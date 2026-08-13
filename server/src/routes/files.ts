@@ -7,25 +7,34 @@ import { db } from '../db/index.js';
 import { files, fileVersions, folders } from '../db/schema.js';
 import { canReadFile, canWriteFile } from '../lib/access.js';
 import { fail } from '../lib/errors.js';
-import { jsonBody } from '../lib/validate.js';
+import { extensionOf, TEXT_EXTENSIONS } from '../lib/filetypes.js';
+import { jsonBody, nameField, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-/** v1 허용 확장자 (API-031). 형식 확장 시 이 맵에만 추가한다 (아키텍처 — 확장 로드맵) */
-const TEXT_EXTENSIONS: Record<string, { fileType: 'md' | 'html' | 'text'; mimeType: string }> = {
-  '.md': { fileType: 'md', mimeType: 'text/markdown' },
-  '.markdown': { fileType: 'md', mimeType: 'text/markdown' },
-  '.html': { fileType: 'html', mimeType: 'text/html' },
-  '.txt': { fileType: 'text', mimeType: 'text/plain' },
-};
+// name/folderId/sortOrder 중 보낸 필드만 갱신 (API-035: 이름 변경 / 이동 / 정렬)
+const updateFileSchema = z
+  .object({
+    name: nameField.optional(),
+    folderId: z.number().int().positive().nullable().optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  .refine((v) => v.name !== undefined || v.folderId !== undefined || v.sortOrder !== undefined, {
+    message: '변경할 필드가 없습니다',
+  });
 
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf('.');
-  return dot === -1 ? '' : name.slice(dot).toLowerCase();
-}
-
-function parseId(raw: string | undefined): number | null {
-  const id = Number(raw);
-  return Number.isInteger(id) && id > 0 ? id : null;
+function duplicateFileName(ownerId: number, folderId: number | null, name: string, excludeId?: number) {
+  const dup = db
+    .select({ id: files.id })
+    .from(files)
+    .where(
+      and(
+        eq(files.ownerId, ownerId),
+        folderId === null ? sql`${files.folderId} IS NULL` : eq(files.folderId, folderId),
+        eq(files.name, name),
+      ),
+    )
+    .get();
+  return dup !== undefined && dup.id !== excludeId;
 }
 
 const saveContentSchema = z.object({
@@ -66,12 +75,9 @@ export const fileRoutes = new Hono<AppEnv>()
       if (file.size > MAX_TEXT_FILE_BYTES) {
         return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: 텍스트 파일은 10MB까지 가능합니다`);
       }
-      const dup = db
-        .select({ id: files.id })
-        .from(files)
-        .where(and(eq(files.ownerId, user.id), folderId === null ? sql`${files.folderId} IS NULL` : eq(files.folderId, folderId), eq(files.name, file.name)))
-        .get();
-      if (dup) return fail(c, 409, 'CONFLICT', `${file.name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
+      if (duplicateFileName(user.id, folderId, file.name)) {
+        return fail(c, 409, 'CONFLICT', `${file.name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
+      }
     }
 
     const now = Date.now();
@@ -199,4 +205,113 @@ export const fileRoutes = new Hono<AppEnv>()
     });
 
     return c.json(result);
+  })
+
+  // API-035: 파일 이름 변경 / 이동 / 정렬
+  .put('/:id', jsonBody(updateFileSchema), (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    const patch = c.req.valid('json');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '수정 권한이 없습니다');
+
+    let typePatch = {};
+    if (patch.name !== undefined) {
+      // 확장자가 바뀌면 fileType·mimeType도 함께 바뀐다. 지원 외 확장자로의 변경은 거부
+      const meta = TEXT_EXTENSIONS[extensionOf(patch.name)];
+      if (!meta) {
+        return fail(c, 400, 'UNSUPPORTED_TYPE', `허용되지 않는 확장자입니다 (${Object.keys(TEXT_EXTENSIONS).join(', ')})`);
+      }
+      typePatch = meta;
+    }
+
+    // 이동 대상 폴더는 파일 소유자의 폴더여야 한다 (관리자가 남의 파일을 자기 폴더로 옮기는 것 방지)
+    if (patch.folderId !== undefined && patch.folderId !== null) {
+      const folder = db.select().from(folders).where(eq(folders.id, patch.folderId)).get();
+      if (!folder || folder.ownerId !== file.ownerId) {
+        return fail(c, 404, 'NOT_FOUND', '대상 폴더가 없습니다');
+      }
+    }
+
+    const nextFolder = patch.folderId !== undefined ? patch.folderId : file.folderId;
+    const nextName = patch.name ?? file.name;
+    if (duplicateFileName(file.ownerId, nextFolder, nextName, id)) {
+      return fail(c, 409, 'CONFLICT', '같은 폴더에 동일한 이름의 파일이 있습니다');
+    }
+
+    const updated = db
+      .update(files)
+      .set({
+        name: nextName,
+        folderId: nextFolder,
+        ...typePatch,
+        ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
+        updatedAt: Date.now(),
+      })
+      .where(eq(files.id, id))
+      .returning()
+      .get();
+    const { contentText: _omit, ...meta } = updated;
+    return c.json(meta);
+  })
+
+  // API-036: 파일 삭제
+  .delete('/:id', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '삭제 권한이 없습니다');
+
+    db.delete(files).where(eq(files.id, id)).run();
+    return c.json({ ok: true });
+  })
+
+  // API-037: 파일 복사 — 복사본은 요청자 소유가 된다 (공유 파일을 내 공간으로 가져오기 겸용)
+  .post('/:id/copy', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (file.contentText === null) {
+      return fail(c, 400, 'VALIDATION_ERROR', '바이너리 파일 복사는 아직 지원하지 않습니다');
+    }
+
+    // 내 파일이면 같은 폴더에, 남의 공유 파일이면 내 루트에 복사한다
+    const targetFolder = file.ownerId === user.id ? file.folderId : null;
+
+    // "이름 (사본).md", 충돌 시 "이름 (사본 2).md" ...
+    const ext = extensionOf(file.name);
+    const stem = ext ? file.name.slice(0, -ext.length) : file.name;
+    let copyName = `${stem} (사본)${ext}`;
+    for (let n = 2; duplicateFileName(user.id, targetFolder, copyName); n++) {
+      copyName = `${stem} (사본 ${n})${ext}`;
+    }
+
+    const now = Date.now();
+    const created = db
+      .insert(files)
+      .values({
+        ownerId: user.id,
+        folderId: targetFolder,
+        name: copyName,
+        fileType: file.fileType,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        contentText: file.contentText,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const { contentText: _omit2, ...meta } = created;
+    return c.json(meta, 201);
   });

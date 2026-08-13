@@ -10,6 +10,7 @@ import { seedAdmin } from './db/seed.js';
 import { authGuard } from './middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
+import { folderRoutes } from './routes/folders.js';
 import { treeRoutes } from './routes/tree.js';
 import type { AppEnv } from './types.js';
 
@@ -26,6 +27,7 @@ api.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
 api.route('/auth', authRoutes);
 api.route('/tree', treeRoutes);
 api.route('/files', fileRoutes);
+api.route('/folders', folderRoutes);
 
 app.route('/api/v1', api);
 
