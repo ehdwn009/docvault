@@ -49,10 +49,14 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
       const s = stateByFile.get(f.id);
       return {
         ...f,
-        tags: [] as number[], // 태그는 5단계에서 조인 예정 — 응답 형태만 미리 맞춰둔다
+        tags: [] as number[], // 태그는 태그 단계에서 조인 예정 — 응답 형태만 미리 맞춰둔다
         state: s
-          ? { isFavorite: s.isFavorite, lastOpenedAt: s.lastOpenedAt }
-          : { isFavorite: 0, lastOpenedAt: null },
+          ? {
+              isFavorite: s.isFavorite,
+              lastOpenedAt: s.lastOpenedAt,
+              readingPosition: s.readingPosition ? JSON.parse(s.readingPosition) : null,
+            }
+          : { isFavorite: 0, lastOpenedAt: null, readingPosition: null },
       };
     }),
   });

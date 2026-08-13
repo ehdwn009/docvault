@@ -1,12 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import FileTree, { type TreeActions } from '../components/FileTree';
-import { api, ApiError, type Tree, type TreeFile, type User } from '../lib/api';
+import RecentList from '../components/RecentList';
+import {
+  api,
+  ApiError,
+  type Tree,
+  type TreeFile,
+  type User,
+  type UserSettings,
+} from '../lib/api';
+import FavoritesPanel from './panels/FavoritesPanel';
+import SettingsPanel from './panels/SettingsPanel';
 import Viewer from './Viewer';
 
-// SCR-100: 워크스페이스 — 좌측 패널(파일 트리) + 본문(뷰어/편집기). 아이콘 레일은 패널이 늘어나는 단계에서
+type Panel = 'files' | 'favorites' | 'settings';
+
+const DEFAULT_SETTINGS: UserSettings = {
+  viewerTheme: 'light',
+  fontSize: 16,
+  fontFamily: null,
+  lineHeight: null,
+  contentWidth: 'normal',
+};
+
+const PANEL_TITLE: Record<Panel, string> = {
+  files: '내 파일',
+  favorites: '즐겨찾기',
+  settings: '설정',
+};
+
+// SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
   const [selected, setSelected] = useState<TreeFile | null>(null);
+  const [panel, setPanel] = useState<Panel>('files');
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [notice, setNotice] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadFolderRef = useRef<number | null>(null);
@@ -22,6 +50,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   useEffect(() => {
     void loadTree();
+    void api<{ settings: UserSettings }>('/me/settings')
+      .then(({ settings }) => setSettings(settings))
+      .catch(() => {});
   }, [loadTree]);
 
   /** 트리 조작 공통 래퍼: 에러는 notice로, 성공하면 트리 재조회 */
@@ -83,66 +114,119 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     },
   };
 
+  function toggleFavorite(file: TreeFile) {
+    void guard(() =>
+      api(`/me/files/${file.id}/state`, {
+        method: 'PUT',
+        body: JSON.stringify({ isFavorite: file.state.isFavorite !== 1 }),
+      }),
+    );
+  }
+
+  function changeSettings(patch: Partial<UserSettings>) {
+    // 실시간 미리보기: 화면에 즉시 반영하고 서버에는 바로 저장 (SCR-141)
+    setSettings((prev) => ({ ...prev, ...patch }));
+    void api('/me/settings', { method: 'PUT', body: JSON.stringify(patch) }).catch(() => {});
+  }
+
   async function handleLogout() {
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
     onLogout();
   }
 
+  const railButton = (target: Panel, icon: string, label: string) => (
+    <button
+      onClick={() => setPanel(target)}
+      title={label}
+      className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
+        panel === target ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200'
+      }`}
+    >
+      {icon}
+    </button>
+  );
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100">
+      {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
+      <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-zinc-800 py-3">
+        {railButton('files', '📄', '내 파일')}
+        {railButton('favorites', '★', '즐겨찾기')}
+        {railButton('settings', '⚙', '설정')}
+        <button
+          onClick={handleLogout}
+          title={`로그아웃 (${user.displayName ?? user.username})`}
+          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-lg text-zinc-600 transition hover:text-zinc-300"
+        >
+          ⏻
+        </button>
+      </div>
+
       <aside className="flex w-72 shrink-0 flex-col border-r border-zinc-800">
         <div className="flex items-center gap-2 px-4 py-3">
-          <h1 className="font-bold tracking-tight">docvault</h1>
-          <span className="ml-auto truncate text-xs text-zinc-500">
+          <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
+          <span className="ml-auto truncate text-xs text-zinc-600">
             {user.displayName ?? user.username}
           </span>
-          <button
-            onClick={handleLogout}
-            title="로그아웃"
-            className="text-xs text-zinc-500 hover:text-zinc-300"
-          >
-            로그아웃
-          </button>
         </div>
 
-        <div className="flex gap-2 px-3">
-          <input
-            ref={uploadRef}
-            type="file"
-            multiple
-            accept=".md,.markdown,.html,.txt"
-            className="hidden"
-            onChange={(e) => void handleUpload(e.target.files)}
-          />
-          <button
-            onClick={() => actions.uploadTo(null)}
-            className="flex-1 rounded-md border border-dashed border-zinc-700 py-2 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
-          >
-            + 업로드
-          </button>
-          <button
-            onClick={() => actions.createFolder(null)}
-            className="rounded-md border border-dashed border-zinc-700 px-3 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
-          >
-            + 폴더
-          </button>
-        </div>
-        {notice && <p className="px-3 pt-2 text-xs text-red-400">{notice}</p>}
+        {panel === 'files' && (
+          <>
+            <div className="flex gap-2 px-3">
+              <input
+                ref={uploadRef}
+                type="file"
+                multiple
+                accept=".md,.markdown,.html,.txt"
+                className="hidden"
+                onChange={(e) => void handleUpload(e.target.files)}
+              />
+              <button
+                onClick={() => actions.uploadTo(null)}
+                className="flex-1 rounded-md border border-dashed border-zinc-700 py-2 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
+              >
+                + 업로드
+              </button>
+              <button
+                onClick={() => actions.createFolder(null)}
+                className="rounded-md border border-dashed border-zinc-700 px-3 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
+              >
+                + 폴더
+              </button>
+            </div>
+            {notice && <p className="px-3 pt-2 text-xs text-red-400">{notice}</p>}
+            <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
+              <RecentList files={tree.files} onSelect={setSelected} />
+              <FileTree
+                folders={tree.folders}
+                files={tree.files}
+                selectedId={selected?.id ?? null}
+                onSelect={setSelected}
+                actions={actions}
+              />
+            </nav>
+          </>
+        )}
 
-        <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
-          <FileTree
-            folders={tree.folders}
+        {panel === 'favorites' && (
+          <FavoritesPanel
             files={tree.files}
             selectedId={selected?.id ?? null}
             onSelect={setSelected}
-            actions={actions}
           />
-        </nav>
+        )}
+
+        {panel === 'settings' && <SettingsPanel settings={settings} onChange={changeSettings} />}
       </aside>
 
       <main className="min-w-0 flex-1">
         {selected ? (
-          <Viewer file={selected} onContentSaved={() => void loadTree()} />
+          <Viewer
+            file={selected}
+            settings={settings}
+            onContentSaved={() => void loadTree()}
+            onToggleFavorite={toggleFavorite}
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-zinc-600">
             좌측에서 파일을 선택하거나 업로드하세요

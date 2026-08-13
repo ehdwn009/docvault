@@ -1,2 +1,7 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/* 뷰어 글자 크기 설정이 먹도록 prose의 rem 고정 크기를 부모 상속으로 바꾼다 (자식은 em 기반이라 함께 스케일됨) */
+.prose {
+  font-size: inherit;
+}

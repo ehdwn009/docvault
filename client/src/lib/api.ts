@@ -33,7 +33,21 @@ export type TreeFile = {
   sortOrder: number;
   updatedAt: number;
   tags: number[];
-  state: { isFavorite: number; lastOpenedAt: number | null };
+  state: {
+    isFavorite: number;
+    lastOpenedAt: number | null;
+    readingPosition: { anchor?: string | null; offset?: number } | null;
+  };
+};
+
+export type ViewerTheme = 'light' | 'dark' | 'sepia';
+
+export type UserSettings = {
+  viewerTheme: ViewerTheme;
+  fontSize: number;
+  fontFamily: string | null;
+  lineHeight: string | null;
+  contentWidth: 'narrow' | 'normal' | 'wide';
 };
 
 export type Tree = { folders: TreeFolder[]; files: TreeFile[] };

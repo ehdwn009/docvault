@@ -11,6 +11,7 @@ import { authGuard } from './middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
 import { folderRoutes } from './routes/folders.js';
+import { meRoutes } from './routes/me.js';
 import { treeRoutes } from './routes/tree.js';
 import type { AppEnv } from './types.js';
 
@@ -28,6 +29,7 @@ api.route('/auth', authRoutes);
 api.route('/tree', treeRoutes);
 api.route('/files', fileRoutes);
 api.route('/folders', folderRoutes);
+api.route('/me', meRoutes);
 
 app.route('/api/v1', api);
 

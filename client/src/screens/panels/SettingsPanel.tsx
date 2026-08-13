@@ -1,0 +1,118 @@
+import { useState, type FormEvent } from 'react';
+import { api, ApiError, type UserSettings } from '../../lib/api';
+
+type Props = {
+  settings: UserSettings;
+  onChange: (patch: Partial<UserSettings>) => void;
+};
+
+const selectClass =
+  'mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-zinc-400';
+
+// SCR-140: 설정 패널 — 뷰어 설정(SCR-141, 변경 즉시 저장·적용) + 비밀번호 변경(SCR-142)
+export default function SettingsPanel({ settings, onChange }: Props) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function changePassword(e: FormEvent) {
+    e.preventDefault();
+    setPwMessage(null);
+    try {
+      await api('/auth/password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      setPwMessage({ ok: true, text: '비밀번호가 변경되었습니다' });
+      setCurrentPassword('');
+      setNewPassword('');
+    } catch (err) {
+      setPwMessage({
+        ok: false,
+        text: err instanceof ApiError ? err.message : '변경에 실패했습니다',
+      });
+    }
+  }
+
+  return (
+    <div className="space-y-6 px-4 py-2">
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">뷰어 설정</h3>
+
+        <label className="mt-3 block text-sm text-zinc-300">
+          테마
+          <select
+            value={settings.viewerTheme}
+            onChange={(e) => onChange({ viewerTheme: e.target.value as UserSettings['viewerTheme'] })}
+            className={selectClass}
+          >
+            <option value="light">라이트</option>
+            <option value="dark">다크</option>
+            <option value="sepia">세피아</option>
+          </select>
+        </label>
+
+        <label className="mt-3 block text-sm text-zinc-300">
+          글자 크기: {settings.fontSize}px
+          <input
+            type="range"
+            min={12}
+            max={24}
+            value={settings.fontSize}
+            onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
+            className="mt-1 w-full accent-zinc-300"
+          />
+        </label>
+
+        <label className="mt-3 block text-sm text-zinc-300">
+          본문 너비
+          <select
+            value={settings.contentWidth}
+            onChange={(e) =>
+              onChange({ contentWidth: e.target.value as UserSettings['contentWidth'] })
+            }
+            className={selectClass}
+          >
+            <option value="narrow">좁게</option>
+            <option value="normal">보통</option>
+            <option value="wide">넓게</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">비밀번호 변경</h3>
+        <form onSubmit={(e) => void changePassword(e)} className="mt-3 space-y-2">
+          <input
+            type="password"
+            placeholder="현재 비밀번호"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+            className={selectClass}
+          />
+          <input
+            type="password"
+            placeholder="새 비밀번호 (8자 이상)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+            className={selectClass}
+          />
+          {pwMessage && (
+            <p className={`text-xs ${pwMessage.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+              {pwMessage.text}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={!currentPassword || newPassword.length < 8}
+            className="w-full rounded-md border border-zinc-700 py-1.5 text-sm text-zinc-300 transition hover:bg-zinc-900 disabled:opacity-40"
+          >
+            변경
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}
