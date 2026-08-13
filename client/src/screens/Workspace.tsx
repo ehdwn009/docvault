@@ -265,12 +265,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 ref={uploadRef}
                 type="file"
                 multiple
-                accept=".md,.markdown,.html,.txt"
+                accept=".md,.markdown,.html,.txt,.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf"
                 className="hidden"
                 onChange={(e) => void handleUpload(e.target.files)}
               />
               <button
                 onClick={() => actions.uploadTo(null)}
+                title="md·html·txt·이미지·PDF"
                 className="flex-1 rounded-md border border-dashed border-zinc-700 py-2 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
               >
                 + 업로드

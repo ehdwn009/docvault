@@ -7,6 +7,7 @@ import { BCRYPT_ROUNDS, PASSWORD_MIN_LENGTH } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, folders, users } from '../db/schema.js';
 import { fail } from '../lib/errors.js';
+import { deleteBinary } from '../lib/storage.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
@@ -125,11 +126,19 @@ export const adminRoutes = new Hono<AppEnv>()
     const target = db.select().from(users).where(eq(users.id, id)).get();
     if (!target) return fail(c, 404, 'NOT_FOUND', '사용자가 없습니다');
 
+    const binaryPaths = db
+      .select({ p: files.storagePath })
+      .from(files)
+      .where(eq(files.ownerId, id))
+      .all()
+      .filter((r): r is { p: string } => r.p !== null);
+
     db.transaction((tx) => {
       // 파일은 명시적으로 먼저 삭제 — FK CASCADE에 맡기면 FTS 동기화 트리거가 안 탈 수 있음
       tx.delete(files).where(eq(files.ownerId, id)).run();
       tx.delete(users).where(eq(users.id, id)).run();
     });
+    for (const { p } of binaryPaths) deleteBinary(p);
     return c.json({ ok: true });
   })
 

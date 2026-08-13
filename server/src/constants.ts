@@ -15,3 +15,6 @@ export const MAX_VERSIONS_PER_FILE = 20;
 
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
+
+/** 바이너리(이미지·PDF) 업로드 크기 제한 50MB (API-031 로드맵) */
+export const MAX_BINARY_FILE_BYTES = 50 * 1024 * 1024;

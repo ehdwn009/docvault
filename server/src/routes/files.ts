@@ -1,14 +1,23 @@
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { MAX_TEXT_FILE_BYTES, MAX_VERSIONS_PER_FILE } from '../constants.js';
+import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES, MAX_VERSIONS_PER_FILE } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, fileTags, fileVersions, folders, tags } from '../db/schema.js';
 import { canReadFile, canWriteFile } from '../lib/access.js';
 import { fail } from '../lib/errors.js';
-import { extensionOf, TEXT_EXTENSIONS } from '../lib/filetypes.js';
+import { ALL_EXTENSIONS, extensionOf } from '../lib/filetypes.js';
+import { binaryAbsPath, copyBinary, deleteBinary, saveBinary } from '../lib/storage.js';
 import { jsonBody, nameField, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
+
+/** 응답용 파일 메타 — 본문과 내부 저장 경로는 절대 노출하지 않는다 */
+function toFileMeta(row: typeof files.$inferSelect) {
+  const { contentText: _c, storagePath: _s, ...meta } = row;
+  return meta;
+}
 
 // name/folderId/sortOrder 중 보낸 필드만 갱신 (API-035: 이름 변경 / 이동 / 정렬)
 const updateFileSchema = z
@@ -67,12 +76,13 @@ export const fileRoutes = new Hono<AppEnv>()
 
     // 저장 전에 전체 파일을 먼저 검증한다 — 일부만 올라가는 어중간한 결과를 만들지 않기 위해
     for (const file of uploads) {
-      const ext = extensionOf(file.name);
-      if (!TEXT_EXTENSIONS[ext]) {
-        return fail(c, 400, 'UNSUPPORTED_TYPE', `${file.name}: 허용되지 않는 형식입니다 (${Object.keys(TEXT_EXTENSIONS).join(', ')})`);
+      const meta = ALL_EXTENSIONS[extensionOf(file.name)];
+      if (!meta) {
+        return fail(c, 400, 'UNSUPPORTED_TYPE', `${file.name}: 허용되지 않는 형식입니다 (${Object.keys(ALL_EXTENSIONS).join(', ')})`);
       }
-      if (file.size > MAX_TEXT_FILE_BYTES) {
-        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: 텍스트 파일은 10MB까지 가능합니다`);
+      const isBinary = meta.fileType === 'image' || meta.fileType === 'pdf';
+      if (file.size > (isBinary ? MAX_BINARY_FILE_BYTES : MAX_TEXT_FILE_BYTES)) {
+        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: ${isBinary ? '바이너리는 50MB' : '텍스트는 10MB'}까지 가능합니다`);
       }
       if (duplicateFileName(user.id, folderId, file.name)) {
         return fail(c, 409, 'CONFLICT', `${file.name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
@@ -82,8 +92,13 @@ export const fileRoutes = new Hono<AppEnv>()
     const now = Date.now();
     const created = [];
     for (const file of uploads) {
-      const { fileType, mimeType } = TEXT_EXTENSIONS[extensionOf(file.name)]!;
-      const contentText = await file.text();
+      const { fileType, mimeType } = ALL_EXTENSIONS[extensionOf(file.name)]!;
+      const isBinary = fileType === 'image' || fileType === 'pdf';
+      // 텍스트는 DB 본문, 바이너리는 디스크 + 경로만 (아키텍처 — 저장 전략)
+      const contentText = isBinary ? null : await file.text();
+      const storagePath = isBinary
+        ? saveBinary(user.id, Buffer.from(await file.arrayBuffer()))
+        : null;
       const row = db
         .insert(files)
         .values({
@@ -94,26 +109,47 @@ export const fileRoutes = new Hono<AppEnv>()
           mimeType,
           sizeBytes: file.size,
           contentText,
+          storagePath,
           createdAt: now,
           updatedAt: now,
         })
         .returning()
         .get();
       created.push({
-        id: row.id,
-        folderId: row.folderId,
-        name: row.name,
-        fileType: row.fileType,
-        sizeBytes: row.sizeBytes,
-        isShared: row.isShared,
-        sortOrder: row.sortOrder,
-        updatedAt: row.updatedAt,
+        ...toFileMeta(row),
         tags: [] as number[],
-        state: { isFavorite: 0, lastOpenedAt: null },
+        state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null },
       });
     }
 
     return c.json({ files: created }, 201);
+  })
+
+  // API-038: 원본 다운로드 / 바이너리 스트리밍
+  .get('/:id/raw', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+
+    c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    // 스크립트가 실행될 수 있는 형식(html·svg 등)은 문서로 직접 열려도 무해하도록 격리
+    if (file.mimeType === 'image/svg+xml' || file.contentText !== null) {
+      c.header('Content-Security-Policy', 'sandbox');
+    }
+
+    if (file.storagePath) {
+      c.header('Content-Type', file.mimeType);
+      c.header('Content-Length', String(file.sizeBytes));
+      const stream = Readable.toWeb(createReadStream(binaryAbsPath(file.storagePath)));
+      return c.body(stream as ReadableStream);
+    }
+    return c.text(file.contentText ?? '', 200, {
+      'Content-Type': `${file.mimeType}; charset=utf-8`,
+    });
   })
 
   // API-032: 파일 메타 조회 (정보 모달용)
@@ -125,8 +161,7 @@ export const fileRoutes = new Hono<AppEnv>()
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
     if (!canReadFile(c.get('user'), file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
 
-    const { contentText: _omit, ...meta } = file;
-    return c.json(meta);
+    return c.json(toFileMeta(file));
   })
 
   // API-033: 텍스트 본문 조회
@@ -220,9 +255,15 @@ export const fileRoutes = new Hono<AppEnv>()
     let typePatch = {};
     if (patch.name !== undefined) {
       // 확장자가 바뀌면 fileType·mimeType도 함께 바뀐다. 지원 외 확장자로의 변경은 거부
-      const meta = TEXT_EXTENSIONS[extensionOf(patch.name)];
+      const meta = ALL_EXTENSIONS[extensionOf(patch.name)];
       if (!meta) {
-        return fail(c, 400, 'UNSUPPORTED_TYPE', `허용되지 않는 확장자입니다 (${Object.keys(TEXT_EXTENSIONS).join(', ')})`);
+        return fail(c, 400, 'UNSUPPORTED_TYPE', `허용되지 않는 확장자입니다 (${Object.keys(ALL_EXTENSIONS).join(', ')})`);
+      }
+      // 저장 방식이 갈리는 경계(텍스트↔바이너리)는 이름 변경으로 넘을 수 없다
+      const wasBinary = file.storagePath !== null;
+      const willBeBinary = meta.fileType === 'image' || meta.fileType === 'pdf';
+      if (wasBinary !== willBeBinary || (wasBinary && meta.fileType !== file.fileType)) {
+        return fail(c, 400, 'UNSUPPORTED_TYPE', '형식이 다른 확장자로는 변경할 수 없습니다');
       }
       typePatch = meta;
     }
@@ -253,8 +294,7 @@ export const fileRoutes = new Hono<AppEnv>()
       .where(eq(files.id, id))
       .returning()
       .get();
-    const { contentText: _omit, ...meta } = updated;
-    return c.json(meta);
+    return c.json(toFileMeta(updated));
   })
 
   // API-036: 파일 삭제
@@ -268,6 +308,7 @@ export const fileRoutes = new Hono<AppEnv>()
     if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '삭제 권한이 없습니다');
 
     db.delete(files).where(eq(files.id, id)).run();
+    deleteBinary(file.storagePath); // DB가 진실이므로 레코드를 지운 뒤 디스크를 정리
     return c.json({ ok: true });
   })
 
@@ -280,9 +321,6 @@ export const fileRoutes = new Hono<AppEnv>()
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
     if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
-    if (file.contentText === null) {
-      return fail(c, 400, 'VALIDATION_ERROR', '바이너리 파일 복사는 아직 지원하지 않습니다');
-    }
 
     // 내 파일이면 같은 폴더에, 남의 공유 파일이면 내 루트에 복사한다
     const targetFolder = file.ownerId === user.id ? file.folderId : null;
@@ -306,13 +344,13 @@ export const fileRoutes = new Hono<AppEnv>()
         mimeType: file.mimeType,
         sizeBytes: file.sizeBytes,
         contentText: file.contentText,
+        storagePath: file.storagePath ? copyBinary(file.storagePath, user.id) : null,
         createdAt: now,
         updatedAt: now,
       })
       .returning()
       .get();
-    const { contentText: _omit2, ...meta } = created;
-    return c.json(meta, 201);
+    return c.json(toFileMeta(created), 201);
   })
 
   // API-041: 버전 목록 (본문 제외 메타)
