@@ -13,6 +13,8 @@ export default function Editor({ file, onSaved, onCancel }: Props) {
   const [draft, setDraft] = useState(file.content);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // md 미만에서 분할 화면은 탭 전환으로 대체 (IA — 반응형 기준)
+  const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit');
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -47,8 +49,21 @@ export default function Editor({ file, onSaved, onCancel }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
-        <span className="text-sm text-zinc-400">편집 중</span>
+      <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2 max-md:pl-14">
+        <span className="text-sm text-zinc-400 max-md:hidden">편집 중</span>
+        <div className="flex gap-1 md:hidden">
+          {(['edit', 'preview'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setMobilePane(p)}
+              className={`rounded px-2 py-0.5 text-xs ${
+                mobilePane === p ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'
+              }`}
+            >
+              {p === 'edit' ? '에디터' : '미리보기'}
+            </button>
+          ))}
+        </div>
         {error && <span className="text-sm text-red-400">{error}</span>}
         <div className="ml-auto flex gap-2">
           <button
@@ -72,9 +87,15 @@ export default function Editor({ file, onSaved, onCancel }: Props) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}
-          className="h-full w-1/2 resize-none border-r border-zinc-800 bg-zinc-950 p-4 font-mono text-sm leading-relaxed text-zinc-200 outline-none"
+          className={`h-full w-full resize-none border-zinc-800 bg-zinc-950 p-4 font-mono text-sm leading-relaxed text-zinc-200 outline-none md:block md:w-1/2 md:border-r ${
+            mobilePane === 'edit' ? 'block' : 'hidden'
+          }`}
         />
-        <div className="h-full w-1/2 overflow-auto p-4">
+        <div
+          className={`h-full w-full overflow-auto p-4 md:block md:w-1/2 ${
+            mobilePane === 'preview' ? 'block' : 'hidden'
+          }`}
+        >
           {file.fileType === 'md' ? (
             <MarkdownRenderer content={draft} />
           ) : (

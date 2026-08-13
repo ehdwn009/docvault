@@ -64,6 +64,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [tagEditorFile, setTagEditorFile] = useState<TreeFile | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadFolderRef = useRef<number | null>(null);
 
@@ -197,6 +198,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     onLogout();
   }
 
+  /** 파일 선택 — 모바일에서는 드로어를 닫아 바로 본문을 보여준다 */
+  function selectFile(file: TreeFile) {
+    setSelected(file);
+    setDrawerOpen(false);
+  }
+
   const railButton = (target: Panel, icon: string, label: string) => (
     <button
       onClick={() => setPanel(target)}
@@ -210,7 +217,23 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex h-dvh bg-zinc-950 text-zinc-100">
+      {/* 모바일: 드로어 토글 (md 미만에서 레일+패널은 드로어로 전환 — IA 반응형 기준) */}
+      <button
+        onClick={() => setDrawerOpen(true)}
+        className="fixed left-3 top-2 z-20 rounded-md border border-zinc-800 bg-zinc-900/90 px-2.5 py-1 text-zinc-300 md:hidden"
+      >
+        ☰
+      </button>
+      {drawerOpen && (
+        <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setDrawerOpen(false)} />
+      )}
+
+      <div
+        className={`z-40 flex shrink-0 bg-zinc-950 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:transition-transform ${
+          drawerOpen ? '' : 'max-md:-translate-x-full'
+        }`}
+      >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-zinc-800 py-3">
         {railButton('files', '📄', '내 파일')}
@@ -285,14 +308,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               </div>
             )}
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
-              <RecentList files={tree.files} onSelect={setSelected} />
+              <RecentList files={tree.files} onSelect={selectFile} />
               <FileTree
                 folders={tree.folders}
                 files={tagFilter === null ? tree.files : tree.files.filter((f) => f.tags.includes(tagFilter))}
                 tags={tags}
                 isAdmin={user.role === 'admin'}
                 selectedId={selected?.id ?? null}
-                onSelect={setSelected}
+                onSelect={selectFile}
                 actions={actions}
               />
             </nav>
@@ -303,23 +326,24 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <FavoritesPanel
             files={tree.files}
             selectedId={selected?.id ?? null}
-            onSelect={setSelected}
+            onSelect={selectFile}
           />
         )}
 
         {panel === 'shared' && (
           <SharedPanel
             selectedId={selected?.id ?? null}
-            onSelect={(f) => setSelected(sharedToTreeFile(f))}
+            onSelect={(f) => selectFile(sharedToTreeFile(f))}
           />
         )}
 
         {panel === 'settings' && <SettingsPanel settings={settings} onChange={changeSettings} />}
 
         {panel === 'admin' && user.role === 'admin' && (
-          <AdminPanel meId={user.id} onSelectFile={setSelected} />
+          <AdminPanel meId={user.id} onSelectFile={selectFile} />
         )}
       </aside>
+      </div>
 
       <main className="min-w-0 flex-1">
         {selected ? (
@@ -339,7 +363,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {paletteOpen && (
         <CommandPalette
           files={tree.files}
-          onPick={setSelected}
+          onPick={selectFile}
           onClose={() => setPaletteOpen(false)}
         />
       )}

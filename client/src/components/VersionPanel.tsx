@@ -54,7 +54,7 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
   const Renderer = renderers[fileType];
 
   return (
-    <div className="flex w-96 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
+    <div className="flex w-96 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-full">
       <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">
         <h3 className="text-sm font-medium text-zinc-200">버전 기록</h3>
         <span className="text-xs text-zinc-600">{versions.length}개</span>

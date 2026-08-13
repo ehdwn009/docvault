@@ -95,7 +95,7 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2">
+      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2 max-md:pl-14">
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
