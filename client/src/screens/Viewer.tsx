@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import VersionPanel from '../components/VersionPanel';
 import { api, ApiError, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { renderers } from '../renderers';
 import Editor from './Editor';
@@ -26,6 +27,7 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [showVersions, setShowVersions] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | undefined>(undefined);
 
@@ -33,6 +35,7 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
     setData(null);
     setError(null);
     setMode('view');
+    setShowVersions(false);
     api<FileContent>(`/files/${file.id}/content`)
       .then(setData)
       .catch((e: unknown) =>
@@ -104,30 +107,57 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
         <span className="text-xs text-zinc-500">
           {new Date(data.updatedAt).toLocaleString()} 수정
         </span>
+        <button
+          onClick={() => setShowVersions((v) => !v)}
+          className={`ml-auto rounded border px-3 py-1 text-sm ${
+            showVersions
+              ? 'border-zinc-500 bg-zinc-800 text-zinc-100'
+              : 'border-zinc-700 text-zinc-300 hover:bg-zinc-900'
+          }`}
+        >
+          버전
+        </button>
         {!data.readonly && (
           <button
             onClick={() => setMode('edit')}
-            className="ml-auto rounded border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-900"
+            className="rounded border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-900"
           >
             편집 (E)
           </button>
         )}
       </div>
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className={`min-h-0 flex-1 overflow-auto ${THEME_BG[settings.viewerTheme]}`}
-      >
+      <div className="flex min-h-0 flex-1">
         <div
-          className={`mx-auto p-6 ${WIDTH[settings.contentWidth]}`}
-          style={{ fontSize: settings.fontSize }}
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className={`min-h-0 min-w-0 flex-1 overflow-auto ${THEME_BG[settings.viewerTheme]}`}
         >
-          {Renderer ? (
-            <Renderer content={data.content} theme={settings.viewerTheme} />
-          ) : (
-            <p className="text-sm text-zinc-500">이 형식({data.fileType})의 뷰어는 아직 없습니다</p>
-          )}
+          <div
+            className={`mx-auto p-6 ${WIDTH[settings.contentWidth]}`}
+            style={{ fontSize: settings.fontSize }}
+          >
+            {Renderer ? (
+              <Renderer content={data.content} theme={settings.viewerTheme} />
+            ) : (
+              <p className="text-sm text-zinc-500">이 형식({data.fileType})의 뷰어는 아직 없습니다</p>
+            )}
+          </div>
         </div>
+        {showVersions && (
+          <VersionPanel
+            fileId={file.id}
+            fileType={data.fileType}
+            theme={settings.viewerTheme}
+            readonly={data.readonly}
+            onClose={() => setShowVersions(false)}
+            onRestored={() => {
+              // 복원 반영: 본문 재조회 + 트리 갱신
+              setShowVersions(false);
+              void api<FileContent>(`/files/${file.id}/content`).then(setData);
+              onContentSaved();
+            }}
+          />
+        )}
       </div>
     </div>
   );

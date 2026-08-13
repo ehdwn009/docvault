@@ -1,6 +1,5 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { MAX_TEXT_FILE_BYTES, MAX_VERSIONS_PER_FILE } from '../constants.js';
 import { db } from '../db/index.js';
@@ -314,4 +313,115 @@ export const fileRoutes = new Hono<AppEnv>()
       .get();
     const { contentText: _omit2, ...meta } = created;
     return c.json(meta, 201);
+  })
+
+  // API-041: 버전 목록 (본문 제외 메타)
+  .get('/:id/versions', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+
+    const versions = db
+      .select({
+        id: fileVersions.id,
+        savedBy: fileVersions.savedBy,
+        sizeBytes: fileVersions.sizeBytes,
+        createdAt: fileVersions.createdAt,
+      })
+      .from(fileVersions)
+      .where(eq(fileVersions.fileId, id))
+      .orderBy(desc(fileVersions.id))
+      .all();
+    return c.json({ versions });
+  })
+
+  // API-042: 특정 버전 본문 (미리보기)
+  .get('/:id/versions/:vid', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    const vid = parseId(c.req.param('vid'));
+    if (id === null || vid === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+
+    const version = db
+      .select()
+      .from(fileVersions)
+      .where(and(eq(fileVersions.id, vid), eq(fileVersions.fileId, id)))
+      .get();
+    if (!version) return fail(c, 404, 'NOT_FOUND', '버전이 없습니다');
+
+    return c.json({
+      id: version.id,
+      content: version.contentText,
+      sizeBytes: version.sizeBytes,
+      createdAt: version.createdAt,
+    });
+  })
+
+  // API-043: 버전 복원 — 복원도 하나의 편집으로 취급, 현재 본문을 먼저 스냅샷 (복원 전으로 되돌아갈 수 있게)
+  .post('/:id/versions/:vid/restore', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    const vid = parseId(c.req.param('vid'));
+    if (id === null || vid === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '수정 권한이 없습니다');
+    if (file.contentText === null) {
+      return fail(c, 400, 'VALIDATION_ERROR', '바이너리 파일은 버전을 지원하지 않습니다');
+    }
+
+    const version = db
+      .select()
+      .from(fileVersions)
+      .where(and(eq(fileVersions.id, vid), eq(fileVersions.fileId, id)))
+      .get();
+    if (!version) return fail(c, 404, 'NOT_FOUND', '버전이 없습니다');
+
+    const now = Date.now();
+    const result = db.transaction((tx) => {
+      const snapshot = tx
+        .insert(fileVersions)
+        .values({
+          fileId: file.id,
+          savedBy: user.id,
+          contentText: file.contentText!,
+          sizeBytes: file.sizeBytes,
+          createdAt: now,
+        })
+        .returning({ id: fileVersions.id })
+        .get();
+
+      tx.update(files)
+        .set({
+          contentText: version.contentText,
+          sizeBytes: Buffer.byteLength(version.contentText, 'utf8'),
+          updatedAt: now,
+        })
+        .where(eq(files.id, file.id))
+        .run();
+
+      tx.run(sql`
+        DELETE FROM file_versions
+        WHERE file_id = ${file.id}
+          AND id NOT IN (
+            SELECT id FROM file_versions
+            WHERE file_id = ${file.id}
+            ORDER BY id DESC
+            LIMIT ${MAX_VERSIONS_PER_FILE}
+          )
+      `);
+
+      return { updatedAt: now, versionId: snapshot.id };
+    });
+
+    return c.json(result);
   });
