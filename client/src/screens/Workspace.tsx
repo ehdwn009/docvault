@@ -13,12 +13,13 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
+import AdminPanel from './panels/AdminPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
 import SharedPanel from './panels/SharedPanel';
 import Viewer from './Viewer';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'settings';
+type Panel = 'files' | 'favorites' | 'shared' | 'settings' | 'admin';
 
 const DEFAULT_SETTINGS: UserSettings = {
   viewerTheme: 'light',
@@ -33,6 +34,7 @@ const PANEL_TITLE: Record<Panel, string> = {
   favorites: '즐겨찾기',
   shared: '공유 파일',
   settings: '설정',
+  admin: '관리자',
 };
 
 /** 공유 트리 항목을 뷰어가 받는 TreeFile 형태로 맞춘다 (내 트리에 없는 파일) */
@@ -215,6 +217,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {railButton('favorites', '★', '즐겨찾기')}
         {railButton('shared', '🔗', '공유 파일')}
         {railButton('settings', '⚙', '설정')}
+        {user.role === 'admin' && railButton('admin', '🛠', '관리자')}
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
@@ -312,6 +315,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         )}
 
         {panel === 'settings' && <SettingsPanel settings={settings} onChange={changeSettings} />}
+
+        {panel === 'admin' && user.role === 'admin' && (
+          <AdminPanel meId={user.id} onSelectFile={setSelected} />
+        )}
       </aside>
 
       <main className="min-w-0 flex-1">
