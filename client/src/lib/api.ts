@@ -15,11 +15,45 @@ export type User = {
   role: 'user' | 'admin';
 };
 
+export type TreeFolder = {
+  id: number;
+  parentId: number | null;
+  name: string;
+  isShared: number;
+  sortOrder: number;
+};
+
+export type TreeFile = {
+  id: number;
+  folderId: number | null;
+  name: string;
+  fileType: 'md' | 'html' | 'code' | 'text' | 'image' | 'pdf';
+  sizeBytes: number;
+  isShared: number;
+  sortOrder: number;
+  updatedAt: number;
+  tags: number[];
+  state: { isFavorite: number; lastOpenedAt: number | null };
+};
+
+export type Tree = { folders: TreeFolder[]; files: TreeFile[] };
+
+export type FileContent = {
+  id: number;
+  fileType: TreeFile['fileType'];
+  content: string;
+  updatedAt: number;
+  readonly: boolean;
+};
+
 /** /api/v1 공통 fetch 래퍼. 세션은 httpOnly 쿠키라 코드에서 다룰 것이 없다. */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  // Content-Type은 JSON 문자열 body일 때만 지정한다 — FormData는 브라우저가 boundary를 붙여야 함
+  const jsonHeaders =
+    typeof init?.body === 'string' ? { 'Content-Type': 'application/json' } : undefined;
   const res = await fetch(`/api/v1${path}`, {
     ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers,
+    headers: { ...jsonHeaders, ...init?.headers },
   });
 
   if (!res.ok) {
