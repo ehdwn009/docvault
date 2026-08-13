@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import type { TreeFile, TreeFolder } from '../lib/api';
+import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 
 const TYPE_BADGE: Record<string, string> = {
@@ -21,11 +21,16 @@ export type TreeActions = {
   deleteFile: (id: number) => void;
   copyFile: (id: number) => void;
   uploadTo: (folderId: number | null) => void;
+  editTags: (file: TreeFile) => void;
+  shareFile: (file: TreeFile) => void;
+  shareFolder: (folder: TreeFolder) => void;
 };
 
 type Props = {
   folders: TreeFolder[];
   files: TreeFile[];
+  tags: Tag[];
+  isAdmin: boolean;
   selectedId: number | null;
   onSelect: (file: TreeFile) => void;
   actions: TreeActions;
@@ -36,7 +41,8 @@ type Menu = { x: number; y: number; items: MenuItem[] };
 type DragPayload = { kind: 'file' | 'folder'; id: number };
 
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
-export default function FileTree({ folders, files, selectedId, onSelect, actions }: Props) {
+export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions }: Props) {
+  const tagColor = new Map(tags.map((t) => [t.id, t.color]));
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<Menu | null>(null);
   const [renaming, setRenaming] = useState<Renaming | null>(null);
@@ -133,6 +139,9 @@ export default function FileTree({ folders, files, selectedId, onSelect, actions
                       label: '이름 변경',
                       action: () => setRenaming({ kind: 'folder', id: folder.id, value: folder.name }),
                     },
+                    ...(isAdmin
+                      ? [{ label: folder.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFolder(folder) }]
+                      : []),
                     { label: '삭제', danger: true, action: () => actions.deleteFolder(folder.id) },
                   ])
                 }
@@ -144,6 +153,7 @@ export default function FileTree({ folders, files, selectedId, onSelect, actions
                 <span className="text-[10px]">{collapsed.has(folder.id) ? '▸' : '▾'}</span>
                 <span>📁</span>
                 {isRenaming ? renameInput(renaming) : <span className="truncate">{folder.name}</span>}
+                {folder.isShared === 1 && <span className="ml-auto text-[10px] text-sky-500">공유</span>}
               </div>
               {!collapsed.has(folder.id) && renderLevel(folder.id, depth + 1)}
             </div>
@@ -163,7 +173,11 @@ export default function FileTree({ folders, files, selectedId, onSelect, actions
                     label: '이름 변경',
                     action: () => setRenaming({ kind: 'file', id: file.id, value: file.name }),
                   },
+                  { label: '태그', action: () => actions.editTags(file) },
                   { label: '복사', action: () => actions.copyFile(file.id) },
+                  ...(isAdmin
+                    ? [{ label: file.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFile(file) }]
+                    : []),
                   { label: '삭제', danger: true, action: () => actions.deleteFile(file.id) },
                 ])
               }
@@ -176,6 +190,16 @@ export default function FileTree({ folders, files, selectedId, onSelect, actions
                 {file.fileType}
               </span>
               {isRenaming ? renameInput(renaming) : <span className="truncate">{file.name}</span>}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                {file.tags.map((tagId) => (
+                  <span
+                    key={tagId}
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: tagColor.get(tagId) ?? '#71717a' }}
+                  />
+                ))}
+                {file.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
+              </span>
             </div>
           );
         })}

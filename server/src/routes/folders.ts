@@ -144,4 +144,22 @@ export const folderRoutes = new Hono<AppEnv>()
     });
 
     return c.json({ ok: true });
+  })
+
+  // API-025: 폴더 공유 토글 (관리자 전용) — 공유 폴더 하위 파일은 전부 열람 공개가 된다
+  .put('/:id/share', jsonBody(z.object({ isShared: z.boolean() })), (c) => {
+    const user = c.get('user');
+    if (user.role !== 'admin') return fail(c, 403, 'FORBIDDEN', '관리자만 공유를 변경할 수 있습니다');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const folder = db.select().from(folders).where(eq(folders.id, id)).get();
+    if (!folder) return fail(c, 404, 'NOT_FOUND', '폴더가 없습니다');
+
+    const { isShared } = c.req.valid('json');
+    db.update(folders)
+      .set({ isShared: isShared ? 1 : 0, updatedAt: Date.now() })
+      .where(eq(folders.id, id))
+      .run();
+    return c.json({ ok: true, isShared: isShared ? 1 : 0 });
   });

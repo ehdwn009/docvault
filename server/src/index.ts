@@ -13,6 +13,8 @@ import { fileRoutes } from './routes/files.js';
 import { folderRoutes } from './routes/folders.js';
 import { meRoutes } from './routes/me.js';
 import { searchRoutes } from './routes/search.js';
+import { sharedRoutes } from './routes/shared.js';
+import { tagRoutes } from './routes/tags.js';
 import { treeRoutes } from './routes/tree.js';
 import type { AppEnv } from './types.js';
 
@@ -32,6 +34,8 @@ api.route('/files', fileRoutes);
 api.route('/folders', folderRoutes);
 api.route('/me', meRoutes);
 api.route('/search', searchRoutes);
+api.route('/shared', sharedRoutes);
+api.route('/tags', tagRoutes);
 
 app.route('/api/v1', api);
 

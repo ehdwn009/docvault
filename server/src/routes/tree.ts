@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { db } from '../db/index.js';
-import { files, folders, userFileState } from '../db/schema.js';
+import { files, fileTags, folders, userFileState } from '../db/schema.js';
 import type { AppEnv } from '../types.js';
 
 // API-021: 내 폴더·파일 트리 — 탐색기 초기 로드를 1 요청으로 (중첩 조립은 클라이언트가 수행)
@@ -43,13 +43,26 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
     .all();
   const stateByFile = new Map(states.map((s) => [s.fileId, s]));
 
+  const tagRows = db
+    .select({ fileId: fileTags.fileId, tagId: fileTags.tagId })
+    .from(fileTags)
+    .innerJoin(files, eq(fileTags.fileId, files.id))
+    .where(eq(files.ownerId, user.id))
+    .all();
+  const tagsByFile = new Map<number, number[]>();
+  for (const t of tagRows) {
+    const list = tagsByFile.get(t.fileId) ?? [];
+    list.push(t.tagId);
+    tagsByFile.set(t.fileId, list);
+  }
+
   return c.json({
     folders: folderRows,
     files: fileRows.map((f) => {
       const s = stateByFile.get(f.id);
       return {
         ...f,
-        tags: [] as number[], // 태그는 태그 단계에서 조인 예정 — 응답 형태만 미리 맞춰둔다
+        tags: tagsByFile.get(f.id) ?? [],
         state: s
           ? {
               isFavorite: s.isFavorite,

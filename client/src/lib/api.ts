@@ -40,6 +40,18 @@ export type TreeFile = {
   };
 };
 
+export type Tag = { id: number; name: string; color: string };
+
+export type SharedFolder = { id: number; parentId: number | null; name: string; ownerName: string };
+export type SharedFile = {
+  id: number;
+  folderId: number | null;
+  name: string;
+  fileType: TreeFile['fileType'];
+  updatedAt: number;
+  ownerName: string;
+};
+
 export type ViewerTheme = 'light' | 'dark' | 'sepia';
 
 export type UserSettings = {

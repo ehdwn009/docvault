@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { MAX_TEXT_FILE_BYTES, MAX_VERSIONS_PER_FILE } from '../constants.js';
 import { db } from '../db/index.js';
-import { files, fileVersions, folders } from '../db/schema.js';
+import { files, fileTags, fileVersions, folders, tags } from '../db/schema.js';
 import { canReadFile, canWriteFile } from '../lib/access.js';
 import { fail } from '../lib/errors.js';
 import { extensionOf, TEXT_EXTENSIONS } from '../lib/filetypes.js';
@@ -424,4 +424,48 @@ export const fileRoutes = new Hono<AppEnv>()
     });
 
     return c.json(result);
+  })
+
+  // API-054: 파일의 태그 목록 교체 — 태그는 개인 소유이므로 파일 소유자만
+  .put('/:id/tags', jsonBody(z.object({ tagIds: z.array(z.number().int().positive()).max(50) })), (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    const { tagIds } = c.req.valid('json');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (file.ownerId !== user.id) return fail(c, 403, 'FORBIDDEN', '내 파일에만 태그를 붙일 수 있습니다');
+
+    // 전부 내 태그인지 확인
+    for (const tagId of tagIds) {
+      const tag = db.select({ ownerId: tags.ownerId }).from(tags).where(eq(tags.id, tagId)).get();
+      if (!tag || tag.ownerId !== user.id) return fail(c, 404, 'NOT_FOUND', `태그가 없습니다 (${tagId})`);
+    }
+
+    db.transaction((tx) => {
+      tx.delete(fileTags).where(eq(fileTags.fileId, id)).run();
+      for (const tagId of tagIds) {
+        tx.insert(fileTags).values({ fileId: id, tagId }).run();
+      }
+    });
+    return c.json({ tagIds });
+  })
+
+  // API-039: 파일 공유 토글 (관리자 전용 — 전체 사용자 대상 열람 공개)
+  .put('/:id/share', jsonBody(z.object({ isShared: z.boolean() })), (c) => {
+    const user = c.get('user');
+    if (user.role !== 'admin') return fail(c, 403, 'FORBIDDEN', '관리자만 공유를 변경할 수 있습니다');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+
+    const { isShared } = c.req.valid('json');
+    db.update(files)
+      .set({ isShared: isShared ? 1 : 0, updatedAt: Date.now() })
+      .where(eq(files.id, id))
+      .run();
+    return c.json({ ok: true, isShared: isShared ? 1 : 0 });
   });

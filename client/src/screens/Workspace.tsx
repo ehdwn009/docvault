@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import CommandPalette from '../components/CommandPalette';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import RecentList from '../components/RecentList';
+import TagEditor from '../components/TagEditor';
 import {
   api,
   ApiError,
+  type SharedFile,
+  type Tag,
   type Tree,
   type TreeFile,
   type User,
@@ -12,9 +15,10 @@ import {
 } from '../lib/api';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
+import SharedPanel from './panels/SharedPanel';
 import Viewer from './Viewer';
 
-type Panel = 'files' | 'favorites' | 'settings';
+type Panel = 'files' | 'favorites' | 'shared' | 'settings';
 
 const DEFAULT_SETTINGS: UserSettings = {
   viewerTheme: 'light',
@@ -27,8 +31,25 @@ const DEFAULT_SETTINGS: UserSettings = {
 const PANEL_TITLE: Record<Panel, string> = {
   files: '내 파일',
   favorites: '즐겨찾기',
+  shared: '공유 파일',
   settings: '설정',
 };
+
+/** 공유 트리 항목을 뷰어가 받는 TreeFile 형태로 맞춘다 (내 트리에 없는 파일) */
+function sharedToTreeFile(f: SharedFile): TreeFile {
+  return {
+    id: f.id,
+    folderId: f.folderId,
+    name: f.name,
+    fileType: f.fileType,
+    sizeBytes: 0,
+    isShared: 1,
+    sortOrder: 0,
+    updatedAt: f.updatedAt,
+    tags: [],
+    state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null },
+  };
+}
 
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
@@ -36,6 +57,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [selected, setSelected] = useState<TreeFile | null>(null);
   const [panel, setPanel] = useState<Panel>('files');
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagFilter, setTagFilter] = useState<number | null>(null);
+  const [tagEditorFile, setTagEditorFile] = useState<TreeFile | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -57,17 +81,24 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     const t = await api<Tree>('/tree').catch(() => null);
     if (t) {
       setTree(t);
-      // 이름변경·이동·삭제가 반영되도록 선택 파일을 새 트리와 동기화한다
-      setSelected((prev) => (prev ? (t.files.find((f) => f.id === prev.id) ?? null) : null));
+      // 이름변경·이동이 반영되도록 선택 파일을 새 트리와 동기화.
+      // 트리에 없으면(공유 파일 열람 중) 선택을 유지한다 — 삭제는 deleteFile에서 직접 해제
+      setSelected((prev) => (prev ? (t.files.find((f) => f.id === prev.id) ?? prev) : null));
     }
+  }, []);
+
+  const loadTags = useCallback(async () => {
+    const r = await api<{ tags: Tag[] }>('/tags').catch(() => null);
+    if (r) setTags(r.tags);
   }, []);
 
   useEffect(() => {
     void loadTree();
+    void loadTags();
     void api<{ settings: UserSettings }>('/me/settings')
       .then(({ settings }) => setSettings(settings))
       .catch(() => {});
-  }, [loadTree]);
+  }, [loadTree, loadTags]);
 
   /** 트리 조작 공통 래퍼: 에러는 notice로, 성공하면 트리 재조회 */
   const guard = useCallback(
@@ -119,6 +150,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) })),
     deleteFile: (id) => {
       if (!window.confirm('파일을 삭제할까요?')) return;
+      if (selected?.id === id) setSelected(null);
       void guard(() => api(`/files/${id}`, { method: 'DELETE' }));
     },
     copyFile: (id) => void guard(() => api(`/files/${id}/copy`, { method: 'POST' })),
@@ -126,6 +158,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       uploadFolderRef.current = folderId;
       uploadRef.current?.click();
     },
+    editTags: setTagEditorFile,
+    shareFile: (file) =>
+      void guard(() =>
+        api(`/files/${file.id}/share`, {
+          method: 'PUT',
+          body: JSON.stringify({ isShared: file.isShared !== 1 }),
+        }),
+      ),
+    shareFolder: (folder) =>
+      void guard(() =>
+        api(`/folders/${folder.id}/share`, {
+          method: 'PUT',
+          body: JSON.stringify({ isShared: folder.isShared !== 1 }),
+        }),
+      ),
   };
 
   function toggleFavorite(file: TreeFile) {
@@ -166,6 +213,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-zinc-800 py-3">
         {railButton('files', '📄', '내 파일')}
         {railButton('favorites', '★', '즐겨찾기')}
+        {railButton('shared', '🔗', '공유 파일')}
         {railButton('settings', '⚙', '설정')}
         <button
           onClick={handleLogout}
@@ -209,11 +257,37 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               </button>
             </div>
             {notice && <p className="px-3 pt-2 text-xs text-red-400">{notice}</p>}
+            {tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1 px-3">
+                <button
+                  onClick={() => setTagFilter(null)}
+                  className={`rounded-full px-2 py-0.5 text-[11px] transition ${
+                    tagFilter === null ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  전체
+                </button>
+                {tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => setTagFilter((cur) => (cur === tag.id ? null : tag.id))}
+                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition ${
+                      tagFilter === tag.id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color }} />
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
               <RecentList files={tree.files} onSelect={setSelected} />
               <FileTree
                 folders={tree.folders}
-                files={tree.files}
+                files={tagFilter === null ? tree.files : tree.files.filter((f) => f.tags.includes(tagFilter))}
+                tags={tags}
+                isAdmin={user.role === 'admin'}
                 selectedId={selected?.id ?? null}
                 onSelect={setSelected}
                 actions={actions}
@@ -227,6 +301,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             files={tree.files}
             selectedId={selected?.id ?? null}
             onSelect={setSelected}
+          />
+        )}
+
+        {panel === 'shared' && (
+          <SharedPanel
+            selectedId={selected?.id ?? null}
+            onSelect={(f) => setSelected(sharedToTreeFile(f))}
           />
         )}
 
@@ -253,6 +334,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           files={tree.files}
           onPick={setSelected}
           onClose={() => setPaletteOpen(false)}
+        />
+      )}
+
+      {tagEditorFile && (
+        <TagEditor
+          file={tagEditorFile}
+          tags={tags}
+          onChanged={() => {
+            void loadTags();
+            void loadTree();
+          }}
+          onClose={() => setTagEditorFile(null)}
         />
       )}
     </div>
