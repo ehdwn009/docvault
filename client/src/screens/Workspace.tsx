@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CommandPalette from '../components/CommandPalette';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import RecentList from '../components/RecentList';
@@ -6,6 +6,7 @@ import TagEditor from '../components/TagEditor';
 import {
   api,
   ApiError,
+  uploadFiles,
   type SharedFile,
   type Tag,
   type Tree,
@@ -13,6 +14,8 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
+import { confirmDialog, promptDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 import AdminPanel from './panels/AdminPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
@@ -20,6 +23,7 @@ import SharedPanel from './panels/SharedPanel';
 import Viewer from './Viewer';
 
 type Panel = 'files' | 'favorites' | 'shared' | 'settings' | 'admin';
+type SortBy = 'name' | 'updated';
 
 const DEFAULT_SETTINGS: UserSettings = {
   viewerTheme: 'light',
@@ -53,6 +57,12 @@ function sharedToTreeFile(f: SharedFile): TreeFile {
   };
 }
 
+/** 딥링크 경로(/f/{id})에서 파일 ID 추출 (IA — URL 라우팅) */
+function fileIdFromPath(pathname: string): number | null {
+  const m = pathname.match(/^\/f\/(\d+)$/);
+  return m ? Number(m[1]) : null;
+}
+
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
@@ -62,11 +72,119 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagFilter, setTagFilter] = useState<number | null>(null);
   const [tagEditorFile, setTagEditorFile] = useState<TreeFile | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortBy>('name');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadFolderRef = useRef<number | null>(null);
+  const treeRef = useRef<Tree>(tree);
+  const dirtyRef = useRef(false); // 편집기의 미저장 변경 여부 — 파일 전환 가드용
+
+  const loadTree = useCallback(async (): Promise<Tree | null> => {
+    const t = await api<Tree>('/tree').catch(() => null);
+    if (t) {
+      setTree(t);
+      treeRef.current = t;
+      // 이름변경·이동이 반영되도록 선택 파일을 새 트리와 동기화.
+      // 트리에 없으면(공유 파일 열람 중) 선택을 유지한다 — 삭제는 deleteFile에서 직접 해제
+      setSelected((prev) => (prev ? (t.files.find((f) => f.id === prev.id) ?? prev) : null));
+    }
+    return t;
+  }, []);
+
+  const loadTags = useCallback(async () => {
+    const r = await api<{ tags: Tag[] }>('/tags').catch(() => null);
+    if (r) setTags(r.tags);
+  }, []);
+
+  /** 트리 밖 파일(공유·타 사용자)도 메타 조회로 열 수 있게 한다 */
+  const resolveFile = useCallback(async (id: number): Promise<TreeFile | null> => {
+    const inTree = treeRef.current.files.find((f) => f.id === id);
+    if (inTree) return inTree;
+    const meta = await api<Omit<TreeFile, 'tags' | 'state'>>(`/files/${id}`).catch(() => null);
+    return meta
+      ? { ...meta, tags: [], state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null } }
+      : null;
+  }, []);
+
+  // 초기 로드 + 딥링크(/f/{id}) 복원
+  useEffect(() => {
+    void (async () => {
+      await Promise.all([loadTree(), loadTags()]);
+      const id = fileIdFromPath(location.pathname);
+      if (id !== null) {
+        const f = await resolveFile(id);
+        if (f) setSelected(f);
+      }
+    })();
+    void api<{ settings: UserSettings }>('/me/settings')
+      .then(({ settings }) => setSettings(settings))
+      .catch(() => {});
+  }, [loadTree, loadTags, resolveFile]);
+
+  // 뒤로가기/앞으로가기
+  useEffect(() => {
+    const handler = () => {
+      const id = fileIdFromPath(location.pathname);
+      if (id === null) setSelected(null);
+      else void resolveFile(id).then((f) => f && setSelected(f));
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [resolveFile]);
+
+  /** 파일 선택 — 미저장 편집 확인 → URL 갱신 → 모바일 드로어 닫기 */
+  const selectFile = useCallback(async (file: TreeFile) => {
+    if (dirtyRef.current) {
+      const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
+        message: '이동하면 작성한 내용이 사라집니다.',
+        danger: true,
+      });
+      if (!ok) return;
+      dirtyRef.current = false;
+    }
+    setSelected(file);
+    setDrawerOpen(false);
+    if (location.pathname !== `/f/${file.id}`) {
+      history.pushState(null, '', `/f/${file.id}`);
+    }
+  }, []);
+
+  /** 트리 조작 공통 래퍼: 에러는 토스트로, 성공하면 트리 재조회 */
+  const guard = useCallback(
+    async (fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        await loadTree();
+      } catch (e) {
+        toast(e instanceof ApiError ? e.message : '작업에 실패했습니다', 'error');
+      }
+    },
+    [loadTree],
+  );
+
+  const doUpload = useCallback(
+    async (fileList: FileList | File[], folderId: number | null) => {
+      const list = [...fileList];
+      if (list.length === 0) return;
+      const fd = new FormData();
+      for (const f of list) fd.append('files', f);
+      if (folderId !== null) fd.append('folderId', String(folderId));
+      setUploadProgress(0);
+      try {
+        const { files } = await uploadFiles(fd, setUploadProgress);
+        await loadTree();
+        toast(`${files.length}개 파일을 업로드했습니다`, 'success');
+        if (files[0]) void selectFile(files[0]);
+      } catch (e) {
+        toast(e instanceof ApiError ? e.message : '업로드에 실패했습니다', 'error');
+      } finally {
+        setUploadProgress(null);
+      }
+    },
+    [loadTree, selectFile],
+  );
 
   // Ctrl+K: 커맨드 팔레트 (IA — 단축키)
   useEffect(() => {
@@ -80,81 +198,40 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const loadTree = useCallback(async () => {
-    const t = await api<Tree>('/tree').catch(() => null);
-    if (t) {
-      setTree(t);
-      // 이름변경·이동이 반영되도록 선택 파일을 새 트리와 동기화.
-      // 트리에 없으면(공유 파일 열람 중) 선택을 유지한다 — 삭제는 deleteFile에서 직접 해제
-      setSelected((prev) => (prev ? (t.files.find((f) => f.id === prev.id) ?? prev) : null));
-    }
-  }, []);
-
-  const loadTags = useCallback(async () => {
-    const r = await api<{ tags: Tag[] }>('/tags').catch(() => null);
-    if (r) setTags(r.tags);
-  }, []);
-
-  useEffect(() => {
-    void loadTree();
-    void loadTags();
-    void api<{ settings: UserSettings }>('/me/settings')
-      .then(({ settings }) => setSettings(settings))
-      .catch(() => {});
-  }, [loadTree, loadTags]);
-
-  /** 트리 조작 공통 래퍼: 에러는 notice로, 성공하면 트리 재조회 */
-  const guard = useCallback(
-    async (fn: () => Promise<unknown>) => {
-      setNotice(null);
-      try {
-        await fn();
-        await loadTree();
-      } catch (e) {
-        setNotice(e instanceof ApiError ? e.message : '작업에 실패했습니다');
-      }
-    },
-    [loadTree],
-  );
-
-  async function handleUpload(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return;
-    const folderId = uploadFolderRef.current;
-    uploadFolderRef.current = null;
-    const fd = new FormData();
-    for (const f of fileList) fd.append('files', f);
-    if (folderId !== null) fd.append('folderId', String(folderId));
-    await guard(async () => {
-      const { files } = await api<{ files: TreeFile[] }>('/files', { method: 'POST', body: fd });
-      if (files[0]) setSelected(files[0]);
-    });
-    if (uploadRef.current) uploadRef.current.value = '';
-  }
-
   const actions: TreeActions = {
     createFolder: (parentId) => {
-      const name = window.prompt('폴더 이름');
-      if (!name?.trim()) return;
-      void guard(() =>
-        api('/folders', { method: 'POST', body: JSON.stringify({ name: name.trim(), parentId }) }),
-      );
+      void promptDialog('폴더 이름').then((name) => {
+        if (!name?.trim()) return;
+        void guard(() =>
+          api('/folders', { method: 'POST', body: JSON.stringify({ name: name.trim(), parentId }) }),
+        );
+      });
     },
     renameFolder: (id, name) =>
       void guard(() => api(`/folders/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })),
     moveFolder: (id, parentId) =>
       void guard(() => api(`/folders/${id}`, { method: 'PUT', body: JSON.stringify({ parentId }) })),
     deleteFolder: (id) => {
-      if (!window.confirm('폴더와 하위 폴더·파일이 모두 삭제됩니다. 계속할까요?')) return;
-      void guard(() => api(`/folders/${id}`, { method: 'DELETE' }));
+      void confirmDialog('폴더를 삭제할까요?', {
+        message: '하위 폴더와 파일이 모두 삭제됩니다.',
+        danger: true,
+      }).then((ok) => {
+        if (ok) void guard(() => api(`/folders/${id}`, { method: 'DELETE' }));
+      });
     },
     renameFile: (id, name) =>
       void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })),
     moveFile: (id, folderId) =>
       void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) })),
     deleteFile: (id) => {
-      if (!window.confirm('파일을 삭제할까요?')) return;
-      if (selected?.id === id) setSelected(null);
-      void guard(() => api(`/files/${id}`, { method: 'DELETE' }));
+      void confirmDialog('파일을 삭제할까요?', { danger: true }).then((ok) => {
+        if (!ok) return;
+        if (selected?.id === id) {
+          setSelected(null);
+          history.replaceState(null, '', '/');
+        }
+        void guard(() => api(`/files/${id}`, { method: 'DELETE' }));
+      });
     },
     copyFile: (id) => void guard(() => api(`/files/${id}/copy`, { method: 'POST' })),
     uploadTo: (folderId) => {
@@ -198,18 +275,25 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     onLogout();
   }
 
-  /** 파일 선택 — 모바일에서는 드로어를 닫아 바로 본문을 보여준다 */
-  function selectFile(file: TreeFile) {
-    setSelected(file);
-    setDrawerOpen(false);
-  }
+  // 정렬 (SCR-111) + 태그 필터를 적용한 트리 데이터
+  const visibleFiles = useMemo(() => {
+    const filtered =
+      tagFilter === null ? tree.files : tree.files.filter((f) => f.tags.includes(tagFilter));
+    return [...filtered].sort((a, b) =>
+      sortBy === 'name' ? a.name.localeCompare(b.name, 'ko') : b.updatedAt - a.updatedAt,
+    );
+  }, [tree.files, tagFilter, sortBy]);
+  const sortedFolders = useMemo(
+    () => [...tree.folders].sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    [tree.folders],
+  );
 
   const railButton = (target: Panel, icon: string, label: string) => (
     <button
       onClick={() => setPanel(target)}
       title={label}
       className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
-        panel === target ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200'
+        panel === target ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'
       }`}
     >
       {icon}
@@ -217,11 +301,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   return (
-    <div className="flex h-dvh bg-zinc-950 text-zinc-100">
+    <div className="flex h-dvh bg-slate-950 text-slate-100">
       {/* 모바일: 드로어 토글 (md 미만에서 레일+패널은 드로어로 전환 — IA 반응형 기준) */}
       <button
         onClick={() => setDrawerOpen(true)}
-        className="fixed left-3 top-2 z-20 rounded-md border border-zinc-800 bg-zinc-900/90 px-2.5 py-1 text-zinc-300 md:hidden"
+        className="fixed left-3 top-2 z-20 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 md:hidden"
       >
         ☰
       </button>
@@ -230,12 +314,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       )}
 
       <div
-        className={`z-40 flex shrink-0 bg-zinc-950 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:transition-transform ${
+        className={`z-40 flex shrink-0 bg-slate-950 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:transition-transform ${
           drawerOpen ? '' : 'max-md:-translate-x-full'
         }`}
       >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
-      <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-zinc-800 py-3">
+      <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
         {railButton('files', '📄', '내 파일')}
         {railButton('favorites', '★', '즐겨찾기')}
         {railButton('shared', '🔗', '공유 파일')}
@@ -244,16 +328,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
-          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-lg text-zinc-600 transition hover:text-zinc-300"
+          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-lg text-slate-600 transition hover:text-slate-300"
         >
           ⏻
         </button>
       </div>
 
-      <aside className="flex w-72 shrink-0 flex-col border-r border-zinc-800">
+      <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800">
         <div className="flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
-          <span className="ml-auto truncate text-xs text-zinc-600">
+          <span className="ml-auto truncate text-xs text-slate-600">
             {user.displayName ?? user.username}
           </span>
         </div>
@@ -267,56 +351,79 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 multiple
                 accept=".md,.markdown,.html,.txt,.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf"
                 className="hidden"
-                onChange={(e) => void handleUpload(e.target.files)}
+                onChange={(e) => {
+                  const folderId = uploadFolderRef.current;
+                  uploadFolderRef.current = null;
+                  if (e.target.files) void doUpload(e.target.files, folderId);
+                  e.target.value = '';
+                }}
               />
               <button
                 onClick={() => actions.uploadTo(null)}
                 title="md·html·txt·이미지·PDF"
-                className="flex-1 rounded-md border border-dashed border-zinc-700 py-2 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
+                className="flex-1 rounded-md border border-dashed border-slate-700 py-2 text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 + 업로드
               </button>
               <button
                 onClick={() => actions.createFolder(null)}
-                className="rounded-md border border-dashed border-zinc-700 px-3 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
+                className="rounded-md border border-dashed border-slate-700 px-3 text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 + 폴더
               </button>
             </div>
-            {notice && <p className="px-3 pt-2 text-xs text-red-400">{notice}</p>}
-            {tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1 px-3">
-                <button
-                  onClick={() => setTagFilter(null)}
-                  className={`rounded-full px-2 py-0.5 text-[11px] transition ${
-                    tagFilter === null ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  전체
-                </button>
-                {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => setTagFilter((cur) => (cur === tag.id ? null : tag.id))}
-                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition ${
-                      tagFilter === tag.id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color }} />
-                    {tag.name}
-                  </button>
-                ))}
+            {uploadProgress !== null && (
+              <div className="mx-3 mt-2 h-1 overflow-hidden rounded bg-slate-800">
+                <div
+                  className="h-full bg-sky-500 transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
               </div>
             )}
+            <div className="mt-2 flex items-start gap-1 px-3">
+              {tags.length > 0 && (
+                <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                  <button
+                    onClick={() => setTagFilter(null)}
+                    className={`rounded-full px-2 py-0.5 text-[11px] transition ${
+                      tagFilter === null ? 'bg-slate-700 text-slate-100' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    전체
+                  </button>
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => setTagFilter((cur) => (cur === tag.id ? null : tag.id))}
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition ${
+                        tagFilter === tag.id ? 'bg-slate-700 text-slate-100' : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color }} />
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                title="정렬"
+                className="ml-auto rounded border border-slate-800 bg-slate-900 px-1 py-0.5 text-[11px] text-slate-400 outline-none"
+              >
+                <option value="name">이름순</option>
+                <option value="updated">최근 수정순</option>
+              </select>
+            </div>
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
-              <RecentList files={tree.files} onSelect={selectFile} />
+              <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} />
               <FileTree
-                folders={tree.folders}
-                files={tagFilter === null ? tree.files : tree.files.filter((f) => f.tags.includes(tagFilter))}
+                folders={sortedFolders}
+                files={visibleFiles}
                 tags={tags}
                 isAdmin={user.role === 'admin'}
                 selectedId={selected?.id ?? null}
-                onSelect={selectFile}
+                onSelect={(f) => void selectFile(f)}
                 actions={actions}
               />
             </nav>
@@ -327,36 +434,53 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <FavoritesPanel
             files={tree.files}
             selectedId={selected?.id ?? null}
-            onSelect={selectFile}
+            onSelect={(f) => void selectFile(f)}
           />
         )}
 
         {panel === 'shared' && (
           <SharedPanel
             selectedId={selected?.id ?? null}
-            onSelect={(f) => selectFile(sharedToTreeFile(f))}
+            onSelect={(f) => void selectFile(sharedToTreeFile(f))}
           />
         )}
 
         {panel === 'settings' && <SettingsPanel settings={settings} onChange={changeSettings} />}
 
         {panel === 'admin' && user.role === 'admin' && (
-          <AdminPanel meId={user.id} onSelectFile={selectFile} />
+          <AdminPanel meId={user.id} onSelectFile={(f) => void selectFile(f)} />
         )}
       </aside>
       </div>
 
-      <main className="min-w-0 flex-1">
+      <main
+        className="min-w-0 flex-1"
+        onDragOver={(e) => {
+          // OS 파일 드롭 업로드 허용 (트리 내부 이동 DnD는 nav 안에서 처리됨)
+          if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (e.dataTransfer.files.length > 0) {
+            e.preventDefault();
+            void doUpload(e.dataTransfer.files, null);
+          }
+        }}
+      >
         {selected ? (
           <Viewer
             file={selected}
             settings={settings}
             onContentSaved={() => void loadTree()}
             onToggleFavorite={toggleFavorite}
+            onDirtyChange={(d) => (dirtyRef.current = d)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-600">
-            좌측에서 파일을 선택하거나 업로드하세요 <span className="ml-2 rounded border border-zinc-800 px-1.5 py-0.5 text-xs">Ctrl+K 검색</span>
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-600">
+            <p>좌측에서 파일을 선택하거나, 여기로 파일을 끌어다 놓으세요</p>
+            <p>
+              <span className="rounded border border-slate-800 px-1.5 py-0.5 text-xs">Ctrl+K</span>{' '}
+              검색
+            </p>
           </div>
         )}
       </main>
@@ -364,7 +488,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {paletteOpen && (
         <CommandPalette
           files={tree.files}
-          onPick={selectFile}
+          onPick={(f) => void selectFile(f)}
           onClose={() => setPaletteOpen(false)}
         />
       )}

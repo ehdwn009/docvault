@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, ApiError, type Tag, type TreeFile } from '../lib/api';
+import { confirmDialog } from '../lib/dialog';
 
 const PALETTE = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#0ea5e9', '#8b5cf6', '#ec4899'];
 
@@ -54,7 +55,11 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
   }
 
   async function deleteTag(tagId: number) {
-    if (!window.confirm('태그를 삭제할까요? 모든 파일에서 제거됩니다.')) return;
+    const ok = await confirmDialog('태그를 삭제할까요?', {
+      message: '모든 파일에서 제거됩니다.',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/tags/${tagId}`, { method: 'DELETE' });
       onChanged();
@@ -68,20 +73,20 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-80 rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl">
-        <h3 className="truncate text-sm font-medium text-zinc-200">태그: {file.name}</h3>
+      <div className="w-80 rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+        <h3 className="truncate text-sm font-medium text-slate-200">태그: {file.name}</h3>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
 
         <div className="mt-3 max-h-52 space-y-1 overflow-auto">
-          {tags.length === 0 && <p className="text-xs text-zinc-600">태그가 없습니다. 아래에서 만들어 보세요.</p>}
+          {tags.length === 0 && <p className="text-xs text-slate-600">태그가 없습니다. 아래에서 만들어 보세요.</p>}
           {tags.map((tag) => (
             <div key={tag.id} className="group flex items-center gap-2">
-              <label className="flex flex-1 cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-zinc-200 hover:bg-zinc-800">
+              <label className="flex flex-1 cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-slate-200 hover:bg-slate-800">
                 <input
                   type="checkbox"
                   checked={attached.has(tag.id)}
                   onChange={() => toggle(tag.id)}
-                  className="accent-zinc-300"
+                  className="accent-slate-300"
                 />
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: tag.color }} />
                 {tag.name}
@@ -89,7 +94,7 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
               <button
                 onClick={() => void deleteTag(tag.id)}
                 title="태그 삭제"
-                className="hidden text-xs text-zinc-600 hover:text-red-400 group-hover:block"
+                className="hidden text-xs text-slate-600 hover:text-red-400 group-hover:block"
               >
                 ✕
               </button>
@@ -97,13 +102,13 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
           ))}
         </div>
 
-        <div className="mt-3 border-t border-zinc-800 pt-3">
+        <div className="mt-3 border-t border-slate-800 pt-3">
           <div className="flex gap-1.5">
             {PALETTE.map((p) => (
               <button
                 key={p}
                 onClick={() => setColor(p)}
-                className={`h-5 w-5 rounded-full ${color === p ? 'ring-2 ring-zinc-300 ring-offset-1 ring-offset-zinc-900' : ''}`}
+                className={`h-5 w-5 rounded-full ${color === p ? 'ring-2 ring-slate-300 ring-offset-1 ring-offset-slate-900' : ''}`}
                 style={{ background: p }}
               />
             ))}
@@ -114,12 +119,12 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void createTag()}
               placeholder="새 태그 이름"
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-400"
+              className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-400"
             />
             <button
               onClick={() => void createTag()}
               disabled={!newName.trim()}
-              className="rounded-md bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-white disabled:opacity-40"
+              className="rounded-md bg-slate-100 px-3 py-1 text-sm font-medium text-slate-900 hover:bg-white disabled:opacity-40"
             >
               추가
             </button>
@@ -128,7 +133,7 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
 
         <button
           onClick={onClose}
-          className="mt-3 w-full rounded-md border border-zinc-700 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+          className="mt-3 w-full rounded-md border border-slate-700 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
         >
           닫기
         </button>

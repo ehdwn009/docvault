@@ -77,18 +77,18 @@ export default function CommandPalette({ files, onPick, onClose }: Props) {
       className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 pt-[15vh]"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-xl rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+      <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKey}
           placeholder="파일 이름 또는 본문 검색…"
-          className="w-full border-b border-zinc-800 bg-transparent px-4 py-3 text-zinc-100 outline-none placeholder:text-zinc-600"
+          className="w-full border-b border-slate-800 bg-transparent px-4 py-3 text-slate-100 outline-none placeholder:text-slate-600"
         />
         <div className="max-h-80 overflow-auto py-1">
           {query.trim() && items.length === 0 && (
-            <p className="px-4 py-3 text-sm text-zinc-500">결과가 없습니다</p>
+            <p className="px-4 py-3 text-sm text-slate-500">결과가 없습니다</p>
           )}
           {items.map((item, i) => (
             <button
@@ -99,17 +99,17 @@ export default function CommandPalette({ files, onPick, onClose }: Props) {
               }}
               onMouseEnter={() => setCursor(i)}
               className={`block w-full px-4 py-2 text-left ${
-                i === cursor ? 'bg-zinc-800' : ''
+                i === cursor ? 'bg-slate-800' : ''
               }`}
             >
-              <span className="text-sm text-zinc-100">{item.file.name}</span>
+              <span className="text-sm text-slate-100">{item.file.name}</span>
               {item.snippet && (
-                <span className="mt-0.5 block truncate text-xs text-zinc-500">{item.snippet}</span>
+                <span className="mt-0.5 block truncate text-xs text-slate-500">{item.snippet}</span>
               )}
             </button>
           ))}
         </div>
-        <div className="border-t border-zinc-800 px-4 py-1.5 text-[10px] text-zinc-600">
+        <div className="border-t border-slate-800 px-4 py-1.5 text-[10px] text-slate-600">
           ↑↓ 이동 · Enter 열기 · Esc 닫기
         </div>
       </div>

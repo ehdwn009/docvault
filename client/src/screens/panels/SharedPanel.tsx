@@ -24,11 +24,11 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
         .map((folder) => (
           <div key={`d${folder.id}`}>
             <div
-              className="flex items-center gap-1.5 px-2 py-1 text-sm text-zinc-400"
+              className="flex items-center gap-1.5 px-2 py-1 text-sm text-slate-400"
               style={{ paddingLeft: `${8 + depth * 14}px` }}
             >
               <span>📁</span> {folder.name}
-              <span className="ml-auto text-[10px] text-zinc-600">{folder.ownerName}</span>
+              <span className="ml-auto text-[10px] text-slate-600">{folder.ownerName}</span>
             </div>
             {renderLevel(folder.id, depth + 1)}
           </div>
@@ -40,19 +40,19 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
             key={file.id}
             onClick={() => onSelect(file)}
             className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
-              file.id === selectedId ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900'
+              file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
             }`}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
           >
             <span className="truncate">{file.name}</span>
-            <span className="ml-auto text-[10px] text-zinc-600">{file.ownerName}</span>
+            <span className="ml-auto text-[10px] text-slate-600">{file.ownerName}</span>
           </button>
         ))}
     </>
   );
 
   if (folders.length === 0 && files.length === 0) {
-    return <p className="px-4 py-4 text-sm text-zinc-600">공유된 파일이 없습니다.</p>;
+    return <p className="px-4 py-4 text-sm text-slate-600">공유된 파일이 없습니다.</p>;
   }
   return <div className="space-y-0.5 px-2">{renderLevel(null, 0)}</div>;
 }

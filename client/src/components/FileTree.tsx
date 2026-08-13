@@ -5,7 +5,7 @@ import ContextMenu, { type MenuItem } from './ContextMenu';
 const TYPE_BADGE: Record<string, string> = {
   md: 'text-sky-400',
   html: 'text-orange-400',
-  text: 'text-zinc-400',
+  text: 'text-slate-400',
   code: 'text-emerald-400',
   image: 'text-purple-400',
   pdf: 'text-red-400',
@@ -98,6 +98,46 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     setRenaming(null);
   }
 
+  // 우클릭과 ⋯ 버튼이 같은 메뉴를 공유한다 (모바일은 우클릭이 없어서 ⋯가 유일한 진입점)
+  const folderMenu = (folder: TreeFolder): MenuItem[] => [
+    { label: '새 하위 폴더', action: () => actions.createFolder(folder.id) },
+    { label: '여기에 업로드', action: () => actions.uploadTo(folder.id) },
+    {
+      label: '이름 변경',
+      action: () => setRenaming({ kind: 'folder', id: folder.id, value: folder.name }),
+    },
+    ...(isAdmin
+      ? [{ label: folder.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFolder(folder) }]
+      : []),
+    { label: '삭제', danger: true, action: () => actions.deleteFolder(folder.id) },
+  ];
+
+  const fileMenu = (file: TreeFile): MenuItem[] => [
+    {
+      label: '이름 변경',
+      action: () => setRenaming({ kind: 'file', id: file.id, value: file.name }),
+    },
+    { label: '태그', action: () => actions.editTags(file) },
+    { label: '복사', action: () => actions.copyFile(file.id) },
+    ...(isAdmin
+      ? [{ label: file.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFile(file) }]
+      : []),
+    { label: '삭제', danger: true, action: () => actions.deleteFile(file.id) },
+  ];
+
+  const moreButton = (items: () => MenuItem[]) => (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        openMenu(e, items());
+      }}
+      title="메뉴"
+      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 md:hidden md:group-hover:block"
+    >
+      ⋯
+    </button>
+  );
+
   const renameInput = (r: Renaming) => (
     <input
       value={r.value}
@@ -110,7 +150,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
         if (e.key === 'Escape') setRenaming(null);
       }}
       onClick={(e) => e.stopPropagation()}
-      className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0.5 text-sm text-zinc-100 outline-none"
+      className="w-full rounded border border-slate-600 bg-slate-800 px-1 py-0.5 text-sm text-slate-100 outline-none"
     />
   );
 
@@ -131,29 +171,19 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 onDragLeave={() => setDropTarget((t) => (t === folder.id ? null : t))}
                 onDrop={(e) => handleDrop(e, folder.id)}
                 onClick={() => toggleCollapse(folder.id)}
-                onContextMenu={(e) =>
-                  openMenu(e, [
-                    { label: '새 하위 폴더', action: () => actions.createFolder(folder.id) },
-                    { label: '여기에 업로드', action: () => actions.uploadTo(folder.id) },
-                    {
-                      label: '이름 변경',
-                      action: () => setRenaming({ kind: 'folder', id: folder.id, value: folder.name }),
-                    },
-                    ...(isAdmin
-                      ? [{ label: folder.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFolder(folder) }]
-                      : []),
-                    { label: '삭제', danger: true, action: () => actions.deleteFolder(folder.id) },
-                  ])
-                }
-                className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-sm transition ${
-                  dropTarget === folder.id ? 'bg-sky-900/50 outline outline-1 outline-sky-600' : 'text-zinc-400 hover:bg-zinc-900'
+                onContextMenu={(e) => openMenu(e, folderMenu(folder))}
+                className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-sm transition ${
+                  dropTarget === folder.id ? 'bg-sky-900/50 outline outline-1 outline-sky-600' : 'text-slate-400 hover:bg-slate-900'
                 }`}
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
               >
                 <span className="text-[10px]">{collapsed.has(folder.id) ? '▸' : '▾'}</span>
                 <span>📁</span>
                 {isRenaming ? renameInput(renaming) : <span className="truncate">{folder.name}</span>}
-                {folder.isShared === 1 && <span className="ml-auto text-[10px] text-sky-500">공유</span>}
+                <span className="ml-auto flex shrink-0 items-center gap-1">
+                  {folder.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
+                  {moreButton(() => folderMenu(folder))}
+                </span>
               </div>
               {!collapsed.has(folder.id) && renderLevel(folder.id, depth + 1)}
             </div>
@@ -167,22 +197,9 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
               draggable={!isRenaming}
               onDragStart={(e) => startDrag(e, { kind: 'file', id: file.id })}
               onClick={() => onSelect(file)}
-              onContextMenu={(e) =>
-                openMenu(e, [
-                  {
-                    label: '이름 변경',
-                    action: () => setRenaming({ kind: 'file', id: file.id, value: file.name }),
-                  },
-                  { label: '태그', action: () => actions.editTags(file) },
-                  { label: '복사', action: () => actions.copyFile(file.id) },
-                  ...(isAdmin
-                    ? [{ label: file.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFile(file) }]
-                    : []),
-                  { label: '삭제', danger: true, action: () => actions.deleteFile(file.id) },
-                ])
-              }
-              className={`flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
-                file.id === selectedId ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900'
+              onContextMenu={(e) => openMenu(e, fileMenu(file))}
+              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
+                file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
               }`}
               style={{ paddingLeft: `${8 + depth * 14}px` }}
             >
@@ -199,6 +216,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   />
                 ))}
                 {file.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
+                {moreButton(() => fileMenu(file))}
               </span>
             </div>
           );
@@ -215,7 +233,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
       onDrop={(e) => handleDrop(e, null)}
     >
       {folders.length === 0 && files.length === 0 ? (
-        <p className="px-2 py-4 text-sm text-zinc-600">파일이 없습니다. 업로드해 보세요.</p>
+        <p className="px-2 py-4 text-sm text-slate-600">파일이 없습니다. 업로드해 보세요.</p>
       ) : (
         renderLevel(null, 0)
       )}

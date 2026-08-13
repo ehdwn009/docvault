@@ -7,7 +7,7 @@ type Props = {
 };
 
 const selectClass =
-  'mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-zinc-400';
+  'mt-1 w-full rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-400';
 
 // SCR-140: 설정 패널 — 뷰어 설정(SCR-141, 변경 즉시 저장·적용) + 비밀번호 변경(SCR-142)
 export default function SettingsPanel({ settings, onChange }: Props) {
@@ -37,9 +37,9 @@ export default function SettingsPanel({ settings, onChange }: Props) {
   return (
     <div className="space-y-6 px-4 py-2">
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">뷰어 설정</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">뷰어 설정</h3>
 
-        <label className="mt-3 block text-sm text-zinc-300">
+        <label className="mt-3 block text-sm text-slate-300">
           테마
           <select
             value={settings.viewerTheme}
@@ -52,7 +52,7 @@ export default function SettingsPanel({ settings, onChange }: Props) {
           </select>
         </label>
 
-        <label className="mt-3 block text-sm text-zinc-300">
+        <label className="mt-3 block text-sm text-slate-300">
           글자 크기: {settings.fontSize}px
           <input
             type="range"
@@ -60,11 +60,11 @@ export default function SettingsPanel({ settings, onChange }: Props) {
             max={24}
             value={settings.fontSize}
             onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
-            className="mt-1 w-full accent-zinc-300"
+            className="mt-1 w-full accent-slate-300"
           />
         </label>
 
-        <label className="mt-3 block text-sm text-zinc-300">
+        <label className="mt-3 block text-sm text-slate-300">
           본문 너비
           <select
             value={settings.contentWidth}
@@ -81,7 +81,7 @@ export default function SettingsPanel({ settings, onChange }: Props) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">비밀번호 변경</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">비밀번호 변경</h3>
         <form onSubmit={(e) => void changePassword(e)} className="mt-3 space-y-2">
           <input
             type="password"
@@ -107,7 +107,7 @@ export default function SettingsPanel({ settings, onChange }: Props) {
           <button
             type="submit"
             disabled={!currentPassword || newPassword.length < 8}
-            className="w-full rounded-md border border-zinc-700 py-1.5 text-sm text-zinc-300 transition hover:bg-zinc-900 disabled:opacity-40"
+            className="w-full rounded-md border border-slate-700 py-1.5 text-sm text-slate-300 transition hover:bg-slate-900 disabled:opacity-40"
           >
             변경
           </button>

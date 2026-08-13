@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import VersionPanel from '../components/VersionPanel';
 import { api, ApiError, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { renderers } from '../renderers';
@@ -9,11 +9,12 @@ type Props = {
   settings: UserSettings;
   onContentSaved: () => void;
   onToggleFavorite: (file: TreeFile) => void;
+  onDirtyChange: (dirty: boolean) => void;
 };
 
 const THEME_BG: Record<UserSettings['viewerTheme'], string> = {
   light: 'bg-white',
-  dark: 'bg-zinc-950',
+  dark: 'bg-slate-950',
   sepia: 'bg-[#f4ecd8]',
 };
 const WIDTH: Record<UserSettings['contentWidth'], string> = {
@@ -22,12 +23,16 @@ const WIDTH: Record<UserSettings['contentWidth'], string> = {
   wide: 'max-w-none',
 };
 
-// SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장(2초 디바운스)·복원
-export default function Viewer({ file, settings, onContentSaved, onToggleFavorite }: Props) {
+type Heading = { text: string; level: number; el: HTMLElement };
+
+// SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
+export default function Viewer({ file, settings, onContentSaved, onToggleFavorite, onDirtyChange }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [showVersions, setShowVersions] = useState(false);
+  const [showToc, setShowToc] = useState(false);
+  const [headings, setHeadings] = useState<Heading[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | undefined>(undefined);
 
@@ -39,6 +44,7 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
     setError(null);
     setMode('view');
     setShowVersions(false);
+    setShowToc(false);
     if (isBinary) {
       setData({ id: file.id, fileType: file.fileType, content: '', updatedAt: file.updatedAt, readonly: true });
     } else {
@@ -64,8 +70,25 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
         if (scrollRef.current) scrollRef.current.scrollTop = offset;
       });
     }
-    // eslint 없이도 의도를 명확히: 복원은 본문 로드 완료 시 1회
+    // 복원은 본문 로드 완료 시 1회
   }, [data, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 목차: 렌더링된 DOM에서 헤딩을 수집한다 (지연 렌더러 대비 재시도 1회)
+  const collectHeadings = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const els = [...container.querySelectorAll<HTMLElement>('h1, h2, h3')];
+    setHeadings(
+      els.map((el) => ({ text: el.textContent ?? '', level: Number(el.tagName[1]), el })),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!showToc || !data) return;
+    collectHeadings();
+    const retry = window.setTimeout(collectHeadings, 600);
+    return () => window.clearTimeout(retry);
+  }, [showToc, data, collectHeadings]);
 
   function handleScroll() {
     window.clearTimeout(debounceRef.current);
@@ -81,13 +104,14 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
   useEffect(() => () => window.clearTimeout(debounceRef.current), []);
 
   if (error) return <p className="p-6 text-sm text-red-400">{error}</p>;
-  if (!data) return <p className="p-6 text-sm text-zinc-500">불러오는 중…</p>;
+  if (!data) return <p className="p-6 text-sm text-slate-500">불러오는 중…</p>;
 
   if (mode === 'edit') {
     return (
       <Editor
         file={data}
         onCancel={() => setMode('view')}
+        onDirtyChange={onDirtyChange}
         onSaved={(content, updatedAt) => {
           setData({ ...data, content, updatedAt });
           setMode('view');
@@ -99,52 +123,74 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
 
   const Renderer = renderers[data.fileType];
   const isFavorite = file.state.isFavorite === 1;
+  const headerButton = (active: boolean) =>
+    `rounded border px-3 py-1 text-sm ${
+      active
+        ? 'border-slate-500 bg-slate-800 text-slate-100'
+        : 'border-slate-700 text-slate-300 hover:bg-slate-900'
+    }`;
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2 max-md:pl-14">
+      <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-2 max-md:pl-14">
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
-          className={`text-lg leading-none ${isFavorite ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+          className={`text-lg leading-none ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
         >
           ★
         </button>
-        <h2 className="truncate font-medium text-zinc-100">{file.name}</h2>
-        <span className="text-xs text-zinc-500">
+        <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
+        <span className="text-xs text-slate-500 max-md:hidden">
           {new Date(data.updatedAt).toLocaleString()} 수정
         </span>
-        {!isBinary && (
-          <button
-            onClick={() => setShowVersions((v) => !v)}
-            className={`ml-auto rounded border px-3 py-1 text-sm ${
-              showVersions
-                ? 'border-zinc-500 bg-zinc-800 text-zinc-100'
-                : 'border-zinc-700 text-zinc-300 hover:bg-zinc-900'
-            }`}
-          >
-            버전
-          </button>
-        )}
-        {isBinary && (
-          <a
-            href={`/api/v1/files/${file.id}/raw`}
-            download={file.name}
-            className="ml-auto rounded border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-900"
-          >
-            다운로드
-          </a>
-        )}
-        {!data.readonly && (
-          <button
-            onClick={() => setMode('edit')}
-            className="rounded border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-900"
-          >
-            편집 (E)
-          </button>
-        )}
+        <div className="ml-auto flex gap-2">
+          {data.fileType === 'md' && (
+            <button onClick={() => setShowToc((v) => !v)} className={headerButton(showToc)}>
+              목차
+            </button>
+          )}
+          {!isBinary && (
+            <button onClick={() => setShowVersions((v) => !v)} className={headerButton(showVersions)}>
+              버전
+            </button>
+          )}
+          {isBinary && (
+            <a
+              href={`/api/v1/files/${file.id}/raw`}
+              download={file.name}
+              className={headerButton(false)}
+            >
+              다운로드
+            </a>
+          )}
+          {!data.readonly && (
+            <button onClick={() => setMode('edit')} className={headerButton(false)}>
+              편집 (E)
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex min-h-0 flex-1">
+        {/* SCR-151: 목차 사이드 패널 */}
+        {showToc && (
+          <nav className="w-56 shrink-0 overflow-auto border-r border-slate-800 py-3 max-md:hidden">
+            {headings.length === 0 ? (
+              <p className="px-3 text-xs text-slate-600">표시할 헤딩이 없습니다</p>
+            ) : (
+              headings.map((h, i) => (
+                <button
+                  key={i}
+                  onClick={() => h.el.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
+                  style={{ paddingLeft: `${12 + (h.level - 1) * 12}px` }}
+                >
+                  {h.text}
+                </button>
+              ))
+            )}
+          </nav>
+        )}
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -165,9 +211,11 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
               style={{ fontSize: settings.fontSize }}
             >
               {Renderer ? (
-                <Renderer content={data.content} theme={settings.viewerTheme} />
+                <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
+                  <Renderer content={data.content} theme={settings.viewerTheme} />
+                </Suspense>
               ) : (
-                <p className="text-sm text-zinc-500">이 형식({data.fileType})의 뷰어는 아직 없습니다</p>
+                <p className="text-sm text-slate-500">이 형식({data.fileType})의 뷰어는 아직 없습니다</p>
               )}
             </div>
           )}

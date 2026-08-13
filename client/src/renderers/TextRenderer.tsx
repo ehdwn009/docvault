@@ -10,7 +10,7 @@ export default function TextRenderer({
   return (
     <pre
       className={`whitespace-pre-wrap font-mono text-sm leading-relaxed ${
-        theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'
+        theme === 'dark' ? 'text-slate-200' : 'text-slate-800'
       }`}
     >
       {content}

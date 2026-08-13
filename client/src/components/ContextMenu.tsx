@@ -27,7 +27,7 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
   return (
     <div
       ref={ref}
-      className="fixed z-50 min-w-40 rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+      className="fixed z-50 min-w-40 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-xl"
       style={{ left: x, top: Math.min(y, window.innerHeight - items.length * 34 - 16) }}
     >
       {items.map((item) => (
@@ -37,8 +37,8 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
             onClose();
             item.action();
           }}
-          className={`block w-full px-3 py-1.5 text-left text-sm transition hover:bg-zinc-800 ${
-            item.danger ? 'text-red-400' : 'text-zinc-200'
+          className={`block w-full px-3 py-1.5 text-left text-sm transition hover:bg-slate-800 ${
+            item.danger ? 'text-red-400' : 'text-slate-200'
           }`}
         >
           {item.label}

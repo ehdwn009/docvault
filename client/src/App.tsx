@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type User } from './lib/api';
+import { DialogHost } from './lib/dialog';
+import { ToastHost } from './lib/toast';
 import Login from './screens/Login';
 import Workspace from './screens/Workspace';
 
@@ -15,11 +17,15 @@ export default function App() {
       .catch(() => setAuth({ status: 'guest' }));
   }, []);
 
-  if (auth.status === 'loading') {
-    return <div className="min-h-screen bg-zinc-950" />;
-  }
-  if (auth.status === 'guest') {
-    return <Login onLogin={(user) => setAuth({ status: 'authed', user })} />;
-  }
-  return <Workspace user={auth.user} onLogout={() => setAuth({ status: 'guest' })} />;
+  return (
+    <>
+      {auth.status === 'loading' && <div className="min-h-screen bg-slate-950" />}
+      {auth.status === 'guest' && <Login onLogin={(user) => setAuth({ status: 'authed', user })} />}
+      {auth.status === 'authed' && (
+        <Workspace user={auth.user} onLogout={() => setAuth({ status: 'guest' })} />
+      )}
+      <DialogHost />
+      <ToastHost />
+    </>
+  );
 }

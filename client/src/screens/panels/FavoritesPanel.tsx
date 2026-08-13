@@ -8,7 +8,7 @@ export default function FavoritesPanel({ files, selectedId, onSelect }: Props) {
 
   if (favorites.length === 0) {
     return (
-      <p className="px-4 py-4 text-sm text-zinc-600">
+      <p className="px-4 py-4 text-sm text-slate-600">
         즐겨찾기가 없습니다. 뷰어 상단의 ★를 눌러 추가하세요.
       </p>
     );
@@ -20,7 +20,7 @@ export default function FavoritesPanel({ files, selectedId, onSelect }: Props) {
           key={file.id}
           onClick={() => onSelect(file)}
           className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
-            file.id === selectedId ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900'
+            file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
           }`}
         >
           <span className="text-amber-400">★</span>

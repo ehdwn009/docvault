@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { api, ApiError, type ViewerTheme } from '../lib/api';
+import { confirmDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
 
 type VersionMeta = { id: number; savedBy: number; sizeBytes: number; createdAt: number };
@@ -38,11 +40,15 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
   }
 
   async function restore(vid: number) {
-    if (!window.confirm('이 버전으로 복원할까요? 현재 본문은 새 버전으로 저장됩니다.')) return;
+    const ok = await confirmDialog('이 버전으로 복원할까요?', {
+      message: '현재 본문은 새 버전으로 저장되어 다시 되돌릴 수 있습니다.',
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
       await api(`/files/${fileId}/versions/${vid}/restore`, { method: 'POST' });
+      toast('복원되었습니다', 'success');
       onRestored();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '복원에 실패했습니다');
@@ -54,11 +60,11 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
   const Renderer = renderers[fileType];
 
   return (
-    <div className="flex w-96 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-full">
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">
-        <h3 className="text-sm font-medium text-zinc-200">버전 기록</h3>
-        <span className="text-xs text-zinc-600">{versions.length}개</span>
-        <button onClick={onClose} className="ml-auto text-zinc-500 hover:text-zinc-300">
+    <div className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-950 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-full">
+      <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
+        <h3 className="text-sm font-medium text-slate-200">버전 기록</h3>
+        <span className="text-xs text-slate-600">{versions.length}개</span>
+        <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-300">
           ✕
         </button>
       </div>
@@ -67,45 +73,51 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
 
       {preview ? (
         <>
-          <div className="flex items-center gap-2 border-b border-zinc-800/70 px-3 py-2">
-            <button onClick={() => setPreview(null)} className="text-xs text-zinc-500 hover:text-zinc-300">
+          <div className="flex items-center gap-2 border-b border-slate-800/70 px-3 py-2">
+            <button onClick={() => setPreview(null)} className="text-xs text-slate-500 hover:text-slate-300">
               ← 목록
             </button>
-            <span className="text-xs text-zinc-400">
+            <span className="text-xs text-slate-400">
               {new Date(preview.createdAt).toLocaleString()}
             </span>
             {!readonly && (
               <button
                 onClick={() => void restore(preview.id)}
                 disabled={busy}
-                className="ml-auto rounded bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-900 hover:bg-white disabled:opacity-40"
+                className="ml-auto rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-900 hover:bg-white disabled:opacity-40"
               >
                 이 버전으로 복원
               </button>
             )}
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-3 text-sm">
-            {Renderer ? <Renderer content={preview.content} theme={theme} /> : <pre>{preview.content}</pre>}
+            {Renderer ? (
+              <Suspense fallback={<p className="text-sm text-slate-500">미리보기 준비 중…</p>}>
+                <Renderer content={preview.content} theme={theme} />
+              </Suspense>
+            ) : (
+              <pre>{preview.content}</pre>
+            )}
           </div>
         </>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto py-1">
           {versions.length === 0 && (
-            <p className="px-3 py-3 text-sm text-zinc-600">저장된 버전이 없습니다. 편집·저장하면 이전 본문이 버전으로 남습니다.</p>
+            <p className="px-3 py-3 text-sm text-slate-600">저장된 버전이 없습니다. 편집·저장하면 이전 본문이 버전으로 남습니다.</p>
           )}
           {versions.map((v, i) => (
             <button
               key={v.id}
               onClick={() => void openPreview(v.id)}
-              className="flex w-full items-baseline gap-2 px-3 py-2 text-left transition hover:bg-zinc-900"
+              className="flex w-full items-baseline gap-2 px-3 py-2 text-left transition hover:bg-slate-900"
             >
-              <span className="text-sm text-zinc-200">
+              <span className="text-sm text-slate-200">
                 {i === 0 ? '최신 스냅샷' : `버전 ${versions.length - i}`}
               </span>
-              <span className="ml-auto text-xs text-zinc-500">
+              <span className="ml-auto text-xs text-slate-500">
                 {new Date(v.createdAt).toLocaleString()}
               </span>
-              <span className="text-[10px] text-zinc-600">{(v.sizeBytes / 1024).toFixed(1)}KB</span>
+              <span className="text-[10px] text-slate-600">{(v.sizeBytes / 1024).toFixed(1)}KB</span>
             </button>
           ))}
         </div>
