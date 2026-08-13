@@ -17,7 +17,8 @@ docker compose up -d --build
 # → http://localhost:3000 (초기 계정 admin / admin1234 — 바로 변경할 것)
 ```
 
-배포·외부 접속(Cloudflare Tunnel)·백업은 [docs/deploy.md](docs/deploy.md) 참고.
+- 처음 배포한다면: [docs/배포-완전-가이드.md](docs/배포-완전-가이드.md) — 계정 가입부터 폰 설치까지 초보자용 전 과정
+- 빠른 참조: [docs/deploy.md](docs/deploy.md) — 명령어 위주 요약
 
 ## 개발
 
