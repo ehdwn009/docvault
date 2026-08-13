@@ -156,6 +156,9 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
             <div className="flex min-h-full items-center justify-center p-6">
               <img src={`/api/v1/files/${file.id}/raw`} alt={file.name} className="max-w-full" />
             </div>
+          ) : file.fileType === 'html' && Renderer ? (
+            // 앱형 HTML은 여백·폭 제한 없이 화면을 꽉 채워 렌더링한다
+            <Renderer content={data.content} theme={settings.viewerTheme} />
           ) : (
             <div
               className={`mx-auto p-6 ${WIDTH[settings.contentWidth]}`}
