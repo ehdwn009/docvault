@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    volumes:
+      # 영속 데이터는 이 폴더 하나. 백업 = 폴더 복사, 이사 = 폴더 이동.
+      - ./data:/app/data
+    environment:
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env before running}
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-admin1234}
+    restart: unless-stopped

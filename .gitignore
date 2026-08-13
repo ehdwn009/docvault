@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# build output
+client/dist/
+server/dist/
+
+# persistent data (SQLite + binary files) — backup unit, never committed
+data/
+
+# env
+.env
+.env.local
+
+# misc
+*.log
+.DS_Store
