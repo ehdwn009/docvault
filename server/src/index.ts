@@ -7,6 +7,9 @@ import { logger } from 'hono/logger';
 import { config } from './config.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
+import { authGuard } from './middleware/auth.js';
+import { authRoutes } from './routes/auth.js';
+import type { AppEnv } from './types.js';
 
 initDb();
 seedAdmin();
@@ -15,8 +18,10 @@ const app = new Hono();
 
 app.use(logger());
 
-const api = new Hono();
+const api = new Hono<AppEnv>();
+api.use('*', authGuard);
 api.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
+api.route('/auth', authRoutes);
 
 app.route('/api/v1', api);
 

@@ -1,33 +1,25 @@
 import { useEffect, useState } from 'react';
+import { api, type User } from './lib/api';
+import Login from './screens/Login';
+import Workspace from './screens/Workspace';
 
-type Health = { status: string; version: string };
+type AuthState = { status: 'loading' } | { status: 'guest' } | { status: 'authed'; user: User };
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [auth, setAuth] = useState<AuthState>({ status: 'loading' });
 
+  // 새로고침해도 세션 쿠키가 살아 있으면 로그인 상태를 복원한다
   useEffect(() => {
-    fetch('/api/v1/health')
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then(setHealth)
-      .catch((e: Error) => setError(e.message));
+    api<{ user: User }>('/auth/me')
+      .then(({ user }) => setAuth({ status: 'authed', user }))
+      .catch(() => setAuth({ status: 'guest' }));
   }, []);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight">docvault</h1>
-        <p className="mt-2 text-zinc-400">폐쇄형 문서 열람·편집 플랫폼</p>
-        <p className="mt-6 text-sm">
-          {health && (
-            <span className="text-emerald-400">
-              API 연결됨 · v{health.version}
-            </span>
-          )}
-          {error && <span className="text-red-400">API 연결 실패: {error}</span>}
-          {!health && !error && <span className="text-zinc-500">API 확인 중…</span>}
-        </p>
-      </div>
-    </div>
-  );
+  if (auth.status === 'loading') {
+    return <div className="min-h-screen bg-zinc-950" />;
+  }
+  if (auth.status === 'guest') {
+    return <Login onLogin={(user) => setAuth({ status: 'authed', user })} />;
+  }
+  return <Workspace user={auth.user} onLogout={() => setAuth({ status: 'guest' })} />;
 }
