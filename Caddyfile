@@ -1,0 +1,5 @@
+# Caddy 리버스 프록시 — DOCVAULT_DOMAIN(.env)으로 오는 HTTPS 요청을 앱으로 전달
+# 인증서는 Let's Encrypt에서 자동 발급·갱신된다
+{$DOCVAULT_DOMAIN} {
+	reverse_proxy app:3000
+}

@@ -17,8 +17,7 @@ docker compose up -d --build
 # → http://localhost:3000 (초기 계정 admin / admin1234 — 바로 변경할 것)
 ```
 
-- 처음 배포한다면: [docs/배포-완전-가이드.md](docs/배포-완전-가이드.md) — 계정 가입부터 폰 설치까지 초보자용 전 과정
-- 빠른 참조: [docs/deploy.md](docs/deploy.md) — 명령어 위주 요약
+배포는 [docs/GCP-배포-가이드.md](docs/GCP-배포-가이드.md) 참고 — GCP 무료 서버에 올리면서 클라우드 기초(VM·SSH·방화벽·DNS·HTTPS·백업)를 함께 배우는 초보자용 전 과정.
 
 ## 개발
 

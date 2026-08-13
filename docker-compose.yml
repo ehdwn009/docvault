@@ -27,3 +27,27 @@ services:
     restart: unless-stopped
     depends_on:
       - app
+
+  # 도메인(DuckDNS 무료 서브도메인 포함)으로 직접 HTTPS 서빙 — 선택 사항. 켜려면:
+  #   .env에 DOCVAULT_DOMAIN=내이름.duckdns.org 넣고
+  #   docker compose --profile edge up -d
+  # Caddy가 Let's Encrypt 인증서를 자동 발급·갱신한다 (서버의 80·443 포트가 열려 있어야 함)
+  caddy:
+    image: caddy:2-alpine
+    profiles: [edge]
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOCVAULT_DOMAIN=${DOCVAULT_DOMAIN:-}
+    depends_on:
+      - app
+
+volumes:
+  caddy-data:
+  caddy-config:
