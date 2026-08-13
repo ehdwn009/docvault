@@ -7,6 +7,7 @@ server/dist/
 
 # persistent data (SQLite + binary files) — backup unit, never committed
 data/
+backups/
 
 # env
 .env
