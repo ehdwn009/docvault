@@ -12,6 +12,7 @@ import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
 import { folderRoutes } from './routes/folders.js';
 import { meRoutes } from './routes/me.js';
+import { searchRoutes } from './routes/search.js';
 import { treeRoutes } from './routes/tree.js';
 import type { AppEnv } from './types.js';
 
@@ -30,6 +31,7 @@ api.route('/tree', treeRoutes);
 api.route('/files', fileRoutes);
 api.route('/folders', folderRoutes);
 api.route('/me', meRoutes);
+api.route('/search', searchRoutes);
 
 app.route('/api/v1', api);
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import CommandPalette from '../components/CommandPalette';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import RecentList from '../components/RecentList';
 import {
@@ -36,8 +37,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [panel, setPanel] = useState<Panel>('files');
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [notice, setNotice] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadFolderRef = useRef<number | null>(null);
+
+  // Ctrl+K: 커맨드 팔레트 (IA — 단축키)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const loadTree = useCallback(async () => {
     const t = await api<Tree>('/tree').catch(() => null);
@@ -229,10 +243,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-zinc-600">
-            좌측에서 파일을 선택하거나 업로드하세요
+            좌측에서 파일을 선택하거나 업로드하세요 <span className="ml-2 rounded border border-zinc-800 px-1.5 py-0.5 text-xs">Ctrl+K 검색</span>
           </div>
         )}
       </main>
+
+      {paletteOpen && (
+        <CommandPalette
+          files={tree.files}
+          onPick={setSelected}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
     </div>
   );
 }
