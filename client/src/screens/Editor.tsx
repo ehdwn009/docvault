@@ -85,11 +85,11 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-2 max-md:pl-14">
-        <span className="text-sm text-slate-400 max-md:hidden">
+      <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-2 touch:pl-14">
+        <span className="text-sm text-slate-400 touch:hidden">
           편집 중{dirty && <span className="ml-1 text-amber-400">●</span>}
         </span>
-        <div className="flex gap-1 md:hidden">
+        <div className="flex gap-1 pc:hidden">
           {(['edit', 'preview'] as const).map((p) => (
             <button
               key={p}
@@ -125,12 +125,12 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}
-          className={`h-full w-full resize-none border-slate-800 bg-slate-950 p-4 font-mono text-sm leading-relaxed text-slate-200 outline-none md:block md:w-1/2 md:border-r ${
+          className={`h-full w-full resize-none border-slate-800 bg-slate-950 p-4 font-mono text-sm leading-relaxed text-slate-200 outline-none pc:block pc:w-1/2 pc:border-r ${
             mobilePane === 'edit' ? 'block' : 'hidden'
           }`}
         />
         <div
-          className={`h-full w-full overflow-auto p-4 md:block md:w-1/2 ${
+          className={`h-full w-full overflow-auto p-4 pc:block pc:w-1/2 ${
             mobilePane === 'preview' ? 'block' : 'hidden'
           }`}
         >

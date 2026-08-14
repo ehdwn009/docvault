@@ -75,6 +75,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadFolderRef = useRef<number | null>(null);
@@ -198,6 +199,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Escape로 몰입 모드 종료
+  useEffect(() => {
+    if (!immersive) return;
+    const handler = (e: KeyboardEvent) => e.key === 'Escape' && setImmersive(false);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [immersive]);
+
   const actions: TreeActions = {
     createFolder: (parentId) => {
       void promptDialog('폴더 이름').then((name) => {
@@ -302,21 +311,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   return (
     <div className="flex h-dvh bg-slate-950 text-slate-100">
-      {/* 모바일: 드로어 토글 (md 미만에서 레일+패널은 드로어로 전환 — IA 반응형 기준) */}
+      {/* 터치 기기: 드로어 토글 (입력 방식 기준 — 가로모드에서도 드로어 유지) */}
       <button
         onClick={() => setDrawerOpen(true)}
-        className="fixed left-3 top-2 z-20 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 md:hidden"
+        className={`fixed left-3 top-2 z-20 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${immersive ? 'hidden' : ''}`}
       >
         ☰
       </button>
       {drawerOpen && (
-        <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setDrawerOpen(false)} />
+        <div className="fixed inset-0 z-30 bg-black/50 pc:hidden" onClick={() => setDrawerOpen(false)} />
       )}
 
       <div
-        className={`z-40 flex shrink-0 bg-slate-950 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:transition-transform ${
-          drawerOpen ? '' : 'max-md:-translate-x-full'
-        }`}
+        className={`z-40 flex shrink-0 bg-slate-950 touch:fixed touch:inset-y-0 touch:left-0 touch:transition-transform ${
+          drawerOpen ? '' : 'touch:-translate-x-full'
+        } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
@@ -470,6 +479,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <Viewer
             file={selected}
             settings={settings}
+            immersive={immersive}
+            onToggleImmersive={() => setImmersive((v) => !v)}
             onContentSaved={() => void loadTree()}
             onToggleFavorite={toggleFavorite}
             onDirtyChange={(d) => (dirtyRef.current = d)}

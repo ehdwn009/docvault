@@ -7,6 +7,8 @@ import Editor from './Editor';
 type Props = {
   file: TreeFile;
   settings: UserSettings;
+  immersive: boolean;
+  onToggleImmersive: () => void;
   onContentSaved: () => void;
   onToggleFavorite: (file: TreeFile) => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -26,7 +28,7 @@ const WIDTH: Record<UserSettings['contentWidth'], string> = {
 type Heading = { text: string; level: number; el: HTMLElement };
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, onContentSaved, onToggleFavorite, onDirtyChange }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onToggleFavorite, onDirtyChange }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -132,7 +134,18 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-2 max-md:pl-14">
+      {/* 몰입 모드: 헤더·레일·패널을 숨기고 본문만 — 떠 있는 종료 버튼만 남긴다 */}
+      {immersive && (
+        <button
+          onClick={onToggleImmersive}
+          title="몰입 모드 종료"
+          className="fixed right-3 top-3 z-30 rounded-md border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-slate-300 backdrop-blur hover:text-white"
+        >
+          ✕
+        </button>
+      )}
+      {!immersive && (
+      <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:pl-14">
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
@@ -141,10 +154,13 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
           ★
         </button>
         <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
-        <span className="text-xs text-slate-500 max-md:hidden">
+        <span className="text-xs text-slate-500 touch:hidden">
           {new Date(data.updatedAt).toLocaleString()} 수정
         </span>
         <div className="ml-auto flex gap-2">
+          <button onClick={onToggleImmersive} className={headerButton(false)} title="몰입 모드 — 본문만 전체 화면으로">
+            ⛶
+          </button>
           {data.fileType === 'md' && (
             <button onClick={() => setShowToc((v) => !v)} className={headerButton(showToc)}>
               목차
@@ -171,10 +187,11 @@ export default function Viewer({ file, settings, onContentSaved, onToggleFavorit
           )}
         </div>
       </div>
+      )}
       <div className="flex min-h-0 flex-1">
         {/* SCR-151: 목차 사이드 패널 */}
         {showToc && (
-          <nav className="w-56 shrink-0 overflow-auto border-r border-slate-800 py-3 max-md:hidden">
+          <nav className="w-56 shrink-0 overflow-auto border-r border-slate-800 py-3 touch:hidden">
             {headings.length === 0 ? (
               <p className="px-3 text-xs text-slate-600">표시할 헤딩이 없습니다</p>
             ) : (

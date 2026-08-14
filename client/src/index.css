@@ -1,6 +1,11 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+/* 데스크톱/모바일 판정을 화면 너비가 아니라 "입력 방식"으로 한다.
+   폰을 가로로 눕혀 너비가 768px를 넘어도 터치 기기면 드로어 UI를 유지하기 위함. */
+@custom-variant pc (@media (hover: hover) and (pointer: fine));
+@custom-variant touch (@media not ((hover: hover) and (pointer: fine)));
+
 /* 뷰어 글자 크기 설정이 먹도록 prose의 rem 고정 크기를 부모 상속으로 바꾼다 (자식은 em 기반이라 함께 스케일됨) */
 .prose {
   font-size: inherit;

@@ -132,7 +132,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
         openMenu(e, items());
       }}
       title="메뉴"
-      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 md:hidden md:group-hover:block"
+      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
     >
       ⋯
     </button>

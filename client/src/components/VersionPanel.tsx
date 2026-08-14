@@ -60,7 +60,7 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
   const Renderer = renderers[fileType];
 
   return (
-    <div className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-950 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-full">
+    <div className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-950 touch:fixed touch:inset-0 touch:z-30 touch:w-full">
       <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
         <h3 className="text-sm font-medium text-slate-200">버전 기록</h3>
         <span className="text-xs text-slate-600">{versions.length}개</span>
