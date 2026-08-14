@@ -6,7 +6,8 @@ COPY client/package.json client/
 COPY server/package.json server/
 RUN npm ci
 COPY client client
-RUN npm run build -w client
+# 저사양 서버(1GB 램)에서 Node가 힙 한도를 낮게 잡아 빌드가 OOM으로 죽는 것 방지 — 스왑까지 쓰며 완주하게
+RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build -w client
 
 # ---- runtime stage ----
 FROM node:22-slim

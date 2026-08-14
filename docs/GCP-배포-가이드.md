@@ -593,6 +593,7 @@ scp 계정명@GCP외부IP:~/docvault/backups/docvault-*.tar.gz C:\백업\
 | 증상 | 확인·해결 |
 |---|---|
 | 빌드가 중간에 죽음/멈춤 | 스왑(5장) 했는지 `free -h`로 확인. 스왑 후에도 죽으면 `docker compose build` 단독 실행으로 로그 확인 |
+| 빌드가 `JavaScript heap out of memory` / exit 134로 실패 | Node가 컨테이너 RAM(1GB)에 맞춰 힙 한도를 ~500MB로 잡아 스왑을 써보기도 전에 자폭하는 것. Dockerfile의 빌드 명령에 `NODE_OPTIONS=--max-old-space-size=2048`이 포함돼 있는지 확인 — 구버전이면 `git pull` 후 재빌드. (exit 134 = SIGABRT, 프로세스 자체 중단) |
 | `https://...duckdns.org` 인증서 오류 | ① duckdns.org에서 IP가 현재 외부 IP와 같은지 ② 방화벽 80·443 열렸는지 ③ `docker compose logs caddy`의 오류 메시지 |
 | 도메인 접속이 갑자기 안 됨 | VM 재시작으로 IP가 바뀐 경우 — duck.sh cron이 도는지 확인 (`crontab -l`), 수동으로 `~/duckdns/duck.sh` 실행 |
 | SSH가 안 됨 | VM이 Running인지, (방법 B) 키를 메타데이터에 넣었는지. 급하면 브라우저 SSH로 |
