@@ -615,7 +615,22 @@ docker compose logs caddy --tail 20   # "certificate obtained successfully" 류�
 
 # 8. 기존 데이터 이사 (PC → GCP)
 
-> 배우는 것: scp — SSH 위에서 파일 복사
+> 배우는 것: 상태(data)와 코드의 분리, tar 압축, scp — SSH 위에서 파일 복사
+
+## 📚 학습 노트: "이사"가 해결하는 상황
+
+지금 docvault는 **두 군데에서 서로 다른 데이터로** 돌고 있습니다:
+
+```
+내 PC의 docvault  → data/ 안에: 업로드한 문서, 계정, 즐겨찾기, 읽던 위치...
+GCP의 docvault   → data/ 안에: 방금 태어난 빈 DB (admin 하나, 문서 0개)
+```
+
+같은 프로그램이지만 금고(data/)가 각자 따로 — GCP에 접속하면 비어 있는 이유입니다. **이사 = PC의 금고를 GCP 금고 자리에 통째로 옮기기.** 완료하면 GCP 접속 시 PC에서 쓰던 문서·계정·비밀번호·설정이 그대로 나타납니다. 가능함의 근거는 설계입니다: docvault의 모든 상태는 `data/` 폴더 하나(SQLite 파일 + 바이너리 원본)에 있고, 코드는 깃허브에서 받으면 되니까요.
+
+**절차가 이 순서인 이유**: 양쪽 앱을 **멈추고** 복사해야 "쓰다 만 DB"가 복사되는 사고가 없습니다(일관성). tar로 **한 덩어리로 묶는** 것은 수백 개 파일 전송 실수 방지 + 압축. 명령 해부 — `tar`: 여러 파일을 한 파일로 묶는 도구. `-c`(create 묶기) / `-x`(extract 풀기), `-z`(gzip 압축), `-f 파일명`(대상 지정) → `-czf`=묶어 압축, `-xzf`=풀기. `scp`(secure copy): SSH 암호화 위에서의 파일 복사로, `scp 원본 계정@서버:목적지` — 항상 왼쪽에서 오른쪽으로 복사됩니다.
+
+> 💡 **건너뛰어도 되는 경우**: PC 쪽이 테스트 파일 몇 개뿐이라면 이사 대신 GCP에서 새로 시작(필요한 파일만 브라우저로 재업로드)해도 됩니다. 이 절차의 진짜 가치는 나중에 "GCP → 다른 서버" 이사 때 똑같이 쓰인다는 것 — 백업 복원(부록 A)도 같은 원리입니다.
 
 지금까지 PC에서 쓰던 문서·계정을 그대로 옮깁니다. **PC의 PowerShell에서**:
 
@@ -640,14 +655,57 @@ docker compose --profile edge up -d
 
 ---
 
-# 9. 운영 루틴
+# 9. 운영 루틴 — 개발하고, 배포하고, 지키기
+
+> 배우는 것: 개발→배포 사이클, 이미지 재빌드가 필요한 이유, 롤백
+
+## 9-1. 앱을 고도화했을 때 반영하는 법 (업데이트 사이클)
+
+세 지점의 역할부터:
+
+```
+[내 PC]            [깃허브]               [GCP 서버]
+개발·테스트  --push-->  중앙 창고  --pull-->  운영 (실제 서비스)
+```
+
+PC와 서버는 직접 통신하지 않고 **항상 깃허브를 거칩니다.** 흐름:
+
+1. **PC에서**: 코드 수정 → dev 서버로 확인 → `git add` → `git commit` → `git push`
+2. **서버 SSH에서** (이 두 줄이 배포의 전부):
 
 ```bash
 cd ~/docvault
-git pull && docker compose --profile edge up -d --build   # 업데이트
-docker compose logs app --tail 50                          # 앱 로그
-docker compose ps                                          # 상태
-./scripts/backup.sh                                        # 수동 백업 → backups/
+git pull && docker compose --profile edge up -d --build
+```
+
+**왜 이 두 줄인가:**
+
+- **`git pull`만으론 반영되지 않습니다.** 돌고 있는 것은 파일이 아니라 이미지(틀)를 찍어낸 컨테이너이고, 이미지는 빌드 시점의 코드로 굳어 있습니다. `--build`가 틀을 다시 굽고, up이 새 틀로 컨테이너를 교체합니다 (다운타임 몇 초)
+- **데이터는 안전합니다.** `data/`는 컨테이너 밖(바인드 마운트)이라 컨테이너를 아무리 갈아끼워도 유지되고, DB 스키마가 바뀐 업데이트도 서버 기동 시 마이그레이션이 자동 적용됩니다 (docvault 설계)
+- **`--profile edge`를 항상 붙입니다.** 빼면 compose가 Caddy를 "이 구성에 없는 서비스"로 취급해 내려버릴 수 있습니다
+
+## 9-2. 망했을 때 되돌리기 (롤백)
+
+데이터는 컨테이너 밖에 있으므로 **코드만 과거로 시간여행**하면 됩니다:
+
+```bash
+git log --oneline -5                  # 돌아갈 커밋 확인
+git checkout 커밋해시                  # 그 시점의 코드로 전환
+docker compose --profile edge up -d --build
+
+# 문제를 고친 뒤 최신으로 복귀:
+git checkout main && git pull
+docker compose --profile edge up -d --build
+```
+
+## 9-3. 일상 명령 모음
+
+```bash
+docker compose ps                          # 상태 (healthy 확인)
+docker compose logs app --tail 50          # 앱 로그
+docker compose logs caddy --tail 20        # 인증서·프록시 로그
+free -h && df -h                           # 메모리·디스크 잔량
+./scripts/backup.sh                        # 수동 백업 → backups/
 
 # 매일 새벽 4시 자동 백업 (crontab -e 에 추가)
 0 4 * * * cd /home/계정명/docvault && ./scripts/backup.sh >> backup.log 2>&1
