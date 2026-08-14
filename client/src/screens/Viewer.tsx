@@ -211,7 +211,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className={`min-h-0 min-w-0 flex-1 overflow-auto ${THEME_BG[settings.viewerTheme]}`}
+          // 본문은 세로로만 스크롤: 가로 오버플로 차단 + 터치는 세로 팬만 + 스크롤 관성이 밖으로 새지 않게
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain ${THEME_BG[settings.viewerTheme]}`}
         >
           {file.fileType === 'pdf' ? (
             <iframe src={`/api/v1/files/${file.id}/raw`} title={file.name} className="h-full w-full" />

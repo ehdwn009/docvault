@@ -10,3 +10,17 @@
 .prose {
   font-size: inherit;
 }
+
+/* 앱 껍데기는 고정 — 스크롤은 지정된 내부 컨테이너(트리·본문 등)에서만 일어난다.
+   모바일의 고무줄 바운스·당겨서 새로고침이 앱 전체를 흔드는 것도 여기서 차단. */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  /* 더블탭 확대 비활성화(팬·핀치줌은 유지) — 버튼 탭 반응도 빨라진다 */
+  touch-action: manipulation;
+}

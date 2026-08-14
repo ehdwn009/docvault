@@ -29,6 +29,13 @@ export default function MarkdownRenderer({
               </code>
             );
           },
+          // 표는 원래 너비를 유지하고 넘치는 만큼만 자체 가로 스크롤 —
+          // 좁은 화면에서 셀이 세로로 짜부라지거나 페이지 전체가 가로로 밀리는 것 방지
+          table: (props) => (
+            <div className="overflow-x-auto">
+              <table {...props} />
+            </div>
+          ),
         }}
       >
         {content}
