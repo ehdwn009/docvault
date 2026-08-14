@@ -17,7 +17,7 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
-import { confirmDialog, promptDialog } from '../lib/dialog';
+import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import AdminPanel from './panels/AdminPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
@@ -61,6 +61,33 @@ function sharedToTreeFile(f: SharedFile): TreeFile {
   };
 }
 
+/** OS 드래그의 폴더 항목을 재귀 순회해 상대 경로 목록으로 만든다 (IA — 폴더 업로드) */
+async function collectFromEntries(
+  entries: FileSystemEntry[],
+): Promise<{ file: File; relPath: string }[]> {
+  const out: { file: File; relPath: string }[] = [];
+  async function walk(entry: FileSystemEntry, prefix: string) {
+    if (entry.isFile) {
+      const file = await new Promise<File>((res, rej) =>
+        (entry as FileSystemFileEntry).file(res, rej),
+      );
+      out.push({ file, relPath: prefix + file.name });
+    } else if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      // readEntries는 한 번에 최대 100개만 준다 — 빈 배열이 올 때까지 반복
+      for (;;) {
+        const batch = await new Promise<FileSystemEntry[]>((res, rej) =>
+          reader.readEntries(res, rej),
+        );
+        if (batch.length === 0) break;
+        for (const child of batch) await walk(child, `${prefix}${entry.name}/`);
+      }
+    }
+  }
+  for (const e of entries) await walk(e, '');
+  return out;
+}
+
 /** 딥링크 경로(/f/{id})에서 파일 ID 추출 (IA — URL 라우팅) */
 function fileIdFromPath(pathname: string): number | null {
   const m = pathname.match(/^\/f\/(\d+)$/);
@@ -87,6 +114,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
   const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
+  const dirUploadRef = useRef<HTMLInputElement | null>(null);
   const uploadFolderRef = useRef<number | null>(null);
   const treeRef = useRef<Tree>(tree);
   const dirtyRef = useRef(false); // 편집기의 미저장 변경 여부 — 파일 전환 가드용
@@ -212,26 +240,218 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     [loadTree],
   );
 
+  /** 같은 폴더의 이름 충돌을 업로드 전에 해소한다 — 덮어쓰기/이름 변경/건너뛰기 (IA — 충돌 처리) */
+  const resolveConflicts = useCallback(
+    async (
+      list: File[],
+      folderId: number | null,
+    ): Promise<{ toUpload: File[]; overwritten: number; skipped: number } | null> => {
+      const inFolder = treeRef.current.files.filter((f) => f.folderId === folderId);
+      const names = new Set(inFolder.map((f) => f.name));
+      const conflicts = list.filter((f) => names.has(f.name));
+      if (conflicts.length === 0) return { toUpload: list, overwritten: 0, skipped: 0 };
+
+      const preview = conflicts.slice(0, 5).map((f) => f.name).join(', ');
+      const choice = await choiceDialog(`이름이 같은 파일이 ${conflicts.length}개 있습니다`, {
+        message: preview + (conflicts.length > 5 ? ` 외 ${conflicts.length - 5}개` : ''),
+        choices: [
+          { label: '덮어쓰기 — 문서는 이전 내용을 버전으로 보관합니다', value: 'overwrite' },
+          { label: '이름 바꿔 저장 — "이름 (2)" 형식으로 나란히 둡니다', value: 'rename' },
+          { label: '건너뛰기 — 충돌한 파일만 빼고 올립니다', value: 'skip' },
+        ],
+      });
+      if (choice === null) return null; // 업로드 전체 취소
+
+      if (choice === 'skip') {
+        return {
+          toUpload: list.filter((f) => !names.has(f.name)),
+          overwritten: 0,
+          skipped: conflicts.length,
+        };
+      }
+
+      if (choice === 'rename') {
+        const used = new Set(names);
+        const renamed = list.map((f) => {
+          if (!used.has(f.name)) {
+            used.add(f.name);
+            return f;
+          }
+          const dot = f.name.lastIndexOf('.');
+          const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
+          const ext = dot > 0 ? f.name.slice(dot) : '';
+          let n = 2;
+          while (used.has(`${stem} (${n})${ext}`)) n++;
+          const name = `${stem} (${n})${ext}`;
+          used.add(name);
+          return new File([f], name, { type: f.type });
+        });
+        return { toUpload: renamed, overwritten: 0, skipped: 0 };
+      }
+
+      // 덮어쓰기
+      let overwritten = 0;
+      const remain: File[] = [];
+      for (const f of list) {
+        const existing = inFolder.find((x) => x.name === f.name);
+        if (!existing) {
+          remain.push(f);
+          continue;
+        }
+        if (existing.fileType === 'image' || existing.fileType === 'pdf') {
+          // 바이너리는 본문 교체 API가 없어 삭제 후 재업로드 (버전이 없는 형식이라 대체와 동일)
+          await api(`/files/${existing.id}`, { method: 'DELETE' });
+          remain.push(f);
+        } else {
+          // 문서는 저장 API로 교체 — 이전 내용이 버전 스냅샷으로 남는다
+          await api(`/files/${existing.id}/content`, {
+            method: 'PUT',
+            body: JSON.stringify({ content: await f.text(), baseUpdatedAt: existing.updatedAt }),
+          });
+          overwritten++;
+        }
+      }
+      return { toUpload: remain, overwritten, skipped: 0 };
+    },
+    [],
+  );
+
+  /** 충돌 해소 후 실제 업로드까지. 토스트·트리 갱신은 호출자 몫 (여러 폴더에 걸친 업로드 대비) */
+  const uploadCore = useCallback(
+    async (list: File[], folderId: number | null) => {
+      const resolved = await resolveConflicts(list, folderId);
+      if (resolved === null) return null;
+      let created: TreeFile[] = [];
+      if (resolved.toUpload.length > 0) {
+        const fd = new FormData();
+        for (const f of resolved.toUpload) fd.append('files', f);
+        if (folderId !== null) fd.append('folderId', String(folderId));
+        created = (await uploadFiles(fd, setUploadProgress)).files;
+      }
+      return { created, overwritten: resolved.overwritten, skipped: resolved.skipped };
+    },
+    [resolveConflicts],
+  );
+
+  const summarize = (created: number, overwritten: number, skipped: number) => {
+    const parts: string[] = [];
+    if (created) parts.push(`${created}개 업로드`);
+    if (overwritten) parts.push(`${overwritten}개 덮어씀`);
+    if (skipped) parts.push(`${skipped}개 건너뜀`);
+    return parts.join(' · ');
+  };
+
   const doUpload = useCallback(
     async (fileList: FileList | File[], folderId: number | null) => {
       const list = [...fileList];
       if (list.length === 0) return;
-      const fd = new FormData();
-      for (const f of list) fd.append('files', f);
-      if (folderId !== null) fd.append('folderId', String(folderId));
       setUploadProgress(0);
       try {
-        const { files } = await uploadFiles(fd, setUploadProgress);
+        const r = await uploadCore(list, folderId);
+        if (r === null) return; // 충돌 대화상자에서 취소
         await loadTree();
-        toast(`${files.length}개 파일을 업로드했습니다`, 'success');
-        if (files[0]) void selectFile(files[0]);
+        toast(
+          summarize(r.created.length, r.overwritten, r.skipped) || '업로드한 파일이 없습니다',
+          r.created.length || r.overwritten ? 'success' : 'info',
+        );
+        if (r.created[0]) void selectFile(r.created[0]);
       } catch (e) {
         toast(e instanceof ApiError ? e.message : '업로드에 실패했습니다', 'error');
       } finally {
         setUploadProgress(null);
       }
     },
-    [loadTree, selectFile],
+    [loadTree, selectFile, uploadCore],
+  );
+
+  /** "a/b" 경로의 폴더 체인을 보장하고 마지막 폴더 id를 돌려준다 — 기존 폴더는 재사용 */
+  const ensureFolderPath = useCallback(
+    async (segments: string[], baseId: number | null, cache: Map<string, number>) => {
+      let parentId: number | null = baseId;
+      let key = `${baseId ?? 'root'}`;
+      for (const seg of segments) {
+        key += `/${seg}`;
+        const cached = cache.get(key);
+        if (cached !== undefined) {
+          parentId = cached;
+          continue;
+        }
+        const existing = treeRef.current.folders.find(
+          (f) => f.parentId === parentId && f.name === seg,
+        );
+        let id: number;
+        if (existing) {
+          id = existing.id;
+        } else {
+          const { folder } = await api<{ folder: { id: number } }>('/folders', {
+            method: 'POST',
+            body: JSON.stringify({ name: seg, parentId }),
+          });
+          id = folder.id;
+        }
+        cache.set(key, id);
+        parentId = id;
+      }
+      return parentId;
+    },
+    [],
+  );
+
+  /** 폴더 업로드 — 상대 경로대로 폴더 체인을 만들고 폴더별로 올린다 (IA — 폴더 업로드) */
+  const doUploadTree = useCallback(
+    async (items: { file: File; relPath: string }[], baseId: number | null) => {
+      if (items.length === 0) return;
+      setUploadProgress(0);
+      try {
+        // 폴더 경로별로 파일을 묶는다 ('' = 드롭 지점 바로 아래)
+        const groups = new Map<string, File[]>();
+        for (const it of items) {
+          const slash = it.relPath.lastIndexOf('/');
+          const dir = slash === -1 ? '' : it.relPath.slice(0, slash);
+          groups.set(dir, [...(groups.get(dir) ?? []), it.file]);
+        }
+        const cache = new Map<string, number>();
+        let created = 0;
+        let overwritten = 0;
+        let skipped = 0;
+        for (const [dir, group] of groups) {
+          const folderId = dir === '' ? baseId : await ensureFolderPath(dir.split('/'), baseId, cache);
+          const r = await uploadCore(group, folderId);
+          if (r === null) break; // 취소 — 이미 만든 폴더·올린 파일은 유지
+          created += r.created.length;
+          overwritten += r.overwritten;
+          skipped += r.skipped;
+        }
+        await loadTree();
+        toast(
+          summarize(created, overwritten, skipped)
+            ? `폴더 업로드 완료 — ${summarize(created, overwritten, skipped)}`
+            : '업로드한 파일이 없습니다',
+          created || overwritten ? 'success' : 'info',
+        );
+      } catch (e) {
+        toast(e instanceof ApiError ? e.message : '폴더 업로드에 실패했습니다', 'error');
+      } finally {
+        setUploadProgress(null);
+      }
+    },
+    [ensureFolderPath, uploadCore, loadTree],
+  );
+
+  /** 드롭된 DataTransfer 처리 — 폴더가 섞여 있으면 구조째, 아니면 평면 업로드.
+   *  entries는 드롭 이벤트 스택 안에서 동기로 수집해야 유효하다. */
+  const uploadDropped = useCallback(
+    (dt: DataTransfer, folderId: number | null) => {
+      const entries = [...dt.items]
+        .map((it) => (it.kind === 'file' ? it.webkitGetAsEntry() : null))
+        .filter((x): x is FileSystemEntry => x !== null);
+      if (entries.some((en) => en.isDirectory)) {
+        void collectFromEntries(entries).then((items) => doUploadTree(items, folderId));
+      } else {
+        void doUpload([...dt.files], folderId);
+      }
+    },
+    [doUpload, doUploadTree],
   );
 
   // 트리가 갱신되면 사라진 파일을 선택 목록에서도 정리한다
@@ -290,6 +510,26 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     window.addEventListener('paste', handler);
     return () => window.removeEventListener('paste', handler);
   }, [doUpload]);
+
+  // 앱 어디에 놓아도 업로드: 브라우저 기본 동작(파일을 새 탭으로 열기)을 막고,
+  // 트리 폴더 등 개별 드롭 존이 처리하지 않은 드롭은 전부 최상위 업로드로 받는다
+  useEffect(() => {
+    const over = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes('Files')) return;
+      if (e.defaultPrevented) return; // 개별 드롭 존이 이미 처리함
+      e.preventDefault();
+      uploadDropped(e.dataTransfer, null);
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+    };
+  }, [uploadDropped]);
 
   // Ctrl+K: 커맨드 팔레트 (IA — 단축키)
   useEffect(() => {
@@ -379,7 +619,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       uploadFolderRef.current = folderId;
       uploadRef.current?.click();
     },
-    uploadFiles: (files, folderId) => void doUpload(files, folderId),
+    uploadDropped,
+    moveFiles: (ids, folderId) => {
+      setChecked(new Set());
+      moveMany(ids, folderId);
+    },
     editTags: setTagEditorFile,
     shareFile: (file) =>
       void guard(() =>
@@ -397,30 +641,42 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       ),
   };
 
-  /** 일괄 이동 — 이전 위치를 기억해 실행 취소 제공 (IA — 다중 선택) */
+  /** 여러 파일 이동 — 이전 위치를 기억해 실행 취소 제공 (IA — 다중 선택) */
+  const moveMany = useCallback(
+    (ids: number[], folderId: number | null) => {
+      const prevMap = new Map(
+        ids.map((id) => [id, treeRef.current.files.find((f) => f.id === id)?.folderId ?? null]),
+      );
+      const moving = ids.filter((id) => prevMap.get(id) !== folderId);
+      if (moving.length === 0) return;
+      void guard(async () => {
+        for (const id of moving) {
+          await api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) });
+        }
+        toast(`${moving.length}개 파일을 이동했습니다`, 'success', {
+          action: {
+            label: '실행 취소',
+            onAction: () =>
+              void guard(async () => {
+                for (const id of moving) {
+                  await api(`/files/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ folderId: prevMap.get(id) ?? null }),
+                  });
+                }
+              }),
+          },
+        });
+      });
+    },
+    [guard],
+  );
+
   function bulkMove(folderId: number | null) {
     const ids = [...checked];
-    const prevMap = new Map(
-      ids.map((id) => [id, treeRef.current.files.find((f) => f.id === id)?.folderId ?? null]),
-    );
     setMovePickerOpen(false);
     setChecked(new Set());
-    void guard(async () => {
-      for (const id of ids) {
-        await api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) });
-      }
-      toast(`${ids.length}개 파일을 이동했습니다`, 'success', {
-        action: {
-          label: '실행 취소',
-          onAction: () =>
-            void guard(async () => {
-              for (const [id, prev] of prevMap) {
-                await api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId: prev }) });
-              }
-            }),
-        },
-      });
-    });
+    moveMany(ids, folderId);
   }
 
   function bulkDelete() {
@@ -568,6 +824,34 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 + 폴더
               </button>
             </div>
+            {/* webkitdirectory는 React 타입에 없어 ref에서 DOM 속성으로 직접 지정한다 */}
+            <input
+              ref={(el) => {
+                dirUploadRef.current = el;
+                el?.setAttribute('webkitdirectory', '');
+              }}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const fl = e.target.files;
+                if (fl && fl.length > 0) {
+                  const items = [...fl].map((f) => ({
+                    file: f,
+                    relPath: f.webkitRelativePath || f.name,
+                  }));
+                  void doUploadTree(items, null);
+                }
+                e.target.value = '';
+              }}
+            />
+            <button
+              onClick={() => dirUploadRef.current?.click()}
+              title="폴더를 하위 구조 그대로 업로드합니다"
+              className="mx-3 mt-1.5 hidden rounded-md border border-dashed border-slate-800 py-1 text-xs text-slate-500 transition hover:border-slate-600 hover:text-slate-300 pc:block"
+            >
+              📂 폴더째 업로드
+            </button>
             {uploadProgress !== null && (
               <div className="mx-3 mt-2 h-1 overflow-hidden rounded bg-slate-800">
                 <div
@@ -679,19 +963,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       </aside>
       </div>
 
-      <main
-        className="min-w-0 flex-1"
-        onDragOver={(e) => {
-          // OS 파일 드롭 업로드 허용 (트리 내부 이동 DnD는 nav 안에서 처리됨)
-          if (e.dataTransfer.types.includes('Files')) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          if (e.dataTransfer.files.length > 0) {
-            e.preventDefault();
-            void doUpload(e.dataTransfer.files, null);
-          }
-        }}
-      >
+      {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
+      <main className="min-w-0 flex-1">
         {selected ? (
           <Viewer
             file={selected}

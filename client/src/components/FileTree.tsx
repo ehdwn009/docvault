@@ -21,7 +21,9 @@ export type TreeActions = {
   deleteFile: (id: number) => void;
   copyFile: (id: number) => void;
   uploadTo: (folderId: number | null) => void;
-  uploadFiles: (files: File[], folderId: number | null) => void;
+  /** OS 드롭 처리 — 폴더 항목이 섞여 있으면 구조째 업로드. 드롭 이벤트 스택 안에서 호출할 것 */
+  uploadDropped: (dt: DataTransfer, folderId: number | null) => void;
+  moveFiles: (ids: number[], folderId: number | null) => void;
   editTags: (file: TreeFile) => void;
   shareFile: (file: TreeFile) => void;
   shareFolder: (folder: TreeFolder) => void;
@@ -42,7 +44,19 @@ type Props = {
 
 type Renaming = { kind: 'file' | 'folder'; id: number; value: string };
 type Menu = { x: number; y: number; items: MenuItem[] };
-type DragPayload = { kind: 'file' | 'folder'; id: number };
+type DragPayload = { kind: 'file' | 'folder'; id: number } | { kind: 'files'; ids: number[] };
+
+/** 드래그 중 커서를 따라다니는 라벨 — 브라우저 기본(반투명 행 복제) 대신 이름/개수를 보여준다 */
+function setDragGhost(e: DragEvent, label: string) {
+  const el = document.createElement('div');
+  el.textContent = label;
+  el.style.cssText =
+    'position:fixed;top:-100px;left:-100px;padding:4px 10px;background:#1e293b;border:1px solid #475569;' +
+    'border-radius:6px;color:#e2e8f0;font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+  document.body.appendChild(el);
+  e.dataTransfer.setDragImage(el, 12, 12);
+  window.setTimeout(() => el.remove(), 0);
+}
 
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
 export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange }: Props) {
@@ -102,24 +116,55 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     });
   }
 
-  function startDrag(e: DragEvent, payload: DragPayload) {
+  function startDrag(e: DragEvent, payload: DragPayload, label: string) {
     e.dataTransfer.setData('text/plain', JSON.stringify(payload));
     e.dataTransfer.effectAllowed = 'move';
+    setDragGhost(e, label);
+  }
+
+  // 스프링 로딩: 접힌 폴더 위에 드래그를 잠시 머물면 자동으로 펼친다
+  const springRef = useRef<{ id: number; timer: number } | null>(null);
+
+  function cancelSpring() {
+    if (springRef.current) {
+      window.clearTimeout(springRef.current.timer);
+      springRef.current = null;
+    }
+  }
+
+  function scheduleSpring(target: number | 'root') {
+    if (typeof target !== 'number' || !collapsed.has(target)) {
+      cancelSpring();
+      return;
+    }
+    if (springRef.current?.id === target) return;
+    cancelSpring();
+    const timer = window.setTimeout(() => {
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        next.delete(target);
+        return next;
+      });
+      springRef.current = null;
+    }, 700);
+    springRef.current = { id: target, timer };
   }
 
   function allowDrop(e: DragEvent, target: number | 'root') {
     e.preventDefault();
     e.stopPropagation();
     setDropTarget(target);
+    scheduleSpring(target);
   }
 
   function handleDrop(e: DragEvent, target: number | null) {
     e.preventDefault();
     e.stopPropagation();
     setDropTarget(null);
-    // OS에서 끌어온 파일이면 그 폴더로 업로드 (트리 내부 이동과 같은 드롭 존을 공유)
-    if (e.dataTransfer.files.length > 0) {
-      actions.uploadFiles([...e.dataTransfer.files], target);
+    cancelSpring();
+    // OS에서 끌어온 파일/폴더면 그 자리로 업로드 (트리 내부 이동과 같은 드롭 존을 공유)
+    if (e.dataTransfer.types.includes('Files')) {
+      actions.uploadDropped(e.dataTransfer, target);
       return;
     }
     let payload: DragPayload;
@@ -128,7 +173,8 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     } catch {
       return;
     }
-    if (payload.kind === 'file') actions.moveFile(payload.id, target);
+    if (payload.kind === 'files') actions.moveFiles(payload.ids, target);
+    else if (payload.kind === 'file') actions.moveFile(payload.id, target);
     else if (payload.id !== target) actions.moveFolder(payload.id, target);
   }
 
@@ -212,7 +258,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
             <div key={`d${folder.id}`}>
               <div
                 draggable={!isRenaming}
-                onDragStart={(e) => startDrag(e, { kind: 'folder', id: folder.id })}
+                onDragStart={(e) => startDrag(e, { kind: 'folder', id: folder.id }, `📁 ${folder.name}`)}
                 onDragOver={(e) => allowDrop(e, folder.id)}
                 onDragLeave={() => setDropTarget((t) => (t === folder.id ? null : t))}
                 onDrop={(e) => handleDrop(e, folder.id)}
@@ -242,7 +288,14 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
             <div
               key={file.id}
               draggable={!isRenaming}
-              onDragStart={(e) => startDrag(e, { kind: 'file', id: file.id })}
+              onDragStart={(e) => {
+                // 선택된 파일을 끌면 선택 전체가 같이 움직인다
+                if (isChecked && checked.size > 1) {
+                  startDrag(e, { kind: 'files', ids: [...checked] }, `📄 ${checked.size}개 파일`);
+                } else {
+                  startDrag(e, { kind: 'file', id: file.id }, `📄 ${file.name}`);
+                }
+              }}
               onClick={(e) => {
                 // Ctrl/⌘ 클릭 = 선택 토글, Shift = 범위, 선택 모드 중엔 클릭도 토글 — 아니면 평소처럼 열람
                 if (e.ctrlKey || e.metaKey) toggleCheck(file.id);
