@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 
@@ -21,6 +21,7 @@ export type TreeActions = {
   deleteFile: (id: number) => void;
   copyFile: (id: number) => void;
   uploadTo: (folderId: number | null) => void;
+  uploadFiles: (files: File[], folderId: number | null) => void;
   editTags: (file: TreeFile) => void;
   shareFile: (file: TreeFile) => void;
   shareFolder: (folder: TreeFolder) => void;
@@ -34,6 +35,9 @@ type Props = {
   selectedId: number | null;
   onSelect: (file: TreeFile) => void;
   actions: TreeActions;
+  /** 다중 선택된 파일 id — 하나라도 있으면 선택 모드 (SCR-110 다중 선택) */
+  checked: Set<number>;
+  onCheckChange: (next: Set<number>) => void;
 };
 
 type Renaming = { kind: 'file' | 'folder'; id: number; value: string };
@@ -41,12 +45,47 @@ type Menu = { x: number; y: number; items: MenuItem[] };
 type DragPayload = { kind: 'file' | 'folder'; id: number };
 
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
-export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions }: Props) {
+export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange }: Props) {
   const tagColor = new Map(tags.map((t) => [t.id, t.color]));
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<Menu | null>(null);
   const [renaming, setRenaming] = useState<Renaming | null>(null);
   const [dropTarget, setDropTarget] = useState<number | 'root' | null>(null);
+  const lastCheckClickRef = useRef<number | null>(null); // Shift 범위 선택의 기준점
+  const selectionMode = checked.size > 0;
+
+  /** 화면에 보이는 순서 그대로의 파일 id 목록 — Shift 범위 선택의 기준 (접힌 폴더 안은 제외) */
+  const visibleFileIds = (): number[] => {
+    const out: number[] = [];
+    const walk = (parentId: number | null) => {
+      for (const folder of folders.filter((f) => f.parentId === parentId)) {
+        if (!collapsed.has(folder.id)) walk(folder.id);
+      }
+      for (const file of files.filter((f) => f.folderId === parentId)) out.push(file.id);
+    };
+    walk(null);
+    return out;
+  };
+
+  const toggleCheck = (id: number) => {
+    const next = new Set(checked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    lastCheckClickRef.current = id;
+    onCheckChange(next);
+  };
+
+  const rangeCheck = (id: number) => {
+    const anchor = lastCheckClickRef.current;
+    if (anchor === null) return toggleCheck(id);
+    const order = visibleFileIds();
+    const a = order.indexOf(anchor);
+    const b = order.indexOf(id);
+    if (a === -1 || b === -1) return toggleCheck(id);
+    const next = new Set(checked);
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(order[i]!);
+    onCheckChange(next);
+  };
 
   function openMenu(e: ReactMouseEvent, items: MenuItem[]) {
     e.preventDefault();
@@ -78,6 +117,11 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     e.preventDefault();
     e.stopPropagation();
     setDropTarget(null);
+    // OS에서 끌어온 파일이면 그 폴더로 업로드 (트리 내부 이동과 같은 드롭 존을 공유)
+    if (e.dataTransfer.files.length > 0) {
+      actions.uploadFiles([...e.dataTransfer.files], target);
+      return;
+    }
     let payload: DragPayload;
     try {
       payload = JSON.parse(e.dataTransfer.getData('text/plain')) as DragPayload;
@@ -113,6 +157,8 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
   ];
 
   const fileMenu = (file: TreeFile): MenuItem[] => [
+    // 터치 기기의 선택 모드 진입점 (PC는 Ctrl+클릭)
+    { label: checked.has(file.id) ? '선택 해제' : '선택', action: () => toggleCheck(file.id) },
     {
       label: '이름 변경',
       action: () => setRenaming({ kind: 'file', id: file.id, value: file.name }),
@@ -191,18 +237,34 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
         })}
         {childFiles.map((file) => {
           const isRenaming = renaming?.kind === 'file' && renaming.id === file.id;
+          const isChecked = checked.has(file.id);
           return (
             <div
               key={file.id}
               draggable={!isRenaming}
               onDragStart={(e) => startDrag(e, { kind: 'file', id: file.id })}
-              onClick={() => onSelect(file)}
+              onClick={(e) => {
+                // Ctrl/⌘ 클릭 = 선택 토글, Shift = 범위, 선택 모드 중엔 클릭도 토글 — 아니면 평소처럼 열람
+                if (e.ctrlKey || e.metaKey) toggleCheck(file.id);
+                else if (e.shiftKey && selectionMode) rangeCheck(file.id);
+                else if (selectionMode) toggleCheck(file.id);
+                else onSelect(file);
+              }}
               onContextMenu={(e) => openMenu(e, fileMenu(file))}
               className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
-                file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
+                isChecked
+                  ? 'bg-sky-950/60 text-slate-100 outline outline-1 outline-sky-800'
+                  : file.id === selectedId
+                    ? 'bg-slate-800 text-slate-100'
+                    : 'text-slate-300 hover:bg-slate-900'
               }`}
               style={{ paddingLeft: `${8 + depth * 14}px` }}
             >
+              {selectionMode && (
+                <span className={`text-xs ${isChecked ? 'text-sky-400' : 'text-slate-600'}`}>
+                  {isChecked ? '☑' : '☐'}
+                </span>
+              )}
               <span className={`font-mono text-[10px] uppercase ${TYPE_BADGE[file.fileType] ?? ''}`}>
                 {file.fileType}
               </span>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CommandPalette from '../components/CommandPalette';
 import FileTree, { type TreeActions } from '../components/FileTree';
+import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
 import TagEditor from '../components/TagEditor';
 import UpdateNotes from '../components/UpdateNotes';
@@ -81,6 +82,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [checked, setChecked] = useState<Set<number>>(new Set()); // 다중 선택된 파일 id
+  const [movePickerOpen, setMovePickerOpen] = useState(false); // 일괄 이동 폴더 선택 모달
   const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
   const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -231,6 +234,63 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     [loadTree, selectFile],
   );
 
+  // 트리가 갱신되면 사라진 파일을 선택 목록에서도 정리한다
+  useEffect(() => {
+    setChecked((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(tree.files.map((f) => f.id));
+      const next = new Set([...prev].filter((id) => ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [tree.files]);
+
+  // 클립보드 붙여넣기 업로드 (IA — 업로드 UX): 입력 요소 밖의 Ctrl+V만 가로챈다
+  useEffect(() => {
+    const PASTE_EXT: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+    };
+    const handler = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const stamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace('T', ' ')
+        .replaceAll(':', '-');
+      const pasted = e.clipboardData?.files;
+      if (pasted && pasted.length > 0) {
+        e.preventDefault();
+        // 스크린샷 등 이름 없는 클립보드 이미지에는 시각 기반 이름을 붙인다
+        const renamed = [...pasted].map((f, i) => {
+          const ext = PASTE_EXT[f.type];
+          if (!ext) return f;
+          const suffix = pasted.length > 1 ? `-${i + 1}` : '';
+          return new File([f], `붙여넣기 ${stamp}${suffix}.${ext}`, { type: f.type });
+        });
+        void doUpload(renamed, null);
+        return;
+      }
+      const text = e.clipboardData?.getData('text/plain');
+      if (text && text.trim().length > 0) {
+        e.preventDefault();
+        void promptDialog('붙여넣은 텍스트로 새 문서 만들기 — 파일 이름', `붙여넣기 ${stamp}.md`).then(
+          (name) => {
+            const trimmed = name?.trim();
+            if (!trimmed) return;
+            const final = /\.(md|markdown|txt|html)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+            void doUpload([new File([text], final, { type: 'text/markdown' })], null);
+          },
+        );
+      }
+    };
+    window.addEventListener('paste', handler);
+    return () => window.removeEventListener('paste', handler);
+  }, [doUpload]);
+
   // Ctrl+K: 커맨드 팔레트 (IA — 단축키)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -262,8 +322,22 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     },
     renameFolder: (id, name) =>
       void guard(() => api(`/folders/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })),
-    moveFolder: (id, parentId) =>
-      void guard(() => api(`/folders/${id}`, { method: 'PUT', body: JSON.stringify({ parentId }) })),
+    moveFolder: (id, parentId) => {
+      const prev = treeRef.current.folders.find((f) => f.id === id)?.parentId ?? null;
+      if (prev === parentId) return;
+      void guard(async () => {
+        await api(`/folders/${id}`, { method: 'PUT', body: JSON.stringify({ parentId }) });
+        toast('폴더를 이동했습니다', 'success', {
+          action: {
+            label: '실행 취소',
+            onAction: () =>
+              void guard(() =>
+                api(`/folders/${id}`, { method: 'PUT', body: JSON.stringify({ parentId: prev }) }),
+              ),
+          },
+        });
+      });
+    },
     deleteFolder: (id) => {
       void confirmDialog('폴더를 삭제할까요?', {
         message: '하위 폴더와 파일이 모두 삭제됩니다.',
@@ -274,8 +348,22 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     },
     renameFile: (id, name) =>
       void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })),
-    moveFile: (id, folderId) =>
-      void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) })),
+    moveFile: (id, folderId) => {
+      const prev = treeRef.current.files.find((f) => f.id === id)?.folderId ?? null;
+      if (prev === folderId) return;
+      void guard(async () => {
+        await api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) });
+        toast('파일을 이동했습니다', 'success', {
+          action: {
+            label: '실행 취소',
+            onAction: () =>
+              void guard(() =>
+                api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId: prev }) }),
+              ),
+          },
+        });
+      });
+    },
     deleteFile: (id) => {
       void confirmDialog('파일을 삭제할까요?', { danger: true }).then((ok) => {
         if (!ok) return;
@@ -291,6 +379,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       uploadFolderRef.current = folderId;
       uploadRef.current?.click();
     },
+    uploadFiles: (files, folderId) => void doUpload(files, folderId),
     editTags: setTagEditorFile,
     shareFile: (file) =>
       void guard(() =>
@@ -307,6 +396,48 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         }),
       ),
   };
+
+  /** 일괄 이동 — 이전 위치를 기억해 실행 취소 제공 (IA — 다중 선택) */
+  function bulkMove(folderId: number | null) {
+    const ids = [...checked];
+    const prevMap = new Map(
+      ids.map((id) => [id, treeRef.current.files.find((f) => f.id === id)?.folderId ?? null]),
+    );
+    setMovePickerOpen(false);
+    setChecked(new Set());
+    void guard(async () => {
+      for (const id of ids) {
+        await api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId }) });
+      }
+      toast(`${ids.length}개 파일을 이동했습니다`, 'success', {
+        action: {
+          label: '실행 취소',
+          onAction: () =>
+            void guard(async () => {
+              for (const [id, prev] of prevMap) {
+                await api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ folderId: prev }) });
+              }
+            }),
+        },
+      });
+    });
+  }
+
+  function bulkDelete() {
+    const ids = [...checked];
+    void confirmDialog(`${ids.length}개 파일을 삭제할까요?`, { danger: true }).then((ok) => {
+      if (!ok) return;
+      if (selected && checked.has(selected.id)) {
+        setSelected(null);
+        history.replaceState(null, '', '/');
+      }
+      setChecked(new Set());
+      void guard(async () => {
+        for (const id of ids) await api(`/files/${id}`, { method: 'DELETE' });
+        toast(`${ids.length}개 파일을 삭제했습니다`, 'success');
+      });
+    });
+  }
 
   function toggleFavorite(file: TreeFile) {
     void guard(() =>
@@ -480,6 +611,32 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 <option value="updated">최근 수정순</option>
               </select>
             </div>
+            {checked.size > 0 && (
+              <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-sky-900 bg-sky-950/40 px-2 py-1.5 text-xs">
+                <span className="font-medium text-sky-300">{checked.size}개 선택</span>
+                <span className="ml-auto flex gap-1">
+                  <button
+                    onClick={() => setMovePickerOpen(true)}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"
+                  >
+                    이동
+                  </button>
+                  <button
+                    onClick={bulkDelete}
+                    className="rounded border border-red-900 px-2 py-0.5 text-red-400 hover:bg-red-950"
+                  >
+                    삭제
+                  </button>
+                  <button
+                    onClick={() => setChecked(new Set())}
+                    title="선택 해제"
+                    className="rounded px-1.5 py-0.5 text-slate-500 hover:text-slate-200"
+                  >
+                    ✕
+                  </button>
+                </span>
+              </div>
+            )}
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
               <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} />
               <FileTree
@@ -490,6 +647,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 selectedId={selected?.id ?? null}
                 onSelect={(f) => void selectFile(f)}
                 actions={actions}
+                checked={checked}
+                onCheckChange={setChecked}
               />
             </nav>
           </>
@@ -559,6 +718,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           files={tree.files}
           onPick={(f) => void selectFile(f)}
           onClose={() => setPaletteOpen(false)}
+        />
+      )}
+
+      {movePickerOpen && (
+        <FolderPicker
+          folders={sortedFolders}
+          title={`${checked.size}개 파일을 이동할 폴더`}
+          onPick={bulkMove}
+          onClose={() => setMovePickerOpen(false)}
         />
       )}
 
