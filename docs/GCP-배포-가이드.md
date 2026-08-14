@@ -253,18 +253,27 @@ rm test.txt       # 파일 삭제
 
 # 5. 스왑 추가 — 작은 서버의 필수 작업
 
-> 배우는 것: 메모리 부족을 디스크로 버티는 스왑(swap)의 개념
+> 배우는 것: 메모리 부족을 디스크로 버티는 스왑(swap)의 개념, OOM Killer, /etc/fstab
 
-e2-micro는 램이 1GB뿐이라 Docker 빌드 도중 메모리가 바닥나 **빌드가 소리 없이 죽을 수 있습니다.** 디스크 일부를 예비 메모리(스왑)로 쓰게 만들어 예방합니다:
+## 📚 학습 노트: 스왑이 뭐고 왜 필수인가
+
+프로그램은 데이터를 **RAM**(빠르지만 작음)에 올려놓고 일합니다. **스왑**은 RAM이 꽉 찼을 때 당장 안 쓰는 내용물을 **디스크에 잠시 내려놓는 비상 공간**입니다 — RAM이 책상이라면 스왑은 넘칠 때 쓰는 서랍.
+
+스왑이 없는 상태에서 RAM이 바닥나면 리눅스는 **OOM Killer**(Out Of Memory Killer)를 발동해 메모리를 많이 쓰는 프로세스를 **강제 종료**합니다. e2-micro는 RAM 1GB뿐인데 Docker 빌드는 순간적으로 그 이상을 요구하므로, 스왑 없이는 빌드가 에러 설명도 없이 `Killed` 한 마디로 죽습니다. 스왑 2GB를 붙이면 초과분이 디스크로 밀려나 느릴지언정 완주합니다.
+
+알아둘 것 두 가지: ① 클라우드 VM 이미지에 스왑이 기본으로 없는 건 "느려지느니 죽고, 더 큰 VM으로 올려라"는 클라우드식 철학 때문입니다. ② 스왑은 디스크라 RAM보다 수백 배 느립니다 — **성능 확장이 아니라 "죽지 않기 위한 보험"**이고, 평소 운영 중에도 스왑 사용량이 계속 높다면 서버가 진짜 좁다는 신호입니다. 2GB라는 크기는 "RAM의 2배" 전통 공식이며 30GB 디스크에 부담 없는 값입니다.
 
 ```bash
-sudo fallocate -l 2G /swapfile         # 2GB짜리 파일 생성
-sudo chmod 600 /swapfile               # root만 읽고 쓰게 권한 제한
-sudo mkswap /swapfile                  # 스왑 형식으로 포맷
-sudo swapon /swapfile                  # 활성화
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # 재부팅 후에도 유지
+sudo fallocate -l 2G /swapfile         # 디스크에 2GB 빈 파일 확보 (-l = length)
+sudo chmod 600 /swapfile               # root만 읽고 쓰게 — 스왑엔 메모리 내용(비밀번호 등)이
+                                       # 내려앉을 수 있어 남이 읽으면 보안 구멍
+sudo mkswap /swapfile                  # 파일을 스왑 형식으로 포맷 (make swap)
+sudo swapon /swapfile                  # 지금 즉시 활성화 (swap on)
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+# /etc/fstab은 "부팅 때 자동 연결할 저장장치 목록" — 이 줄이 없으면 재부팅 시 스왑이 사라진다.
+# `sudo echo >> 파일`은 권한 문제로 안 되기 때문에 `| sudo tee -a`(관리자 권한으로 끝에 추가)를 쓴다
 
-free -h    # Swap 줄에 2.0Gi가 보이면 성공
+free -h    # Swap 줄에 2.0Gi가 보이면 성공 (-h = 사람이 읽기 좋은 단위)
 ```
 
 ---
