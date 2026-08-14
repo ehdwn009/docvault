@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` ADD `last_seen_version` text;

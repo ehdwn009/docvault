@@ -4,7 +4,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
-import { config } from './config.js';
+import { APP_VERSION, config } from './config.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
 import { authGuard } from './middleware/auth.js';
@@ -28,7 +28,17 @@ app.use(logger());
 
 const api = new Hono<AppEnv>();
 api.use('*', authGuard);
-api.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
+api.get('/health', (c) => c.json({ status: 'ok', version: APP_VERSION }));
+// 업데이트 기록 (SCR-144) — 저장소 루트의 CHANGELOG.md를 그대로 내려준다 (렌더링은 클라이언트 md 렌더러가)
+api.get('/changelog', (c) => {
+  let content = '';
+  try {
+    content = fs.readFileSync(path.join(config.appRoot, 'CHANGELOG.md'), 'utf8');
+  } catch {
+    // 파일이 없어도 화면이 죽지 않게 빈 내용으로
+  }
+  return c.json({ version: APP_VERSION, content });
+});
 api.route('/admin', adminRoutes);
 api.route('/auth', authRoutes);
 api.route('/tree', treeRoutes);

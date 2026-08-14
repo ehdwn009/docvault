@@ -122,5 +122,7 @@ export const userSettings = sqliteTable('user_settings', {
   contentWidth: text('content_width', { enum: ['narrow', 'normal', 'wide'] })
     .notNull()
     .default('normal'),
+  /** 패치노트 모달용 — 마지막으로 확인한 앱 버전. 기기 간 동기화되어 한 번 본 공지는 다시 안 뜬다 */
+  lastSeenVersion: text('last_seen_version'),
   updatedAt: integer('updated_at').notNull(),
 });

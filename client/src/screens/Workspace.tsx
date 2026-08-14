@@ -3,10 +3,12 @@ import CommandPalette from '../components/CommandPalette';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import RecentList from '../components/RecentList';
 import TagEditor from '../components/TagEditor';
+import UpdateNotes from '../components/UpdateNotes';
 import {
   api,
   ApiError,
   uploadFiles,
+  type Changelog,
   type SharedFile,
   type Tag,
   type Tree,
@@ -31,6 +33,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   fontFamily: null,
   lineHeight: null,
   contentWidth: 'normal',
+  lastSeenVersion: null,
 };
 
 const PANEL_TITLE: Record<Panel, string> = {
@@ -77,6 +80,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
+  const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadFolderRef = useRef<number | null>(null);
   const treeRef = useRef<Tree>(tree);
@@ -120,9 +125,47 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       }
     })();
     void api<{ settings: UserSettings }>('/me/settings')
-      .then(({ settings }) => setSettings(settings))
+      .then(({ settings }) => {
+        setSettings(settings);
+        // 새 버전 이후 첫 로그인이면 패치노트를 한 번 보여준다 (확인 시 기록 → 기기 간 공유)
+        if (settings.lastSeenVersion !== __APP_VERSION__) {
+          void api<Changelog>('/changelog')
+            .then(({ content }) => content && setChangelogContent(content))
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
   }, [loadTree, loadTags, resolveFile]);
+
+  // 서버가 새 버전으로 배포됐는지 감시 — 탭 복귀 시 + 10분 주기
+  useEffect(() => {
+    const check = () =>
+      void api<{ version: string }>('/health')
+        .then(({ version }) => {
+          if (version !== __APP_VERSION__) setNewVersionReady(true);
+        })
+        .catch(() => {});
+    const onVisible = () => document.visibilityState === 'visible' && check();
+    const timer = window.setInterval(check, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  function closeChangelog() {
+    setChangelogContent(null);
+    if (settings.lastSeenVersion !== __APP_VERSION__) {
+      changeSettings({ lastSeenVersion: __APP_VERSION__ });
+    }
+  }
+
+  function showChangelog() {
+    void api<Changelog>('/changelog')
+      .then(({ content }) => setChangelogContent(content || '아직 기록이 없습니다.'))
+      .catch(() => toast('업데이트 기록을 불러오지 못했습니다', 'error'));
+  }
 
   // 뒤로가기/앞으로가기
   useEffect(() => {
@@ -454,7 +497,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         )}
 
-        {panel === 'settings' && <SettingsPanel settings={settings} onChange={changeSettings} />}
+        {panel === 'settings' && (
+          <SettingsPanel settings={settings} onChange={changeSettings} onShowChangelog={showChangelog} />
+        )}
 
         {panel === 'admin' && user.role === 'admin' && (
           <AdminPanel meId={user.id} onSelectFile={(f) => void selectFile(f)} />
@@ -514,6 +559,22 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           }}
           onClose={() => setTagEditorFile(null)}
         />
+      )}
+
+      {changelogContent !== null && (
+        <UpdateNotes content={changelogContent} onClose={closeChangelog} />
+      )}
+
+      {newVersionReady && (
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 rounded-lg border border-sky-800 bg-slate-900 px-4 py-2.5 shadow-xl">
+          <span className="text-sm text-slate-200">새 버전이 배포되었습니다</span>
+          <button
+            onClick={() => location.reload()}
+            className="rounded-md bg-sky-600 px-3 py-1 text-sm font-medium text-white hover:bg-sky-500"
+          >
+            새로고침
+          </button>
+        </div>
       )}
     </div>
   );

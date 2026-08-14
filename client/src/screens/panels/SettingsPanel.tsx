@@ -4,13 +4,14 @@ import { api, ApiError, type UserSettings } from '../../lib/api';
 type Props = {
   settings: UserSettings;
   onChange: (patch: Partial<UserSettings>) => void;
+  onShowChangelog: () => void;
 };
 
 const selectClass =
   'mt-1 w-full rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-400';
 
-// SCR-140: 설정 패널 — 뷰어 설정(SCR-141, 변경 즉시 저장·적용) + 비밀번호 변경(SCR-142)
-export default function SettingsPanel({ settings, onChange }: Props) {
+// SCR-140: 설정 패널 — 뷰어 설정(SCR-141) + 비밀번호 변경(SCR-142) + 정보·업데이트 기록(SCR-144)
+export default function SettingsPanel({ settings, onChange, onShowChangelog }: Props) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -112,6 +113,20 @@ export default function SettingsPanel({ settings, onChange }: Props) {
             변경
           </button>
         </form>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">정보</h3>
+        <p className="mt-2 text-sm text-slate-400">
+          docvault <span className="font-medium text-slate-200">v{__APP_VERSION__}</span>
+          <span className="ml-1.5 text-xs text-slate-600">({__BUILD_DATE__} 빌드)</span>
+        </p>
+        <button
+          onClick={onShowChangelog}
+          className="mt-2 w-full rounded-md border border-slate-700 py-1.5 text-sm text-slate-300 transition hover:bg-slate-900"
+        >
+          업데이트 기록 보기
+        </button>
       </section>
     </div>
   );

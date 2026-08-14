@@ -17,6 +17,7 @@ COPY package.json package-lock.json ./
 COPY server/package.json server/
 RUN npm ci -w server --omit=dev
 COPY server server
+COPY CHANGELOG.md ./
 COPY --from=build /app/client/dist client/dist
 ENV DATA_DIR=/app/data
 EXPOSE 3000

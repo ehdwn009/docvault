@@ -60,7 +60,10 @@ export type UserSettings = {
   fontFamily: string | null;
   lineHeight: string | null;
   contentWidth: 'narrow' | 'normal' | 'wide';
+  lastSeenVersion: string | null;
 };
+
+export type Changelog = { version: string; content: string };
 
 export type Tree = { folders: TreeFolder[]; files: TreeFile[] };
 

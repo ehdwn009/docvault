@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
   fontFamily: null,
   lineHeight: null,
   contentWidth: 'normal' as const,
+  lastSeenVersion: null as string | null,
 };
 
 const settingsSchema = z.object({
@@ -22,6 +23,7 @@ const settingsSchema = z.object({
   fontFamily: z.string().max(100).nullable().optional(),
   lineHeight: z.string().max(20).nullable().optional(),
   contentWidth: z.enum(['narrow', 'normal', 'wide']).optional(),
+  lastSeenVersion: z.string().max(20).optional(),
 });
 
 const stateSchema = z
