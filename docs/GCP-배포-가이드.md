@@ -392,6 +392,12 @@ exit    # 그룹 적용을 위해 나갔다가
 
 **`exit`**: 현재 셸 종료 = SSH 접속 종료. 그룹 소속은 **로그인하는 시점에 결정**되므로, 나갔다 들어와야 새 그룹이 반영됩니다.
 
+**설치 출력 읽는 법** — 성공했다면 이런 신호들이 보입니다:
+
+- `Using systemd to manage Docker service` / `Docker daemon enabled and started`: 데몬이 설치·시작됐고 **재부팅 시 자동 시작**으로 등록됨 (`systemctl enable --now`의 결과 — enable=부팅 자동 시작, --now=지금 시작)
+- `Client:`와 `Server:` 양쪽에 버전 표시: Docker는 **명령어(Client) + 데몬(Server)** 구조인데 둘 다 정상 응답했다는 확인
+- 끝의 rootless mode 안내와 `WARNING: ... equivalent to root access`는 **에러가 아니라 정보성 안내**입니다. "docker 그룹 권한 = 사실상 root"라는 보안 상식을 알려주는 것 — 혼자 쓰는 서버라 표준 방식(usermod)으로 진행하면 됩니다
+
 다시 SSH 접속 후:
 
 ```bash
