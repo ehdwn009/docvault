@@ -408,6 +408,10 @@ git clone https://github.com/ehdwn009/docvault.git
 cd docvault
 echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
 echo "ADMIN_INITIAL_PASSWORD=초기비밀번호로바꾸세요" >> .env
+# ↑ "초기비밀번호로바꾸세요" 자리에 원하는 비밀번호(8자 이상)를 넣어 실행.
+#   셸이 $ ` " 같은 특수문자를 해석해버리므로 영문+숫자 조합 권장 (복잡한 비밀번호는 로그인 후 앱 설정에서).
+#   이 값은 첫 기동 때 admin 계정 생성에 한 번만 쓰이며, cat .env 로 잘 들어갔는지 확인 가능.
+#   (8장에서 PC 데이터를 이사해 오면 계정·비밀번호도 PC 것으로 교체되므로 임시값이어도 무방)
 
 # 실행 (e2-micro에선 첫 빌드가 5~10분 걸릴 수 있습니다 — 스왑 덕에 죽지 않고 완주합니다)
 docker compose up -d --build
