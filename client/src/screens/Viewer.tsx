@@ -27,6 +27,9 @@ const WIDTH: Record<UserSettings['contentWidth'], string> = {
 
 type Heading = { text: string; level: number; el: HTMLElement };
 
+/** CSS의 pc 변형과 같은 판정 — 터치 기기에서만 다른 동작이 필요할 때 사용 */
+const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
 export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onToggleFavorite, onDirtyChange }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
@@ -189,24 +192,30 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       </div>
       )}
       <div className="flex min-h-0 flex-1">
-        {/* SCR-151: 목차 사이드 패널 */}
+        {/* SCR-151: 목차 — 데스크톱은 인라인 사이드 패널, 터치 기기는 오버레이 드로어 */}
         {showToc && (
-          <nav className="w-56 shrink-0 overflow-auto border-r border-slate-800 py-3 touch:hidden">
-            {headings.length === 0 ? (
-              <p className="px-3 text-xs text-slate-600">표시할 헤딩이 없습니다</p>
-            ) : (
-              headings.map((h, i) => (
-                <button
-                  key={i}
-                  onClick={() => h.el.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
-                  style={{ paddingLeft: `${12 + (h.level - 1) * 12}px` }}
-                >
-                  {h.text}
-                </button>
-              ))
-            )}
-          </nav>
+          <>
+            <div className="fixed inset-0 z-20 bg-black/50 pc:hidden" onClick={() => setShowToc(false)} />
+            <nav className="w-56 shrink-0 overflow-auto overscroll-contain border-r border-slate-800 py-3 touch:fixed touch:inset-y-0 touch:left-0 touch:z-30 touch:w-64 touch:bg-slate-950">
+              {headings.length === 0 ? (
+                <p className="px-3 text-xs text-slate-600">표시할 헤딩이 없습니다</p>
+              ) : (
+                headings.map((h, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      h.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      if (!isPcDevice()) setShowToc(false); // 터치에선 선택 즉시 드로어를 닫아 본문을 보여준다
+                    }}
+                    className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
+                    style={{ paddingLeft: `${12 + (h.level - 1) * 12}px` }}
+                  >
+                    {h.text}
+                  </button>
+                ))
+              )}
+            </nav>
+          </>
         )}
         <div
           ref={scrollRef}
