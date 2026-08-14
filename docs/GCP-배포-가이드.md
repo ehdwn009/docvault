@@ -566,6 +566,7 @@ GCP는 기본적으로 **SSH(22)를 제외한 모든 인그레스를 거부**합
 ### ① DuckDNS에서 이름 만들기
 
 1. https://www.duckdns.org 접속 → 구글 계정으로 로그인
+   - "please complete the reCaptcha" 화면이 나오면 주황색 **reCaptcha 버튼**을 눌러 로봇 확인을 통과 (봇 가입 방지용 — 통과하면 본 화면이 열림)
 2. 원하는 이름 입력(예: `mydocvault`) → **add domain**
 3. 방금 만든 줄의 IP 칸에 **GCP 외부 IP**를 넣고 update
 4. 페이지 상단의 **token**을 복사해 두세요 (IP 자동 갱신에 씁니다)
