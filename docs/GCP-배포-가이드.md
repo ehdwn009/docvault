@@ -689,7 +689,16 @@ git pull && docker compose --profile edge pull && docker compose --profile edge 
 - **데이터는 안전합니다.** `data/`는 컨테이너 밖(바인드 마운트)이라 유지되고, DB 스키마 변경도 기동 시 마이그레이션이 자동 적용됩니다
 - **`--profile edge`를 항상 붙입니다.** 빼면 compose가 Caddy를 내려버릴 수 있습니다
 
-> 최초 1회 설정: GHCR 패키지를 공개로 — github.com 프로필 → **Packages** 탭 → `docvault` → Package settings → **Change visibility → Public**. (저장소가 공개라도 패키지는 기본 비공개라, 공개로 바꿔야 서버가 로그인 없이 pull할 수 있습니다)
+### 최초 1회 설정: GHCR 패키지 공개 전환
+
+저장소가 공개(public)여도 **패키지(이미지)는 기본 비공개**라, 한 번 공개로 바꿔야 서버가 로그인 없이 pull할 수 있습니다.
+
+1. 먼저 첫 빌드가 끝났는지 확인: 저장소의 **Actions 탭**(github.com/내계정/docvault/actions) → "build-image" 워크플로가 **초록 체크**인지. (첫 빌드 전에는 패키지 자체가 아직 없습니다)
+2. github.com/내계정?tab=**packages** 접속 → `docvault` 패키지 클릭
+3. 우측(또는 하단) **Package settings** → 맨 아래 Danger Zone의 **Change visibility**
+4. 확인 대화상자에서 **Public** 선택 → 입력칸에 패키지 이름 **`docvault`**를 그대로 타이핑 (위험한 변경 전에 이름을 직접 치게 하는 GitHub의 실수 방지 장치) → **I understand the consequences...** 버튼
+
+> ⚠️ Actions가 아직 도는 중에 서버에서 `compose pull` 하면 이미지를 못 찾거나 옛 버전을 받습니다 — **항상 Actions 초록불 확인 후 pull.**
 
 > 서버에서 직접 빌드하는 옛 방식(`up -d --build`)도 여전히 동작합니다 — Actions가 실패했을 때의 비상 수단. 빌드 도중 Ctrl+C로 취소해도 돌고 있는 컨테이너·데이터는 안전하며, 레이어 캐시 덕에 재시도 시 이어서 굽습니다.
 
