@@ -419,6 +419,9 @@ curl http://localhost:3000/api/v1/health    # {"status":"ok",...}
 ### 📚 학습 노트: 실행 블록 해부
 
 - **`git clone 주소`**: 깃허브의 저장소(코드 전체 + 변경 이력)를 서버에 복제. 실행하면 현재 위치에 `docvault` 폴더가 생기고, `cd docvault`로 그 안에 들어갑니다
+  - ⚠️ **`Username for 'https://github.com':` 이 뜬다면** 저장소가 비공개(private)라 인증을 요구하는 것입니다. 깃허브는 비밀번호 인증을 폐지해서 여기에 계정 비밀번호를 쳐도 실패합니다. **Ctrl+C로 취소**하고 둘 중 하나를 선택:
+    - **(추천) 저장소를 public으로 전환** — 저장소 Settings → Danger Zone → Change visibility. `.env`와 `data/`는 gitignore라 저장소에 비밀이 없으므로 안전하고, 이후 clone/pull에 인증이 아예 필요 없어집니다
+    - **비공개 유지** — 깃허브 Settings → Developer settings → **Fine-grained token** 발급(해당 저장소만, Contents: Read-only) 후 Username엔 깃허브 아이디, Password엔 **토큰**을 입력 (붙여넣어도 화면에 안 보이는 게 정상). 단 pull 때마다 다시 물어봅니다
 - **`echo "JWT_SECRET=$(openssl rand -hex 32)" > .env`** — 세 가지가 겹쳐 있습니다:
   - **`$(명령)`**: **명령 치환** — 괄호 안 명령을 먼저 실행하고 그 출력으로 바꿔치기하는 셸 문법. 앞서 본 `$USER`(변수 치환)의 명령 버전
   - **`openssl rand -hex 32`**: openssl(암호학 도구 모음)로 **난수 32바이트**를 만들어 16진수(hex) 64글자로 출력 — 사람이 못 추측하는 비밀 키 생성의 표준 방법
