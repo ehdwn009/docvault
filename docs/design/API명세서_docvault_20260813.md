@@ -42,10 +42,14 @@
 | API-033 | GET | /files/{id}/content | 텍스트 본문 조회 (JSON) | 로그인 |
 | API-034 | PUT | /files/{id}/content | 본문 저장 (버전 스냅샷 포함) | 로그인 |
 | API-035 | PUT | /files/{id} | 이름 변경 / 이동 / 정렬 | 로그인 |
-| API-036 | DELETE | /files/{id} | 파일 삭제 | 로그인 |
+| API-036 | DELETE | /files/{id} | 파일 삭제 → 휴지통 이동 (soft delete, 2026-08-15) | 로그인 |
 | API-037 | POST | /files/{id}/copy | 파일 복사 | 로그인 |
 | API-038 | GET | /files/{id}/raw | 원본 다운로드 / 바이너리 스트리밍 | 로그인 |
 | API-039 | PUT | /files/{id}/share | 파일 공유 토글 | 관리자 |
+| API-044 | GET | /files/trash | 휴지통 목록 (내 파일) | 로그인 |
+| API-045 | DELETE | /files/trash | 휴지통 비우기 (전체 영구 삭제) | 로그인 |
+| API-046 | POST | /files/{id}/restore | 휴지통에서 복원 (충돌 시 자동 개명, 폴더 소실 시 최상위) | 소유자 |
+| API-047 | DELETE | /files/{id}/purge | 휴지통에서 영구 삭제 | 소유자 |
 | API-041 | GET | /files/{id}/versions | 버전 목록 (본문 제외 메타) | 로그인 |
 | API-042 | GET | /files/{id}/versions/{vid} | 특정 버전 본문 (미리보기) | 로그인 |
 | API-043 | POST | /files/{id}/versions/{vid}/restore | 해당 버전으로 복원 | 로그인 |

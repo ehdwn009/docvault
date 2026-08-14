@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { files, folders } from '../db/schema.js';
 import { fail } from '../lib/errors.js';
-import { deleteBinary } from '../lib/storage.js';
 import { jsonBody, nameField, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
@@ -126,24 +125,12 @@ export const folderRoutes = new Hono<AppEnv>()
     const folder = getOwnFolder(user.id, id);
     if (!folder) return fail(c, 404, 'NOT_FOUND', '폴더가 없습니다');
 
-    // 삭제 전에 하위 트리의 바이너리 경로를 수집해 둔다 (DB 삭제 후 디스크 정리용)
-    const binaryPaths = db.all<{ p: string }>(sql`
-      SELECT storage_path AS p FROM ${files}
-      WHERE storage_path IS NOT NULL AND folder_id IN (
-        WITH RECURSIVE subtree(id) AS (
-          SELECT ${id}
-          UNION ALL
-          SELECT f.id FROM ${folders} f JOIN subtree s ON f.parent_id = s.id
-        )
-        SELECT id FROM subtree
-      )
-    `);
-
     db.transaction((tx) => {
-      // 하위 트리의 파일을 명시적으로 먼저 지운다 — FK CASCADE에 맡기면
-      // SQLite가 FTS 동기화 트리거를 안 태울 수 있어서(recursive_triggers 의존) 직접 지운다
+      // 하위 트리의 파일은 지우지 않고 휴지통으로 보낸다 (IA — 휴지통).
+      // folder_id를 먼저 끊어야 폴더 삭제의 FK CASCADE가 파일까지 지우지 않는다
       tx.run(sql`
-        DELETE FROM ${files}
+        UPDATE ${files}
+        SET folder_id = NULL, deleted_at = COALESCE(deleted_at, ${Date.now()})
         WHERE folder_id IN (
           WITH RECURSIVE subtree(id) AS (
             SELECT ${id}
@@ -156,7 +143,6 @@ export const folderRoutes = new Hono<AppEnv>()
       // 하위 폴더는 parent_id CASCADE로 함께 삭제된다
       tx.delete(folders).where(eq(folders.id, id)).run();
     });
-    for (const { p } of binaryPaths) deleteBinary(p);
 
     return c.json({ ok: true });
   })

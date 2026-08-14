@@ -1,6 +1,6 @@
-import { createReadStream } from 'node:fs';
+﻿import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES, MAX_VERSIONS_PER_FILE } from '../constants.js';
@@ -39,6 +39,7 @@ function duplicateFileName(ownerId: number, folderId: number | null, name: strin
         eq(files.ownerId, ownerId),
         folderId === null ? sql`${files.folderId} IS NULL` : eq(files.folderId, folderId),
         eq(files.name, name),
+        isNull(files.deletedAt), // 휴지통의 파일은 이름을 점유하지 않는다
       ),
     )
     .get();
@@ -123,6 +124,39 @@ export const fileRoutes = new Hono<AppEnv>()
     }
 
     return c.json({ files: created }, 201);
+  })
+
+  // API-044: 휴지통 목록 — 내 파일만
+  .get('/trash', (c) => {
+    const user = c.get('user');
+    const rows = db
+      .select({
+        id: files.id,
+        name: files.name,
+        fileType: files.fileType,
+        sizeBytes: files.sizeBytes,
+        deletedAt: files.deletedAt,
+      })
+      .from(files)
+      .where(and(eq(files.ownerId, user.id), isNotNull(files.deletedAt)))
+      .orderBy(desc(files.deletedAt))
+      .all();
+    return c.json({ files: rows });
+  })
+
+  // API-045: 휴지통 비우기 — 내 휴지통 전체 영구 삭제
+  .delete('/trash', (c) => {
+    const user = c.get('user');
+    const rows = db
+      .select({ id: files.id, storagePath: files.storagePath })
+      .from(files)
+      .where(and(eq(files.ownerId, user.id), isNotNull(files.deletedAt)))
+      .all();
+    for (const row of rows) {
+      db.delete(files).where(eq(files.id, row.id)).run();
+      deleteBinary(row.storagePath);
+    }
+    return c.json({ ok: true, purged: rows.length });
   })
 
   // API-038: 원본 다운로드 / 바이너리 스트리밍
@@ -297,7 +331,7 @@ export const fileRoutes = new Hono<AppEnv>()
     return c.json(toFileMeta(updated));
   })
 
-  // API-036: 파일 삭제
+  // API-036: 파일 삭제 → 휴지통 이동 (soft delete). 영구 삭제는 /purge와 보관 기한 만료가 담당
   .delete('/:id', (c) => {
     const user = c.get('user');
     const id = parseId(c.req.param('id'));
@@ -306,6 +340,51 @@ export const fileRoutes = new Hono<AppEnv>()
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
     if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '삭제 권한이 없습니다');
+
+    db.update(files).set({ deletedAt: Date.now() }).where(eq(files.id, id)).run();
+    return c.json({ ok: true });
+  })
+
+  // API-046: 휴지통에서 복원 — 원래 폴더가 사라졌으면 최상위로, 이름이 겹치면 자동으로 번호를 붙인다
+  .post('/:id/restore', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file || file.deletedAt === null) return fail(c, 404, 'NOT_FOUND', '휴지통에 없는 파일입니다');
+    if (file.ownerId !== user.id && user.role !== 'admin') {
+      return fail(c, 403, 'FORBIDDEN', '복원 권한이 없습니다');
+    }
+
+    let folderId = file.folderId;
+    if (folderId !== null && !db.select().from(folders).where(eq(folders.id, folderId)).get()) {
+      folderId = null;
+    }
+    let name = file.name;
+    if (duplicateFileName(file.ownerId, folderId, name, file.id)) {
+      const ext = extensionOf(name);
+      const stem = ext ? name.slice(0, -ext.length) : name;
+      let n = 2;
+      while (duplicateFileName(file.ownerId, folderId, `${stem} (${n})${ext}`, file.id)) n++;
+      name = `${stem} (${n})${ext}`;
+    }
+
+    db.update(files).set({ deletedAt: null, folderId, name }).where(eq(files.id, id)).run();
+    return c.json({ ok: true });
+  })
+
+  // API-047: 휴지통에서 영구 삭제
+  .delete('/:id/purge', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file || file.deletedAt === null) return fail(c, 404, 'NOT_FOUND', '휴지통에 없는 파일입니다');
+    if (file.ownerId !== user.id && user.role !== 'admin') {
+      return fail(c, 403, 'FORBIDDEN', '삭제 권한이 없습니다');
+    }
 
     db.delete(files).where(eq(files.id, id)).run();
     deleteBinary(file.storagePath); // DB가 진실이므로 레코드를 지운 뒤 디스크를 정리

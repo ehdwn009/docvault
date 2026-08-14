@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
@@ -46,11 +46,12 @@ export const adminRoutes = new Hono<AppEnv>()
   .get('/stats', (c) => {
     const one = <T>(q: T[]): T => q[0]!;
     const userCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM users`)).n;
-    const fileCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM files`)).n;
+    // 휴지통 파일은 통계에서 제외한다 (용량은 디스크를 실제 점유하므로 포함)
+    const fileCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM files WHERE deleted_at IS NULL`)).n;
     const folderCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM folders`)).n;
     const versionCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM file_versions`)).n;
     const totalBytes = one(db.all<{ n: number | null }>(sql`SELECT sum(size_bytes) AS n FROM files`)).n ?? 0;
-    const sharedCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM files WHERE is_shared = 1`)).n;
+    const sharedCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM files WHERE is_shared = 1 AND deleted_at IS NULL`)).n;
     return c.json({ stats: { userCount, fileCount, folderCount, versionCount, totalBytes, sharedCount } });
   })
 
@@ -167,6 +168,7 @@ export const adminRoutes = new Hono<AppEnv>()
         updatedAt: files.updatedAt,
       })
       .from(files)
+      .where(isNull(files.deletedAt)) // 휴지통 파일은 관리자 전체 목록에서도 제외
       .orderBy(desc(files.updatedAt))
       .all();
 

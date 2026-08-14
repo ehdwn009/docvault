@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CommandPalette from '../components/CommandPalette';
+import FileGrid from '../components/FileGrid';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
+import TrashPanel from '../components/TrashPanel';
 import TagEditor from '../components/TagEditor';
 import UpdateNotes from '../components/UpdateNotes';
 import {
@@ -111,6 +113,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set()); // 다중 선택된 파일 id
   const [movePickerOpen, setMovePickerOpen] = useState(false); // 일괄 이동 폴더 선택 모달
+  const [trashOpen, setTrashOpen] = useState(false); // 휴지통 모달
+  // 보기 모드는 기기별 취향이라 서버 설정이 아니라 localStorage에 둔다
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() =>
+    localStorage.getItem('dv_viewmode') === 'grid' ? 'grid' : 'list',
+  );
   const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
   const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -580,7 +587,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     },
     deleteFolder: (id) => {
       void confirmDialog('폴더를 삭제할까요?', {
-        message: '하위 폴더와 파일이 모두 삭제됩니다.',
+        message: '폴더 구조는 삭제되고, 안의 파일은 휴지통으로 이동합니다.',
         danger: true,
       }).then((ok) => {
         if (ok) void guard(() => api(`/folders/${id}`, { method: 'DELETE' }));
@@ -604,14 +611,20 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         });
       });
     },
+    // 삭제는 확인 없이 휴지통으로 — 실행 취소(복원)가 안전망이라 대화상자보다 빠르고 안전하다
     deleteFile: (id) => {
-      void confirmDialog('파일을 삭제할까요?', { danger: true }).then((ok) => {
-        if (!ok) return;
-        if (selected?.id === id) {
-          setSelected(null);
-          history.replaceState(null, '', '/');
-        }
-        void guard(() => api(`/files/${id}`, { method: 'DELETE' }));
+      if (selected?.id === id) {
+        setSelected(null);
+        history.replaceState(null, '', '/');
+      }
+      void guard(async () => {
+        await api(`/files/${id}`, { method: 'DELETE' });
+        toast('휴지통으로 이동했습니다', 'success', {
+          action: {
+            label: '실행 취소',
+            onAction: () => void guard(() => api(`/files/${id}/restore`, { method: 'POST' })),
+          },
+        });
       });
     },
     copyFile: (id) => void guard(() => api(`/files/${id}/copy`, { method: 'POST' })),
@@ -681,16 +694,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   function bulkDelete() {
     const ids = [...checked];
-    void confirmDialog(`${ids.length}개 파일을 삭제할까요?`, { danger: true }).then((ok) => {
-      if (!ok) return;
-      if (selected && checked.has(selected.id)) {
-        setSelected(null);
-        history.replaceState(null, '', '/');
-      }
-      setChecked(new Set());
-      void guard(async () => {
-        for (const id of ids) await api(`/files/${id}`, { method: 'DELETE' });
-        toast(`${ids.length}개 파일을 삭제했습니다`, 'success');
+    if (selected && checked.has(selected.id)) {
+      setSelected(null);
+      history.replaceState(null, '', '/');
+    }
+    setChecked(new Set());
+    void guard(async () => {
+      for (const id of ids) await api(`/files/${id}`, { method: 'DELETE' });
+      toast(`${ids.length}개 파일을 휴지통으로 이동했습니다`, 'success', {
+        action: {
+          label: '실행 취소',
+          onAction: () =>
+            void guard(async () => {
+              for (const id of ids) await api(`/files/${id}/restore`, { method: 'POST' });
+            }),
+        },
       });
     });
   }
@@ -894,6 +912,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 <option value="name">이름순</option>
                 <option value="updated">최근 수정순</option>
               </select>
+              <button
+                onClick={() =>
+                  setViewMode((m) => {
+                    const next = m === 'list' ? 'grid' : 'list';
+                    localStorage.setItem('dv_viewmode', next);
+                    return next;
+                  })
+                }
+                title={viewMode === 'list' ? '격자 보기' : '목록 보기'}
+                className="rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-400 hover:text-slate-200"
+              >
+                {viewMode === 'list' ? '▦' : '▤'}
+              </button>
             </div>
             {checked.size > 0 && (
               <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-sky-900 bg-sky-950/40 px-2 py-1.5 text-xs">
@@ -923,18 +954,33 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             )}
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
               <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} />
-              <FileTree
-                folders={sortedFolders}
-                files={visibleFiles}
-                tags={tags}
-                isAdmin={user.role === 'admin'}
-                selectedId={selected?.id ?? null}
-                onSelect={(f) => void selectFile(f)}
-                actions={actions}
-                checked={checked}
-                onCheckChange={setChecked}
-              />
+              {viewMode === 'grid' ? (
+                <FileGrid
+                  files={visibleFiles}
+                  folders={sortedFolders}
+                  selectedId={selected?.id ?? null}
+                  onSelect={(f) => void selectFile(f)}
+                />
+              ) : (
+                <FileTree
+                  folders={sortedFolders}
+                  files={visibleFiles}
+                  tags={tags}
+                  isAdmin={user.role === 'admin'}
+                  selectedId={selected?.id ?? null}
+                  onSelect={(f) => void selectFile(f)}
+                  actions={actions}
+                  checked={checked}
+                  onCheckChange={setChecked}
+                />
+              )}
             </nav>
+            <button
+              onClick={() => setTrashOpen(true)}
+              className="mx-3 mb-3 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
+            >
+              🗑 휴지통
+            </button>
           </>
         )}
 
@@ -992,6 +1038,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           onPick={(f) => void selectFile(f)}
           onClose={() => setPaletteOpen(false)}
         />
+      )}
+
+      {trashOpen && (
+        <TrashPanel onChanged={() => void loadTree()} onClose={() => setTrashOpen(false)} />
       )}
 
       {movePickerOpen && (

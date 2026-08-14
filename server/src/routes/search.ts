@@ -39,6 +39,7 @@ export const searchRoutes = new Hono<AppEnv>().get('/', (c) => {
       FROM files_fts
       JOIN files f ON f.id = files_fts.rowid
       WHERE files_fts MATCH ${toFtsQuery(q)}
+        AND f.deleted_at IS NULL
       ORDER BY bm25(files_fts)
       LIMIT 30
     `);

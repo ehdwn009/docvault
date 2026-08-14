@@ -7,8 +7,10 @@ import { logger } from 'hono/logger';
 import { APP_VERSION, config } from './config.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
+import { purgeExpiredTrash } from './lib/trash.js';
 import { authGuard } from './middleware/auth.js';
 import { adminRoutes } from './routes/admin.js';
+import { shareTargetRoutes } from './routes/share-target.js';
 import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
 import { folderRoutes } from './routes/folders.js';
@@ -21,6 +23,10 @@ import type { AppEnv } from './types.js';
 
 initDb();
 seedAdmin();
+
+// 휴지통 자동 비움 — 기동 시 1회 + 하루 주기 (IA — 휴지통 30일 보관)
+purgeExpiredTrash();
+setInterval(purgeExpiredTrash, 24 * 60 * 60 * 1000);
 
 const app = new Hono();
 
@@ -50,6 +56,7 @@ api.route('/shared', sharedRoutes);
 api.route('/tags', tagRoutes);
 
 app.route('/api/v1', api);
+app.route('/share-target', shareTargetRoutes); // PWA 공유 시트 수신 (매니페스트 share_target)
 
 // SPA 정적 서빙: 빌드 결과물이 있으면 서빙하고, 미지의 경로는 index.html로 폴백(딥링크 지원)
 if (fs.existsSync(config.clientDist)) {

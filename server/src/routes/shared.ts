@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { db } from '../db/index.js';
 import { files, folders, users } from '../db/schema.js';
@@ -60,6 +60,7 @@ export const sharedRoutes = new Hono<AppEnv>().get('/tree', (c) => {
       updatedAt: files.updatedAt,
     })
     .from(files)
+    .where(isNull(files.deletedAt)) // 휴지통 파일은 공유 목록에서 제외
     .all()
     .filter((f) => f.isShared === 1 || (f.folderId !== null && sharedFolderIds.has(f.folderId)))
     .map((f) => ({

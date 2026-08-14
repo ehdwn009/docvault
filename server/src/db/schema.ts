@@ -51,6 +51,8 @@ export const files = sqliteTable('files', {
   storagePath: text('storage_path'),
   isShared: integer('is_shared').notNull().default(0),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** 휴지통 이동 시각. null이면 정상 파일. 보관 기한이 지나면 서버가 자동 영구 삭제한다 */
+  deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

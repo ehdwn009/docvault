@@ -13,6 +13,9 @@ export const PASSWORD_MIN_LENGTH = 8;
 /** 파일당 버전 스냅샷 보관 개수 (아키텍처 — 편집 저장 흐름) */
 export const MAX_VERSIONS_PER_FILE = 20;
 
+/** 휴지통 보관 기간 — 지나면 자동 영구 삭제 (IA — 휴지통) */
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 

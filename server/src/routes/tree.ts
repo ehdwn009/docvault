@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { db } from '../db/index.js';
 import { files, fileTags, folders, userFileState } from '../db/schema.js';
@@ -33,7 +33,7 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
       updatedAt: files.updatedAt,
     })
     .from(files)
-    .where(eq(files.ownerId, user.id))
+    .where(and(eq(files.ownerId, user.id), isNull(files.deletedAt))) // 휴지통 파일 제외
     .all();
 
   const states = db
