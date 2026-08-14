@@ -1,5 +1,8 @@
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
+// CommonMark 규칙상 닫는 **가 문장부호 뒤 + 한글 조사 앞이면(예: "(Caddy)**와") 볼드로
+// 인식되지 않는다 — CJK 문서에서 빈번하므로 플러그인으로 완화한다
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import remarkGfm from 'remark-gfm';
 import type { ViewerTheme } from '../lib/api';
 import Mermaid from './Mermaid';
@@ -15,7 +18,7 @@ export default function MarkdownRenderer({
   return (
     <div className={`prose ${theme === 'dark' ? 'prose-invert' : ''} max-w-none`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         rehypePlugins={[rehypeHighlight]}
         components={{
           // ```mermaid 블록은 다이어그램으로 렌더링

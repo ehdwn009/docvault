@@ -77,6 +77,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [tagEditorFile, setTagEditorFile] = useState<TreeFile | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false); // 활성 레일 버튼 재클릭 시 패널 접기 (PC 전용)
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -342,10 +343,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   const railButton = (target: Panel, icon: string, label: string) => (
     <button
-      onClick={() => setPanel(target)}
+      onClick={() => {
+        // VS Code 방식: 활성 패널의 버튼을 다시 누르면 패널을 접는다
+        if (panel === target) setPanelCollapsed((v) => !v);
+        else {
+          setPanel(target);
+          setPanelCollapsed(false);
+        }
+      }}
       title={label}
       className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
-        panel === target ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'
+        panel === target && !panelCollapsed
+          ? 'bg-slate-800 text-slate-100'
+          : 'text-slate-500 hover:text-slate-200'
       }`}
     >
       {icon}
@@ -386,7 +396,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         </button>
       </div>
 
-      <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800">
+      {/* 접힘은 PC 전용 — 터치 드로어에서는 패널이 곧 내비게이션이라 항상 펼친다 */}
+      <aside
+        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 ${panelCollapsed ? 'pc:hidden' : ''}`}
+      >
         <div className="flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
           <span className="ml-auto truncate text-xs text-slate-600">
