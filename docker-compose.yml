@@ -1,5 +1,7 @@
 services:
   app:
+    # 평소엔 GHCR의 완성 이미지를 pull해서 쓰고(서버), 직접 굽고 싶을 때만 --build(개발 PC)
+    image: ghcr.io/ehdwn009/docvault:latest
     build: .
     ports:
       - '3000:3000'

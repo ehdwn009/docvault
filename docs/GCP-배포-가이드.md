@@ -670,20 +670,28 @@ docker compose --profile edge up -d
 
 PC와 서버는 직접 통신하지 않고 **항상 깃허브를 거칩니다.** 흐름:
 
+> 📚 **CI/CD** — 이 프로젝트는 push하면 GitHub의 무료 빌드 서버(Actions)가 자동으로 Docker 이미지를 구워 **GHCR**(GitHub 컨테이너 창고, `ghcr.io`)에 올립니다 (`.github/workflows/docker.yml`). 운영 서버는 빌드하지 않고 **완성된 이미지를 내려받기만** 합니다. 저사양 서버에서 빌드에 30분 넘게 걸리는 문제를 없애는 실무 표준 구조("지속적 통합/배포")입니다.
+
 1. **PC에서**: 코드 수정 → dev 서버로 확인 → `git add` → `git commit` → `git push`
-2. **서버 SSH에서** (이 두 줄이 배포의 전부):
+2. **깃허브가 자동으로**: 이미지를 빌드해 창고에 업로드 (저장소의 Actions 탭에서 진행 상황 확인, 3~5분)
+3. **서버 SSH에서** (Actions가 초록불이 된 뒤):
 
 ```bash
 cd ~/docvault
-git pull && docker compose --profile edge up -d --build
+git pull && docker compose --profile edge pull && docker compose --profile edge up -d
 ```
 
-**왜 이 두 줄인가:**
+**왜 이 순서인가:**
 
-- **`git pull`만으론 반영되지 않습니다.** 돌고 있는 것은 파일이 아니라 이미지(틀)를 찍어낸 컨테이너이고, 이미지는 빌드 시점의 코드로 굳어 있습니다. `--build`가 틀을 다시 굽고, up이 새 틀로 컨테이너를 교체합니다 (다운타임 몇 초)
-- **데이터는 안전합니다.** `data/`는 컨테이너 밖(바인드 마운트)이라 컨테이너를 아무리 갈아끼워도 유지되고, DB 스키마가 바뀐 업데이트도 서버 기동 시 마이그레이션이 자동 적용됩니다 (docvault 설계)
-- **`--profile edge`를 항상 붙입니다.** 빼면 compose가 Caddy를 "이 구성에 없는 서비스"로 취급해 내려버릴 수 있습니다
-- **빌드 도중 취소(Ctrl+C)해도 안전합니다.** 빌드는 옆에서 새 이미지를 굽는 작업이라 돌고 있는 컨테이너·데이터를 건드리지 않고, 레이어 캐시 덕에 다시 돌리면 이어서 굽습니다 — 빌드 중에 더 최신 커밋이 생겼다면 취소 → `git pull` → 재빌드가 정석
+- **`git pull`** — compose 설정·Caddyfile 등 "실행 방법"의 변경을 받습니다 (코드는 이미지 안에 있으니 사실 이미지가 본체)
+- **`compose pull`** — 창고에서 새 이미지를 내려받습니다 (빌드가 아니라 다운로드라 1~2분)
+- **`up -d`** — 새 이미지로 컨테이너 교체 (다운타임 몇 초)
+- **데이터는 안전합니다.** `data/`는 컨테이너 밖(바인드 마운트)이라 유지되고, DB 스키마 변경도 기동 시 마이그레이션이 자동 적용됩니다
+- **`--profile edge`를 항상 붙입니다.** 빼면 compose가 Caddy를 내려버릴 수 있습니다
+
+> 최초 1회 설정: GHCR 패키지를 공개로 — github.com 프로필 → **Packages** 탭 → `docvault` → Package settings → **Change visibility → Public**. (저장소가 공개라도 패키지는 기본 비공개라, 공개로 바꿔야 서버가 로그인 없이 pull할 수 있습니다)
+
+> 서버에서 직접 빌드하는 옛 방식(`up -d --build`)도 여전히 동작합니다 — Actions가 실패했을 때의 비상 수단. 빌드 도중 Ctrl+C로 취소해도 돌고 있는 컨테이너·데이터는 안전하며, 레이어 캐시 덕에 재시도 시 이어서 굽습니다.
 
 ## 9-2. 망했을 때 되돌리기 (롤백)
 
