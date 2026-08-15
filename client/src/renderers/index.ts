@@ -3,7 +3,14 @@ import type { ViewerTheme } from '../lib/api';
 import HtmlRenderer from './HtmlRenderer';
 import TextRenderer from './TextRenderer';
 
-export type RendererProps = { content: string; theme?: ViewerTheme };
+export type RendererProps = {
+  content: string;
+  theme?: ViewerTheme;
+  /** 열람 시작 시 복원할 스크롤 위치 — iframe 내부에서 스크롤되는 html 렌더러용 */
+  initialOffset?: number;
+  /** 렌더러 내부 스크롤 보고 — 부모가 읽던 위치 저장에 사용 (html 렌더러용) */
+  onScrollOffset?: (offset: number) => void;
+};
 
 // react-markdown + highlight.js가 무거워서 md 렌더러는 지연 로드한다 (사용처는 Suspense로 감쌀 것)
 export const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));

@@ -67,8 +67,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   }, [file.id, file.fileType, file.updatedAt, isBinary]);
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
+  // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
   useEffect(() => {
-    if (!data || mode !== 'view') return;
+    if (!data || mode !== 'view' || data.fileType === 'html') return;
     const offset = file.state.readingPosition?.offset;
     if (offset && scrollRef.current) {
       requestAnimationFrame(() => {
@@ -95,15 +96,22 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     return () => window.clearTimeout(retry);
   }, [showToc, data, collectHeadings]);
 
+  // 읽던 위치 저장 — 바깥 div 스크롤(md 등)과 iframe 내부 스크롤 보고(html)가 공유한다
+  const saveOffset = useCallback(
+    (offset: number) => {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = window.setTimeout(() => {
+        void api(`/me/files/${file.id}/state`, {
+          method: 'PUT',
+          body: JSON.stringify({ readingPosition: { offset } }),
+        }).catch(() => {});
+      }, 2000);
+    },
+    [file.id],
+  );
+
   function handleScroll() {
-    window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => {
-      const offset = scrollRef.current?.scrollTop ?? 0;
-      void api(`/me/files/${file.id}/state`, {
-        method: 'PUT',
-        body: JSON.stringify({ readingPosition: { offset } }),
-      }).catch(() => {});
-    }, 2000);
+    saveOffset(scrollRef.current?.scrollTop ?? 0);
   }
 
   useEffect(() => () => window.clearTimeout(debounceRef.current), []);
@@ -231,7 +239,14 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             </div>
           ) : file.fileType === 'html' && Renderer ? (
             // 앱형 HTML은 여백·폭 제한 없이 화면을 꽉 채워 렌더링한다
-            <Renderer content={data.content} theme={settings.viewerTheme} />
+            // key=파일 id: 파일을 바꿔 열면 iframe을 새로 만들어 읽던 위치를 그 파일 기준으로 심는다
+            <Renderer
+              key={file.id}
+              content={data.content}
+              theme={settings.viewerTheme}
+              initialOffset={file.state.readingPosition?.offset ?? 0}
+              onScrollOffset={saveOffset}
+            />
           ) : (
             <div
               className={`mx-auto p-6 ${WIDTH[settings.contentWidth]}`}
