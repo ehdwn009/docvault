@@ -61,6 +61,11 @@ app.route('/share-target', shareTargetRoutes); // PWA 공유 시트 수신 (매�
 // SPA 정적 서빙: 빌드 결과물이 있으면 서빙하고, 미지의 경로는 index.html로 폴백(딥링크 지원)
 if (fs.existsSync(config.clientDist)) {
   const root = path.relative(process.cwd(), config.clientDist);
+  // 폰트는 CORS 필수 자원 — HTML 문서 iframe(격리 오리진)에서도 가져갈 수 있게 허용
+  app.use('/fonts/*', async (c, next) => {
+    await next();
+    c.header('Access-Control-Allow-Origin', '*');
+  });
   app.use('*', serveStatic({ root }));
   app.get('*', serveStatic({ root, path: 'index.html' }));
 } else {

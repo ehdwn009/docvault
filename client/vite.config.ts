@@ -20,5 +20,9 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000',
     },
+    // 폰트는 CORS 필수 자원 — 격리 오리진(HTML 문서 iframe)에서도 /fonts를 가져갈 수 있게 허용
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+    },
   },
 });

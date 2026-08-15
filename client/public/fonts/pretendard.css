@@ -1,0 +1,11 @@
+/* Pretendard 가변 폰트 자가 호스팅 (아키텍처 — 폰트 자가 호스팅)
+   원본: https://github.com/orioncactus/pretendard (SIL Open Font License 1.1)
+   HTML 문서들이 /fonts/pretendard.css 로 참조한다 — srcdoc iframe이 base URL을
+   부모(docvault)에게서 물려받으므로 이 루트 경로가 그대로 docvault 서버를 가리킨다. */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
