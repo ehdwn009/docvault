@@ -41,3 +41,13 @@ export function canWriteFile(user: SessionUser, file: FileAccess): boolean {
   if (file.deletedAt != null) return false;
   return file.ownerId === user.id || user.role === 'admin';
 }
+
+/** 폴더 열람: 소유자, 관리자, 또는 자신이나 상위 체인이 공유된 폴더 (API-040 폴더째 내보내기) */
+export function canReadFolder(
+  user: SessionUser,
+  folder: { ownerId: number; isShared: number; parentId: number | null },
+): boolean {
+  if (folder.ownerId === user.id || user.role === 'admin') return true;
+  // 자신의 공유 여부 + 상위 체인 상속을 파일과 같은 규칙으로 판정한다
+  return isEffectivelyShared({ isShared: folder.isShared, folderId: folder.parentId });
+}

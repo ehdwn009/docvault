@@ -20,6 +20,7 @@ import {
   type UserSettings,
 } from '../lib/api';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
+import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
 import AdminPanel from './panels/AdminPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
@@ -628,6 +629,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       });
     },
     copyFile: (id) => void guard(() => api(`/files/${id}/copy`, { method: 'POST' })),
+    downloadFile: (file) => downloadFile(file.id, file.name),
+    downloadFolder: (folder) => downloadArchive({ folderIds: [folder.id] }),
     uploadTo: (folderId) => {
       uploadFolderRef.current = folderId;
       uploadRef.current?.click();
@@ -930,6 +933,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-sky-900 bg-sky-950/40 px-2 py-1.5 text-xs">
                 <span className="font-medium text-sky-300">{checked.size}개 선택</span>
                 <span className="ml-auto flex gap-1">
+                  <button
+                    onClick={() => downloadArchive({ fileIds: [...checked] })}
+                    title="고른 파일을 ZIP 하나로 받기"
+                    className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"
+                  >
+                    다운로드
+                  </button>
                   <button
                     onClick={() => setMovePickerOpen(true)}
                     className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"

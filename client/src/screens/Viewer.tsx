@@ -189,15 +189,10 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               버전
             </button>
           )}
-          {isBinary && (
-            <a
-              href={`/api/v1/files/${file.id}/raw`}
-              download={file.name}
-              className={headerButton(false)}
-            >
-              다운로드
-            </a>
-          )}
+          {/* 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다) */}
+          <a href={`/api/v1/files/${file.id}/raw`} download={file.name} className={headerButton(false)}>
+            다운로드
+          </a>
           {!data.readonly && (
             <button onClick={() => setMode('edit')} className={headerButton(false)}>
               편집 (E)

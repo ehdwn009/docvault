@@ -20,6 +20,9 @@ export type TreeActions = {
   moveFile: (id: number, folderId: number | null) => void;
   deleteFile: (id: number) => void;
   copyFile: (id: number) => void;
+  downloadFile: (file: TreeFile) => void;
+  /** 폴더를 하위 구조 그대로 ZIP 하나로 (API-040) */
+  downloadFolder: (folder: TreeFolder) => void;
   uploadTo: (folderId: number | null) => void;
   /** OS 드롭 처리 — 폴더 항목이 섞여 있으면 구조째 업로드. 드롭 이벤트 스택 안에서 호출할 것 */
   uploadDropped: (dt: DataTransfer, folderId: number | null) => void;
@@ -192,6 +195,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
   const folderMenu = (folder: TreeFolder): MenuItem[] => [
     { label: '새 하위 폴더', action: () => actions.createFolder(folder.id) },
     { label: '여기에 업로드', action: () => actions.uploadTo(folder.id) },
+    { label: '폴더째 다운로드', action: () => actions.downloadFolder(folder) },
     {
       label: '이름 변경',
       action: () => setRenaming({ kind: 'folder', id: folder.id, value: folder.name }),
@@ -210,6 +214,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
       action: () => setRenaming({ kind: 'file', id: file.id, value: file.name }),
     },
     { label: '태그', action: () => actions.editTags(file) },
+    { label: '다운로드', action: () => actions.downloadFile(file) },
     { label: '복사', action: () => actions.copyFile(file.id) },
     ...(isAdmin
       ? [{ label: file.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFile(file) }]

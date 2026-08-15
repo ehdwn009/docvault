@@ -3,14 +3,28 @@ import { Readable } from 'node:stream';
 import { and, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES, MAX_VERSIONS_PER_FILE } from '../constants.js';
+import {
+  MAX_ARCHIVE_ENTRIES,
+  MAX_ARCHIVE_ID_PARAMS,
+  MAX_BINARY_FILE_BYTES,
+  MAX_TEXT_FILE_BYTES,
+  MAX_VERSIONS_PER_FILE,
+} from '../constants.js';
 import { db } from '../db/index.js';
 import { files, fileTags, fileVersions, folders, tags } from '../db/schema.js';
 import { canReadFile, canWriteFile } from '../lib/access.js';
+import {
+  ArchiveTooLargeError,
+  buildManifest,
+  collectArchiveEntries,
+  createArchiveStream,
+  type ArchiveEntry,
+  type ArchiveScope,
+} from '../lib/archive.js';
 import { fail } from '../lib/errors.js';
 import { ALL_EXTENSIONS, extensionOf } from '../lib/filetypes.js';
 import { binaryAbsPath, copyBinary, deleteBinary, saveBinary } from '../lib/storage.js';
-import { jsonBody, nameField, parseId } from '../lib/validate.js';
+import { jsonBody, nameField, parseId, parseIdList } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
 /** 응답용 파일 메타 — 본문과 내부 저장 경로는 절대 노출하지 않는다 */
@@ -44,6 +58,22 @@ function duplicateFileName(ownerId: number, folderId: number | null, name: strin
     )
     .get();
   return dup !== undefined && dup.id !== excludeId;
+}
+
+/** 내려받는 ZIP의 이름. 폴더 하나만 받을 때는 그 폴더 이름을 그대로 써서 무엇을 받았는지 남긴다 */
+function archiveFileName(scope: ArchiveScope, entries: ArchiveEntry[]): string {
+  const d = new Date(); // 파일 이름은 보는 사람 기준이 자연스러우므로 로컬 날짜로
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  if (scope.all) return `docvault-전체-${stamp}.zip`;
+  if (scope.folderIds.length === 1 && scope.fileIds.length === 0) {
+    const folder = db
+      .select({ name: folders.name })
+      .from(folders)
+      .where(eq(folders.id, scope.folderIds[0]!))
+      .get();
+    if (folder) return `${folder.name}.zip`;
+  }
+  return `docvault-${entries.length}개-${stamp}.zip`;
 }
 
 const saveContentSchema = z.object({
@@ -157,6 +187,44 @@ export const fileRoutes = new Hono<AppEnv>()
       deleteBinary(row.storagePath);
     }
     return c.json({ ok: true, purged: rows.length });
+  })
+
+  // API-040: 선택·폴더·전체를 ZIP 하나로 내보내기.
+  // /:id 계열보다 먼저 등록해야 'archive'가 id로 잡히지 않는다 (/trash와 같은 이유)
+  .get('/archive', (c) => {
+    const user = c.get('user');
+    const fileIds = parseIdList(c.req.query('files'), MAX_ARCHIVE_ID_PARAMS);
+    const folderIds = parseIdList(c.req.query('folders'), MAX_ARCHIVE_ID_PARAMS);
+    if (fileIds === null || folderIds === null) {
+      return fail(c, 400, 'VALIDATION_ERROR', `files/folders: 올바르지 않은 id 목록입니다 (최대 ${MAX_ARCHIVE_ID_PARAMS}개)`);
+    }
+    const scope: ArchiveScope = { fileIds, folderIds, all: c.req.query('all') === '1' };
+    if (!scope.all && fileIds.length === 0 && folderIds.length === 0) {
+      return fail(c, 400, 'VALIDATION_ERROR', '내보낼 대상이 없습니다');
+    }
+
+    let entries: ArchiveEntry[];
+    try {
+      entries = collectArchiveEntries(user, scope);
+    } catch (err) {
+      if (err instanceof ArchiveTooLargeError) {
+        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `한 번에 ${MAX_ARCHIVE_ENTRIES}개까지 내보낼 수 있습니다`);
+      }
+      throw err;
+    }
+    if (entries.length === 0) return fail(c, 404, 'NOT_FOUND', '내보낼 파일이 없습니다');
+
+    const manifest = c.req.query('manifest') === '1' ? buildManifest(user, entries) : null;
+    const name = archiveFileName(scope, entries);
+    c.header('Content-Type', 'application/zip');
+    c.header('Cache-Control', 'no-store');
+    // 한글 이름은 filename*(RFC 5987)로, 못 읽는 옛 클라이언트를 위해 ASCII 이름도 함께 준다
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="docvault-export.zip"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    );
+    // 스트리밍 — 전체를 메모리에 쌓지 않으므로 Content-Length는 알 수 없다
+    return c.body(Readable.toWeb(createArchiveStream(entries, manifest)) as ReadableStream);
   })
 
   // API-038: 원본 다운로드 / 바이너리 스트리밍

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
+import { downloadArchive } from '../../lib/download';
 
 type Props = {
   settings: UserSettings;
@@ -15,6 +16,7 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [withManifest, setWithManifest] = useState(true);
 
   async function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -113,6 +115,28 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
             변경
           </button>
         </form>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">내보내기</h3>
+        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+          내 파일 전부를 폴더 구조 그대로 ZIP 하나로 받습니다. 파일이 많으면 시간이 걸릴 수 있습니다.
+        </p>
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={withManifest}
+            onChange={(e) => setWithManifest(e.target.checked)}
+            className="accent-slate-400"
+          />
+          태그·즐겨찾기 목록도 함께 담기
+        </label>
+        <button
+          onClick={() => downloadArchive({ all: true, manifest: withManifest })}
+          className="mt-2 w-full rounded-md border border-slate-700 py-1.5 text-sm text-slate-300 transition hover:bg-slate-900"
+        >
+          내 자료 전부 내보내기
+        </button>
       </section>
 
       <section>

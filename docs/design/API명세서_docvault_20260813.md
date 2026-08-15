@@ -46,6 +46,7 @@
 | API-037 | POST | /files/{id}/copy | 파일 복사 | 로그인 |
 | API-038 | GET | /files/{id}/raw | 원본 다운로드 / 바이너리 스트리밍 | 로그인 |
 | API-039 | PUT | /files/{id}/share | 파일 공유 토글 | 관리자 |
+| API-040 | GET | /files/archive | 선택·폴더·전체를 ZIP 하나로 내보내기 (스트리밍, 2026-08-15) | 로그인 |
 | API-044 | GET | /files/trash | 휴지통 목록 (내 파일) | 로그인 |
 | API-045 | DELETE | /files/trash | 휴지통 비우기 (전체 영구 삭제) | 로그인 |
 | API-046 | POST | /files/{id}/restore | 휴지통에서 복원 (충돌 시 자동 개명, 폴더 소실 시 최상위) | 소유자 |
@@ -166,6 +167,44 @@
 | content | string | 본문 텍스트 |
 | updatedAt | number | 마지막 수정 (unix ms) |
 | readonly | boolean | 공유 열람 등 수정 불가 여부 (편집 버튼 표시 제어) |
+
+---
+
+## API-040: ZIP 내보내기
+
+| 항목 | 내용 |
+|---|---|
+| 메서드 / 경로 | GET /files/archive |
+| 설명 | 고른 파일·폴더·내 자료 전체를 ZIP 하나로 묶어 스트리밍한다. 텍스트 본문은 DB에서, 바이너리는 디스크에서 꺼내 조립하므로 "폴더 압축"이 아니라 재구성 작업이다 |
+| 인증 필요 | 예 (담기는 항목마다 열람 권한을 개별 검사 — 권한 없는 항목은 조용히 빠진다) |
+| 비고 | GET인 이유: 브라우저가 주소만 열면 디스크로 바로 흘러가 큰 묶음도 메모리에 쌓이지 않는다 |
+
+### Request
+**Query**
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| files | string | N | 파일 ID를 쉼표로 나열 (`1,2,3`). 최대 500개 |
+| folders | string | N | 폴더 ID 목록. 하위 구조를 그대로 담는다. 최대 500개 |
+| all | `1` | N | 내 파일 전체 (다른 사람 파일은 포함하지 않음) |
+| manifest | `1` | N | 태그·즐겨찾기를 담은 `docvault-manifest.json` 동봉 |
+
+`all`이 없고 files·folders도 비어 있으면 400. 셋 중 하나 이상 필요.
+
+### Response
+**200 OK** — `Content-Type: application/zip`, `Content-Disposition: attachment`
+(스트리밍이라 Content-Length는 없다)
+
+- **경로 규칙**: 폴더·전체 내보내기는 폴더 구조를 살리고(폴더 자신이 최상위 칸), 파일만 고른 경우는 평평하게 담는다
+- **이름 규칙**: 폴더 하나면 `{폴더명}.zip`, 전체면 `docvault-전체-{YYYYMMDD}.zip`, 그 외 `docvault-{N}개-{YYYYMMDD}.zip`
+- 같은 칸에서 이름이 겹치면 `이름 (2).md`로 번호를 붙여 덮어쓰기를 막는다
+- 휴지통(deleted_at) 파일과 디스크에서 원본이 사라진 바이너리는 제외한다
+
+**에러**
+| 코드 | HTTP | 설명 |
+|---|---|---|
+| VALIDATION_ERROR | 400 | id 목록 형식 오류, 개수 초과, 대상 없음 |
+| NOT_FOUND | 404 | 담을 수 있는 파일이 하나도 없음 (권한 없는 id만 요청한 경우 포함) |
+| PAYLOAD_TOO_LARGE | 413 | 한 번에 10,000개 초과 |
 
 ---
 
