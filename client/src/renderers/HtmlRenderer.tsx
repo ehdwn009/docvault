@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ViewerTheme } from '../lib/api';
+import type { RendererTocItem } from './index';
 
 // HTML은 iframe sandbox로 격리 렌더링한다 (아키텍처 — 보안 경계).
 // allow-same-origin은 절대 추가하지 않는다 — 없어야 iframe이 별도 오리진이 되어
@@ -12,12 +14,16 @@ const STORAGE_SHIM = `<script>(function(){try{void window.localStorage}catch(e){
 
 // srcdoc 문서는 base URL을 부모 페이지에서 물려받는다 — 그래서 문서 안 #앵커 클릭이
 // "문서 내 스크롤"이 아니라 앱 URL로의 iframe 내비게이션(흰 화면)이 된다 (아키텍처 — HTML 렌더러 호환 심).
-// ① 앵커 클릭을 가로채 스크롤로 바꾸고 ② 스크롤 위치를 postMessage로 부모에 보고(이어 읽기),
-// ③ 마운트 시 심어 둔 위치로 복원한다. 격리 오리진이라 postMessage가 유일한 통신 수단이다.
-function navShim(restoreOffset: number): string {
+// 심이 하는 일: ① 앵커 클릭을 가로채 스크롤로 변환 ② 스크롤 위치·헤딩 목록을 postMessage로
+// 부모에 보고(이어 읽기·목차) ③ 부모의 이동(goto)·테마(theme) 메시지 수행 ④ 심어 둔 위치·테마 복원.
+// 격리 오리진이라 postMessage가 유일한 통신 수단이다.
+function navShim(restoreOffset: number, theme: ViewerTheme): string {
   const offset = Math.max(0, Math.floor(restoreOffset));
+  // 문서가 원하면 CSS에서 [data-theme="dark"]로 뷰어 테마를 따를 수 있게 표식만 남긴다 (강제하지 않음)
+  const safeTheme = theme === 'dark' || theme === 'sepia' ? theme : 'light';
   return `<script>(function(){
 var se=function(){return document.scrollingElement||document.documentElement};
+document.documentElement.dataset.theme='${safeTheme}';
 document.addEventListener('click',function(ev){
 var t=ev.target,a=t&&t.closest?t.closest('a[href^="#"]'):null;
 if(!a)return;ev.preventDefault();
@@ -27,13 +33,20 @@ if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
 else if(!id)window.scrollTo({top:0,behavior:'smooth'});
 },true);
 var t;addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(function(){parent.postMessage({type:'docvault:scroll',offset:se().scrollTop},'*')},400)},{passive:true});
+var HD=[];
+var sendToc=function(){HD=[].slice.call(document.querySelectorAll('h1,h2,h3')).slice(0,300);
+parent.postMessage({type:'docvault:toc',items:HD.map(function(h){return{text:(h.textContent||'').trim().slice(0,120),level:+h.tagName[1]||1}})},'*')};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sendToc);else sendToc();
+addEventListener('message',function(ev){var d=ev.data||{};
+if(d.type==='docvault:goto'&&HD[d.index])HD[d.index].scrollIntoView({behavior:'smooth',block:'start'});
+else if(d.type==='docvault:theme')document.documentElement.dataset.theme=String(d.theme)});
 ${offset > 0 ? `var ap=function(){se().scrollTop=${offset}};if(document.readyState==='complete')ap();else addEventListener('load',function(){requestAnimationFrame(ap)});` : ''}
 })()</${'script'}>`;
 }
 
 /** 문서 구조(doctype·head)를 깨뜨리지 않는 위치에 심을 주입한다 */
-function injectShims(html: string, restoreOffset: number): string {
-  const shims = STORAGE_SHIM + navShim(restoreOffset);
+function injectShims(html: string, restoreOffset: number, theme: ViewerTheme): string {
+  const shims = STORAGE_SHIM + navShim(restoreOffset, theme);
   const head = html.match(/<head[^>]*>/i);
   if (head) {
     const at = head.index! + head[0].length;
@@ -49,33 +62,51 @@ function injectShims(html: string, restoreOffset: number): string {
 
 type Props = {
   content: string;
+  theme?: ViewerTheme;
   /** 열람 시작 시 복원할 스크롤 위치 (읽던 위치 이어 읽기) */
   initialOffset?: number;
   /** iframe 내부 스크롤 보고 수신 — 부모(Viewer)가 읽던 위치 저장에 사용 */
   onScrollOffset?: (offset: number) => void;
+  /** 문서 헤딩 목록 보고 수신 — 부모(Viewer)가 목차(SCR-151)에 사용 */
+  onToc?: (items: RendererTocItem[]) => void;
 };
 
-export default function HtmlRenderer({ content, initialOffset = 0, onScrollOffset }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, onScrollOffset, onToc }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치는 마운트 시점 값으로 고정해
-  // 부모 리렌더(트리 갱신 등)가 읽는 중인 문서를 초기화하지 않게 한다
+  // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마는 마운트 시점 값으로 고정해
+  // 부모 리렌더(트리 갱신·설정 변경 등)가 읽는 중인 문서를 초기화하지 않게 한다
   const [restoreOffset] = useState(initialOffset);
-  const doc = useMemo(() => injectShims(content, restoreOffset), [content, restoreOffset]);
+  const [initialTheme] = useState<ViewerTheme>(theme ?? 'light');
+  const doc = useMemo(() => injectShims(content, restoreOffset, initialTheme), [content, restoreOffset, initialTheme]);
 
   useEffect(() => {
-    if (!onScrollOffset) return;
-    const report = onScrollOffset; // 좁히기는 중첩 함수 안까지 유지되지 않는다
     function onMessage(e: MessageEvent) {
       // 반드시 이 iframe에서 온 메시지만 신뢰한다 (아키텍처 — HTML 렌더러 호환 심)
       if (e.source !== frameRef.current?.contentWindow) return;
-      const d = e.data as { type?: unknown; offset?: unknown } | null;
-      if (d && typeof d === 'object' && d.type === 'docvault:scroll' && typeof d.offset === 'number') {
-        report(d.offset);
+      const d = e.data as { type?: unknown; offset?: unknown; items?: unknown } | null;
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'docvault:scroll' && typeof d.offset === 'number') {
+        onScrollOffset?.(d.offset);
+      } else if (d.type === 'docvault:toc' && Array.isArray(d.items)) {
+        const items = (d.items as { text?: unknown; level?: unknown }[]).map((it, index) => ({
+          text: String(it.text ?? ''),
+          level: Number(it.level) || 1,
+          // 목차 클릭 = iframe에 이동 요청 쪽지 — 격리 때문에 직접 스크롤시킬 수 없다
+          jump: () => frameRef.current?.contentWindow?.postMessage({ type: 'docvault:goto', index }, '*'),
+        }));
+        onToc?.(items);
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onScrollOffset]);
+  }, [onScrollOffset, onToc]);
+
+  // 열람 중 테마 변경은 리로드 없이 쪽지로 전파한다
+  useEffect(() => {
+    if (theme && theme !== initialTheme) {
+      frameRef.current?.contentWindow?.postMessage({ type: 'docvault:theme', theme }, '*');
+    }
+  }, [theme, initialTheme]);
 
   return (
     <iframe

@@ -25,7 +25,8 @@ const WIDTH: Record<UserSettings['contentWidth'], string> = {
   wide: 'max-w-none',
 };
 
-type Heading = { text: string; level: number; el: HTMLElement };
+// 목차 한 줄 — md는 바깥 DOM의 헤딩에서, html은 iframe 심의 보고에서 만들어진다
+type Heading = { text: string; level: number; jump: () => void };
 
 /** CSS의 pc 변형과 같은 판정 — 터치 기기에서만 다른 동작이 필요할 때 사용 */
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -50,6 +51,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     setMode('view');
     setShowVersions(false);
     setShowToc(false);
+    setHeadings([]);
     if (isBinary) {
       setData({ id: file.id, fileType: file.fileType, content: '', updatedAt: file.updatedAt, readonly: true });
     } else {
@@ -80,17 +82,22 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   }, [data, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 목차: 렌더링된 DOM에서 헤딩을 수집한다 (지연 렌더러 대비 재시도 1회)
+  // html은 격리 iframe 안이라 여기서 닿을 수 없다 — 렌더러 심이 onToc으로 대신 보고한다
   const collectHeadings = useCallback(() => {
     const container = scrollRef.current;
     if (!container) return;
     const els = [...container.querySelectorAll<HTMLElement>('h1, h2, h3')];
     setHeadings(
-      els.map((el) => ({ text: el.textContent ?? '', level: Number(el.tagName[1]), el })),
+      els.map((el) => ({
+        text: el.textContent ?? '',
+        level: Number(el.tagName[1]),
+        jump: () => el.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      })),
     );
   }, []);
 
   useEffect(() => {
-    if (!showToc || !data) return;
+    if (!showToc || !data || data.fileType === 'html') return;
     collectHeadings();
     const retry = window.setTimeout(collectHeadings, 600);
     return () => window.clearTimeout(retry);
@@ -172,7 +179,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           <button onClick={onToggleImmersive} className={headerButton(false)} title="몰입 모드 — 본문만 전체 화면으로">
             ⛶
           </button>
-          {data.fileType === 'md' && (
+          {(data.fileType === 'md' || data.fileType === 'html') && (
             <button onClick={() => setShowToc((v) => !v)} className={headerButton(showToc)}>
               목차
             </button>
@@ -212,7 +219,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   <button
                     key={i}
                     onClick={() => {
-                      h.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      h.jump();
                       if (!isPcDevice()) setShowToc(false); // 터치에선 선택 즉시 드로어를 닫아 본문을 보여준다
                     }}
                     className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
@@ -246,6 +253,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               theme={settings.viewerTheme}
               initialOffset={file.state.readingPosition?.offset ?? 0}
               onScrollOffset={saveOffset}
+              onToc={setHeadings}
             />
           ) : (
             <div
