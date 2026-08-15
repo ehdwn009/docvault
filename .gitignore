@@ -16,3 +16,6 @@ backups/
 # misc
 *.log
 .DS_Store
+
+# personal study materials (textbook PDFs etc.) — never committed
+docs/data_ignored/
