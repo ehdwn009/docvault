@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import VersionPanel from '../components/VersionPanel';
+import ViewOptions from '../components/ViewOptions';
 import { api, ApiError, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { renderers } from '../renderers';
 import Editor from './Editor';
@@ -42,8 +43,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [showToc, setShowToc] = useState(false);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [fit, setFit] = useState(file.state.viewerFit !== 0);
+  const [showViewOptions, setShowViewOptions] = useState(false);
+  // null = 이 파일만의 배율 없음(설정의 전역 기본값을 따름)
+  const [fontScale, setFontScale] = useState<number | null>(file.state.fontScale);
   const scrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | undefined>(undefined);
+  const scaleSaveRef = useRef<number | undefined>(undefined);
 
   // 이미지·PDF는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = file.fileType === 'image' || file.fileType === 'pdf';
@@ -71,10 +76,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     }).catch(() => {});
   }, [file.id, file.fileType, file.updatedAt, isBinary]);
 
-  // 파일을 바꿔 열면 그 파일에 저장해 둔 화면 맞춤 설정을 따른다.
-  // file.id에만 반응시키는 이유: 토글 직후 트리가 갱신돼도 방금 누른 값을 도로 덮어쓰지 않게
+  // 파일을 바꿔 열면 그 파일에 저장해 둔 보기 설정(맞춤·배율)을 따른다.
+  // file.id에만 반응시키는 이유: 조작 직후 트리가 갱신돼도 방금 누른 값을 도로 덮어쓰지 않게
   useEffect(() => {
     setFit(file.state.viewerFit !== 0);
+    setFontScale(file.state.fontScale);
+    setShowViewOptions(false);
   }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
@@ -130,18 +137,38 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     saveOffset(scrollRef.current?.scrollTop ?? 0);
   }
 
-  function toggleFit() {
-    const next = !fit;
-    setFit(next);
-    void api(`/me/files/${file.id}/state`, {
-      method: 'PUT',
-      body: JSON.stringify({ viewerFit: next }),
-    })
+  /** 파일별 보기 설정 저장 — 화면에는 즉시 반영하고 서버 저장은 뒤따르게 한다 */
+  function saveState(patch: { viewerFit?: boolean; fontScale?: number | null }) {
+    void api(`/me/files/${file.id}/state`, { method: 'PUT', body: JSON.stringify(patch) })
       .then(onStateChanged)
       .catch(() => {});
   }
 
-  useEffect(() => () => window.clearTimeout(debounceRef.current), []);
+  function changeFit(next: boolean) {
+    setFit(next);
+    saveState({ viewerFit: next });
+  }
+
+  function changeScale(next: number) {
+    setFontScale(next);
+    // +/− 연타 시 요청이 쌓이지 않게 잠깐 모았다 보낸다
+    window.clearTimeout(scaleSaveRef.current);
+    scaleSaveRef.current = window.setTimeout(() => saveState({ fontScale: next }), 500);
+  }
+
+  function resetScale() {
+    setFontScale(null);
+    window.clearTimeout(scaleSaveRef.current);
+    saveState({ fontScale: null });
+  }
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(debounceRef.current);
+      window.clearTimeout(scaleSaveRef.current);
+    },
+    [],
+  );
 
   if (error) return <p className="p-6 text-sm text-red-400">{error}</p>;
   if (!data) return <p className="p-6 text-sm text-slate-500">불러오는 중…</p>;
@@ -163,6 +190,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   const Renderer = renderers[data.fileType];
   const isFavorite = file.state.isFavorite === 1;
+  // 파일별 값이 있으면 그것을, 없으면 설정의 전역 기본값을 쓴다 (대체이지 곱하기가 아니다)
+  const effectiveScale = fontScale ?? settings.htmlFontScale;
   const headerButton = (active: boolean) =>
     `rounded border px-3 py-1 text-sm ${
       active
@@ -205,13 +234,26 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             </button>
           )}
           {data.fileType === 'html' && (
-            <button
-              onClick={toggleFit}
-              className={headerButton(fit)}
-              title="화면 맞춤 — 문서가 화면보다 넓으면 화면 폭에 맞춥니다 (끄면 문서 원본 그대로)"
-            >
-              맞춤
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowViewOptions((v) => !v)}
+                className={headerButton(showViewOptions)}
+                title="보기 — 글자 크기·화면 맞춤"
+              >
+                보기
+              </button>
+              {showViewOptions && (
+                <ViewOptions
+                  fit={fit}
+                  scale={effectiveScale}
+                  isOverride={fontScale !== null}
+                  onFitChange={changeFit}
+                  onScaleChange={changeScale}
+                  onResetScale={resetScale}
+                  onClose={() => setShowViewOptions(false)}
+                />
+              )}
+            </div>
           )}
           {!isBinary && (
             <button onClick={() => setShowVersions((v) => !v)} className={headerButton(showVersions)}>
@@ -279,6 +321,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               onScrollOffset={saveOffset}
               onToc={setHeadings}
               fit={fit}
+              fontScale={effectiveScale}
             />
           ) : (
             <div

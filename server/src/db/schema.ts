@@ -109,6 +109,8 @@ export const userFileState = sqliteTable(
     lastOpenedAt: integer('last_opened_at'),
     /** HTML 뷰어의 화면 맞춤 보정 사용 여부 — 문서가 아니라 "이 사람이 이 문서를 보는 방식"이라 여기 둔다 */
     viewerFit: integer('viewer_fit').notNull().default(1),
+    /** 이 파일만의 글자 크기 배율(%). NULL이면 전역 기본값(user_settings.html_font_scale)을 따른다 */
+    fontScale: integer('font_scale'),
   },
   (t) => [primaryKey({ columns: [t.userId, t.fileId] })],
 );
@@ -121,6 +123,8 @@ export const userSettings = sqliteTable('user_settings', {
     .notNull()
     .default('light'),
   fontSize: integer('font_size').notNull().default(16),
+  /** HTML 문서 글자 크기의 전역 기본 배율(%) — 파일별 값이 없을 때 쓰인다 */
+  htmlFontScale: integer('html_font_scale').notNull().default(100),
   fontFamily: text('font_family'),
   lineHeight: text('line_height'),
   contentWidth: text('content_width', { enum: ['narrow', 'normal', 'wide'] })

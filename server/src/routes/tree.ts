@@ -69,8 +69,9 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
               lastOpenedAt: s.lastOpenedAt,
               readingPosition: s.readingPosition ? JSON.parse(s.readingPosition) : null,
               viewerFit: s.viewerFit,
+              fontScale: s.fontScale,
             }
-          : { isFavorite: 0, lastOpenedAt: null, readingPosition: null, viewerFit: 1 },
+          : { isFavorite: 0, lastOpenedAt: null, readingPosition: null, viewerFit: 1, fontScale: null },
       };
     }),
   });

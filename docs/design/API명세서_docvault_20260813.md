@@ -60,7 +60,7 @@
 | API-054 | PUT | /files/{id}/tags | 파일의 태그 목록 교체 | 로그인 |
 | API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용) | 로그인 |
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
-| API-072 | PUT | /me/settings | 뷰어 설정 저장 | 로그인 |
+| API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비) | 로그인 |
 | API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장 | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5) | 로그인 |
@@ -286,6 +286,7 @@
 | readingPosition | object | { anchor: "헤딩 slug", offset: number } |
 | touch | boolean | true면 last_opened_at을 현재 시각으로 (열람 기록) |
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
+| fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 70~200). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
 
 ### Response
 **200 OK** — 갱신된 state 객체

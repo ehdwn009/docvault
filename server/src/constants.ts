@@ -10,6 +10,13 @@ export const BCRYPT_ROUNDS = 10;
 /** 비밀번호 최소 길이 (API-013) */
 export const PASSWORD_MIN_LENGTH = 8;
 
+/** HTML 글자 크기 배율 범위(%) — 문서마다 기준 크기가 달라 절대 px가 아니라 배율로 다룬다 (아키텍처 — 글자 크기 배율) */
+export const FONT_SCALE_MIN = 70;
+export const FONT_SCALE_MAX = 200;
+export const FONT_SCALE_DEFAULT = 100;
+/** 배율 조절 한 칸 */
+export const FONT_SCALE_STEP = 10;
+
 /** 파일당 버전 스냅샷 보관 개수 (아키텍처 — 편집 저장 흐름) */
 export const MAX_VERSIONS_PER_FILE = 20;
 

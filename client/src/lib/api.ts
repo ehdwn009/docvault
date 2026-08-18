@@ -39,6 +39,8 @@ export type TreeFile = {
     readingPosition: { anchor?: string | null; offset?: number } | null;
     /** HTML 화면 맞춤 보정 사용 여부 (1=켬) */
     viewerFit: number;
+    /** 이 파일만의 글자 크기 배율(%). null이면 전역 기본값을 따른다 */
+    fontScale: number | null;
   };
 };
 
@@ -48,6 +50,7 @@ export const DEFAULT_FILE_STATE: TreeFile['state'] = {
   lastOpenedAt: null,
   readingPosition: null,
   viewerFit: 1,
+  fontScale: null,
 };
 
 export type Tag = { id: number; name: string; color: string };
@@ -67,6 +70,8 @@ export type ViewerTheme = 'light' | 'dark' | 'sepia';
 export type UserSettings = {
   viewerTheme: ViewerTheme;
   fontSize: number;
+  /** HTML 문서 글자 크기의 전역 기본 배율(%) — 파일별 값이 없을 때 쓰인다 */
+  htmlFontScale: number;
   fontFamily: string | null;
   lineHeight: string | null;
   contentWidth: 'narrow' | 'normal' | 'wide';

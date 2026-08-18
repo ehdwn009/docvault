@@ -17,6 +17,8 @@ export type RendererProps = {
   onToc?: (items: RendererTocItem[]) => void;
   /** 좁은 화면 맞춤 보정 사용 여부 — 끄면 문서를 만든 그대로 보여준다 (html 렌더러용) */
   fit?: boolean;
+  /** 글자 크기 배율(%) — 문서마다 기준 크기가 달라 절대 px가 아니라 배율로 준다 (html 렌더러용) */
+  fontScale?: number;
 };
 
 // react-markdown + highlight.js가 무거워서 md 렌더러는 지연 로드한다 (사용처는 Suspense로 감쌀 것)

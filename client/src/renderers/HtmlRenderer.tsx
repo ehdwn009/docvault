@@ -44,6 +44,63 @@ ${offset > 0 ? `var ap=function(){se().scrollTop=${offset}};if(document.readySta
 })()</${'script'}>`;
 }
 
+// 글자 크기 배율 (아키텍처 — 글자 크기 배율).
+// 문서마다 기준 크기가 달라(어떤 정독본은 본문 15px, 어떤 건 14px) 절대 px가 아니라 배율로 다룬다.
+// 방법: 문서가 가진 스타일 규칙을 읽어 font-size만 배율을 곱한 **사본 시트**를 맨 뒤에 덧붙인다.
+// 원본 규칙을 고치지 않으므로 되돌리기가 시트 한 장 제거이고, 선택자를 그대로 베끼므로
+// 제목 36px : 본문 15px 같은 위계도 비율 그대로 남는다.
+function scaleShim(percent: number): string {
+  return `<script>(function(){
+var ID='dv-scale',cur=${Math.round(percent)},patched=[],baseRoot=0;
+var de=function(){return document.documentElement};
+// 인라인 style="font-size:14px"는 어떤 시트보다 세다 — 따로 손대고 원래 값을 적어 둔다
+var putInline=function(el,val){
+patched.push([el,el.style.getPropertyValue('font-size'),el.style.getPropertyPriority('font-size')]);
+el.style.setProperty('font-size',val,'important')};
+var undoInline=function(){
+for(var i=patched.length-1;i>=0;i--){var p=patched[i];p[0].style.setProperty('font-size',p[1],p[2])}
+patched=[]};
+// px·pt만 곱한다. em·rem·%는 부모(또는 루트)에 비례하는 값이라 손대면 두 번 커진다 —
+// 부모가 커지면 저절로 따라 커지므로 그대로 두는 것이 정답이다
+var scaleVal=function(v,f){
+var m=/^\\s*(-?[\\d.]+)(px|pt)\\s*$/.exec(v||'');
+return m?(Math.round(parseFloat(m[1])*f*100)/100)+m[2]:null};
+var collect=function(rules,f,out){
+for(var i=0;i<rules.length;i++){var r=rules[i];
+if(r.selectorText&&r.style){var s=scaleVal(r.style.fontSize,f);
+if(s)out.push(r.selectorText+'{font-size:'+s+' !important}')}
+else if(r.media&&r.cssRules){var a=[];collect(r.cssRules,f,a);
+if(a.length)out.push('@media '+r.media.mediaText+'{'+a.join('')+'}')}
+else if(r.conditionText&&r.cssRules){var b=[];collect(r.cssRules,f,b);
+if(b.length)out.push('@supports '+r.conditionText+'{'+b.join('')+'}')}
+else if(r.cssRules)collect(r.cssRules,f,out)}};
+var apply=function(){
+var old=document.getElementById(ID);if(old&&old.parentNode)old.parentNode.removeChild(old);
+undoInline();
+// 원본 상태에서의 루트 크기를 한 번만 기억한다 — 매번 재면 우리가 키운 값 위에 또 곱해진다
+if(!baseRoot)baseRoot=parseFloat(getComputedStyle(de()).fontSize)||16;
+var f=cur/100;
+if(!(f>0)||f===1||!document.body)return;
+var out=[],sheets=document.styleSheets;
+for(var i=0;i<sheets.length;i++){
+if(sheets[i].ownerNode&&sheets[i].ownerNode.id===ID)continue;
+var rules;try{rules=sheets[i].cssRules}catch(e){continue} // 외부(CDN) 시트는 읽을 수 없다 — 건너뛴다
+if(rules)collect(rules,f,out)}
+// rem의 기준인 루트 크기도 함께 키운다 — 크기를 rem으로만 짠 문서가 반응하도록
+out.unshift('html{font-size:'+(Math.round(baseRoot*f*100)/100)+'px !important}');
+var st=document.createElement('style');st.id=ID;st.textContent=out.join('\\n');
+document.body.appendChild(st);
+var els=document.querySelectorAll('[style*="font-size"]');
+for(var j=0;j<els.length;j++){var sv=scaleVal(els[j].style.fontSize,f);if(sv)putInline(els[j],sv)}};
+var run=function(){try{apply()}catch(e){}};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();
+// 늦게 붙는 <style>이나 JS가 나중에 그리는 본문(인라인 style)까지 덮기 위해 한 번 더
+addEventListener('load',function(){run();setTimeout(run,900)});
+addEventListener('message',function(ev){var d=ev.data||{};
+if(d.type==='docvault:scale'&&typeof d.percent==='number'){cur=d.percent;run()}});
+})()</${'script'}>`;
+}
+
 // 좁은 화면 맞춤 (아키텍처 — 모바일 화면 맞춤).
 // 올라오는 HTML은 docvault를 모르고 만들어진 남의 문서다 — 문서를 고치라고 요구하지 않고 뷰어가 맞춘다.
 // 넘칠 때만, 약한 수단부터 단계적으로 개입한다: 가드 CSS → 원인 요소만 스크롤 상자로 → 그래도 넘치면 축소.
@@ -51,7 +108,7 @@ ${offset > 0 ? `var ap=function(){se().scrollTop=${offset}};if(document.readySta
 function fitShim(enabled: boolean): string {
   return `<script>(function(){
 var TOL=2,MIN_ZOOM=.5,on=${enabled ? 'true' : 'false'};
-var css=null,zoomed=false,patched=[],timer;
+var css=null,zoomed=false,patched=[],timer,obs;
 var de=function(){return document.documentElement};
 var over=function(){return (document.scrollingElement||de()).scrollWidth-de().clientWidth};
 // 덧씌우기 전 원래 값을 적어 둔다 — 보정을 끄면 그대로 되돌린다. 요소에 표식을 남겨 중복 적용을 막는다
@@ -69,27 +126,35 @@ var guard=function(){
 if(css)return;css=document.createElement('style');
 css.textContent='img,svg,video,canvas,iframe{max-width:100%!important}img,svg,video{height:auto!important}body{overflow-wrap:break-word}';
 (document.head||de()).appendChild(css)};
-// 표의 내부(tr·td)는 스크롤 상자가 될 수 없다 — 고칠 수 있는 바깥 요소로 바꿔 준다
-var fixable=function(el){
-var d=getComputedStyle(el).display;
-if(d.slice(0,6)==='table-'){var t=el.closest&&el.closest('table');if(t)return t}
-if(d==='inline')return el.parentElement;
-return el};
-// ② 화면보다 넓은 요소 중 가장 안쪽만이 진짜 원인 — 바깥은 그것 때문에 넓어졌을 뿐이다
+// ② 넘치는 요소를 손본다. 두 걸음으로 나누는 이유:
+// "가장 안쪽이 범인"이라는 짐작으로 한 놈만 고르면, 고정 width를 가진 바깥 상자나
+// 오른쪽으로 밀려난 형제를 놓친다. 그래서 ⓐ 넘치는 것을 일단 전부 화면 폭 안으로 가둔 뒤
+// ⓑ 가두고 나서도 제 안에서 내용이 넘치는 것만 가로 스크롤 상자로 만든다.
 var patchWide=function(){
-var vw=de().clientWidth,wide=[],all=document.body.getElementsByTagName('*'),i,p,el;
-for(i=0;i<all.length;i++)if(all[i].getBoundingClientRect().width>vw+TOL)wide.push(all[i]);
-var outer=new Set();
-for(i=0;i<wide.length;i++)for(p=wide[i].parentElement;p;p=p.parentElement)outer.add(p);
-var targets=[];
-for(i=0;i<wide.length;i++){if(outer.has(wide[i]))continue;
-var t=fixable(wide[i]);if(t&&t!==document.body&&targets.indexOf(t)<0)targets.push(t)}
-for(i=0;i<targets.length;i++){el=targets[i];
-put(el,'max-width','100%');
-if(el.tagName==='TABLE')put(el,'display','block');
-if(el.tagName==='TABLE'||getComputedStyle(el).overflowX==='visible')put(el,'overflow-x','auto');
+var vw=de().clientWidth,list=[],all=document.body.getElementsByTagName('*'),i,p,el,r;
+for(i=0;i<all.length;i++){el=all[i];r=el.getBoundingClientRect();
+// 폭이 넓은 것뿐 아니라 오른쪽으로 밀려난 것도 범인이다 (폭은 좁아도 화면 밖으로 나간다)
+if(r.width<=vw+TOL&&r.right<=vw+TOL)continue;
+if(getComputedStyle(el).position==='fixed')continue; // 떠 있는 요소는 문서 폭에 관여하지 않는다
+list.push(el)}
+for(i=0;i<list.length;i++){el=list[i];
+if(el.tagName==='TABLE')put(el,'display','block'); // 표는 block이어야 overflow가 먹는다
+// box-sizing을 같이 주지 않으면 max-width:100%가 "내용 상자" 기준이라 좌우 여백만큼 그대로 넘친다
+put(el,'box-sizing','border-box');put(el,'max-width','100%');put(el,'min-width','0');
 // grid/flex의 1fr은 내용물의 min-content보다 못 줄어든다 — 조상 사슬을 풀어야 칸이 좁아진다
-for(p=el.parentElement;p&&p!==document.body;p=p.parentElement)put(p,'min-width','0')}};
+for(p=el.parentElement;p&&p!==document.body;p=p.parentElement)put(p,'min-width','0')}
+// 스크롤을 맡을 후보에는 조상도 넣는다 — 제 상자는 멀쩡한데 자식들만 삐져나오는 부모가
+// 진짜 스크롤 상자여야 한다(3단 배치의 줄, 코드 블록 등). 그런 부모는 위 목록에 잡히지 않는다
+var cand=[],seen=new Set();
+var add=function(e){if(e&&e!==document.body&&!seen.has(e)){seen.add(e);
+var d=0,q=e;while(q=q.parentElement)d++;cand.push([d,e])}};
+for(i=0;i<list.length;i++){add(list[i]);
+for(p=list[i].parentElement;p&&p!==document.body;p=p.parentElement)add(p)}
+// 안쪽부터 처리해야 가장 가까운 상자가 스크롤을 맡는다 (바깥이 맡으면 문서 전체가 흔들린다)
+cand.sort(function(a,b){return b[0]-a[0]});
+for(i=0;i<cand.length;i++){el=cand[i][1];
+if(el.scrollWidth>el.clientWidth+TOL&&getComputedStyle(el).overflowX==='visible')
+put(el,'overflow-x','auto')}};
 // ③ 마지막 수단: 문서 전체를 화면 폭에 맞게 축소 (글씨가 못 읽을 만큼 작아지지 않게 하한을 둔다)
 var zoomFit=function(){
 if(zoomed)return;
@@ -102,19 +167,35 @@ guard();if(over()<=TOL)return;
 try{patchWide()}catch(e){}
 if(over()<=TOL)return;
 zoomFit()};
-var schedule=function(){clearTimeout(timer);timer=setTimeout(run,80)};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();
-addEventListener('load',function(){run();setTimeout(run,600)});
+var schedule=function(){clearTimeout(timer);timer=setTimeout(run,120)};
+// 문서가 나중에 그리는 내용(스크립트가 붙이는 표·목록)도 잡는다.
+// 자식이 늘고 주는 것만 본다 — 속성까지 보면 우리가 덧씌운 스타일이 스스로를 다시 부른다
+var watch=function(){
+if(obs||!window.MutationObserver||!document.body)return;
+obs=new MutationObserver(schedule);obs.observe(document.body,{childList:true,subtree:true})};
+var start=function(){run();watch()};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+addEventListener('load',function(){start();setTimeout(run,600)});
 addEventListener('resize',schedule,{passive:true});
 addEventListener('message',function(ev){var d=ev.data||{};
-if(d.type==='docvault:fit'){on=!!d.on;undo();if(on)run()}});
+if(d.type==='docvault:fit'){on=!!d.on;undo();if(on)run()}
+// 글자가 커지면 표·코드가 다시 넘친다 — 배율이 바뀌면 맞춤을 처음부터 다시 계산한다.
+// 0ms 뒤로 미루는 이유: 같은 쪽지를 받는 배율 심이 먼저 일을 끝내야 한다
+else if(d.type==='docvault:scale')setTimeout(function(){undo();if(on)run()},0)});
 })()</${'script'}>`;
 }
 
 /** 문서 구조(doctype·head)를 깨뜨리지 않는 위치에 심을 주입한다 */
-function injectShims(html: string, restoreOffset: number, theme: ViewerTheme, fit: boolean): string {
-  // 맞춤 심을 앞에 둔다 — load 리스너가 먼저 등록되어야 "맞춤 후 읽던 위치 복원" 순서가 된다
-  const shims = STORAGE_SHIM + fitShim(fit) + navShim(restoreOffset, theme);
+function injectShims(
+  html: string,
+  restoreOffset: number,
+  theme: ViewerTheme,
+  fit: boolean,
+  scale: number,
+): string {
+  // 순서가 곧 실행 순서다(리스너는 등록된 차례로 불린다) — 글자 크기를 정한 뒤 그 결과로 맞춤을 재고,
+  // 마지막에 읽던 위치를 복원해야 앞 단계가 바꿔 놓은 레이아웃 위에서 제자리를 찾는다
+  const shims = STORAGE_SHIM + scaleShim(scale) + fitShim(fit) + navShim(restoreOffset, theme);
   const head = html.match(/<head[^>]*>/i);
   if (head) {
     const at = head.index! + head[0].length;
@@ -139,18 +220,21 @@ type Props = {
   onToc?: (items: RendererTocItem[]) => void;
   /** 좁은 화면 맞춤 보정 — 끄면 문서를 만든 그대로 보여준다 */
   fit?: boolean;
+  /** 글자 크기 배율(%) — 100이면 문서가 정한 크기 그대로 */
+  fontScale?: number;
 };
 
-export default function HtmlRenderer({ content, theme, initialOffset = 0, onScrollOffset, onToc, fit = true }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, onScrollOffset, onToc, fit = true, fontScale = 100 }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마·초기 맞춤은 마운트 시점 값으로 고정해
+  // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마·맞춤·배율은 마운트 시점 값으로 고정해
   // 부모 리렌더(트리 갱신·설정 변경 등)가 읽는 중인 문서를 초기화하지 않게 한다
   const [restoreOffset] = useState(initialOffset);
   const [initialTheme] = useState<ViewerTheme>(theme ?? 'light');
   const [initialFit] = useState(fit);
+  const [initialScale] = useState(fontScale);
   const doc = useMemo(
-    () => injectShims(content, restoreOffset, initialTheme, initialFit),
-    [content, restoreOffset, initialTheme, initialFit],
+    () => injectShims(content, restoreOffset, initialTheme, initialFit, initialScale),
+    [content, restoreOffset, initialTheme, initialFit, initialScale],
   );
 
   useEffect(() => {
@@ -177,7 +261,7 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, onScro
 
   // 열람 중 테마·맞춤 변경은 리로드 없이 쪽지로 전파한다 (마운트 시점 값은 이미 심에 박혀 있다).
   // 실제로 보낸 값을 기억해 두는 이유: 처음 값으로 되돌아가는 변경(밝게→어둡게→밝게)도 전해야 한다
-  const sent = useRef({ theme: initialTheme, fit: initialFit });
+  const sent = useRef({ theme: initialTheme, fit: initialFit, scale: initialScale });
   useEffect(() => {
     const win = frameRef.current?.contentWindow;
     if (!win) return;
@@ -189,7 +273,11 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, onScro
       win.postMessage({ type: 'docvault:fit', on: fit }, '*');
       sent.current.fit = fit;
     }
-  }, [theme, fit]);
+    if (fontScale !== sent.current.scale) {
+      win.postMessage({ type: 'docvault:scale', percent: fontScale }, '*');
+      sent.current.scale = fontScale;
+    }
+  }, [theme, fit, fontScale]);
 
   return (
     <iframe

@@ -1,6 +1,7 @@
 import { desc, eq, isNotNull, and } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { FONT_SCALE_DEFAULT, FONT_SCALE_MAX, FONT_SCALE_MIN } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, userFileState, userSettings } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
@@ -11,6 +12,7 @@ import type { AppEnv } from '../types.js';
 const DEFAULT_SETTINGS = {
   viewerTheme: 'light' as const,
   fontSize: 16,
+  htmlFontScale: FONT_SCALE_DEFAULT,
   fontFamily: null,
   lineHeight: null,
   contentWidth: 'normal' as const,
@@ -20,6 +22,7 @@ const DEFAULT_SETTINGS = {
 const settingsSchema = z.object({
   viewerTheme: z.enum(['light', 'dark', 'sepia']).optional(),
   fontSize: z.number().int().min(12).max(24).optional(),
+  htmlFontScale: z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).optional(),
   fontFamily: z.string().max(100).nullable().optional(),
   lineHeight: z.string().max(20).nullable().optional(),
   contentWidth: z.enum(['narrow', 'normal', 'wide']).optional(),
@@ -35,12 +38,15 @@ const stateSchema = z
       .optional(),
     touch: z.boolean().optional(),
     viewerFit: z.boolean().optional(),
+    // null = 이 파일만의 배율을 지우고 전역 기본값을 따르게 (설계 — 전역 기본 + 파일별 덮어쓰기)
+    fontScale: z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).nullable().optional(),
   })
   .refine(
     (v) =>
       v.isFavorite !== undefined ||
       v.readingPosition !== undefined ||
       v.viewerFit !== undefined ||
+      v.fontScale !== undefined ||
       v.touch,
     { message: '변경할 필드가 없습니다' },
   );
@@ -112,6 +118,7 @@ export const meRoutes = new Hono<AppEnv>()
       lastOpenedAt: patch.touch ? Date.now() : (existing?.lastOpenedAt ?? null),
       viewerFit:
         patch.viewerFit !== undefined ? (patch.viewerFit ? 1 : 0) : (existing?.viewerFit ?? 1),
+      fontScale: patch.fontScale !== undefined ? patch.fontScale : (existing?.fontScale ?? null),
     };
 
     const row = db
@@ -130,6 +137,7 @@ export const meRoutes = new Hono<AppEnv>()
         readingPosition: row.readingPosition ? JSON.parse(row.readingPosition) : null,
         lastOpenedAt: row.lastOpenedAt,
         viewerFit: row.viewerFit,
+        fontScale: row.fontScale,
       },
     });
   })

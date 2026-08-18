@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
+import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SCALE_STEP } from '../../lib/constants';
 import { downloadArchive } from '../../lib/download';
 
 type Props = {
@@ -65,6 +66,24 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
             onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
             className="mt-1 w-full accent-slate-300"
           />
+        </label>
+
+        {/* HTML은 문서가 자기 크기를 px로 갖고 있어 절대값을 줄 수 없다 — 문서 기준의 배율로 다룬다 */}
+        <label className="mt-3 block text-sm text-slate-300">
+          HTML 글자 크기: {settings.htmlFontScale}%
+          <input
+            type="range"
+            min={FONT_SCALE_MIN}
+            max={FONT_SCALE_MAX}
+            step={FONT_SCALE_STEP}
+            value={settings.htmlFontScale}
+            onChange={(e) => onChange({ htmlFontScale: Number(e.target.value) })}
+            className="mt-1 w-full accent-slate-300"
+          />
+          <span className="text-xs text-slate-500">
+            HTML 문서에 적용되는 기본 배율입니다. 문서별로 다르게 보고 싶으면 그 문서를 열고 "보기"에서
+            바꾸세요.
+          </span>
         </label>
 
         <label className="mt-3 block text-sm text-slate-300">

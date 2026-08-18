@@ -20,6 +20,7 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
+import { FONT_SCALE_DEFAULT } from '../lib/constants';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
@@ -35,6 +36,7 @@ type SortBy = 'name' | 'updated';
 const DEFAULT_SETTINGS: UserSettings = {
   viewerTheme: 'light',
   fontSize: 16,
+  htmlFontScale: FONT_SCALE_DEFAULT,
   fontFamily: null,
   lineHeight: null,
   contentWidth: 'normal',
