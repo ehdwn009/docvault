@@ -32,6 +32,8 @@ var el=id?document.getElementById(id):null;
 if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
 else if(!id)window.scrollTo({top:0,behavior:'smooth'});
 },true);
+// 문서를 누른 것은 부모에게 보이지 않는다(iframe 경계) — 열려 있는 팝오버를 닫으라고 알린다
+addEventListener('pointerdown',function(){parent.postMessage({type:'docvault:interact'},'*')},{passive:true,capture:true});
 var t;addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(function(){parent.postMessage({type:'docvault:scroll',offset:se().scrollTop},'*')},400)},{passive:true});
 var HD=[];
 var sendToc=function(){HD=[].slice.call(document.querySelectorAll('h1,h2,h3')).slice(0,300);
@@ -218,13 +220,15 @@ type Props = {
   onScrollOffset?: (offset: number) => void;
   /** 문서 헤딩 목록 보고 수신 — 부모(Viewer)가 목차(SCR-151)에 사용 */
   onToc?: (items: RendererTocItem[]) => void;
+  /** 문서 안을 눌렀다는 신호 — 부모가 열어 둔 팝오버를 닫는 데 쓴다 */
+  onInteract?: () => void;
   /** 좁은 화면 맞춤 보정 — 끄면 문서를 만든 그대로 보여준다 */
   fit?: boolean;
   /** 글자 크기 배율(%) — 100이면 문서가 정한 크기 그대로 */
   fontScale?: number;
 };
 
-export default function HtmlRenderer({ content, theme, initialOffset = 0, onScrollOffset, onToc, fit = true, fontScale = 100 }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100 }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마·맞춤·배율은 마운트 시점 값으로 고정해
   // 부모 리렌더(트리 갱신·설정 변경 등)가 읽는 중인 문서를 초기화하지 않게 한다
@@ -243,7 +247,9 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, onScro
       if (e.source !== frameRef.current?.contentWindow) return;
       const d = e.data as { type?: unknown; offset?: unknown; items?: unknown } | null;
       if (!d || typeof d !== 'object') return;
-      if (d.type === 'docvault:scroll' && typeof d.offset === 'number') {
+      if (d.type === 'docvault:interact') {
+        onInteract?.();
+      } else if (d.type === 'docvault:scroll' && typeof d.offset === 'number') {
         onScrollOffset?.(d.offset);
       } else if (d.type === 'docvault:toc' && Array.isArray(d.items)) {
         const items = (d.items as { text?: unknown; level?: unknown }[]).map((it, index) => ({
@@ -257,7 +263,7 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, onScro
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onScrollOffset, onToc]);
+  }, [onScrollOffset, onToc, onInteract]);
 
   // 열람 중 테마·맞춤 변경은 리로드 없이 쪽지로 전파한다 (마운트 시점 값은 이미 심에 박혀 있다).
   // 실제로 보낸 값을 기억해 두는 이유: 처음 값으로 되돌아가는 변경(밝게→어둡게→밝게)도 전해야 한다

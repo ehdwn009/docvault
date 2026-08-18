@@ -137,6 +137,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     saveOffset(scrollRef.current?.scrollTop ?? 0);
   }
 
+  // 격리된 문서 안의 클릭은 부모에 닿지 않는다 — 렌더러가 알려 주면 팝오버를 닫는다
+  const closeViewOptions = useCallback(() => setShowViewOptions(false), []);
+
   /** 파일별 보기 설정 저장 — 화면에는 즉시 반영하고 서버 저장은 뒤따르게 한다 */
   function saveState(patch: { viewerFit?: boolean; fontScale?: number | null }) {
     void api(`/me/files/${file.id}/state`, { method: 'PUT', body: JSON.stringify(patch) })
@@ -193,7 +196,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 파일별 값이 있으면 그것을, 없으면 설정의 전역 기본값을 쓴다 (대체이지 곱하기가 아니다)
   const effectiveScale = fontScale ?? settings.htmlFontScale;
   const headerButton = (active: boolean) =>
-    `rounded border px-3 py-1 text-sm ${
+    // whitespace-nowrap이 없으면 폭이 좁을 때 "보 기"처럼 글자가 세로로 접힌다
+    `whitespace-nowrap rounded border px-3 py-1 text-sm ${
       active
         ? 'border-slate-500 bg-slate-800 text-slate-100'
         : 'border-slate-700 text-slate-300 hover:bg-slate-900'
@@ -234,26 +238,18 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             </button>
           )}
           {data.fileType === 'html' && (
-            <div className="relative">
-              <button
-                onClick={() => setShowViewOptions((v) => !v)}
-                className={headerButton(showViewOptions)}
-                title="보기 — 글자 크기·화면 맞춤"
-              >
-                보기
-              </button>
-              {showViewOptions && (
-                <ViewOptions
-                  fit={fit}
-                  scale={effectiveScale}
-                  isOverride={fontScale !== null}
-                  onFitChange={changeFit}
-                  onScaleChange={changeScale}
-                  onResetScale={resetScale}
-                  onClose={() => setShowViewOptions(false)}
-                />
-              )}
-            </div>
+            <ViewOptions
+              open={showViewOptions}
+              fit={fit}
+              scale={effectiveScale}
+              isOverride={fontScale !== null}
+              buttonClass={headerButton}
+              onToggle={() => setShowViewOptions((v) => !v)}
+              onClose={() => setShowViewOptions(false)}
+              onFitChange={changeFit}
+              onScaleChange={changeScale}
+              onResetScale={resetScale}
+            />
           )}
           {!isBinary && (
             <button onClick={() => setShowVersions((v) => !v)} className={headerButton(showVersions)}>
@@ -320,6 +316,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               initialOffset={file.state.readingPosition?.offset ?? 0}
               onScrollOffset={saveOffset}
               onToc={setHeadings}
+              onInteract={closeViewOptions}
               fit={fit}
               fontScale={effectiveScale}
             />
