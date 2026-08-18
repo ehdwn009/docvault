@@ -52,6 +52,7 @@ erDiagram
         text storage_path "바이너리만, 텍스트는 null"
         integer is_shared "0|1"
         integer sort_order
+        integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15)"
         integer created_at
         integer updated_at
     }
@@ -91,6 +92,7 @@ erDiagram
         text font_family
         text line_height
         text content_width "narrow|normal|wide"
+        text last_seen_version "마지막으로 확인한 앱 버전, 패치노트 모달용 (2026-08-14)"
         integer updated_at
     }
 ```
