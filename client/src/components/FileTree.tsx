@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 
@@ -64,19 +64,43 @@ function setDragGhost(e: DragEvent, label: string) {
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
 export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange }: Props) {
   const tagColor = new Map(tags.map((t) => [t.id, t.color]));
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  // "접힌 목록"이 아니라 "펼친 목록"으로 들고 있는다 — 빈 집합이 곧 전부 접힘(기본값)이다
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<Menu | null>(null);
   const [renaming, setRenaming] = useState<Renaming | null>(null);
   const [dropTarget, setDropTarget] = useState<number | 'root' | null>(null);
   const lastCheckClickRef = useRef<number | null>(null); // Shift 범위 선택의 기준점
   const selectionMode = checked.size > 0;
 
+  // 트리는 기본이 접힘이라, 밖에서 고른 파일(최근 열람·검색·커맨드 팔레트·딥링크)은
+  // 조상 폴더를 열어 주지 않으면 트리에서 보이지 않는다
+  useEffect(() => {
+    if (selectedId == null) return;
+    const file = files.find((f) => f.id === selectedId);
+    if (!file) return;
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    const chain: number[] = [];
+    let parent = file.folderId;
+    // 자기참조가 꼬여도 멈추도록 방문한 폴더는 다시 따라가지 않는다
+    while (parent != null && !chain.includes(parent)) {
+      chain.push(parent);
+      parent = byId.get(parent)?.parentId ?? null;
+    }
+    if (chain.length === 0) return;
+    setExpanded((prev) => {
+      if (chain.every((id) => prev.has(id))) return prev; // 이미 열려 있으면 그대로 (불필요한 리렌더 방지)
+      const next = new Set(prev);
+      for (const id of chain) next.add(id);
+      return next;
+    });
+  }, [selectedId, files, folders]);
+
   /** 화면에 보이는 순서 그대로의 파일 id 목록 — Shift 범위 선택의 기준 (접힌 폴더 안은 제외) */
   const visibleFileIds = (): number[] => {
     const out: number[] = [];
     const walk = (parentId: number | null) => {
       for (const folder of folders.filter((f) => f.parentId === parentId)) {
-        if (!collapsed.has(folder.id)) walk(folder.id);
+        if (expanded.has(folder.id)) walk(folder.id);
       }
       for (const file of files.filter((f) => f.folderId === parentId)) out.push(file.id);
     };
@@ -110,8 +134,8 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     setMenu({ x: e.clientX, y: e.clientY, items });
   }
 
-  function toggleCollapse(id: number) {
-    setCollapsed((prev) => {
+  function toggleExpand(id: number) {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -136,16 +160,16 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
   }
 
   function scheduleSpring(target: number | 'root') {
-    if (typeof target !== 'number' || !collapsed.has(target)) {
+    if (typeof target !== 'number' || expanded.has(target)) {
       cancelSpring();
       return;
     }
     if (springRef.current?.id === target) return;
     cancelSpring();
     const timer = window.setTimeout(() => {
-      setCollapsed((prev) => {
+      setExpanded((prev) => {
         const next = new Set(prev);
-        next.delete(target);
+        next.add(target);
         return next;
       });
       springRef.current = null;
@@ -267,14 +291,14 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 onDragOver={(e) => allowDrop(e, folder.id)}
                 onDragLeave={() => setDropTarget((t) => (t === folder.id ? null : t))}
                 onDrop={(e) => handleDrop(e, folder.id)}
-                onClick={() => toggleCollapse(folder.id)}
+                onClick={() => toggleExpand(folder.id)}
                 onContextMenu={(e) => openMenu(e, folderMenu(folder))}
                 className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-sm transition ${
                   dropTarget === folder.id ? 'bg-sky-900/50 outline outline-1 outline-sky-600' : 'text-slate-400 hover:bg-slate-900'
                 }`}
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
               >
-                <span className="text-[10px]">{collapsed.has(folder.id) ? '▸' : '▾'}</span>
+                <span className="text-[10px]">{expanded.has(folder.id) ? '▾' : '▸'}</span>
                 <span>📁</span>
                 {isRenaming ? renameInput(renaming) : <span className="truncate">{folder.name}</span>}
                 <span className="ml-auto flex shrink-0 items-center gap-1">
@@ -282,7 +306,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   {moreButton(() => folderMenu(folder))}
                 </span>
               </div>
-              {!collapsed.has(folder.id) && renderLevel(folder.id, depth + 1)}
+              {expanded.has(folder.id) && renderLevel(folder.id, depth + 1)}
             </div>
           );
         })}

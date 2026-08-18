@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import VersionPanel from '../components/VersionPanel';
-import ViewOptions from '../components/ViewOptions';
+import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { renderers } from '../renderers';
 import Editor from './Editor';
@@ -43,7 +43,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [showToc, setShowToc] = useState(false);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [fit, setFit] = useState(file.state.viewerFit !== 0);
-  const [showViewOptions, setShowViewOptions] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   // null = 이 파일만의 배율 없음(설정의 전역 기본값을 따름)
   const [fontScale, setFontScale] = useState<number | null>(file.state.fontScale);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,7 +81,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   useEffect(() => {
     setFit(file.state.viewerFit !== 0);
     setFontScale(file.state.fontScale);
-    setShowViewOptions(false);
+    setShowMenu(false);
   }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
@@ -138,7 +138,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   }
 
   // 격리된 문서 안의 클릭은 부모에 닿지 않는다 — 렌더러가 알려 주면 팝오버를 닫는다
-  const closeViewOptions = useCallback(() => setShowViewOptions(false), []);
+  const closeMenu = useCallback(() => setShowMenu(false), []);
 
   /** 파일별 보기 설정 저장 — 화면에는 즉시 반영하고 서버 저장은 뒤따르게 한다 */
   function saveState(patch: { viewerFit?: boolean; fontScale?: number | null }) {
@@ -195,13 +195,57 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const isFavorite = file.state.isFavorite === 1;
   // 파일별 값이 있으면 그것을, 없으면 설정의 전역 기본값을 쓴다 (대체이지 곱하기가 아니다)
   const effectiveScale = fontScale ?? settings.htmlFontScale;
-  const headerButton = (active: boolean) =>
-    // whitespace-nowrap이 없으면 폭이 좁을 때 "보 기"처럼 글자가 세로로 접힌다
-    `whitespace-nowrap rounded border px-3 py-1 text-sm ${
+  // 터치 기기에서는 조작을 화면 아래(엄지가 닿는 자리)로 내린다 — CSS의 pc/touch 변형과 같은 판정이고,
+  // 기기 특성이라 실행 중에 바뀌지 않으므로 한 번만 재도 된다
+  const isPc = isPcDevice();
+  const actionButton = (active: boolean) =>
+    // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
+    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'w-full px-4 py-2'} ${
       active
         ? 'border-slate-500 bg-slate-800 text-slate-100'
         : 'border-slate-700 text-slate-300 hover:bg-slate-900'
     }`;
+
+  // 자주 쓰는 것(목차)만 남기고 나머지는 더보기로 접는다
+  const menuItems: ViewerAction[] = [
+    { label: '몰입 모드', onClick: onToggleImmersive },
+    ...(isBinary
+      ? []
+      : [{ label: '버전 기록', onClick: () => setShowVersions((v) => !v), active: showVersions }]),
+    // 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다)
+    { label: '다운로드', href: `/api/v1/files/${file.id}/raw`, download: file.name },
+    ...(data.readonly ? [] : [{ label: '편집 (E)', onClick: () => setMode('edit') }]),
+  ];
+
+  const actions = (
+    <>
+      {(data.fileType === 'md' || data.fileType === 'html') && (
+        <button onClick={() => setShowToc((v) => !v)} className={actionButton(showToc)}>
+          목차
+        </button>
+      )}
+      <ViewerMenu
+        open={showMenu}
+        placement={isPc ? 'down' : 'up'}
+        buttonClass={actionButton}
+        onToggle={() => setShowMenu((v) => !v)}
+        onClose={closeMenu}
+        items={menuItems}
+        display={
+          data.fileType === 'html'
+            ? {
+                fit,
+                scale: effectiveScale,
+                isOverride: fontScale !== null,
+                onFitChange: changeFit,
+                onScaleChange: changeScale,
+                onResetScale: resetScale,
+              }
+            : null
+        }
+      />
+    </>
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -228,44 +272,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         <span className="text-xs text-slate-500 touch:hidden">
           {new Date(data.updatedAt).toLocaleString()} 수정
         </span>
-        <div className="ml-auto flex gap-2">
-          <button onClick={onToggleImmersive} className={headerButton(false)} title="몰입 모드 — 본문만 전체 화면으로">
-            ⛶
-          </button>
-          {(data.fileType === 'md' || data.fileType === 'html') && (
-            <button onClick={() => setShowToc((v) => !v)} className={headerButton(showToc)}>
-              목차
-            </button>
-          )}
-          {data.fileType === 'html' && (
-            <ViewOptions
-              open={showViewOptions}
-              fit={fit}
-              scale={effectiveScale}
-              isOverride={fontScale !== null}
-              buttonClass={headerButton}
-              onToggle={() => setShowViewOptions((v) => !v)}
-              onClose={() => setShowViewOptions(false)}
-              onFitChange={changeFit}
-              onScaleChange={changeScale}
-              onResetScale={resetScale}
-            />
-          )}
-          {!isBinary && (
-            <button onClick={() => setShowVersions((v) => !v)} className={headerButton(showVersions)}>
-              버전
-            </button>
-          )}
-          {/* 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다) */}
-          <a href={`/api/v1/files/${file.id}/raw`} download={file.name} className={headerButton(false)}>
-            다운로드
-          </a>
-          {!data.readonly && (
-            <button onClick={() => setMode('edit')} className={headerButton(false)}>
-              편집 (E)
-            </button>
-          )}
-        </div>
+        {/* PC는 헤더 오른쪽에, 터치 기기는 아래 도구막대에 둔다 */}
+        {isPc && <div className="ml-auto flex gap-2">{actions}</div>}
       </div>
       )}
       <div className="flex min-h-0 flex-1">
@@ -316,7 +324,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               initialOffset={file.state.readingPosition?.offset ?? 0}
               onScrollOffset={saveOffset}
               onToc={setHeadings}
-              onInteract={closeViewOptions}
+              onInteract={closeMenu}
               fit={fit}
               fontScale={effectiveScale}
             />
@@ -351,6 +359,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           />
         )}
       </div>
+      {/* 터치 기기의 아래쪽 도구막대 — 엄지가 닿는 자리에 조작을 모은다 (몰입 모드에서는 숨긴다).
+          목차는 w-full로 남는 폭을 채우고 더보기는 오른쪽 끝에 — 목차가 없는 형식에서도 자리가 유지된다 */}
+      {!isPc && !immersive && (
+        <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950 px-3 py-2">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
