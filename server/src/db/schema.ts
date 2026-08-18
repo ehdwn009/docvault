@@ -107,6 +107,8 @@ export const userFileState = sqliteTable(
     /** { anchor: "헤딩 slug", offset: number } JSON */
     readingPosition: text('reading_position'),
     lastOpenedAt: integer('last_opened_at'),
+    /** HTML 뷰어의 화면 맞춤 보정 사용 여부 — 문서가 아니라 "이 사람이 이 문서를 보는 방식"이라 여기 둔다 */
+    viewerFit: integer('viewer_fit').notNull().default(1),
   },
   (t) => [primaryKey({ columns: [t.userId, t.fileId] })],
 );

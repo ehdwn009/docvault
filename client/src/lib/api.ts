@@ -37,7 +37,17 @@ export type TreeFile = {
     isFavorite: number;
     lastOpenedAt: number | null;
     readingPosition: { anchor?: string | null; offset?: number } | null;
+    /** HTML 화면 맞춤 보정 사용 여부 (1=켬) */
+    viewerFit: number;
   };
+};
+
+/** 트리 밖에서 얻은 파일(검색 결과·딥링크·관리자 목록)에 붙이는 기본 열람 상태 — 서버 기본값과 같아야 한다 */
+export const DEFAULT_FILE_STATE: TreeFile['state'] = {
+  isFavorite: 0,
+  lastOpenedAt: null,
+  readingPosition: null,
+  viewerFit: 1,
 };
 
 export type Tag = { id: number; name: string; color: string };

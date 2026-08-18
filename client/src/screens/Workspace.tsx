@@ -10,6 +10,7 @@ import UpdateNotes from '../components/UpdateNotes';
 import {
   api,
   ApiError,
+  DEFAULT_FILE_STATE,
   uploadFiles,
   type Changelog,
   type SharedFile,
@@ -60,7 +61,7 @@ function sharedToTreeFile(f: SharedFile): TreeFile {
     sortOrder: 0,
     updatedAt: f.updatedAt,
     tags: [],
-    state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null },
+    state: { ...DEFAULT_FILE_STATE },
   };
 }
 
@@ -150,7 +151,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     if (inTree) return inTree;
     const meta = await api<Omit<TreeFile, 'tags' | 'state'>>(`/files/${id}`).catch(() => null);
     return meta
-      ? { ...meta, tags: [], state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null } }
+      ? { ...meta, tags: [], state: { ...DEFAULT_FILE_STATE } }
       : null;
   }, []);
 
@@ -1028,6 +1029,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             immersive={immersive}
             onToggleImmersive={() => setImmersive((v) => !v)}
             onContentSaved={() => void loadTree()}
+            onStateChanged={() => void loadTree()}
             onToggleFavorite={toggleFavorite}
             onDirtyChange={(d) => (dirtyRef.current = d)}
           />

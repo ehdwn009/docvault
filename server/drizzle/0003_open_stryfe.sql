@@ -1,0 +1,1 @@
+ALTER TABLE `user_file_state` ADD `viewer_fit` integer DEFAULT 1 NOT NULL;

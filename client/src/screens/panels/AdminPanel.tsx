@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, type TreeFile, type User } from '../../lib/api';
+import { api, ApiError, DEFAULT_FILE_STATE, type TreeFile, type User } from '../../lib/api';
 import { confirmDialog, promptDialog } from '../../lib/dialog';
 
 type Stats = {
@@ -127,7 +127,7 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
                         ...f,
                         sortOrder: 0,
                         tags: [],
-                        state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null },
+                        state: { ...DEFAULT_FILE_STATE },
                       })
                     }
                     className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"

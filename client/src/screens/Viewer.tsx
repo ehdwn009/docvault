@@ -10,6 +10,8 @@ type Props = {
   immersive: boolean;
   onToggleImmersive: () => void;
   onContentSaved: () => void;
+  /** 파일별 열람 상태(화면 맞춤 등)를 바꿨을 때 — 트리가 들고 있는 state를 다시 받아 오게 한다 */
+  onStateChanged: () => void;
   onToggleFavorite: (file: TreeFile) => void;
   onDirtyChange: (dirty: boolean) => void;
 };
@@ -32,13 +34,14 @@ type Heading = { text: string; level: number; jump: () => void };
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onToggleFavorite, onDirtyChange }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [showVersions, setShowVersions] = useState(false);
   const [showToc, setShowToc] = useState(false);
   const [headings, setHeadings] = useState<Heading[]>([]);
+  const [fit, setFit] = useState(file.state.viewerFit !== 0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | undefined>(undefined);
 
@@ -67,6 +70,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       body: JSON.stringify({ touch: true }),
     }).catch(() => {});
   }, [file.id, file.fileType, file.updatedAt, isBinary]);
+
+  // 파일을 바꿔 열면 그 파일에 저장해 둔 화면 맞춤 설정을 따른다.
+  // file.id에만 반응시키는 이유: 토글 직후 트리가 갱신돼도 방금 누른 값을 도로 덮어쓰지 않게
+  useEffect(() => {
+    setFit(file.state.viewerFit !== 0);
+  }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
@@ -119,6 +128,17 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   function handleScroll() {
     saveOffset(scrollRef.current?.scrollTop ?? 0);
+  }
+
+  function toggleFit() {
+    const next = !fit;
+    setFit(next);
+    void api(`/me/files/${file.id}/state`, {
+      method: 'PUT',
+      body: JSON.stringify({ viewerFit: next }),
+    })
+      .then(onStateChanged)
+      .catch(() => {});
   }
 
   useEffect(() => () => window.clearTimeout(debounceRef.current), []);
@@ -182,6 +202,15 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           {(data.fileType === 'md' || data.fileType === 'html') && (
             <button onClick={() => setShowToc((v) => !v)} className={headerButton(showToc)}>
               목차
+            </button>
+          )}
+          {data.fileType === 'html' && (
+            <button
+              onClick={toggleFit}
+              className={headerButton(fit)}
+              title="화면 맞춤 — 문서가 화면보다 넓으면 화면 폭에 맞춥니다 (끄면 문서 원본 그대로)"
+            >
+              맞춤
             </button>
           )}
           {!isBinary && (
@@ -249,6 +278,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               initialOffset={file.state.readingPosition?.offset ?? 0}
               onScrollOffset={saveOffset}
               onToc={setHeadings}
+              fit={fit}
             />
           ) : (
             <div

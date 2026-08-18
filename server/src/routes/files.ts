@@ -149,7 +149,7 @@ export const fileRoutes = new Hono<AppEnv>()
       created.push({
         ...toFileMeta(row),
         tags: [] as number[],
-        state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null },
+        state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null, viewerFit: 1 },
       });
     }
 

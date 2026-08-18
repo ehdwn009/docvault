@@ -61,7 +61,7 @@
 | API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용) | 로그인 |
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
 | API-072 | PUT | /me/settings | 뷰어 설정 저장 | 로그인 |
-| API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록 저장 | 로그인 |
+| API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장 | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5) | 로그인 |
 
@@ -275,7 +275,7 @@
 | 항목 | 내용 |
 |---|---|
 | 메서드 / 경로 | PUT /me/files/{id}/state |
-| 설명 | 즐겨찾기 토글, 읽던 위치, 열람 기록을 부분 갱신(upsert). 뷰어가 스크롤 시 디바운스(2초)로 호출 |
+| 설명 | 즐겨찾기 토글, 읽던 위치, 열람 기록, 화면 맞춤 여부를 부분 갱신(upsert). 뷰어가 스크롤 시 디바운스(2초)로 호출 |
 | 인증 필요 | 예 |
 
 ### Request
@@ -285,6 +285,7 @@
 | isFavorite | boolean | 즐겨찾기 여부 |
 | readingPosition | object | { anchor: "헤딩 slug", offset: number } |
 | touch | boolean | true면 last_opened_at을 현재 시각으로 (열람 기록) |
+| viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
 
 ### Response
 **200 OK** — 갱신된 state 객체

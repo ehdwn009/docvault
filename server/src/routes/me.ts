@@ -34,10 +34,16 @@ const stateSchema = z
       .nullable()
       .optional(),
     touch: z.boolean().optional(),
+    viewerFit: z.boolean().optional(),
   })
-  .refine((v) => v.isFavorite !== undefined || v.readingPosition !== undefined || v.touch, {
-    message: '변경할 필드가 없습니다',
-  });
+  .refine(
+    (v) =>
+      v.isFavorite !== undefined ||
+      v.readingPosition !== undefined ||
+      v.viewerFit !== undefined ||
+      v.touch,
+    { message: '변경할 필드가 없습니다' },
+  );
 
 function pickSettings(row: typeof userSettings.$inferSelect) {
   const { userId: _omit, updatedAt: _omit2, ...rest } = row;
@@ -104,6 +110,8 @@ export const meRoutes = new Hono<AppEnv>()
             : JSON.stringify(patch.readingPosition)
           : (existing?.readingPosition ?? null),
       lastOpenedAt: patch.touch ? Date.now() : (existing?.lastOpenedAt ?? null),
+      viewerFit:
+        patch.viewerFit !== undefined ? (patch.viewerFit ? 1 : 0) : (existing?.viewerFit ?? 1),
     };
 
     const row = db
@@ -121,6 +129,7 @@ export const meRoutes = new Hono<AppEnv>()
         isFavorite: row.isFavorite,
         readingPosition: row.readingPosition ? JSON.parse(row.readingPosition) : null,
         lastOpenedAt: row.lastOpenedAt,
+        viewerFit: row.viewerFit,
       },
     });
   })
