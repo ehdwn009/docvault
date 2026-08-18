@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
+import { FONT_SCALE_DEFAULT } from '../lib/constants';
 import { renderers } from '../renderers';
 import Editor from './Editor';
 
@@ -193,8 +194,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   const Renderer = renderers[data.fileType];
   const isFavorite = file.state.isFavorite === 1;
-  // 파일별 값이 있으면 그것을, 없으면 설정의 전역 기본값을 쓴다 (대체이지 곱하기가 아니다)
-  const effectiveScale = fontScale ?? settings.htmlFontScale;
+  // 파일별 값이 있으면 그것을, 없으면 전역 기본값을 쓴다 (대체이지 곱하기가 아니다).
+  // md·텍스트의 전역 기본은 설정의 글자 크기(px) 자체라 배율 100%가 기준이고,
+  // HTML만 문서마다 기준 px이 달라 전역 기본 배율(htmlFontScale)을 따로 갖는다
+  const effectiveScale =
+    fontScale ?? (data.fileType === 'html' ? settings.htmlFontScale : FONT_SCALE_DEFAULT);
   // 터치 기기에서는 조작을 화면 아래(엄지가 닿는 자리)로 내린다 — CSS의 pc/touch 변형과 같은 판정이고,
   // 기기 특성이라 실행 중에 바뀌지 않으므로 한 번만 재도 된다
   const isPc = isPcDevice();
@@ -232,16 +236,18 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         onClose={closeMenu}
         items={menuItems}
         display={
-          data.fileType === 'html'
-            ? {
-                fit,
+          // 글자 크기는 우리가 그리는 문서(md·텍스트·코드)와 HTML 모두에 준다.
+          // 이미지·PDF는 브라우저가 그리는 것이라 배율을 걸 자리가 없다
+          isBinary || !Renderer
+            ? null
+            : {
                 scale: effectiveScale,
                 isOverride: fontScale !== null,
-                onFitChange: changeFit,
                 onScaleChange: changeScale,
                 onResetScale: resetScale,
+                fit:
+                  data.fileType === 'html' ? { on: fit, onChange: changeFit } : undefined,
               }
-            : null
         }
       />
     </>
@@ -331,7 +337,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ) : (
             <div
               className={`mx-auto p-6 ${WIDTH[settings.contentWidth]}`}
-              style={{ fontSize: settings.fontSize }}
+              // 설정의 글자 크기(px)를 100% 기준으로 두고 파일별 배율을 곱한다 —
+              // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
+              style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
             >
               {Renderer ? (
                 <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>

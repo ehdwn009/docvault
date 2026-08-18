@@ -286,7 +286,7 @@
 | readingPosition | object | { anchor: "헤딩 slug", offset: number } |
 | touch | boolean | true면 last_opened_at을 현재 시각으로 (열람 기록) |
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
-| fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 70~200). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
+| fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 10~300). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
 
 ### Response
 **200 OK** — 갱신된 state 객체

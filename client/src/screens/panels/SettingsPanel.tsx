@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
-import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SCALE_STEP } from '../../lib/constants';
+import { FONT_SCALE_MAX, FONT_SCALE_MIN } from '../../lib/constants';
 import { downloadArchive } from '../../lib/download';
 
 type Props = {
@@ -75,13 +75,13 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
             type="range"
             min={FONT_SCALE_MIN}
             max={FONT_SCALE_MAX}
-            step={FONT_SCALE_STEP}
+            step={1}
             value={settings.htmlFontScale}
             onChange={(e) => onChange({ htmlFontScale: Number(e.target.value) })}
             className="mt-1 w-full accent-slate-300"
           />
           <span className="text-xs text-slate-500">
-            HTML 문서에 적용되는 기본 배율입니다. 문서별로 다르게 보고 싶으면 그 문서를 열고 "보기"에서
+            HTML 문서에 적용되는 기본 배율입니다. 문서별로 다르게 보고 싶으면 그 문서를 열고 ⋯ 메뉴에서
             바꾸세요.
           </span>
         </label>

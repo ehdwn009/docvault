@@ -10,9 +10,10 @@ export const BCRYPT_ROUNDS = 10;
 /** 비밀번호 최소 길이 (API-013) */
 export const PASSWORD_MIN_LENGTH = 8;
 
-/** HTML 글자 크기 배율 범위(%) — 문서마다 기준 크기가 달라 절대 px가 아니라 배율로 다룬다 (아키텍처 — 글자 크기 배율) */
-export const FONT_SCALE_MIN = 70;
-export const FONT_SCALE_MAX = 200;
+/** 글자 크기 배율 범위(%) — 문서마다 기준 크기가 달라 절대 px가 아니라 배율로 다룬다 (아키텍처 — 글자 크기 배율).
+    하한을 낮게 연 이유: 조작 UI가 배율을 먹는 본문 바깥에 있어 사용자가 언제든 되돌릴 수 있다 */
+export const FONT_SCALE_MIN = 10;
+export const FONT_SCALE_MAX = 300;
 export const FONT_SCALE_DEFAULT = 100;
 /** 배율 조절 한 칸 */
 export const FONT_SCALE_STEP = 10;
