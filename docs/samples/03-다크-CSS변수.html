@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>테마를 따라가는 문서</title>
+<style>
+  /* 기본(라이트) 팔레트를 맨바닥 :root에 정의한다.
+     뷰어는 문서 <html>에 data-theme="light|dark|sepia" 표식을 남기므로 그것도 함께 받는다. */
+  :root {
+    --bg:        #ffffff;
+    --surface:   #f4f6fa;
+    --surface-2: #e9edf5;
+    --text:      #161c2b;
+    --text-dim:  #5a6480;
+    --border:    #d3dae8;
+    --accent:    #3b5bdb;
+    --accent-bg: #e7ecfd;
+    --warn:      #b25c00;
+    --warn-bg:   #fdf1e0;
+    --ok:        #17795e;
+    --ok-bg:     #e2f4ee;
+    --code-bg:   #eef1f7;
+    --shadow:    0 1px 3px rgba(20, 28, 50, .12);
+  }
+
+  /* 사용자가 뷰어에서 테마를 고르지 않았을 때를 대비한 시스템 설정 대응.
+     [data-theme="light"]가 명시된 경우에는 라이트를 유지해야 하므로 :not()으로 막는다. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]):not([data-theme="sepia"]) {
+      --bg:        #10131c;
+      --surface:   #171b28;
+      --surface-2: #1f2434;
+      --text:      #e6eaf5;
+      --text-dim:  #9aa3bd;
+      --border:    #2c3346;
+      --accent:    #8aa4ff;
+      --accent-bg: #1c2440;
+      --warn:      #f0ad4e;
+      --warn-bg:   #33260f;
+      --ok:        #56d3ac;
+      --ok-bg:     #10312a;
+      --code-bg:   #1b2130;
+      --shadow:    0 1px 3px rgba(0, 0, 0, .5);
+    }
+  }
+
+  /* 뷰어가 dark를 명시하면 시스템 설정과 무관하게 다크 */
+  :root[data-theme="dark"] {
+    --bg:        #10131c;
+    --surface:   #171b28;
+    --surface-2: #1f2434;
+    --text:      #e6eaf5;
+    --text-dim:  #9aa3bd;
+    --border:    #2c3346;
+    --accent:    #8aa4ff;
+    --accent-bg: #1c2440;
+    --warn:      #f0ad4e;
+    --warn-bg:   #33260f;
+    --ok:        #56d3ac;
+    --ok-bg:     #10312a;
+    --code-bg:   #1b2130;
+    --shadow:    0 1px 3px rgba(0, 0, 0, .5);
+  }
+
+  /* 뷰어의 세 번째 테마 — 종이 느낌 */
+  :root[data-theme="sepia"] {
+    --bg:        #f6ecd8;
+    --surface:   #efe3c9;
+    --surface-2: #e6d7b6;
+    --text:      #3a2e1c;
+    --text-dim:  #7a6748;
+    --border:    #d5c3a0;
+    --accent:    #9a5b1f;
+    --accent-bg: #f0dfc0;
+    --warn:      #a3591b;
+    --warn-bg:   #f2e2c4;
+    --ok:        #5c6f2a;
+    --ok-bg:     #eae6c8;
+    --code-bg:   #ece0c4;
+    --shadow:    0 1px 3px rgba(90, 70, 30, .2);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 80px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", system-ui, sans-serif;
+    line-height: 1.8;
+    font-size: 16px;   /* 이 문서의 크기는 전부 px — 배율 기능의 대상 */
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+
+  h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -.5px; }
+  h2 { font-size: 24px; margin: 40px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 18px; margin: 24px 0 6px; color: var(--accent); }
+  p  { font-size: 16px; margin: 0 0 12px; }
+
+  .kicker { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+
+  .intro {
+    background: var(--accent-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 20px 0 32px;
+    font-size: 15px;
+    box-shadow: var(--shadow);
+  }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 24px; }
+  .sw {
+    flex: 1 1 150px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .sw .chip { height: 46px; }
+  .sw .name { font-size: 12px; padding: 6px 8px; color: var(--text-dim); }
+  .chip-bg      { background: var(--bg);        border-bottom: 1px solid var(--border); }
+  .chip-surface { background: var(--surface-2); }
+  .chip-accent  { background: var(--accent); }
+  .chip-ok      { background: var(--ok); }
+  .chip-warn    { background: var(--warn); }
+  .chip-border  { background: var(--border); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 14px 0;
+    box-shadow: var(--shadow);
+  }
+  .card h3 { margin-top: 0; }
+
+  .callout { border-left: 4px solid var(--accent); padding: 12px 16px; border-radius: 0 8px 8px 0; background: var(--accent-bg); margin: 16px 0; font-size: 15px; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .callout.ok   { border-left-color: var(--ok);   background: var(--ok-bg); }
+  .callout .label { font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; }
+
+  pre  { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; }
+  code { font-family: "D2Coding", ui-monospace, monospace; font-size: 14px; color: var(--text); }
+  p code, li code { background: var(--code-bg); padding: 2px 5px; border-radius: 4px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 15px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+  th { background: var(--surface-2); font-size: 14px; }
+
+  ul { padding-left: 20px; }
+  li { font-size: 16px; margin-bottom: 6px; }
+
+  footer { margin-top: 48px; border-top: 1px solid var(--border); padding-top: 14px; font-size: 13px; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="kicker">테마 대응 시료</div>
+<h1>테마를 따라가는 문서</h1>
+
+<div class="intro">
+  <strong>이 문서로 무엇을 시험하는가.</strong>
+  색을 전부 CSS 변수로 뽑아 놓고, 뷰어가 문서 <code>&lt;html&gt;</code>에 남기는
+  <code>data-theme</code> 표식(light / dark / sepia)에 따라 팔레트를 통째로 갈아끼웁니다.
+  뷰어에서 테마를 바꿀 때 배경·글자·테두리·코드블록이 <b>한 번에</b> 따라 바뀌는지,
+  시스템이 다크 모드인데 뷰어에서 라이트를 고른 경우 라이트가 이기는지를 봅니다.
+  글자 크기는 전부 <code>px</code>이므로 배율 기능도 함께 시험 대상입니다.
+</div>
+
+<h2>1. 색을 변수로 뽑는다는 것</h2>
+
+<p>테마를 바꾼다는 건 결국 같은 자리에 다른 색을 넣는 일입니다. 문제는 그 "자리"가 문서 전체에 흩어져 있다는 점입니다. 배경색 한 가지가 본문·카드·표 머리·코드블록 등 수십 군데에 적혀 있으면, 테마마다 그 수십 군데를 전부 다시 적어야 합니다.</p>
+
+<p>CSS 변수는 이 관계를 뒤집습니다. 색에 <b>역할 이름</b>을 붙여 한곳에 모아 두고, 실제 규칙들은 그 이름만 참조합니다. 테마가 바뀔 때 갈아끼우는 것은 이름표 뭉치 하나뿐입니다.</p>
+
+<div class="swatches">
+  <div class="sw"><div class="chip chip-bg"></div><div class="name">--bg · 바탕</div></div>
+  <div class="sw"><div class="chip chip-surface"></div><div class="name">--surface-2 · 면</div></div>
+  <div class="sw"><div class="chip chip-accent"></div><div class="name">--accent · 강조</div></div>
+  <div class="sw"><div class="chip chip-ok"></div><div class="name">--ok · 성공</div></div>
+  <div class="sw"><div class="chip chip-warn"></div><div class="name">--warn · 주의</div></div>
+  <div class="sw"><div class="chip chip-border"></div><div class="name">--border · 경계</div></div>
+</div>
+
+<p>위 견본 상자는 변수를 그대로 칠한 것입니다. 테마를 바꾸면 여섯 칸의 색이 동시에 바뀌어야 합니다. 하나라도 그대로 남아 있다면 그 변수가 어딘가에서 하드코딩된 색으로 덮여 있다는 뜻입니다.</p>
+
+<h2>2. 우선순위 — 누가 이기는가</h2>
+
+<h3>세 갈래의 선언</h3>
+<p>이 문서는 팔레트를 세 번 선언합니다.</p>
+
+<ul>
+  <li>맨바닥 <code>:root</code> — 라이트 기본값. 아무 조건이 없으므로 항상 깔립니다.</li>
+  <li><code>@media (prefers-color-scheme: dark)</code> — 운영체제가 다크 모드일 때. 단, 뷰어가 명시적으로 light나 sepia를 골랐다면 적용되면 안 되므로 <code>:not([data-theme="light"]):not([data-theme="sepia"])</code>로 막아 둡니다.</li>
+  <li><code>:root[data-theme="dark"]</code> / <code>[data-theme="sepia"]</code> — 뷰어에서 사용자가 직접 고른 테마. 가장 뒤에 오고 선택자도 더 구체적이므로 언제나 이깁니다.</li>
+</ul>
+
+<div class="callout warn">
+  <span class="label">흔한 실수</span>
+  다크 팔레트를 미디어 쿼리 안에만 정의하면, 시스템이 다크인 사용자가 뷰어에서 라이트를 골라도 다크가 남아 버립니다.
+  그래서 <b>기본값은 반드시 조건 없는 <code>:root</code>에</b> 두고, 미디어 쿼리 쪽은 예외 처리를 붙여야 합니다.
+</div>
+
+<h3>실제 동작 표</h3>
+<table>
+  <thead>
+    <tr><th>시스템 설정</th><th>뷰어 테마</th><th>적용 결과</th><th>이유</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>라이트</td><td>light</td><td>라이트</td><td>기본 :root만 적용</td></tr>
+    <tr><td>다크</td><td>light</td><td>라이트</td><td>:not([data-theme="light"])가 미디어 쿼리를 차단</td></tr>
+    <tr><td>라이트</td><td>dark</td><td>다크</td><td>[data-theme="dark"]가 직접 적용</td></tr>
+    <tr><td>다크</td><td>dark</td><td>다크</td><td>두 경로가 같은 값이라 충돌 없음</td></tr>
+    <tr><td>아무거나</td><td>sepia</td><td>세피아</td><td>[data-theme="sepia"]가 가장 구체적</td></tr>
+  </tbody>
+</table>
+
+<h2>3. 문서가 테마를 "따르는" 것과 "강요하는" 것</h2>
+
+<p>뷰어는 문서에 테마를 강요하지 않습니다. 남의 HTML을 격리된 틀 안에 그대로 띄우는 것이 원칙이고, 색을 억지로 덮어쓰면 원본이 의도한 디자인이 망가지기 때문입니다. 대신 <b>표식만 남깁니다.</b> 문서가 그 표식을 읽고 따라올지 말지는 문서의 자유입니다.</p>
+
+<div class="card">
+  <h3>따르는 문서 (이 문서)</h3>
+  <p><code>[data-theme]</code> 선택자를 준비해 두었으므로, 뷰어에서 테마를 바꾸면 즉시 반응합니다. 뷰어의 주변 UI와 색이 어우러집니다.</p>
+</div>
+
+<div class="card">
+  <h3>따르지 않는 문서</h3>
+  <p>표식을 무시하고 자기 색만 씁니다. 다크 테마 뷰어 안에 흰 종이 한 장이 덩그러니 떠 있는 모습이 되지만, 그게 원본의 의도라면 그대로 존중됩니다.</p>
+</div>
+
+<div class="callout ok">
+  <span class="label">확인 포인트</span>
+  뷰어 테마를 세 번 돌려 보세요. 이 문서의 배경·카드·코드블록·표 머리·견본 상자가 모두 함께 바뀌면 통과입니다.
+  하나만 어색하게 남는다면 그 규칙이 변수를 안 쓰고 있는 것입니다.
+</div>
+
+<h2>4. 코드로 보기</h2>
+
+<pre><code>/* 역할 이름을 정하고 */
+:root {
+  --bg:   #ffffff;
+  --text: #161c2b;
+}
+
+/* 규칙은 이름만 참조한다 */
+body { background: var(--bg); color: var(--text); }
+
+/* 테마마다 이름표 뭉치만 갈아끼운다 */
+:root[data-theme="dark"] {
+  --bg:   #10131c;
+  --text: #e6eaf5;
+}</code></pre>
+
+<p>규칙의 수가 아무리 늘어도 테마 추가 비용은 늘지 않습니다. 새 테마를 하나 더 만들고 싶다면 변수 뭉치 하나만 더 쓰면 됩니다. 이 문서가 세피아를 쉽게 추가할 수 있었던 이유입니다.</p>
+
+<h3>배율과 함께 시험하기</h3>
+<p>이 문서의 글자 크기는 전부 px입니다(<code>34px</code>, <code>24px</code>, <code>16px</code>, <code>13px</code> ...). 따라서 뷰어 배율의 직접 대상입니다. 테마를 바꾼 상태에서 배율까지 올려 보고, 두 기능이 서로를 지우지 않는지 확인하세요. 색이 유지된 채 글자만 커져야 정상입니다.</p>
+
+<h2>5. 확인 항목 정리</h2>
+<ul>
+  <li>light → dark → sepia 전환 시 모든 영역의 색이 동시에 바뀌는가</li>
+  <li>시스템 다크 + 뷰어 라이트 조합에서 라이트가 이기는가</li>
+  <li>테마를 바꿔도 글자 크기 배율 설정이 유지되는가</li>
+  <li>코드블록·표·견본 상자 등 특수 영역에 하드코딩된 색이 남아 있지 않은가</li>
+  <li>목차에 h1 1개, h2 5개, h3 4개가 잡히는가</li>
+</ul>
+
+<footer>
+  테마 대응 시료 · CSS 변수 팔레트 3종(light / dark / sepia) · 외부 리소스 없음 · 글자 크기는 전부 px
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문서 처리 흐름 도해집</title>
+<style>
+  body {
+    margin: 0;
+    padding: 30px 20px 80px;
+    background: #f7f4fb;
+    color: #241b33;
+    font-family: "Pretendard", system-ui, sans-serif;
+    line-height: 1.75;
+    font-size: 15px;
+  }
+  .wrap { max-width: 840px; margin: 0 auto; }
+
+  h1 { font-size: 30px; margin: 0 0 8px; color: #45296e; }
+  h2 { font-size: 22px; margin: 38px 0 8px; color: #573384; border-bottom: 2px solid #ddd0ee; padding-bottom: 5px; }
+  h3 { font-size: 17px; margin: 22px 0 6px; color: #7048a8; }
+  p  { font-size: 15px; margin: 0 0 10px; }
+
+  .intro {
+    background: #efe8fa;
+    border: 1px solid #d6c6ec;
+    border-left: 5px solid #7048a8;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 18px 0 30px;
+    font-size: 14px;
+  }
+
+  figure {
+    margin: 16px 0 22px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid #e0d5f0;
+    border-radius: 10px;
+  }
+  figcaption { font-size: 13px; color: #6b5a86; margin-top: 8px; }
+
+  /* 일부 그림에만 max-width를 준다 — 문서가 스스로 대비한 경우와 아닌 경우의 차이를 만든다 */
+  .guarded svg { max-width: 100%; height: auto; }
+
+  .tagline { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; margin-bottom: 8px; }
+  .t-guard { background: #e0f2e9; color: #1c6b47; }
+  .t-raw   { background: #fbe6e6; color: #93242a; }
+
+  code { font-family: "D2Coding", ui-monospace, monospace; font-size: 13px; background: #ece3f7; padding: 2px 5px; border-radius: 4px; }
+  ul { padding-left: 20px; } li { margin-bottom: 5px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { border: 1px solid #ddd0ee; padding: 7px 9px; text-align: left; }
+  th { background: #efe8fa; }
+  footer { margin-top: 48px; border-top: 1px solid #ddd0ee; padding-top: 12px; font-size: 13px; color: #6b5a86; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>문서 처리 흐름 도해집</h1>
+
+<div class="intro">
+  <strong>이 문서로 무엇을 시험하는가.</strong>
+  인라인 <code>&lt;svg&gt;</code> 다이어그램 다섯 개가 들어 있고, 모두 <code>width="760"</code>처럼
+  <b>뷰포트보다 넓을 수 있는 고정 폭 속성</b>을 갖습니다. 그중 두 개에만 <code>max-width:100%</code>를 걸어 두었으므로,
+  뷰어의 화면 맞춤이 <b>나머지 세 개</b>를 어떻게 다루는지 비교할 수 있습니다.
+  또한 도형 안의 글자는 CSS가 아니라 <code>font-size="14"</code>처럼 <b>SVG 속성</b>으로 크기를 줍니다.
+  글자 크기 배율은 이 속성을 건드리지 않으므로, 배율을 올려도 도해 안의 라벨은 <b>그대로여야</b> 정상입니다.
+</div>
+
+<h2>1. 전체 처리 흐름</h2>
+
+<p>문서 한 건이 서버에 올라와 화면에 뜨기까지 거치는 단계입니다. 저장 위치가 형식에 따라 갈라지는 지점이 핵심입니다.</p>
+
+<figure class="guarded">
+  <span class="tagline t-guard">max-width 있음</span>
+  <svg width="760" height="300" viewBox="0 0 760 300" role="img" aria-label="문서 처리 전체 흐름도">
+    <rect x="0" y="0" width="760" height="300" fill="#fdfbff"/>
+    <rect x="16" y="110" width="130" height="64" rx="8" fill="#e8ddf7" stroke="#8a63c9" stroke-width="2"/>
+    <text x="81" y="136" font-size="14" text-anchor="middle" fill="#3d2560">업로드</text>
+    <text x="81" y="156" font-size="11" text-anchor="middle" fill="#6b5a86">multipart</text>
+
+    <rect x="186" y="110" width="130" height="64" rx="8" fill="#e8ddf7" stroke="#8a63c9" stroke-width="2"/>
+    <text x="251" y="136" font-size="14" text-anchor="middle" fill="#3d2560">형식 판별</text>
+    <text x="251" y="156" font-size="11" text-anchor="middle" fill="#6b5a86">확장자 + MIME</text>
+
+    <rect x="356" y="34" width="150" height="64" rx="8" fill="#ddeef0" stroke="#3a8f9c" stroke-width="2"/>
+    <text x="431" y="60" font-size="14" text-anchor="middle" fill="#134b54">텍스트 → DB</text>
+    <text x="431" y="80" font-size="11" text-anchor="middle" fill="#3a6b72">files.content_text</text>
+
+    <rect x="356" y="186" width="150" height="64" rx="8" fill="#f6e8dd" stroke="#b4763a" stroke-width="2"/>
+    <text x="431" y="212" font-size="14" text-anchor="middle" fill="#5c3a12">바이너리 → 디스크</text>
+    <text x="431" y="232" font-size="11" text-anchor="middle" fill="#7d5a2c">data/files/{owner}/{uuid}</text>
+
+    <rect x="556" y="110" width="180" height="64" rx="8" fill="#e8ddf7" stroke="#8a63c9" stroke-width="2"/>
+    <text x="646" y="136" font-size="14" text-anchor="middle" fill="#3d2560">뷰어 렌더링</text>
+    <text x="646" y="156" font-size="11" text-anchor="middle" fill="#6b5a86">격리 iframe</text>
+
+    <path d="M146 142 H186" stroke="#8a63c9" stroke-width="2" marker-end="url(#ar1)"/>
+    <path d="M316 132 Q336 132 336 90 Q336 66 356 66" fill="none" stroke="#3a8f9c" stroke-width="2" marker-end="url(#ar2)"/>
+    <path d="M316 152 Q336 152 336 194 Q336 218 356 218" fill="none" stroke="#b4763a" stroke-width="2" marker-end="url(#ar3)"/>
+    <path d="M506 66 Q536 66 536 120 Q536 142 556 142" fill="none" stroke="#3a8f9c" stroke-width="2" marker-end="url(#ar2)"/>
+    <path d="M506 218 Q536 218 536 164 Q536 142 556 142" fill="none" stroke="#b4763a" stroke-width="2" marker-end="url(#ar3)"/>
+
+    <text x="330" y="24" font-size="12" fill="#3a6b72">md / html / txt / 코드</text>
+    <text x="322" y="284" font-size="12" fill="#7d5a2c">이미지 / PDF / 기타</text>
+
+    <defs>
+      <marker id="ar1" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#8a63c9"/></marker>
+      <marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#3a8f9c"/></marker>
+      <marker id="ar3" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b4763a"/></marker>
+    </defs>
+  </svg>
+  <figcaption>그림 1. 업로드에서 렌더링까지. 이 그림에는 <code>max-width:100%</code>가 걸려 있어 좁은 화면에서 스스로 줄어듭니다.</figcaption>
+</figure>
+
+<h2>2. 화면 맞춤의 3단계</h2>
+
+<p>뷰어가 넘치는 문서를 다루는 순서입니다. 약한 개입부터 차례로 시도하고, 필요한 만큼만 씁니다.</p>
+
+<figure>
+  <span class="tagline t-raw">max-width 없음</span>
+  <svg width="880" height="260" viewBox="0 0 880 260" role="img" aria-label="화면 맞춤 3단계 도해">
+    <rect x="0" y="0" width="880" height="260" fill="#fffdf9"/>
+    <text x="20" y="34" font-size="16" fill="#5c3a12" font-weight="bold">넘치는 문서를 만났을 때</text>
+
+    <rect x="20" y="60" width="250" height="130" rx="10" fill="#e6f4ec" stroke="#2f8f63" stroke-width="2"/>
+    <text x="145" y="90" font-size="15" text-anchor="middle" fill="#14512f">1단계 · 그림 폭 가드</text>
+    <text x="145" y="116" font-size="12" text-anchor="middle" fill="#2c6647">img · svg · video · canvas에</text>
+    <text x="145" y="136" font-size="12" text-anchor="middle" fill="#2c6647">max-width:100%를 강제한다</text>
+    <text x="145" y="164" font-size="11" text-anchor="middle" fill="#4d7a63">가장 흔한 원인을 가장 싸게 해결</text>
+
+    <rect x="310" y="60" width="250" height="130" rx="10" fill="#e6eefa" stroke="#3a68b4" stroke-width="2"/>
+    <text x="435" y="90" font-size="15" text-anchor="middle" fill="#173a6b">2단계 · 스크롤 상자</text>
+    <text x="435" y="116" font-size="12" text-anchor="middle" fill="#2d4f80">여전히 넘치는 요소를 찾아</text>
+    <text x="435" y="136" font-size="12" text-anchor="middle" fill="#2d4f80">가로 스크롤 상자로 감싼다</text>
+    <text x="435" y="164" font-size="11" text-anchor="middle" fill="#4d6a94">표 · 코드 블록이 주 대상</text>
+
+    <rect x="600" y="60" width="250" height="130" rx="10" fill="#faeae6" stroke="#b4523a" stroke-width="2"/>
+    <text x="725" y="90" font-size="15" text-anchor="middle" fill="#6b2317">3단계 · 축소</text>
+    <text x="725" y="116" font-size="12" text-anchor="middle" fill="#80392d">그래도 넘치면 문서 전체를</text>
+    <text x="725" y="136" font-size="12" text-anchor="middle" fill="#80392d">비율에 맞춰 줄인다</text>
+    <text x="725" y="164" font-size="11" text-anchor="middle" fill="#94564a">최후 수단 — 고정폭 판형용</text>
+
+    <path d="M270 125 H310" stroke="#6b7280" stroke-width="2" marker-end="url(#ag)"/>
+    <path d="M560 125 H600" stroke="#6b7280" stroke-width="2" marker-end="url(#ag)"/>
+    <text x="290" y="112" font-size="11" text-anchor="middle" fill="#6b7280">부족하면</text>
+    <text x="580" y="112" font-size="11" text-anchor="middle" fill="#6b7280">부족하면</text>
+    <text x="20" y="228" font-size="12" fill="#6b7280">각 단계는 앞 단계로 해결되지 않은 경우에만 실행된다. 개입은 항상 최소한으로.</text>
+
+    <defs><marker id="ag" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6b7280"/></marker></defs>
+  </svg>
+  <figcaption>그림 2. 폭이 <b>880</b>이고 <code>max-width</code> 가드가 없습니다. 뷰어가 1단계에서 이 그림을 잡아 줄여야 합니다.</figcaption>
+</figure>
+
+<h2>3. 글자 크기 배율의 처리 대상</h2>
+
+<h3>무엇을 곱하고 무엇을 건드리지 않는가</h3>
+<p>배율은 스타일 규칙 안의 <code>font-size</code> 중 <b>px 단위만</b> 골라 곱합니다. 상대 단위는 문서가 의도한 비율이므로 그대로 두고, SVG 안의 <code>font-size</code> <b>속성</b>은 도형 좌표계에 속한 값이므로 역시 건드리지 않습니다.</p>
+
+<figure>
+  <span class="tagline t-raw">max-width 없음</span>
+  <svg width="820" height="280" viewBox="0 0 820 280" role="img" aria-label="배율 적용 대상 분류도">
+    <rect x="0" y="0" width="820" height="280" fill="#fbfaff"/>
+    <text x="20" y="32" font-size="16" fill="#3d2560" font-weight="bold">font-size 선언을 만났을 때의 분기</text>
+
+    <rect x="20" y="56" width="200" height="56" rx="8" fill="#ece3f7" stroke="#7048a8" stroke-width="2"/>
+    <text x="120" y="82" font-size="14" text-anchor="middle" fill="#3d2560">스타일 규칙 순회</text>
+    <text x="120" y="100" font-size="11" text-anchor="middle" fill="#6b5a86">문서의 모든 시트</text>
+
+    <path d="M220 84 H280" stroke="#7048a8" stroke-width="2" marker-end="url(#ap)"/>
+
+    <rect x="280" y="20" width="230" height="56" rx="8" fill="#e0f2e9" stroke="#2f8f63" stroke-width="2"/>
+    <text x="395" y="44" font-size="14" text-anchor="middle" fill="#14512f">px 값 → 배율을 곱한다</text>
+    <text x="395" y="63" font-size="11" text-anchor="middle" fill="#2c6647">16px × 1.25 = 20px</text>
+
+    <rect x="280" y="96" width="230" height="56" rx="8" fill="#fdf0dc" stroke="#b4763a" stroke-width="2"/>
+    <text x="395" y="120" font-size="14" text-anchor="middle" fill="#5c3a12">em · rem · % → 그대로</text>
+    <text x="395" y="139" font-size="11" text-anchor="middle" fill="#7d5a2c">상대값은 이미 따라 움직인다</text>
+
+    <rect x="280" y="172" width="230" height="56" rx="8" fill="#fbe3e3" stroke="#b4523a" stroke-width="2"/>
+    <text x="395" y="196" font-size="14" text-anchor="middle" fill="#6b2317">SVG 속성 → 그대로</text>
+    <text x="395" y="215" font-size="11" text-anchor="middle" fill="#94564a">도형 좌표계의 값</text>
+
+    <path d="M280 84 Q260 84 260 48 H280" fill="none" stroke="#2f8f63" stroke-width="2" marker-end="url(#ap2)"/>
+    <path d="M280 124 H262" fill="none" stroke="#b4763a" stroke-width="2"/>
+    <path d="M280 84 Q260 84 260 200 H280" fill="none" stroke="#b4523a" stroke-width="2" marker-end="url(#ap3)"/>
+
+    <rect x="570" y="96" width="230" height="56" rx="8" fill="#ece3f7" stroke="#7048a8" stroke-width="2"/>
+    <text x="685" y="120" font-size="14" text-anchor="middle" fill="#3d2560">사본 시트를 맨 뒤에 추가</text>
+    <text x="685" y="139" font-size="11" text-anchor="middle" fill="#6b5a86">원본은 손대지 않는다</text>
+
+    <path d="M510 48 Q545 48 545 124 H570" fill="none" stroke="#7048a8" stroke-width="2" marker-end="url(#ap)"/>
+    <text x="20" y="258" font-size="12" fill="#6b5a86">뒤에 온 규칙이 이기는 CSS의 성질을 이용하므로, 배율을 1로 되돌리면 원본 그대로 복귀한다.</text>
+
+    <defs>
+      <marker id="ap"  markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7048a8"/></marker>
+      <marker id="ap2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#2f8f63"/></marker>
+      <marker id="ap3" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b4523a"/></marker>
+    </defs>
+  </svg>
+  <figcaption>그림 3. 폭 <b>820</b>, 가드 없음. 안의 라벨은 모두 <code>font-size</code> 속성이므로 배율에 반응하지 않아야 합니다.</figcaption>
+</figure>
+
+<h2>4. 권한 검사 경로</h2>
+
+<h3>한 함수로 모으는 이유</h3>
+<p>권한 검사를 라우트마다 따로 쓰면 언젠가 하나를 빠뜨립니다. 빠뜨린 그 하나가 곧 구멍입니다. 그래서 검사는 공용 함수 하나로 모읍니다.</p>
+
+<figure class="guarded">
+  <span class="tagline t-guard">max-width 있음</span>
+  <svg width="760" height="300" viewBox="0 0 760 300" role="img" aria-label="권한 검사 경로 도해">
+    <rect x="0" y="0" width="760" height="300" fill="#fdfdff"/>
+    <text x="20" y="30" font-size="16" fill="#173a6b" font-weight="bold">assertFileAccess 하나로 모은 검사</text>
+
+    <rect x="20" y="54" width="150" height="50" rx="8" fill="#e6eefa" stroke="#3a68b4" stroke-width="2"/>
+    <text x="95" y="84" font-size="13" text-anchor="middle" fill="#173a6b">GET /files/:id</text>
+    <rect x="20" y="118" width="150" height="50" rx="8" fill="#e6eefa" stroke="#3a68b4" stroke-width="2"/>
+    <text x="95" y="148" font-size="13" text-anchor="middle" fill="#173a6b">PUT /files/:id</text>
+    <rect x="20" y="182" width="150" height="50" rx="8" fill="#e6eefa" stroke="#3a68b4" stroke-width="2"/>
+    <text x="95" y="212" font-size="13" text-anchor="middle" fill="#173a6b">DELETE /files/:id</text>
+
+    <rect x="270" y="110" width="200" height="66" rx="10" fill="#fff3d6" stroke="#b4763a" stroke-width="3"/>
+    <text x="370" y="138" font-size="15" text-anchor="middle" fill="#5c3a12">assertFileAccess</text>
+    <text x="370" y="158" font-size="11" text-anchor="middle" fill="#7d5a2c">소유자 · 공유 · 관리자</text>
+
+    <path d="M170 79  Q230 79  250 130 H270" fill="none" stroke="#3a68b4" stroke-width="2" marker-end="url(#ab)"/>
+    <path d="M170 143 H270" stroke="#3a68b4" stroke-width="2" marker-end="url(#ab)"/>
+    <path d="M170 207 Q230 207 250 156 H270" fill="none" stroke="#3a68b4" stroke-width="2" marker-end="url(#ab)"/>
+
+    <rect x="560" y="66" width="170" height="50" rx="8" fill="#e0f2e9" stroke="#2f8f63" stroke-width="2"/>
+    <text x="645" y="96" font-size="13" text-anchor="middle" fill="#14512f">통과 → 핸들러 진행</text>
+    <rect x="560" y="170" width="170" height="50" rx="8" fill="#fbe3e3" stroke="#b4523a" stroke-width="2"/>
+    <text x="645" y="194" font-size="13" text-anchor="middle" fill="#6b2317">거부 → FORBIDDEN</text>
+    <text x="645" y="211" font-size="11" text-anchor="middle" fill="#94564a">{ code, message } 403</text>
+
+    <path d="M470 130 Q520 130 520 91 H560" fill="none" stroke="#2f8f63" stroke-width="2" marker-end="url(#ab2)"/>
+    <path d="M470 156 Q520 156 520 195 H560" fill="none" stroke="#b4523a" stroke-width="2" marker-end="url(#ab3)"/>
+
+    <text x="20" y="272" font-size="12" fill="#4d6a94">인증은 /api/v1 전체에 기본 적용하고 예외만 명시한다 — 빼먹으면 뚫리는 구조를 만들지 않는다.</text>
+
+    <defs>
+      <marker id="ab"  markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#3a68b4"/></marker>
+      <marker id="ab2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#2f8f63"/></marker>
+      <marker id="ab3" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b4523a"/></marker>
+    </defs>
+  </svg>
+  <figcaption>그림 4. 폭 760, 가드 있음. 그림 2·3과 나란히 놓고 좁은 화면에서의 차이를 비교하세요.</figcaption>
+</figure>
+
+<h2>5. 버전 보관 정책</h2>
+
+<figure>
+  <span class="tagline t-raw">max-width 없음</span>
+  <svg width="900" height="220" viewBox="0 0 900 220" role="img" aria-label="버전 보관 정책 타임라인">
+    <rect x="0" y="0" width="900" height="220" fill="#fdfbff"/>
+    <text x="20" y="32" font-size="16" fill="#3d2560" font-weight="bold">편집할 때마다 이전 본문을 스냅샷한다 (최대 20개 보관)</text>
+    <line x1="30" y1="120" x2="870" y2="120" stroke="#bfb3d6" stroke-width="3"/>
+
+    <circle cx="90"  cy="120" r="13" fill="#8a63c9"/><text x="90"  y="126" font-size="11" text-anchor="middle" fill="#fff">v1</text>
+    <circle cx="230" cy="120" r="13" fill="#8a63c9"/><text x="230" y="126" font-size="11" text-anchor="middle" fill="#fff">v2</text>
+    <circle cx="370" cy="120" r="13" fill="#8a63c9"/><text x="370" y="126" font-size="11" text-anchor="middle" fill="#fff">v3</text>
+    <circle cx="510" cy="120" r="13" fill="#8a63c9"/><text x="510" y="126" font-size="11" text-anchor="middle" fill="#fff">v19</text>
+    <circle cx="650" cy="120" r="13" fill="#8a63c9"/><text x="650" y="126" font-size="11" text-anchor="middle" fill="#fff">v20</text>
+    <circle cx="790" cy="120" r="15" fill="#2f8f63"/><text x="790" y="126" font-size="11" text-anchor="middle" fill="#fff">현재</text>
+
+    <text x="90"  y="90" font-size="12" text-anchor="middle" fill="#6b5a86">최초 저장</text>
+    <text x="230" y="90" font-size="12" text-anchor="middle" fill="#6b5a86">편집</text>
+    <text x="370" y="90" font-size="12" text-anchor="middle" fill="#6b5a86">편집</text>
+    <text x="510" y="90" font-size="12" text-anchor="middle" fill="#6b5a86">편집</text>
+    <text x="650" y="90" font-size="12" text-anchor="middle" fill="#6b5a86">복원도 편집으로 취급</text>
+    <text x="790" y="86" font-size="12" text-anchor="middle" fill="#14512f">열람 중인 본문</text>
+
+    <text x="90"  y="160" font-size="11" text-anchor="middle" fill="#b4523a">21번째부터 밀려남</text>
+    <path d="M90 168 L60 190" stroke="#b4523a" stroke-width="2" marker-end="url(#av)"/>
+    <text x="20" y="206" font-size="12" fill="#6b5a86">가장 오래된 스냅샷부터 지운다. 보관 개수는 constants.ts 한 곳에서만 정한다.</text>
+
+    <defs><marker id="av" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b4523a"/></marker></defs>
+  </svg>
+  <figcaption>그림 5. 폭 <b>900</b>으로 가장 넓습니다. 가드가 없어 화면 맞춤 1단계의 효과가 가장 뚜렷하게 드러납니다.</figcaption>
+</figure>
+
+<h2>6. 확인 항목</h2>
+
+<table>
+  <thead><tr><th>그림</th><th>폭 속성</th><th>max-width 가드</th><th>기대 동작</th></tr></thead>
+  <tbody>
+    <tr><td>그림 1</td><td>760</td><td>있음</td><td>문서 스스로 줄어듦 — 뷰어 개입 불필요</td></tr>
+    <tr><td>그림 2</td><td>880</td><td>없음</td><td>뷰어가 1단계에서 폭을 제한</td></tr>
+    <tr><td>그림 3</td><td>820</td><td>없음</td><td>뷰어가 1단계에서 폭을 제한</td></tr>
+    <tr><td>그림 4</td><td>760</td><td>있음</td><td>문서 스스로 줄어듦</td></tr>
+    <tr><td>그림 5</td><td>900</td><td>없음</td><td>가장 크게 축소됨</td></tr>
+  </tbody>
+</table>
+
+<ul>
+  <li>가드 없는 그림 세 개가 화면 안에 들어오고, 비율이 찌그러지지 않는가</li>
+  <li>글자 크기 배율을 올렸을 때 도해 안 라벨이 <b>변하지 않는가</b> (속성이므로 보존되어야 정상)</li>
+  <li>같은 배율에서 본문 글자는 커지는가 (px이므로 대상)</li>
+  <li>화살표 마커와 곡선이 축소 후에도 깨지지 않는가</li>
+  <li>목차에 h1 1개, h2 6개, h3 2개가 잡히는가</li>
+</ul>
+
+<footer>
+  SVG 도해 시료 · 인라인 svg 5개(폭 760~900) · 라벨은 전부 font-size 속성 · 외부 리소스 없음
+</footer>
+</div>
+</body>
+</html>

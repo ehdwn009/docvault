@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>목판일보 — 고정폭 조판호</title>
+<style>
+  /* 이 문서의 핵심: 래퍼가 900px로 못박혀 있고, 폰트 크기가 전부 px 하드코딩이다. */
+  body {
+    margin: 0;
+    background: #efe7d7;
+    color: #241d14;
+    font-family: "Nanum Myeongjo", "Batang", serif;
+  }
+  .paper {
+    width: 900px;          /* 고정 픽셀 폭 — 좁은 화면에서 반드시 넘친다 */
+    margin: 0 auto;
+    padding: 32px 36px 64px;
+    background: #fbf6ea;
+    border-left: 1px solid #cbbc9c;
+    border-right: 1px solid #cbbc9c;
+    box-shadow: 0 0 24px rgba(80, 60, 20, .12);
+  }
+  .masthead {
+    border-bottom: 6px double #241d14;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-size: 52px;
+    letter-spacing: 12px;
+    margin: 0;
+    text-align: center;
+    font-weight: 800;
+  }
+  .masthead .sub {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #6b5a3e;
+    margin-top: 10px;
+  }
+  .notice {
+    border: 2px solid #8a6a30;
+    background: #f4ead1;
+    padding: 14px 18px;
+    margin: 20px 0 28px;
+    font-size: 15px;
+    line-height: 1.8;
+  }
+  .notice strong { font-size: 17px; }
+  h2 {
+    font-size: 30px;
+    margin: 34px 0 8px;
+    border-bottom: 2px solid #241d14;
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 21px;
+    margin: 22px 0 6px;
+    color: #5c4620;
+  }
+  p { font-size: 15px; line-height: 1.95; margin: 0 0 12px; text-align: justify; }
+
+  /* 여러 단 조판 — 단 폭까지 px로 고정한다 */
+  .cols3 {
+    column-count: 3;
+    column-gap: 28px;
+    column-rule: 1px solid #c9b78f;
+    margin-bottom: 18px;
+  }
+  .cols2 {
+    column-count: 2;
+    column-gap: 34px;
+    column-rule: 1px dashed #c9b78f;
+  }
+  .lead {
+    font-size: 18px;
+    line-height: 2;
+    column-span: all;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+  .byline { font-size: 12px; color: #7b6844; margin-bottom: 14px; }
+  figure {
+    margin: 0 0 14px;
+    break-inside: avoid;
+    background: #e6dcc2;
+    border: 1px solid #bda978;
+    padding: 10px;
+  }
+  figcaption { font-size: 12px; color: #6b5a3e; margin-top: 6px; }
+  .plate {
+    width: 260px;   /* 그림 자리를 픽셀로 고정 — 축소 보정 대상 */
+    height: 130px;
+    background: repeating-linear-gradient(45deg, #d6c69f 0 8px, #c9b78f 8px 16px);
+  }
+  .rule { border: 0; border-top: 3px double #8a6a30; margin: 30px 0; }
+  .box-side {
+    float: right;
+    width: 300px;    /* 고정폭 사이드박스 */
+    margin: 0 0 14px 20px;
+    padding: 14px;
+    background: #efe2c2;
+    border: 1px solid #b39d6c;
+    font-size: 14px;
+    line-height: 1.85;
+  }
+  .box-side h3 { margin-top: 0; font-size: 17px; }
+  .stamp {
+    display: inline-block;
+    border: 2px solid #9b2c2c;
+    color: #9b2c2c;
+    padding: 4px 10px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    transform: rotate(-3deg);
+  }
+  footer { margin-top: 40px; border-top: 1px solid #c9b78f; padding-top: 12px; font-size: 12px; color: #7b6844; }
+</style>
+</head>
+<body>
+<div class="paper">
+
+  <div class="masthead">
+    <h1>목판일보</h1>
+    <div class="sub">
+      <span>제 1호 · 조판부 발행</span>
+      <span>고정폭 900px 판형</span>
+      <span>2026년 8월 18일 화요일</span>
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>이 문서로 무엇을 시험하는가</strong><br>
+    본문 래퍼가 <code>width:900px</code>로 못박혀 있어 좁은 화면에서는 반드시 가로로 넘칩니다.
+    뷰어의 화면 맞춤이 이 고정폭 덩어리를 인식하고 마지막 단계인 <b>축소</b>까지 내려가는지 봅니다.
+    또한 문서의 모든 글자 크기가 <code>px</code>로 하드코딩되어 있으므로, 글자 크기 배율을 올리고 내릴 때
+    제목·본문·캡션이 <b>빠짐없이 함께</b> 커지고 작아져야 합니다.
+    단 조판(<code>column-count:3</code>) 안의 글자도 예외가 아니어야 합니다.
+  </div>
+
+  <h2>1면 · 종이 신문은 왜 폭을 못박았나</h2>
+
+  <p class="lead">종이에는 화면이 없다. 인쇄기에 걸리는 종이의 크기가 곧 지면의 크기였고, 조판공은 그 크기를 한 번 정하면 기사가 아무리 길어져도 바꾸지 않았다. 웹으로 옮겨온 옛 판형이 오늘도 픽셀 단위로 폭을 못박고 있는 이유다.</p>
+
+  <div class="cols3">
+    <div class="byline">조판부 기자 · 활자 취재</div>
+    <p>납활자를 쓰던 시절, 한 단의 폭은 활자를 담는 나무틀의 폭이었다. 틀은 쇠와 나무로 만들어져 있었으므로 늘어나지도 줄어들지도 않았다. 기사가 길면 단을 하나 더 쓰거나 활자 크기를 한 호 줄였지, 지면을 넓히는 선택지는 애초에 없었다.</p>
+    <p>이 사고방식은 화면으로 그대로 넘어왔다. 초기 웹 디자이너들은 인쇄 조판을 배운 사람들이었고, 그들이 아는 안전한 값은 언제나 고정된 숫자였다. 900이라는 숫자에 특별한 근거가 있는 것도 아니다. 당시 흔하던 모니터 가로 해상도에서 좌우 여백을 뺀 어림값이 그대로 굳어졌을 뿐이다.</p>
+    <p>문제는 읽는 쪽의 화면이 제각각이 되면서 드러났다. 900픽셀을 전제로 짜인 지면을 400픽셀짜리 화면에 올리면, 오른쪽 절반이 그냥 잘려 나간다. 잘리지 않게 하려면 읽는 쪽에서 무언가를 해야 한다.</p>
+    <p>가장 점잖은 방법은 축소다. 지면을 통째로 줄여 화면 안에 밀어 넣는 것이다. 글자는 작아지지만 조판은 무너지지 않는다. 단 세 개는 여전히 단 세 개로 남는다.</p>
+    <p>덜 점잖은 방법은 강제 줄바꿈이다. 고정폭 지시를 무시하고 요소를 접어 넣는다. 화면에는 들어가지만 조판공이 의도한 리듬은 사라진다. 어느 쪽이 나은지는 문서마다 다르다.</p>
+    <p>그래서 뷰어는 순서를 둔다. 먼저 그림처럼 명백히 넘치는 것부터 막고, 그다음 표나 코드처럼 스크롤 상자에 담아 해결할 수 있는 것을 담고, 그래도 남으면 그때 축소한다. 이 문서는 그 마지막 단계를 부르기 위한 시료다.</p>
+  </div>
+
+  <hr class="rule">
+
+  <h2>2면 · 픽셀로 못박은 글자 크기</h2>
+
+  <div class="box-side">
+    <h3>곁글 · 호수와 포인트</h3>
+    <p>활자 크기를 부르는 이름은 나라마다 달랐다. 동아시아 인쇄소는 초호·1호·2호처럼 호수로 불렀고, 서양은 포인트를 썼다. 어느 쪽이든 <b>절대 크기</b>였다는 점은 같다. 지면을 넓힌다고 활자가 따라 커지지는 않았다.</p>
+    <p><code>px</code>도 같은 성격의 단위다. 부모가 무엇이든, 화면이 얼마나 넓든, 14는 그냥 14다. 그래서 배율 기능이 손댈 수 있는 유일한 단위이기도 하다.</p>
+    <span class="stamp">교 정 필</span>
+  </div>
+
+  <h3>절대값이라는 성질</h3>
+  <p>이 지면의 제목은 30px, 본문은 15px, 캡션은 12px이다. 어느 값도 부모를 참조하지 않는다. 부모가 커지든 작아지든 자식은 자기 숫자를 지킨다. 편하기도 하고 위험하기도 한 성질이다. 편한 이유는 예측 가능해서고, 위험한 이유는 읽는 사람의 사정을 전혀 반영하지 못해서다.</p>
+  <p>눈이 침침한 독자가 글자를 키우고 싶어도, px로 못박힌 문서는 브라우저의 기본 글자 크기 설정을 무시한다. 그래서 뷰어가 대신 나선다. 문서가 선언한 규칙들을 훑어 <code>font-size</code>에 붙은 px 값만 골라 배율을 곱한 사본을 만들고, 그 사본을 규칙 목록 맨 뒤에 덧붙인다. 뒤에 온 규칙이 이기므로 원본을 지우지 않고도 크기를 바꿀 수 있다.</p>
+
+  <h3>단 조판 안에서도 같아야 한다</h3>
+  <div class="cols2">
+    <p>여러 단으로 나뉜 영역은 브라우저가 글줄을 다시 흘려 배치한다. 글자가 커지면 한 단에 들어가는 줄 수가 줄고, 그만큼 지면이 길어진다. 배율을 올렸을 때 단이 무너지지 않고 자연스럽게 길어지는지 확인하는 자리가 바로 여기다.</p>
+    <p>단 사이 여백과 구분선은 px로 지정되어 있으므로 배율과 무관하게 그대로다. 글자만 커지고 여백은 그대로일 때 지면이 답답해 보이지 않는지도 같이 본다. 배율 기능은 글자 크기만 건드린다는 원칙을 눈으로 확인하는 셈이다.</p>
+    <p>또 하나, 단 조판은 요소의 높이를 브라우저가 계산해 나눈다. 축소 보정이 들어가면 이 계산이 다시 일어난다. 축소와 배율이 겹쳤을 때 글줄이 단 사이에서 어색하게 끊기지 않는지 살펴야 한다.</p>
+    <figure>
+      <div class="plate"></div>
+      <figcaption>도판 1. 260px로 고정된 도판 자리. 화면 맞춤 1단계인 그림 폭 가드가 이런 요소를 먼저 잡는다.</figcaption>
+    </figure>
+    <p>도판은 폭이 260px로 못박혀 있다. 지면 자체가 900px이므로 도판 하나만으로는 넘치지 않지만, 축소가 걸린 뒤에도 비율이 유지되는지 확인하기에는 충분하다.</p>
+  </div>
+
+  <hr class="rule">
+
+  <h2>3면 · 읽는 사람 쪽의 보정</h2>
+
+  <h3>순서가 있는 이유</h3>
+  <p>보정을 한꺼번에 몰아치면 문서가 이상해진다. 축소부터 걸어 버리면 넘치지 않았을 문서까지 작아지고, 강제 줄바꿈부터 걸면 표와 코드가 뭉개진다. 그래서 약한 개입부터 차례로 시도하고, 필요한 만큼만 쓴다.</p>
+  <p>이 신문 지면은 첫 두 단계로는 해결되지 않는다. 넘치는 주범이 그림도 아니고 표도 아니라 <b>지면 그 자체</b>이기 때문이다. 900px 래퍼는 스크롤 상자에 담아도 여전히 900px이다. 남은 수단은 축소뿐이고, 그 판단이 제대로 내려지는지가 이 문서의 시험 항목이다.</p>
+
+  <h3>축소가 걸린 뒤에 확인할 것</h3>
+  <div class="cols3">
+    <p>첫째, 지면 전체가 균일하게 줄어드는가. 제목만 줄고 본문은 그대로라면 배율 계산이 어딘가에서 어긋난 것이다. 둘째, 좌우 여백이 남는가. 축소가 지나쳐 지면이 화면 한가운데 작게 떠 버리면 읽기 불편하다.</p>
+    <p>셋째, 세로 스크롤이 자연스러운가. 가로로 줄어든 만큼 세로도 줄어들어 전체 길이가 짧아져야 정상이다. 넷째, 축소 상태에서 글자 크기 배율을 올렸을 때 두 보정이 서로 싸우지 않는가.</p>
+    <p>다섯째, 이 지면의 목차는 제대로 잡히는가. h1 하나, h2 셋, h3 다섯이 문서 안에 있으므로 목차에도 같은 구조가 계층대로 나타나야 한다. 축소나 배율을 바꿔도 목차 항목이 사라지거나 중복되면 안 된다.</p>
+    <p>여섯째, 인쇄용으로 짜인 옛 문서를 그대로 보관해도 읽을 수 있는가. 폐쇄망에 쌓인 문서 상당수가 이런 판형이므로, 이 확인이 곧 실무 확인이다.</p>
+    <p>마지막으로, 원본이 훼손되지 않는가. 보정은 어디까지나 보는 방식이지 문서를 고치는 일이 아니다. 배율을 원래대로 되돌리면 900px 지면이 900px 그대로 돌아와야 한다.</p>
+    <p>이상 여섯 가지가 모두 통과하면 이 시료는 제 몫을 다한 것이다. 통과하지 못하면 어느 단계에서 멈췄는지가 곧 다음 작업의 실마리가 된다.</p>
+  </div>
+
+  <footer>
+    목판일보 · 고정폭 판형 시료 · 외부 리소스 없음(폰트·이미지 링크 미사용) · 전 지면 px 조판
+  </footer>
+</div>
+</body>
+</html>

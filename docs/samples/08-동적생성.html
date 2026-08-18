@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>나중에 그려지는 문서</title>
+
+<!-- 폐쇄망에서는 이 요청이 반드시 실패한다. 실패해도 문서가 멀쩡해야 하는지가 시험 항목이다. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/some-typography@1.4.2/dist/some.css">
+
+<style>
+  body {
+    margin: 0;
+    padding: 30px 20px 80px;
+    background: #f4f7fa;
+    color: #16232e;
+    font-family: "Pretendard", system-ui, sans-serif;
+    line-height: 1.75;
+    font-size: 15px;
+  }
+  .wrap { max-width: 840px; margin: 0 auto; }
+
+  h1 { font-size: 30px; margin: 0 0 8px; color: #0f3b52; }
+  h2 { font-size: 22px; margin: 36px 0 8px; color: #12556f; border-bottom: 2px solid #cbdde6; padding-bottom: 5px; }
+  h3 { font-size: 17px; margin: 22px 0 6px; color: #1c7391; }
+  p  { font-size: 15px; margin: 0 0 10px; }
+
+  .intro {
+    background: #e3eff5;
+    border: 1px solid #bcd6e2;
+    border-left: 5px solid #1c7391;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 18px 0 28px;
+    font-size: 14px;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid #cbdde6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 16px 0 24px;
+    font-size: 14px;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #e0a63c; flex: 0 0 auto; }
+  .dot.done { background: #2f9e79; }
+
+  .skeleton { background: #e8eef3; border-radius: 6px; height: 16px; margin: 8px 0; }
+  .skeleton.w70 { width: 70%; }
+  .skeleton.w45 { width: 45%; }
+
+  /* 나중에 삽입되는 내용에도 미리 규칙을 준비해 둔다 —
+     삽입 시점에 스타일이 이미 적용된 상태로 나타나야 배율·맞춤 계산이 한 번에 끝난다. */
+  .gen-card {
+    background: #fff;
+    border: 1px solid #cbdde6;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 10px 0;
+  }
+  .gen-card .title { font-size: 16px; font-weight: 700; color: #0f3b52; }
+  .gen-card .meta  { font-size: 12px; color: #5e7b8c; margin-top: 2px; }
+  .gen-card .body  { font-size: 14px; margin-top: 6px; }
+
+  .gen-table { border-collapse: collapse; margin: 12px 0; font-size: 13px; background: #fff; border: 1px solid #cbdde6; }
+  .gen-table th, .gen-table td { border: 1px solid #d9e5ec; padding: 6px 9px; text-align: left; white-space: nowrap; }
+  .gen-table th { background: #e3eff5; color: #0f3b52; }
+  .gen-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .gen-table .w-wide { width: 220px; }
+
+  .gen-list { padding-left: 20px; margin: 10px 0; }
+  .gen-list li { font-size: 15px; margin-bottom: 5px; }
+
+  .chip { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #e3eff5; color: #12556f; }
+  code { font-family: "D2Coding", ui-monospace, monospace; font-size: 13px; background: #e3eff5; padding: 2px 5px; border-radius: 4px; }
+  ul { padding-left: 20px; } li { margin-bottom: 5px; }
+  footer { margin-top: 48px; border-top: 1px solid #cbdde6; padding-top: 12px; font-size: 13px; color: #5e7b8c; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>나중에 그려지는 문서</h1>
+
+<div class="intro">
+  <strong>이 문서로 무엇을 시험하는가.</strong>
+  본문의 대부분이 처음에는 없고, 로드 후 <b>0.8초 뒤</b>에 자바스크립트가 목록·카드·넓은 표를 DOM에 추가합니다.
+  뷰어의 화면 맞춤과 글자 크기 배율이 <b>최초 렌더 시점에만</b> 계산된다면, 나중에 나타난 넓은 표는 보정을 못 받고 그대로 넘칠 것입니다.
+  또한 <code>&lt;head&gt;</code>에 외부 CDN 스타일시트 링크가 하나 있습니다. 폐쇄망에서는 이 요청이 실패하는데,
+  실패해도 문서가 <b>멀쩡히 읽히는지</b>, 실패한 시트를 읽으려다 배율 기능이 멈추지는 않는지 확인합니다.
+</div>
+
+<div class="status" id="status">
+  <span class="dot" id="dot"></span>
+  <span id="status-text">본문을 준비하는 중입니다… 약 0.8초 후 아래에 내용이 채워집니다.</span>
+</div>
+
+<h2>1. 처음부터 있는 부분</h2>
+
+<p>이 문단은 HTML에 직접 적혀 있습니다. 문서를 열자마자 보이고, 뷰어의 최초 계산에도 포함됩니다. 아래 자리 표시자는 잠시 후 실제 내용으로 교체됩니다.</p>
+
+<div id="skeleton">
+  <div class="skeleton"></div>
+  <div class="skeleton w70"></div>
+  <div class="skeleton w45"></div>
+</div>
+
+<h3>왜 나중에 그리는 문서가 있는가</h3>
+
+<p>사내 문서 중에는 데이터를 불러와 화면을 구성하는 것들이 있습니다. 보고서 템플릿에 수치를 채워 넣거나, 목록을 접었다 펴거나, 표를 정렬하는 기능이 붙은 경우입니다. 이런 문서는 HTML 파일 자체에는 뼈대만 있고, 살은 스크립트가 붙입니다.</p>
+
+<p>뷰어 입장에서는 까다로운 손님입니다. 문서를 띄운 직후에 폭을 재고 보정을 끝냈는데, 잠시 후 갑자기 화면보다 넓은 표가 나타나기 때문입니다. 그래서 보정은 <b>한 번 하고 끝</b>이 아니라 문서의 변화를 지켜보며 다시 해야 합니다.</p>
+
+<h3>외부 스타일시트가 실패할 때</h3>
+
+<p>이 문서의 <code>&lt;head&gt;</code>에는 CDN 스타일시트 링크가 하나 있습니다. 인터넷이 닿는 환경이라면 폰트와 타이포그래피 규칙을 받아 올 것이고, 폐쇄망에서는 조용히 실패합니다.</p>
+
+<p>중요한 것은 <b>실패해도 아무 일도 일어나지 않아야</b> 한다는 점입니다. 문서의 자체 <code>&lt;style&gt;</code>이 필요한 서식을 모두 담고 있으므로 보기에는 차이가 없어야 합니다. 다만 배율 기능은 문서의 스타일 규칙을 훑어야 하는데, 로드에 실패한 시트를 읽으려 하면 브라우저가 접근을 막을 수 있습니다. 그 상황에서 기능 전체가 멈추지 않고 읽을 수 있는 시트만 처리하고 넘어가는지가 실질적인 시험 항목입니다.</p>
+
+<h2>2. 나중에 채워지는 부분</h2>
+
+<p>아래 세 영역은 스크립트가 채웁니다. 채워지기 전에는 비어 있고, 채워진 뒤에는 스크롤이 꽤 길어집니다.</p>
+
+<h3>2-1. 생성된 카드 목록</h3>
+<div id="cards"></div>
+
+<h3>2-2. 생성된 넓은 표</h3>
+<p>열이 열 개이고 셀에 <code>nowrap</code>이 걸려 있어 확실히 넘칩니다. <b>이 표는 문서가 뜬 뒤에 나타난다</b>는 점이 앞의 표 시료와 다릅니다.</p>
+<div id="table-area"></div>
+
+<h3>2-3. 생성된 항목 목록</h3>
+<div id="list-area"></div>
+
+<h2>3. 확인 항목</h2>
+<ul>
+  <li>0.8초 뒤에 나타난 넓은 표가 <b>가로 스크롤 상자로 감싸지는가</b> (최초 계산만 한다면 감싸지지 않는다)</li>
+  <li>나중에 생긴 내용에도 글자 크기 배율이 적용되는가</li>
+  <li>배율을 먼저 바꾸고 기다렸을 때와, 내용이 다 나온 뒤 배율을 바꿨을 때 결과가 같은가</li>
+  <li>CDN 시트 로드 실패가 화면이나 배율 기능에 아무 영향을 주지 않는가</li>
+  <li>목차가 나중에 추가된 헤딩까지 반영하는가 (스크립트가 h3 두 개를 더 추가합니다)</li>
+</ul>
+
+<footer>
+  동적 생성 시료 · setTimeout 800ms 후 DOM 삽입 · 외부 CDN 링크 1개(실패 전제) · 문서 자체 style 병행
+</footer>
+</div>
+
+<script>
+// 이 문서의 목적은 "렌더 후 변화"를 만드는 것이므로, 일부러 늦게 그린다.
+(function () {
+  var CARDS = [
+    ['접수 창구 통합 안내', '운영1팀 · 2026-06-02', '지점별로 나뉘어 있던 접수 창구를 하나로 합쳤습니다. 방문자는 어느 창구에서든 모든 업무를 처리할 수 있고, 대기 순번은 통합 번호표로 관리합니다.'],
+    ['야간 접수 시범 운영', '운영2팀 · 2026-06-09', '수도권 세 개 지점에서 오후 여섯 시부터 아홉 시까지 접수를 받습니다. 시범 기간 동안의 이용 실적을 보고 확대 여부를 정합니다.'],
+    ['재작업률 기준선 조정', '품질관리팀 · 2026-06-14', '기존 5퍼센트였던 기준선을 3퍼센트로 낮췄습니다. 기준을 넘는 지점은 다음 달 점검 대상에 자동으로 포함됩니다.'],
+    ['장비 교체 우선순위 공지', '자산팀 · 2026-06-18', '가동 시간 삼만 시간을 넘긴 장비부터 교체합니다. 예산 범위 안에서 오류 횟수가 많은 순으로 배정합니다.'],
+    ['문서 보관 기간 안내', '기록관리팀 · 2026-06-21', '편집 이력은 최대 스무 개까지 보관하며, 그보다 오래된 판본은 자동으로 정리됩니다. 중요한 판본은 별도로 내보내 두시기 바랍니다.'],
+    ['폐쇄망 배포 절차 개정', '인프라팀 · 2026-06-25', '반입 매체 검사 단계를 추가했습니다. 배포 꾸러미는 체크섬 확인을 통과해야 다음 단계로 넘어갑니다.'],
+    ['교육 일정 2분기 결산', '교육팀 · 2026-06-28', '신규 입사자 교육 열두 차례, 보수 교육 여덟 차례를 진행했습니다. 하반기에는 실습 비중을 늘릴 예정입니다.'],
+    ['민원 응대 매뉴얼 개정', '고객지원팀 · 2026-06-30', '자주 들어오는 문의 서른 건을 유형별로 다시 정리했습니다. 응대 문구는 지점별로 조정해 쓸 수 있습니다.']
+  ];
+
+  var ROWS = [
+    ['REQ-20260601-0012', '서울중앙지점', '운영1팀', '문서 재발급', '2026-06-01', '2026-06-03', '2', '완료', '4', '창구 방문'],
+    ['REQ-20260602-0044', '강남대로지점', '운영1팀', '이력 정정',   '2026-06-02', '2026-06-07', '5', '완료', '11', '온라인 접수'],
+    ['REQ-20260605-0071', '인천항만지점', '운영2팀', '신규 등록',   '2026-06-05', '2026-06-06', '1', '완료', '2', '단체 접수'],
+    ['REQ-20260608-0103', '대전둔산지점', '운영2팀', '기록 열람',   '2026-06-08', '2026-06-15', '7', '지연', '19', '담당자 부재'],
+    ['REQ-20260611-0128', '천안아산지점', '운영3팀', '문서 재발급', '2026-06-11', '2026-06-12', '1', '완료', '1', '—'],
+    ['REQ-20260614-0166', '대구수성지점', '운영3팀', '이력 정정',   '2026-06-14', '2026-06-19', '5', '완료', '9', '증빙 보완 요청'],
+    ['REQ-20260617-0201', '부산해운대지점', '운영3팀', '신규 등록', '2026-06-17', '2026-06-18', '1', '완료', '3', '—'],
+    ['REQ-20260619-0233', '창원성산지점', '운영4팀', '기록 열람',   '2026-06-19', '—',          '—', '진행중', '22', '시스템 지연'],
+    ['REQ-20260622-0270', '광주상무지점', '운영4팀', '문서 재발급', '2026-06-22', '2026-06-24', '2', '완료', '5', '—'],
+    ['REQ-20260624-0299', '전주덕진지점', '운영4팀', '이력 정정',   '2026-06-24', '2026-06-27', '3', '완료', '7', '우편 회신'],
+    ['REQ-20260626-0318', '춘천효자지점', '운영5팀', '신규 등록',   '2026-06-26', '—',          '—', '진행중', '14', '담당자 배정 대기'],
+    ['REQ-20260628-0341', '제주노형지점', '운영5팀', '기록 열람',   '2026-06-28', '2026-06-29', '1', '완료', '2', '—'],
+    ['REQ-20260629-0355', '서울중앙지점', '운영1팀', '이력 정정',   '2026-06-29', '2026-06-30', '1', '완료', '3', '창구 방문'],
+    ['REQ-20260630-0372', '강남대로지점', '운영1팀', '문서 재발급', '2026-06-30', '—',          '—', '접수', '0', '익월 이월']
+  ];
+
+  var HEAD = ['접수번호', '지점', '담당팀', '유형', '접수일', '처리일', '소요일', '상태', '문의횟수', '비고'];
+
+  var LIST = [
+    '문서를 열자마자 보이는 부분과 나중에 나타나는 부분이 뒤섞여 있으면, 뷰어의 보정은 문서의 변화를 계속 지켜봐야 한다.',
+    '지켜보는 방식은 보통 DOM 변화 감시다. 요소가 추가되면 폭을 다시 재고 필요한 만큼만 다시 손본다.',
+    '다만 감시를 너무 촘촘히 하면 스크립트가 요소를 하나 추가할 때마다 계산이 돌아 문서가 버벅인다.',
+    '그래서 변화가 몰아쳐 들어올 때는 잠깐 모았다가 한 번에 처리하는 방식을 쓴다. 흔히 디바운스라고 부른다.',
+    '반대로 너무 느슨하면 사용자가 넘치는 표를 잠시 보게 된다. 이 균형점을 찾는 것이 구현의 핵심이다.',
+    '글자 크기 배율도 같은 문제를 갖는다. 사본 시트는 이미 붙어 있으므로 새로 추가된 요소에도 자동으로 적용되지만, 새 요소가 자기만의 시트를 함께 들고 오면 그 시트는 처리 대상에서 빠져 있다.',
+    '이 문서는 새 시트를 들고 오지 않는다. 미리 준비된 규칙(.gen-card 등)만 쓰므로, 배율이 정상 동작한다면 새 내용도 함께 커져야 한다.',
+    '반대로 표의 고정폭은 CSS의 width라서 배율의 대상이 아니다. 글자만 커지고 열 폭은 그대로이므로 셀이 더 빡빡해 보일 수 있다.',
+    '외부 시트가 실패한 경우, 브라우저는 그 시트를 규칙 목록에 넣지 않거나 접근을 막는다. 어느 쪽이든 예외 처리 없이 순회하면 거기서 멈춘다.',
+    '따라서 배율 구현은 시트 하나를 읽다 실패해도 다음 시트로 넘어가야 한다. 이 문서가 그 예외 경로를 실제로 밟게 해 준다.'
+  ];
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  setTimeout(function () {
+    // 카드
+    var cards = document.getElementById('cards');
+    CARDS.forEach(function (c) {
+      var card = el('div', 'gen-card');
+      card.appendChild(el('div', 'title', c[0]));
+      card.appendChild(el('div', 'meta', c[1]));
+      card.appendChild(el('div', 'body', c[2]));
+      cards.appendChild(card);
+    });
+
+    // 넓은 표
+    var area = document.getElementById('table-area');
+    var table = el('table', 'gen-table');
+    var thead = el('thead');
+    var htr = el('tr');
+    HEAD.forEach(function (h, i) {
+      var th = el('th', i === HEAD.length - 1 ? 'w-wide' : null, h);
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    ROWS.forEach(function (r) {
+      var tr = el('tr');
+      r.forEach(function (v, i) {
+        var td = el('td', (i === 6 || i === 8) ? 'num' : null, v);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    area.appendChild(table);
+
+    // 나중에 추가되는 헤딩 — 목차가 이것까지 잡는지 본다
+    area.appendChild(el('h3', null, '2-2-1. 표 아래에 나중에 붙은 소제목'));
+    area.appendChild(el('p', null,
+      '이 소제목은 HTML 파일에 없습니다. 스크립트가 표를 그린 뒤 함께 추가했습니다. 뷰어의 목차가 문서 변화를 따라간다면 이 항목도 목차에 나타나야 합니다.'));
+
+    // 목록
+    var list = document.getElementById('list-area');
+    var ul = el('ul', 'gen-list');
+    LIST.forEach(function (t) {
+      var li = el('li');
+      li.appendChild(el('span', 'chip', '메모'));
+      li.appendChild(document.createTextNode(' ' + t));
+      ul.appendChild(li);
+    });
+    list.appendChild(ul);
+    list.appendChild(el('h3', null, '2-3-1. 목록 아래에 나중에 붙은 소제목'));
+    list.appendChild(el('p', null,
+      '두 번째로 나중에 추가된 헤딩입니다. 앞의 것과 함께 목차에 잡히면 목차가 실시간으로 갱신된다는 뜻입니다.'));
+
+    // 자리 표시자 정리 + 상태 갱신
+    var sk = document.getElementById('skeleton');
+    if (sk) sk.parentNode.removeChild(sk);
+    document.getElementById('dot').className = 'dot done';
+    document.getElementById('status-text').textContent =
+      '본문 생성 완료 — 카드 ' + CARDS.length + '개, 표 1개(열 ' + HEAD.length + '개 · 행 ' + ROWS.length + '개), 목록 ' + LIST.length + '개, 소제목 2개가 추가되었습니다.';
+  }, 800);
+})();
+</script>
+</body>
+</html>

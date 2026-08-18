@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메일 편집기가 뱉은 문서</title>
+</head>
+<body style="margin:0;padding:0;background:#eef1ec;font-family:'Pretendard',system-ui,sans-serif;color:#22301f;">
+<div style="max-width:760px;margin:0 auto;padding:28px 20px 80px;background:#ffffff;border-left:1px solid #d5ddd0;border-right:1px solid #d5ddd0;">
+
+  <div style="border-bottom:4px solid #3f6b3a;padding-bottom:10px;margin-bottom:18px;">
+    <div style="font-size:12px;letter-spacing:3px;color:#6f8a68;text-transform:uppercase;">inline style only</div>
+    <h1 style="font-size:32px;margin:6px 0 0;color:#274d23;line-height:1.25;">메일 편집기가 뱉은 문서</h1>
+    <div style="font-size:13px;color:#6f8a68;margin-top:6px;">스타일 태그 없음 · 모든 서식이 style 속성에 직접</div>
+  </div>
+
+  <div style="background:#e7efe4;border:1px solid #c6d6c0;border-left:5px solid #3f6b3a;border-radius:8px;padding:14px 18px;margin-bottom:28px;font-size:14px;line-height:1.8;">
+    <strong style="font-size:15px;">이 문서로 무엇을 시험하는가.</strong><br>
+    이 문서에는 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;background:#d8e5d4;padding:2px 5px;border-radius:4px;">&lt;style&gt;</span> 태그가 하나도 없습니다.
+    글자 크기·색·여백이 전부 요소의 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;background:#d8e5d4;padding:2px 5px;border-radius:4px;">style="..."</span> 속성에 박혀 있습니다.
+    뷰어의 글자 크기 배율은 <b>스타일 규칙</b>을 읽어 사본 시트를 덧붙이는 방식인데, 인라인 스타일은 규칙 목록에 들어 있지 않고
+    우선순위도 어떤 시트보다 높습니다. 그래서 이 문서는 <b>배율이 통하지 않거나, 통하려면 별도의 처리가 필요한</b> 경우를 보여 줍니다.
+    현재 동작이 어떤지 눈으로 확인하는 것이 이 시료의 목적입니다.
+  </div>
+
+  <h2 style="font-size:23px;margin:34px 0 8px;color:#2f5c2a;border-bottom:2px solid #cfdcc9;padding-bottom:5px;">1. 왜 이런 문서가 생기는가</h2>
+
+  <p style="font-size:15px;line-height:1.85;margin:0 0 12px;">사내에 쌓인 HTML 문서 중 상당수는 사람이 손으로 짠 것이 아닙니다. 메일 편집기, 위지윅 에디터, 오래된 워드프로세서의 "웹 페이지로 저장" 기능이 뱉어낸 결과물입니다. 이런 도구들은 공통적으로 인라인 스타일을 씁니다.</p>
+
+  <p style="font-size:15px;line-height:1.85;margin:0 0 12px;">이유는 단순합니다. 메일 클라이언트 상당수가 오랫동안 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;background:#eef1ec;padding:2px 5px;border-radius:4px;">&lt;style&gt;</span> 블록을 통째로 지워 버렸기 때문입니다. 스타일 태그가 사라져도 서식이 살아남으려면 각 요소에 직접 붙여 두는 수밖에 없었습니다. 그 관행이 굳어 오늘도 이어지고 있습니다.</p>
+
+  <h3 style="font-size:17px;margin:22px 0 6px;color:#4a7a44;">인라인 스타일의 세 가지 성질</h3>
+
+  <div style="border:1px solid #d5ddd0;border-radius:8px;padding:14px 16px;margin:12px 0;background:#fafcf9;">
+    <div style="font-size:16px;font-weight:700;color:#274d23;margin-bottom:4px;">첫째 — 우선순위가 매우 높다</div>
+    <p style="font-size:14px;line-height:1.8;margin:0;color:#3c4f39;">선택자로 쓴 어떤 규칙보다 인라인 스타일이 우선합니다. 시트를 아무리 뒤에 붙여도 인라인을 이기지 못합니다. 이기려면 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;">!important</span>를 쓰거나 요소의 속성 자체를 고쳐야 합니다.</p>
+  </div>
+
+  <div style="border:1px solid #d5ddd0;border-radius:8px;padding:14px 16px;margin:12px 0;background:#fafcf9;">
+    <div style="font-size:16px;font-weight:700;color:#274d23;margin-bottom:4px;">둘째 — 재사용이 안 된다</div>
+    <p style="font-size:14px;line-height:1.8;margin:0;color:#3c4f39;">같은 서식을 열 군데에 쓰려면 열 번 적어야 합니다. 그래서 이런 문서는 길이에 비해 용량이 큽니다. 이 문서만 해도 같은 글자 크기 선언이 수십 번 반복됩니다.</p>
+  </div>
+
+  <div style="border:1px solid #d5ddd0;border-radius:8px;padding:14px 16px;margin:12px 0;background:#fafcf9;">
+    <div style="font-size:16px;font-weight:700;color:#274d23;margin-bottom:4px;">셋째 — 일괄 변경이 어렵다</div>
+    <p style="font-size:14px;line-height:1.8;margin:0;color:#3c4f39;">"본문 글자를 한 단계 키워 달라"는 요청이 오면, 시트가 있는 문서는 한 줄만 고치면 됩니다. 인라인 문서는 모든 요소를 훑어야 합니다. 뷰어 입장에서도 똑같은 부담입니다.</p>
+  </div>
+
+  <h2 style="font-size:23px;margin:34px 0 8px;color:#2f5c2a;border-bottom:2px solid #cfdcc9;padding-bottom:5px;">2. 서식 견본</h2>
+
+  <p style="font-size:15px;line-height:1.85;margin:0 0 12px;">아래는 이런 문서에서 흔히 보는 서식들입니다. 전부 인라인으로 지정되어 있으니, 배율을 바꿔 보며 어느 것이 반응하고 어느 것이 반응하지 않는지 하나씩 확인하세요.</p>
+
+  <h3 style="font-size:17px;margin:22px 0 6px;color:#4a7a44;">글자 크기 사다리</h3>
+  <p style="font-size:11px;line-height:1.8;margin:0 0 4px;color:#3c4f39;">11px — 각주나 면책 문구에 쓰이는 크기입니다.</p>
+  <p style="font-size:13px;line-height:1.8;margin:0 0 4px;color:#3c4f39;">13px — 캡션, 부가 설명, 표의 셀에 쓰입니다.</p>
+  <p style="font-size:15px;line-height:1.8;margin:0 0 4px;color:#3c4f39;">15px — 이 문서의 본문 크기입니다.</p>
+  <p style="font-size:18px;line-height:1.7;margin:0 0 4px;color:#3c4f39;">18px — 소제목이나 강조 문단에 씁니다.</p>
+  <p style="font-size:22px;line-height:1.6;margin:0 0 4px;color:#3c4f39;">22px — 중간 제목 정도의 크기입니다.</p>
+  <p style="font-size:28px;line-height:1.5;margin:0 0 12px;color:#3c4f39;">28px — 큰 제목입니다.</p>
+
+  <h3 style="font-size:17px;margin:22px 0 6px;color:#4a7a44;">표</h3>
+  <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+    <thead>
+      <tr>
+        <th style="border:1px solid #cfdcc9;padding:8px 10px;background:#e7efe4;font-size:14px;text-align:left;color:#274d23;">항목</th>
+        <th style="border:1px solid #cfdcc9;padding:8px 10px;background:#e7efe4;font-size:14px;text-align:left;color:#274d23;">시트 문서</th>
+        <th style="border:1px solid #cfdcc9;padding:8px 10px;background:#e7efe4;font-size:14px;text-align:left;color:#274d23;">인라인 문서</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">서식 위치</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">&lt;style&gt; 블록 한곳</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">요소마다 흩어짐</td>
+      </tr>
+      <tr style="background:#f6f9f4;">
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">우선순위</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">선택자 구체성에 따름</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">거의 최상위</td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">배율 적용</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">사본 시트로 간단히</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">요소를 직접 훑어야 함</td>
+      </tr>
+      <tr style="background:#f6f9f4;">
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">테마 대응</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">변수로 쉽게</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">사실상 불가</td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">용량</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">작음</td>
+        <td style="border:1px solid #cfdcc9;padding:8px 10px;font-size:14px;">반복만큼 커짐</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:17px;margin:22px 0 6px;color:#4a7a44;">인용과 강조</h3>
+  <blockquote style="margin:12px 0;padding:12px 18px;border-left:4px solid #7fa878;background:#f2f7f0;font-size:15px;line-height:1.85;color:#2f4a2b;font-style:italic;">
+    "문서를 있는 그대로 보여 주는 것이 원칙이다. 보정은 읽기 위한 최소한의 개입이어야 하고, 원본을 고치는 일이 되어서는 안 된다."
+    <span style="display:block;font-size:13px;font-style:normal;color:#6f8a68;margin-top:6px;">— 뷰어 설계 원칙 중에서</span>
+  </blockquote>
+
+  <p style="font-size:15px;line-height:1.85;margin:0 0 12px;">문장 안에서 <b style="color:#274d23;">굵게</b>, <i>기울임</i>, <u>밑줄</u>, <span style="background:#fbf0a8;padding:1px 3px;">형광펜</span>, <span style="font-size:12px;color:#6f8a68;">작은 글씨</span>를 섞어 쓰는 것도 흔한 패턴입니다.</p>
+
+  <h3 style="font-size:17px;margin:22px 0 6px;color:#4a7a44;">목록</h3>
+  <ul style="padding-left:22px;margin:10px 0;">
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">첫 번째 항목 — 목록 항목에도 크기가 하나하나 붙습니다.</li>
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">두 번째 항목 — 중첩하면 안쪽에도 다시 붙여야 합니다.
+      <ul style="padding-left:20px;margin:6px 0 0;">
+        <li style="font-size:14px;line-height:1.8;margin-bottom:4px;">안쪽 항목은 보통 한 단계 작게 적습니다.</li>
+        <li style="font-size:14px;line-height:1.8;margin-bottom:4px;">상속을 쓰지 않으므로 빠뜨리면 크기가 튑니다.</li>
+      </ul>
+    </li>
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">세 번째 항목 — 실제 문서에서는 이 빠뜨림이 자주 보입니다.</li>
+  </ul>
+
+  <h2 style="font-size:23px;margin:34px 0 8px;color:#2f5c2a;border-bottom:2px solid #cfdcc9;padding-bottom:5px;">3. 고정폭 요소도 인라인으로</h2>
+
+  <p style="font-size:15px;line-height:1.85;margin:0 0 12px;">인라인 문서는 폭도 인라인으로 못박습니다. 아래 상자는 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;background:#eef1ec;padding:2px 5px;border-radius:4px;">width:680px</span>로 지정되어 있어 좁은 화면에서 넘칩니다. 화면 맞춤이 이런 인라인 폭도 잡아내는지 확인하는 자리입니다.</p>
+
+  <div style="width:680px;background:#e7efe4;border:2px dashed #7fa878;border-radius:8px;padding:14px 16px;margin:12px 0;">
+    <div style="font-size:15px;font-weight:700;color:#274d23;margin-bottom:4px;">인라인으로 680px를 못박은 상자</div>
+    <p style="font-size:14px;line-height:1.8;margin:0;color:#3c4f39;">이 상자는 화면이 좁아져도 줄어들지 않습니다. 바깥 래퍼는 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;">max-width</span>를 쓰고 있어 유연한데, 이 상자 하나 때문에 문서 전체가 넘칠 수 있습니다. 실제 문서에서도 이런 식으로 딱 한 요소가 원인이 되는 경우가 가장 흔합니다.</p>
+  </div>
+
+  <h3 style="font-size:17px;margin:22px 0 6px;color:#4a7a44;">여러 개를 나란히</h3>
+  <div style="display:flex;gap:12px;flex-wrap:nowrap;margin:12px 0;">
+    <div style="flex:0 0 auto;width:260px;background:#fafcf9;border:1px solid #d5ddd0;border-radius:8px;padding:12px 14px;">
+      <div style="font-size:14px;font-weight:700;color:#274d23;">상자 A · 260px</div>
+      <p style="font-size:13px;line-height:1.75;margin:4px 0 0;color:#3c4f39;">줄바꿈을 막아 두었으므로 세 상자가 한 줄에 붙어 있습니다.</p>
+    </div>
+    <div style="flex:0 0 auto;width:260px;background:#fafcf9;border:1px solid #d5ddd0;border-radius:8px;padding:12px 14px;">
+      <div style="font-size:14px;font-weight:700;color:#274d23;">상자 B · 260px</div>
+      <p style="font-size:13px;line-height:1.75;margin:4px 0 0;color:#3c4f39;">합치면 800px가 넘어 웬만한 화면에서는 넘칩니다.</p>
+    </div>
+    <div style="flex:0 0 auto;width:260px;background:#fafcf9;border:1px solid #d5ddd0;border-radius:8px;padding:12px 14px;">
+      <div style="font-size:14px;font-weight:700;color:#274d23;">상자 C · 260px</div>
+      <p style="font-size:13px;line-height:1.75;margin:4px 0 0;color:#3c4f39;">뷰어가 이 줄을 스크롤 상자로 감쌀지, 문서를 축소할지 관찰하세요.</p>
+    </div>
+  </div>
+
+  <h2 style="font-size:23px;margin:34px 0 8px;color:#2f5c2a;border-bottom:2px solid #cfdcc9;padding-bottom:5px;">4. 확인 항목</h2>
+
+  <ul style="padding-left:22px;margin:10px 0;">
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">글자 크기 배율을 올렸을 때 <b>어떤 일이 일어나는가</b> — 전혀 안 커지는지, 일부만 커지는지 기록해 두세요.</li>
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">배율이 통하지 않는다면, 그것이 의도된 동작인지 보완이 필요한지 판단하는 근거가 됩니다.</li>
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">인라인 <span style="font-family:'D2Coding',ui-monospace,monospace;font-size:13px;">width:680px</span> 상자와 260px 삼단 배치가 화면 맞춤으로 처리되는가.</li>
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">테마를 바꿔도 이 문서는 색이 변하지 않아야 정상입니다 (변수를 쓰지 않으므로).</li>
+    <li style="font-size:15px;line-height:1.85;margin-bottom:6px;">목차에 h1 1개, h2 4개, h3 5개가 잡히는가 — 헤딩에 클래스가 없어도 인식되어야 합니다.</li>
+  </ul>
+
+  <div style="margin-top:44px;border-top:1px solid #cfdcc9;padding-top:12px;font-size:13px;color:#6f8a68;">
+    인라인 스타일 시료 · &lt;style&gt; 태그 0개 · style 속성 100여 개 · 외부 리소스 없음
+  </div>
+
+</div>
+</body>
+</html>

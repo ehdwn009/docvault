@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>분기 운영 지표 집계표</title>
+<style>
+  /* 주의: 이 문서에는 표를 감싸는 스크롤 상자를 일부러 넣지 않았다.
+     넘치는 표를 스크롤 상자에 담는 일은 뷰어의 화면 맞춤이 해야 한다. */
+  body {
+    margin: 0;
+    padding: 28px 22px 80px;
+    background: #fdfcfa;
+    color: #2a2320;
+    font-family: "Pretendard", system-ui, sans-serif;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+
+  h1 { font-size: 30px; margin: 0 0 8px; color: #6b2d3c; }
+  h2 { font-size: 22px; margin: 36px 0 8px; color: #7d3a4a; border-bottom: 2px solid #e6ccd2; padding-bottom: 5px; }
+  h3 { font-size: 17px; margin: 20px 0 6px; color: #955461; }
+  p  { font-size: 15px; margin: 0 0 10px; }
+
+  .intro {
+    background: #fbeef1;
+    border: 1px solid #eccdd4;
+    border-left: 5px solid #a3455a;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 18px 0 30px;
+    font-size: 14px;
+  }
+
+  table {
+    border-collapse: collapse;
+    margin: 14px 0 8px;
+    font-size: 13px;
+    background: #fff;
+    border: 1px solid #d9c6cb;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 700;
+    color: #7d3a4a;
+    padding: 6px 0;
+  }
+  th, td {
+    border: 1px solid #e2d2d6;
+    padding: 7px 9px;
+    vertical-align: middle;
+  }
+  thead th {
+    background: #f3e2e6;
+    color: #5c2531;
+    font-size: 13px;
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:nth-child(even) { background: #fdf7f8; }
+  tfoot td { background: #f7ecee; font-weight: 700; }
+
+  /* 셀 폭을 픽셀로 못박는다 — 표가 화면보다 넓어지는 주된 원인 */
+  .c-id     { width: 92px;  }
+  .c-name   { width: 150px; }
+  .c-team   { width: 120px; }
+  .c-region { width: 120px; }
+  .c-num    { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+  .c-date   { width: 120px; white-space: nowrap; }
+  .c-status { width: 108px; }
+  .c-memo   { width: 240px; }
+  .nowrap   { white-space: nowrap; }
+
+  .badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .b-ok   { background: #e2f2e8; color: #1f6b42; }
+  .b-warn { background: #fdf0dc; color: #8a5a12; }
+  .b-bad  { background: #fbe3e3; color: #93242a; }
+  .b-idle { background: #eceff3; color: #4f5a68; }
+
+  .up   { color: #1f6b42; }
+  .down { color: #a3323a; }
+
+  .hint { font-size: 13px; color: #8a7076; margin: 4px 0 24px; }
+  code { font-family: "D2Coding", ui-monospace, monospace; font-size: 13px; background: #f3e9eb; padding: 2px 5px; border-radius: 4px; }
+  ul { padding-left: 20px; } li { margin-bottom: 5px; }
+  footer { margin-top: 48px; border-top: 1px solid #e6ccd2; padding-top: 12px; font-size: 13px; color: #8a7076; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>분기 운영 지표 집계표</h1>
+
+<div class="intro">
+  <strong>이 문서로 무엇을 시험하는가.</strong>
+  열이 아홉에서 열둘까지 되는 넓은 표 세 개가 들어 있고, 셀마다 <code>width:120px</code> 같은 고정폭이 박혀 있습니다.
+  표를 감싸는 스크롤 상자는 <b>일부러 넣지 않았습니다</b> — 뷰어의 화면 맞춤이 알아서 스크롤 상자에 담아야 합니다.
+  날짜·상태 열에는 <code>white-space:nowrap</code>이 걸려 있어 강제로 줄바꿈해 해결하는 방법도 통하지 않습니다.
+  표만 가로로 스크롤되고 문서 본문은 제자리에 있는지, 배율을 올렸을 때 표가 더 넓어지며 스크롤 폭이 함께 늘어나는지 확인하세요.
+</div>
+
+<h2>1. 지점별 월간 실적</h2>
+
+<p>첫 번째 표는 열이 열둘입니다. 식별자·지점명·담당팀·권역·수치 다섯 개·날짜·상태·비고가 한 줄에 늘어섭니다. 고정폭을 모두 더하면 1,400픽셀을 넘기므로 웬만한 화면에서는 확실히 넘칩니다.</p>
+
+<table>
+  <caption>표 1. 2026년 2분기 지점별 실적 (단위: 건 / 천원)</caption>
+  <thead>
+    <tr>
+      <th class="c-id">지점코드</th>
+      <th class="c-name">지점명</th>
+      <th class="c-team">담당팀</th>
+      <th class="c-region">권역</th>
+      <th class="c-num">접수건수</th>
+      <th class="c-num">처리건수</th>
+      <th class="c-num">평균처리일</th>
+      <th class="c-num">재작업률</th>
+      <th class="c-num">누적매출</th>
+      <th class="c-date">최종점검일</th>
+      <th class="c-status">상태</th>
+      <th class="c-memo">비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="c-id nowrap">BR-1001</td><td>서울중앙지점</td><td>운영1팀</td><td class="nowrap">수도권 북부</td><td class="c-num">4,182</td><td class="c-num">4,050</td><td class="c-num">2.4</td><td class="c-num up">1.8%</td><td class="c-num">982,400</td><td class="c-date">2026-06-28</td><td><span class="badge b-ok">정상</span></td><td>야간 접수 비중 증가</td></tr>
+    <tr><td class="c-id nowrap">BR-1002</td><td>강남대로지점</td><td>운영1팀</td><td class="nowrap">수도권 남부</td><td class="c-num">5,930</td><td class="c-num">5,611</td><td class="c-num">3.1</td><td class="c-num down">4.2%</td><td class="c-num">1,418,700</td><td class="c-date">2026-06-27</td><td><span class="badge b-warn">주의</span></td><td>재작업률 기준선 초과</td></tr>
+    <tr><td class="c-id nowrap">BR-1003</td><td>인천항만지점</td><td>운영2팀</td><td class="nowrap">수도권 서부</td><td class="c-num">2,207</td><td class="c-num">2,190</td><td class="c-num">1.9</td><td class="c-num up">0.9%</td><td class="c-num">512,300</td><td class="c-date">2026-06-30</td><td><span class="badge b-ok">정상</span></td><td>물류 연계 안정화</td></tr>
+    <tr><td class="c-id nowrap">BR-2011</td><td>대전둔산지점</td><td>운영2팀</td><td class="nowrap">충청권</td><td class="c-num">1,884</td><td class="c-num">1,720</td><td class="c-num">4.6</td><td class="c-num down">6.7%</td><td class="c-num">398,150</td><td class="c-date">2026-06-19</td><td><span class="badge b-bad">점검필요</span></td><td>인력 2명 결원 상태 지속</td></tr>
+    <tr><td class="c-id nowrap">BR-2012</td><td>천안아산지점</td><td>운영3팀</td><td class="nowrap">충청권</td><td class="c-num">1,341</td><td class="c-num">1,338</td><td class="c-num">2.0</td><td class="c-num up">1.1%</td><td class="c-num">276,900</td><td class="c-date">2026-06-25</td><td><span class="badge b-ok">정상</span></td><td>—</td></tr>
+    <tr><td class="c-id nowrap">BR-3021</td><td>대구수성지점</td><td>운영3팀</td><td class="nowrap">영남권</td><td class="c-num">2,776</td><td class="c-num">2,604</td><td class="c-num">3.4</td><td class="c-num down">5.0%</td><td class="c-num">644,820</td><td class="c-date">2026-06-22</td><td><span class="badge b-warn">주의</span></td><td>신규 장비 적응 기간</td></tr>
+    <tr><td class="c-id nowrap">BR-3022</td><td>부산해운대지점</td><td>운영3팀</td><td class="nowrap">영남권</td><td class="c-num">3,558</td><td class="c-num">3,502</td><td class="c-num">2.2</td><td class="c-num up">1.4%</td><td class="c-num">871,050</td><td class="c-date">2026-06-29</td><td><span class="badge b-ok">정상</span></td><td>성수기 대비 증원 완료</td></tr>
+    <tr><td class="c-id nowrap">BR-3023</td><td>창원성산지점</td><td>운영4팀</td><td class="nowrap">영남권</td><td class="c-num">1,092</td><td class="c-num">1,010</td><td class="c-num">5.2</td><td class="c-num down">7.9%</td><td class="c-num">198,440</td><td class="c-date">2026-06-11</td><td><span class="badge b-bad">점검필요</span></td><td>시스템 지연 민원 다수</td></tr>
+    <tr><td class="c-id nowrap">BR-4031</td><td>광주상무지점</td><td>운영4팀</td><td class="nowrap">호남권</td><td class="c-num">2,015</td><td class="c-num">1,988</td><td class="c-num">2.6</td><td class="c-num up">1.6%</td><td class="c-num">455,120</td><td class="c-date">2026-06-26</td><td><span class="badge b-ok">정상</span></td><td>—</td></tr>
+    <tr><td class="c-id nowrap">BR-4032</td><td>전주덕진지점</td><td>운영4팀</td><td class="nowrap">호남권</td><td class="c-num">988</td><td class="c-num">960</td><td class="c-num">3.0</td><td class="c-num up">2.1%</td><td class="c-num">187,600</td><td class="c-date">2026-06-24</td><td><span class="badge b-ok">정상</span></td><td>소규모 지점 통합 검토</td></tr>
+    <tr><td class="c-id nowrap">BR-5041</td><td>춘천효자지점</td><td>운영5팀</td><td class="nowrap">강원권</td><td class="c-num">642</td><td class="c-num">598</td><td class="c-num">4.1</td><td class="c-num down">6.1%</td><td class="c-num">104,880</td><td class="c-date">2026-06-15</td><td><span class="badge b-warn">주의</span></td><td>동절기 접근성 문제 반복</td></tr>
+    <tr><td class="c-id nowrap">BR-6051</td><td>제주노형지점</td><td>운영5팀</td><td class="nowrap">제주권</td><td class="c-num">771</td><td class="c-num">769</td><td class="c-num">1.7</td><td class="c-num up">0.6%</td><td class="c-num">166,300</td><td class="c-date">2026-06-30</td><td><span class="badge b-ok">정상</span></td><td>관광 성수기 진입</td></tr>
+  </tbody>
+  <tfoot>
+    <tr><td colspan="4">합계 / 평균</td><td class="c-num">27,386</td><td class="c-num">26,340</td><td class="c-num">3.0</td><td class="c-num">3.3%</td><td class="c-num">6,306,660</td><td class="c-date">—</td><td>—</td><td>12개 지점</td></tr>
+  </tfoot>
+</table>
+<p class="hint">셀 폭 합계 약 1,464px. <code>white-space:nowrap</code>이 걸린 열이 세 개라 줄바꿈으로는 좁힐 수 없습니다.</p>
+
+<h2>2. 장비 점검 이력</h2>
+
+<h3>열 아홉 개짜리 이력표</h3>
+<p>두 번째 표는 열이 아홉입니다. 첫 표보다는 좁지만 비고 열이 넓어 여전히 넘칩니다. 앞의 표와 스크롤이 <b>따로</b> 동작해야 합니다. 하나를 옆으로 밀었을 때 다른 표가 함께 움직이면 잘못된 것입니다.</p>
+
+<table>
+  <caption>표 2. 상반기 장비 점검 이력</caption>
+  <thead>
+    <tr>
+      <th class="c-id">자산번호</th>
+      <th class="c-name">장비명</th>
+      <th class="c-team">설치지점</th>
+      <th class="c-date">도입일</th>
+      <th class="c-date">최근점검</th>
+      <th class="c-num">가동시간</th>
+      <th class="c-num">오류횟수</th>
+      <th class="c-status">판정</th>
+      <th class="c-memo">조치 내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="c-id nowrap">AS-7710</td><td>고속 스캐너 A형</td><td>서울중앙</td><td class="c-date">2023-03-14</td><td class="c-date">2026-06-02</td><td class="c-num">18,420</td><td class="c-num">3</td><td><span class="badge b-ok">양호</span></td><td>급지 롤러 교체</td></tr>
+    <tr><td class="c-id nowrap">AS-7711</td><td>고속 스캐너 A형</td><td>강남대로</td><td class="c-date">2023-03-14</td><td class="c-date">2026-05-28</td><td class="c-num">21,905</td><td class="c-num">11</td><td><span class="badge b-warn">관찰</span></td><td>급지 오류 잦음, 재점검 예정</td></tr>
+    <tr><td class="c-id nowrap">AS-7802</td><td>대형 출력기 B형</td><td>인천항만</td><td class="c-date">2022-11-02</td><td class="c-date">2026-06-10</td><td class="c-num">33,110</td><td class="c-num">27</td><td><span class="badge b-bad">교체검토</span></td><td>정착부 온도 편차 지속</td></tr>
+    <tr><td class="c-id nowrap">AS-7803</td><td>대형 출력기 B형</td><td>대전둔산</td><td class="c-date">2022-11-02</td><td class="c-date">2026-04-19</td><td class="c-num">29,880</td><td class="c-num">19</td><td><span class="badge b-warn">관찰</span></td><td>소모품 조기 소진</td></tr>
+    <tr><td class="c-id nowrap">AS-8120</td><td>보관 서버 랙</td><td>서울중앙</td><td class="c-date">2024-07-21</td><td class="c-date">2026-06-14</td><td class="c-num">16,240</td><td class="c-num">0</td><td><span class="badge b-ok">양호</span></td><td>—</td></tr>
+    <tr><td class="c-id nowrap">AS-8121</td><td>보관 서버 랙</td><td>부산해운대</td><td class="c-date">2024-07-21</td><td class="c-date">2026-06-14</td><td class="c-num">16,190</td><td class="c-num">1</td><td><span class="badge b-ok">양호</span></td><td>냉각팬 소음 경미</td></tr>
+    <tr><td class="c-id nowrap">AS-8430</td><td>무정전 전원장치</td><td>대구수성</td><td class="c-date">2021-05-09</td><td class="c-date">2026-03-30</td><td class="c-num">41,770</td><td class="c-num">34</td><td><span class="badge b-bad">교체검토</span></td><td>배터리 수명 도래, 예산 신청</td></tr>
+    <tr><td class="c-id nowrap">AS-8431</td><td>무정전 전원장치</td><td>광주상무</td><td class="c-date">2021-05-09</td><td class="c-date">2026-05-11</td><td class="c-num">40,120</td><td class="c-num">22</td><td><span class="badge b-warn">관찰</span></td><td>부하 분산 재설정</td></tr>
+    <tr><td class="c-id nowrap">AS-9002</td><td>휴대형 검수 단말</td><td>제주노형</td><td class="c-date">2025-09-01</td><td class="c-date">2026-06-20</td><td class="c-num">4,310</td><td class="c-num">0</td><td><span class="badge b-ok">양호</span></td><td>—</td></tr>
+    <tr><td class="c-id nowrap">AS-9003</td><td>휴대형 검수 단말</td><td>춘천효자</td><td class="c-date">2025-09-01</td><td class="c-date">2026-02-17</td><td class="c-num">3,980</td><td class="c-num">5</td><td><span class="badge b-idle">미사용</span></td><td>동절기 보관 중</td></tr>
+  </tbody>
+</table>
+
+<h2>3. 문서 형식별 처리 현황</h2>
+
+<h3>숫자 열이 많은 표</h3>
+<p>세 번째 표는 숫자 열 위주라 열 하나하나는 좁지만 열 개수가 많습니다. 숫자에는 <code>tabular-nums</code>가 걸려 자릿수가 세로로 정렬됩니다. 배율을 올렸을 때 이 정렬이 유지되는지도 볼 만합니다.</p>
+
+<table>
+  <caption>표 3. 형식별 월별 처리 건수</caption>
+  <thead>
+    <tr>
+      <th class="c-name">문서 형식</th>
+      <th class="c-num">1월</th>
+      <th class="c-num">2월</th>
+      <th class="c-num">3월</th>
+      <th class="c-num">4월</th>
+      <th class="c-num">5월</th>
+      <th class="c-num">6월</th>
+      <th class="c-num">상반기 계</th>
+      <th class="c-num">전년 대비</th>
+      <th class="c-status">추세</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>마크다운(.md)</td><td class="c-num">1,204</td><td class="c-num">1,388</td><td class="c-num">1,502</td><td class="c-num">1,610</td><td class="c-num">1,744</td><td class="c-num">1,902</td><td class="c-num">9,350</td><td class="c-num up">+38.4%</td><td><span class="badge b-ok">상승</span></td></tr>
+    <tr><td>HTML(.html)</td><td class="c-num">842</td><td class="c-num">910</td><td class="c-num">1,088</td><td class="c-num">1,240</td><td class="c-num">1,315</td><td class="c-num">1,470</td><td class="c-num">6,865</td><td class="c-num up">+52.1%</td><td><span class="badge b-ok">상승</span></td></tr>
+    <tr><td>일반 텍스트(.txt)</td><td class="c-num">2,110</td><td class="c-num">2,004</td><td class="c-num">1,955</td><td class="c-num">1,880</td><td class="c-num">1,802</td><td class="c-num">1,744</td><td class="c-num">11,495</td><td class="c-num down">-14.9%</td><td><span class="badge b-warn">하락</span></td></tr>
+    <tr><td>소스 코드</td><td class="c-num">560</td><td class="c-num">602</td><td class="c-num">688</td><td class="c-num">744</td><td class="c-num">810</td><td class="c-num">905</td><td class="c-num">4,309</td><td class="c-num up">+61.6%</td><td><span class="badge b-ok">상승</span></td></tr>
+    <tr><td>이미지</td><td class="c-num">3,220</td><td class="c-num">3,410</td><td class="c-num">3,388</td><td class="c-num">3,502</td><td class="c-num">3,611</td><td class="c-num">3,700</td><td class="c-num">20,831</td><td class="c-num up">+14.9%</td><td><span class="badge b-ok">상승</span></td></tr>
+    <tr><td>PDF</td><td class="c-num">1,880</td><td class="c-num">1,921</td><td class="c-num">2,044</td><td class="c-num">2,110</td><td class="c-num">2,205</td><td class="c-num">2,318</td><td class="c-num">12,478</td><td class="c-num up">+23.3%</td><td><span class="badge b-ok">상승</span></td></tr>
+    <tr><td>기타</td><td class="c-num">402</td><td class="c-num">388</td><td class="c-num">377</td><td class="c-num">360</td><td class="c-num">344</td><td class="c-num">330</td><td class="c-num">2,201</td><td class="c-num down">-17.9%</td><td><span class="badge b-idle">감소</span></td></tr>
+  </tbody>
+  <tfoot>
+    <tr><td>합계</td><td class="c-num">10,218</td><td class="c-num">10,623</td><td class="c-num">11,042</td><td class="c-num">11,446</td><td class="c-num">11,831</td><td class="c-num">12,369</td><td class="c-num">67,529</td><td class="c-num up">+21.0%</td><td>—</td></tr>
+  </tfoot>
+</table>
+
+<h2>4. 확인 항목</h2>
+<ul>
+  <li>표 세 개가 <b>각각</b> 독립적으로 가로 스크롤되는가 (하나를 밀어도 나머지는 그대로)</li>
+  <li>표 때문에 문서 본문 전체가 가로로 밀리지는 않는가</li>
+  <li><code>nowrap</code> 셀이 억지로 접히거나 잘리지 않는가</li>
+  <li>배율을 올렸을 때 표가 더 넓어지고 스크롤 가능 폭도 함께 늘어나는가</li>
+  <li>고정 <code>width</code>가 배율과 무관하게 유지되는가 (배율은 글자 크기만 건드려야 함)</li>
+  <li>목차에 h1 1개, h2 4개, h3 2개가 잡히는가</li>
+</ul>
+
+<footer>
+  넓은 표 시료 · 표 3개 (열 12 / 9 / 10) · 스크롤 래퍼 없음 · 외부 리소스 없음
+</footer>
+</div>
+</body>
+</html>

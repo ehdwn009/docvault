@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상대 단위로만 짠 문서</title>
+<style>
+  /* 이 문서에는 font-size에 px가 단 한 번, html 루트에만 등장한다.
+     나머지는 전부 rem·em·% — 배율 기능이 일부러 건드리지 않아야 하는 값들이다. */
+  html { font-size: 16px; }
+
+  @media (max-width: 60rem) { html { font-size: 15px; } }
+  @media (max-width: 40rem) { html { font-size: 14px; } }
+  @media (min-width: 90rem) { html { font-size: 18px; } }
+
+  body {
+    margin: 0;
+    padding: 2rem 1.25rem 5rem;
+    background: #f2f7f4;
+    color: #16302a;
+    font-family: "Pretendard", system-ui, sans-serif;
+    line-height: 1.75;
+    font-size: 1rem;
+  }
+  .wrap { max-width: 48rem; margin: 0 auto; }
+
+  h1 { font-size: 2.4rem; line-height: 1.25; margin: 0 0 .5rem; color: #0f4d3d; }
+  h2 { font-size: 1.6rem; margin: 2.5rem 0 .6rem; color: #12604c; border-bottom: .125rem solid #b9ddcf; padding-bottom: .3rem; }
+  h3 { font-size: 1.2rem; margin: 1.6rem 0 .4rem; color: #1c7a5f; }
+  p  { font-size: 1rem; margin: 0 0 .9rem; }
+  small { font-size: .8em; }
+
+  .intro {
+    background: #e2f0e9;
+    border-left: .375rem solid #2f9e79;
+    padding: 1.1rem 1.25rem;
+    border-radius: .5rem;
+    font-size: 1.05rem;
+    margin-bottom: 2rem;
+  }
+
+  /* 중첩 em — 부모를 타고 곱해지는 구조를 일부러 여러 겹 만든다 */
+  .box      { font-size: 1.1em;  padding: 1.1em; border: .0625rem solid #a9d6c5; border-radius: .5rem; background: #fff; margin: 1rem 0; }
+  .box .box { background: #f6fbf9; }
+  .tag      { font-size: .8em;  background: #d5ece2; color: #14614c; padding: .2em .6em; border-radius: 999px; display: inline-block; }
+  .tag .sup { font-size: .75em; vertical-align: super; }
+  .note     { font-size: .9em;  color: #3e6a5c; }
+  .note .fine { font-size: .85em; }
+  .note .fine .tiny { font-size: .8em; }
+
+  .ladder { list-style: none; padding: 0; margin: 1rem 0; }
+  .ladder li { font-size: 1.08em; border-left: .25rem solid #7fc7ac; padding: .35em .75em; margin: 0 0 .35em; background: #fff; border-radius: 0 .375rem .375rem 0; }
+  .ladder li li { margin-top: .35em; }
+  .ladder ul { list-style: none; padding-left: 1em; margin: .4em 0 0; }
+
+  code { font-family: "D2Coding", ui-monospace, monospace; font-size: .9em; background: #dcece5; padding: .1em .35em; border-radius: .25rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .95rem; }
+  th, td { border: .0625rem solid #bfdfd2; padding: .5rem .6rem; text-align: left; }
+  th { background: #dcefe7; }
+  .measure { font-size: 1.35em; font-weight: 700; color: #0f4d3d; }
+  .measure .unit { font-size: .55em; font-weight: 400; color: #4a7a6b; }
+  footer { margin-top: 3rem; font-size: .85rem; color: #4a7a6b; border-top: .0625rem solid #bfdfd2; padding-top: 1rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>상대 단위로만 짠 문서</h1>
+
+<div class="intro">
+  <strong>이 문서로 무엇을 시험하는가.</strong>
+  글자 크기를 지정하는 곳에 <code>px</code>가 오직 한 군데, <code>html{font-size:16px}</code>에만 있습니다.
+  나머지는 전부 <code>rem</code>과 <code>em</code>입니다. 뷰어의 글자 크기 배율은 px 값만 건드리므로,
+  이 문서는 배율을 올리든 내리든 <b>루트 하나가 바뀌면서 전체가 통째로</b> 따라 움직여야 합니다.
+  중첩된 <code>em</code>이 여러 겹 쌓인 부분에서 비율이 깨지지 않는지, <code>@media</code>로 루트 크기가 바뀌는 구간에서
+  배율과 반응형이 서로 싸우지 않는지가 관전 포인트입니다.
+</div>
+
+<h2>1. rem과 em은 무엇이 다른가</h2>
+
+<p>둘 다 상대 단위지만 기준이 다릅니다. <code>rem</code>은 언제나 문서 뿌리(<code>html</code>)의 글자 크기를 기준으로 삼습니다. 문서 어디에 있든 <code>1.2rem</code>은 같은 크기입니다. 반면 <code>em</code>은 자기 부모의 글자 크기를 기준으로 삼습니다. 같은 <code>0.8em</code>이라도 부모가 크면 크게, 작으면 작게 나옵니다.</p>
+
+<p>이 차이는 중첩될 때 극적으로 드러납니다. <code>em</code>은 부모를 타고 <b>곱셈으로 누적</b>되기 때문입니다. 아래 상자를 보세요.</p>
+
+<div class="box">
+  바깥 상자입니다. 부모의 <code>1.1</code>배 크기를 갖습니다.
+  <span class="tag">꼬리표 <span class="sup">주석</span></span>
+  <div class="box">
+    안쪽 상자입니다. 다시 그 <code>1.1</code>배이므로 바깥 상자보다 한 단계 더 큽니다.
+    <span class="tag">꼬리표 <span class="sup">주석</span></span>
+    <div class="box">
+      세 번째 상자. 여기까지 오면 <code>1.1 × 1.1 × 1.1</code>이 곱해져 본문보다 눈에 띄게 커집니다.
+      이 누적이 배율을 바꿔도 <b>같은 비율로</b> 유지되어야 합니다.
+    </div>
+  </div>
+</div>
+
+<h3>꼬리표 안의 꼬리표</h3>
+<p class="note">
+  이 문단은 <code>.note</code>로 <code>0.9em</code>입니다.
+  <span class="fine">여기는 <code>.fine</code>이 붙어 다시 <code>0.85em</code>,
+  <span class="tiny">여기는 <code>.tiny</code>까지 붙어 또 <code>0.8em</code>입니다.</span></span>
+  세 겹이 곱해지면 본문의 약 0.61배가 됩니다. 배율을 크게 올려도 이 문장이 본문 대비 같은 비율로 작아야 정상입니다.
+</p>
+
+<h2>2. 사다리 목록 — em이 계단처럼 쌓이는 곳</h2>
+
+<p>목록 항목마다 <code>1.08em</code>이 걸려 있고, 목록이 중첩되면 그만큼 계단이 생깁니다. 깊이 들어갈수록 글자가 조금씩 커지는 모습이 보여야 합니다.</p>
+
+<ul class="ladder">
+  <li>1단계 — 문서 뿌리에 가장 가까운 항목
+    <ul>
+      <li>2단계 — 부모의 1.08배
+        <ul>
+          <li>3단계 — 다시 1.08배, 누적 약 1.17배
+            <ul>
+              <li>4단계 — 누적 약 1.26배. 여기까지 오면 차이가 뚜렷합니다
+                <ul>
+                  <li>5단계 — 누적 약 1.36배. 상대 단위의 누적이 왜 조심스러운지 보여주는 지점입니다</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<h2>3. 반응형은 루트 하나로 끝난다</h2>
+
+<p>이 문서는 미디어 쿼리를 딱 네 줄만 씁니다. 화면이 좁아지면 <code>html</code>의 글자 크기를 16px에서 15px로, 다시 14px로 낮추고, 아주 넓으면 18px로 올립니다. 본문의 어떤 규칙도 미디어 쿼리를 따로 갖지 않습니다. 그런데도 제목·본문·여백·모서리 반지름까지 전부 함께 움직입니다. <code>rem</code>으로 지정했기 때문입니다.</p>
+
+<table>
+  <thead>
+    <tr><th>화면 폭</th><th>루트 크기</th><th>h1 실제 크기</th><th>본문 실제 크기</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>40rem 이하</td><td>14px</td><td>33.6px</td><td>14px</td></tr>
+    <tr><td>40rem ~ 60rem</td><td>15px</td><td>36px</td><td>15px</td></tr>
+    <tr><td>기본</td><td>16px</td><td>38.4px</td><td>16px</td></tr>
+    <tr><td>90rem 이상</td><td>18px</td><td>43.2px</td><td>18px</td></tr>
+  </tbody>
+</table>
+
+<p>창 크기를 줄였다 늘렸다 해 보면 표의 값이 실제로 재현되는 것을 볼 수 있습니다. <span class="measure">1<span class="unit">개의 숫자</span></span>만 바꿔 문서 전체의 밀도를 조절하는 방식입니다.</p>
+
+<h3>배율과 반응형이 만나는 지점</h3>
+<p>여기서 뷰어의 배율 기능이 흥미로워집니다. 배율은 px 값에만 곱해지므로, 이 문서에서 배율의 영향을 받는 유일한 선언은 <code>html{font-size:16px}</code>과 미디어 쿼리 안의 세 줄입니다. 즉 <b>뿌리 하나가 바뀌고 나머지는 전부 자동으로 따라오는</b> 이상적인 형태입니다. 고정폭 신문 문서와 정반대의 경로를 밟는 셈입니다.</p>
+
+<h2>4. 왜 상대 단위를 권하는가</h2>
+
+<h3>접근성</h3>
+<p>브라우저 설정에서 기본 글자 크기를 키우는 독자가 있습니다. 문서가 <code>rem</code>으로 짜여 있으면 그 설정이 그대로 반영됩니다. px로 못박힌 문서는 설정을 무시합니다. 시력이 좋지 않은 독자에게는 이 차이가 문서를 읽을 수 있느냐 없느냐를 가릅니다.</p>
+
+<h3>유지보수</h3>
+<p>디자인 시안이 바뀌어 "전체적으로 한 단계 크게" 요청이 들어왔을 때, 상대 단위 문서는 한 줄만 고치면 됩니다. px 문서는 모든 선언을 찾아 고쳐야 하고, 하나라도 빠뜨리면 비율이 어긋납니다.</p>
+
+<h3>주의할 점</h3>
+<p>만능은 아닙니다. <code>em</code>의 누적은 위 사다리 목록처럼 예상보다 빠르게 커지거나 작아집니다. 그래서 실무에서는 <b>크기는 rem, 간격은 em</b> 같은 규칙을 정해 두고 쓰는 경우가 많습니다. 간격은 자기 글자 크기에 비례하는 편이 자연스럽고, 크기는 문서 전체와 맞물리는 편이 예측하기 쉽기 때문입니다.</p>
+
+<div class="box">
+  <p class="note">한 줄 정리 — <b>rem은 문서 전체와 약속하고, em은 부모와 약속한다.</b>
+  약속의 상대가 다르니 중첩될 때의 성질도 다르다. <span class="fine">그리고 배율 기능은 이 약속들을 존중하기 위해 px에만 손댄다.</span></p>
+</div>
+
+<h2>5. 확인 항목</h2>
+<ul class="ladder">
+  <li>배율을 최소·최대로 바꿨을 때 문서 전체가 <b>비율을 유지한 채</b> 커지고 작아지는가</li>
+  <li>중첩 상자와 사다리 목록의 단계별 크기 차이가 배율과 무관하게 일정한가</li>
+  <li>창 폭을 40rem 아래로 줄였을 때 루트가 14px로 내려가고, 그 상태에서도 배율이 정상 동작하는가</li>
+  <li>가로 스크롤이 전혀 생기지 않는가 (이 문서는 <code>max-width:48rem</code>이라 넘칠 이유가 없다)</li>
+  <li>목차에 h1 1개, h2 5개, h3 4개가 계층대로 잡히는가</li>
+</ul>
+
+<footer>
+  상대 단위 시료 · 외부 리소스 없음 · font-size에 쓰인 px는 루트 관련 4곳뿐 <small>(16 / 15 / 14 / 18)</small>
+</footer>
+</div>
+</body>
+</html>

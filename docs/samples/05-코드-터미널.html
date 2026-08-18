@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>배포 점검 로그와 코드 조각</title>
+<style>
+  body {
+    margin: 0;
+    padding: 30px 20px 80px;
+    background: #f5f6f8;
+    color: #1d2129;
+    font-family: "Pretendard", system-ui, sans-serif;
+    line-height: 1.75;
+    font-size: 15px;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+
+  h1 { font-size: 30px; margin: 0 0 8px; color: #16324f; }
+  h2 { font-size: 22px; margin: 36px 0 8px; color: #1b4a72; border-bottom: 2px solid #cfd9e4; padding-bottom: 5px; }
+  h3 { font-size: 17px; margin: 22px 0 6px; color: #2b6ca3; }
+  p  { font-size: 15px; margin: 0 0 10px; }
+
+  .intro {
+    background: #e8eef6;
+    border: 1px solid #c3d1e2;
+    border-left: 5px solid #2b6ca3;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 18px 0 30px;
+    font-size: 14px;
+  }
+
+  /* 핵심: pre에 white-space:pre — 줄바꿈이 절대 일어나지 않는다.
+     스크롤 상자를 문서가 직접 만들지 않으므로 긴 줄은 그대로 넘친다. */
+  pre {
+    white-space: pre;
+    font-family: "D2Coding", "Consolas", ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 12px 0;
+    padding: 14px 16px;
+    border-radius: 8px;
+  }
+  .code-light {
+    background: #ffffff;
+    border: 1px solid #d3dae4;
+    color: #1d2129;
+  }
+  .term {
+    background: #11161d;
+    color: #d7e3ef;
+    border: 1px solid #000;
+    box-shadow: 0 2px 10px rgba(10, 20, 35, .2);
+  }
+  .term .prompt { color: #6ee7a8; }
+  .term .path   { color: #79b8ff; }
+  .term .warn   { color: #f2c14e; }
+  .term .err    { color: #ff8080; }
+  .term .dim    { color: #7b8794; }
+
+  .term-bar {
+    background: #232a35;
+    color: #9fb0c4;
+    font-family: "D2Coding", ui-monospace, monospace;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid #000;
+    border-bottom: none;
+    margin-top: 12px;
+  }
+  .term-bar + pre { margin-top: 0; border-radius: 0 0 8px 8px; }
+
+  /* 줄 번호가 붙은 블록 — 번호는 별도 열, 코드는 pre 그대로 */
+  .numbered {
+    display: flex;
+    background: #fbfcfe;
+    border: 1px solid #d3dae4;
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
+  }
+  .numbered .gutter {
+    flex: 0 0 auto;
+    background: #eef2f7;
+    color: #8a97a8;
+    font-family: "D2Coding", ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: right;
+    padding: 14px 10px;
+    border-right: 1px solid #d3dae4;
+    user-select: none;
+    white-space: pre;
+  }
+  .numbered pre { margin: 0; border: none; border-radius: 0; background: transparent; flex: 1 1 auto; }
+
+  .kw  { color: #a626a4; }
+  .str { color: #1a7f37; }
+  .cmt { color: #8a97a8; font-style: italic; }
+  .fn  { color: #1b4a72; font-weight: 600; }
+
+  .note { background: #fff8e6; border: 1px solid #ecd9a5; border-radius: 6px; padding: 10px 14px; font-size: 14px; margin: 12px 0; }
+  code { font-family: "D2Coding", ui-monospace, monospace; font-size: 13px; background: #e6ebf2; padding: 2px 5px; border-radius: 4px; }
+  ul { padding-left: 20px; } li { margin-bottom: 5px; }
+  footer { margin-top: 48px; border-top: 1px solid #cfd9e4; padding-top: 12px; font-size: 13px; color: #6b7887; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>배포 점검 로그와 코드 조각</h1>
+
+<div class="intro">
+  <strong>이 문서로 무엇을 시험하는가.</strong>
+  모든 코드 블록에 <code>white-space:pre</code>가 걸려 있어 줄바꿈이 일어나지 않습니다.
+  그중 몇 줄은 <b>120자를 훌쩍 넘깁니다</b>. 문서 자체는 스크롤 상자를 만들지 않으므로,
+  뷰어의 화면 맞춤이 각 코드 블록을 <b>독립된 가로 스크롤 상자</b>로 감싸야 합니다.
+  어두운 터미널 블록과 줄 번호가 붙은 블록에서도 같은 처리가 되는지, 특히 줄 번호와 코드가
+  스크롤 중에 어긋나지 않는지 확인하세요.
+</div>
+
+<h2>1. 배포 전 점검 절차</h2>
+
+<p>폐쇄망 배포는 인터넷이 닿는 환경과 절차가 다릅니다. 패키지를 내려받을 수 없으니 모든 의존성을 미리 담아 옮겨야 하고, 옮긴 뒤에는 그 꾸러미가 온전한지 손으로 확인해야 합니다. 아래 로그는 그 확인 과정을 그대로 옮긴 것입니다.</p>
+
+<div class="term-bar">deploy@vault-01 — 배포 점검 세션</div>
+<pre class="term"><span class="prompt">deploy@vault-01</span>:<span class="path">~/release</span>$ ls -al bundle/
+합계 184320
+drwxr-xr-x  4 deploy deploy      4096  8월 18 09:12 <span class="path">.</span>
+drwxr-xr-x  9 deploy deploy      4096  8월 18 09:10 <span class="path">..</span>
+-rw-r--r--  1 deploy deploy 132841984  8월 18 09:11 node_modules.tar.gz
+-rw-r--r--  1 deploy deploy   4194304  8월 18 09:11 client-dist.tar.gz
+-rw-r--r--  1 deploy deploy      2048  8월 18 09:11 checksums.sha256
+
+<span class="prompt">deploy@vault-01</span>:<span class="path">~/release</span>$ sha256sum -c checksums.sha256
+node_modules.tar.gz: <span class="prompt">성공</span>
+client-dist.tar.gz: <span class="prompt">성공</span>
+
+<span class="prompt">deploy@vault-01</span>:<span class="path">~/release</span>$ ./scripts/preflight.sh --strict --check-fonts --check-db --check-migrations --check-ports 3000,5173 --report /var/log/docvault/preflight-20260818-0912.log --no-network
+[09:12:03] <span class="dim">단계 1/6</span> 런타임 확인 ................................ Node v22.14.0 / better-sqlite3 네이티브 바인딩 정상
+[09:12:04] <span class="dim">단계 2/6</span> 폰트 자가호스팅 확인 ....................... Pretendard 8종 발견, 외부 요청 0건
+[09:12:06] <span class="dim">단계 3/6</span> 데이터베이스 파일 확인 ..................... data/docvault.db 존재, 무결성 검사 통과
+[09:12:09] <span class="dim">단계 4/6</span> 마이그레이션 적용 상태 ..................... 미적용 12건 감지 — 서버 기동 시 자동 적용 예정
+[09:12:09] <span class="warn">경고</span> 마이그레이션이 미적용 상태입니다. 첫 기동이 평소보다 오래 걸릴 수 있습니다.
+[09:12:11] <span class="dim">단계 5/6</span> 포트 점유 확인 ............................. 3000 사용 가능 / 5173 사용 가능
+[09:12:12] <span class="dim">단계 6/6</span> 외부 네트워크 차단 확인 .................... 아웃바운드 요청 시도 0건 <span class="prompt">(정상)</span>
+[09:12:12] 점검 완료 — 통과 5, 경고 1, 실패 0
+
+<span class="prompt">deploy@vault-01</span>:<span class="path">~/release</span>$ echo $?
+0</pre>
+
+<div class="note">
+  위 블록에서 <code>./scripts/preflight.sh</code>로 시작하는 줄은 190자가 넘습니다. 이 한 줄 때문에 블록 전체가 가로로 넘칩니다.
+</div>
+
+<h3>실패했을 때의 로그</h3>
+
+<div class="term-bar">deploy@vault-02 — 실패 사례</div>
+<pre class="term"><span class="prompt">deploy@vault-02</span>:<span class="path">~/release</span>$ ./scripts/preflight.sh --strict
+[10:41:18] <span class="dim">단계 1/6</span> 런타임 확인 ................................ Node v18.19.0
+[10:41:18] <span class="err">실패</span> 필요한 Node 버전은 20 이상입니다. 현재 v18.19.0 — 배포를 중단합니다.
+[10:41:18] <span class="dim">힌트</span> 오프라인 설치본은 vendor/node-v22.14.0-linux-x64.tar.xz 에 포함되어 있습니다. 압축을 풀고 PATH 앞쪽에 bin 디렉터리를 추가한 뒤 다시 실행하세요.
+
+<span class="prompt">deploy@vault-02</span>:<span class="path">~/release</span>$ echo $?
+1</pre>
+
+<h2>2. 점검 스크립트의 실제 코드</h2>
+
+<h3>줄 번호가 붙은 블록</h3>
+<p>아래는 점검 스크립트에서 마이그레이션 상태를 읽는 부분입니다. 줄 번호는 왼쪽 별도 열에 있고, 코드는 <code>white-space:pre</code>인 <code>&lt;pre&gt;</code>입니다. 가로 스크롤이 걸릴 때 <b>번호 열은 고정되고 코드만 움직이는지</b>, 아니면 둘 다 함께 밀리는지 관찰하세요. 어느 쪽이든 번호와 코드의 줄이 어긋나서는 안 됩니다.</p>
+
+<div class="numbered">
+  <div class="gutter"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18</div>
+<pre class="code-light"><span class="cmt">// 마이그레이션 폴더의 SQL 파일과 DB에 기록된 적용 이력을 대조한다.</span>
+<span class="cmt">// 폐쇄망에서는 배포 담당자가 결과를 눈으로 확인해야 하므로 요약을 문자열로 돌려준다.</span>
+<span class="kw">export function</span> <span class="fn">checkPendingMigrations</span>(dir: <span class="kw">string</span>, db: Database): PendingReport {
+  <span class="kw">const</span> files = readdirSync(dir).filter((f) => f.endsWith(<span class="str">'.sql'</span>)).sort();
+  <span class="kw">const</span> applied = <span class="kw">new</span> <span class="fn">Set</span>(db.prepare(<span class="str">'SELECT hash FROM __drizzle_migrations'</span>).all().map((r) => r.hash));
+  <span class="kw">const</span> pending = files.filter((f) => !applied.has(<span class="fn">hashOf</span>(join(dir, f))));
+
+  <span class="kw">if</span> (pending.length === <span class="str">0</span>) {
+    <span class="kw">return</span> { count: <span class="str">0</span>, summary: <span class="str">'모든 마이그레이션이 적용되어 있습니다.'</span>, files: [] };
+  }
+
+  <span class="cmt">// 첫 기동 때 한꺼번에 적용되면 시간이 걸린다는 사실을 미리 알린다 (운영 문의가 가장 잦았던 항목)</span>
+  <span class="kw">const</span> summary = <span class="str">`미적용 ${pending.length}건 감지 — 서버 기동 시 자동 적용 예정. 예상 소요 ${Math.ceil(pending.length * 0.4)}초`</span>;
+  <span class="kw">return</span> { count: pending.length, summary, files: pending };
+}
+
+<span class="cmt">// 사용 예</span>
+<span class="kw">const</span> report = <span class="fn">checkPendingMigrations</span>(<span class="str">'./server/drizzle'</span>, db);</pre>
+</div>
+
+<h3>등폭 글꼴로 그린 표</h3>
+<p>텍스트만으로 그린 표도 <code>pre</code> 안에서는 모양이 유지됩니다. 글자 하나의 폭이 모두 같아야 선이 맞으므로, 배율을 바꿔도 등폭 성질이 유지되는지 확인하기 좋은 재료입니다.</p>
+
+<pre class="code-light">┌──────────────┬────────────┬──────────────┬────────────────────────────┐
+│ 점검 항목    │ 소요(ms)   │ 결과         │ 비고                       │
+├──────────────┼────────────┼──────────────┼────────────────────────────┤
+│ 런타임       │        112 │ 통과         │ Node v22.14.0              │
+│ 폰트         │         48 │ 통과         │ 자가호스팅 8종             │
+│ DB 파일      │        214 │ 통과         │ 무결성 검사 포함           │
+│ 마이그레이션 │         96 │ 경고         │ 미적용 12건                │
+│ 포트         │         31 │ 통과         │ 3000 / 5173                │
+│ 네트워크     │      1,004 │ 통과         │ 아웃바운드 0건             │
+└──────────────┴────────────┴──────────────┴────────────────────────────┘</pre>
+
+<h2>3. 아주 긴 한 줄</h2>
+
+<p>실무 로그에는 한 줄이 200자를 넘는 경우가 흔합니다. 요청 URL, 스택 트레이스, 직렬화된 설정값 따위가 그렇습니다. 아래 블록은 그런 줄만 모았습니다.</p>
+
+<pre class="code-light">2026-08-18T09:12:12.884Z INFO  [http] GET /api/v1/files/3f2a9c11-7b4e-4d0a-9f61-8c2d55ee1042/content?revision=latest&amp;include=meta,acl,history&amp;fields=id,name,mime,sizeBytes,updatedAt,ownerId 200 41ms ip=10.20.3.77 ua="DocVaultViewer/0.8.0"
+2026-08-18T09:12:13.201Z WARN  [render] 문서 폭이 뷰포트를 초과했습니다. 적용 단계=3(축소), 문서폭=1464px, 뷰포트=780px, 계산배율=0.5328, 대상선택자=".paper > table.wide", 원인="셀 고정폭 합계 초과", 조치="가로 스크롤 상자 삽입 실패 후 축소로 전환"
+2026-08-18T09:12:13.560Z ERROR [font] 외부 폰트 요청이 차단되었습니다. url="https://fonts.example.net/css2?family=Some+Sans:wght@300;400;500;700&amp;display=swap" reason="offline-policy" fallback="Pretendard(local)" impact="none"
+2026-08-18T09:12:14.007Z DEBUG [scale] 글자 크기 배율 적용 결과: 규칙 412개 검사, px 선언 168개 치환, em/rem/% 선언 96개 보존, svg font-size 속성 22개 보존, 소요 7.4ms, 배율=1.25</pre>
+
+<div class="note">
+  네 줄 모두 120자를 넘고, 두 번째 줄은 220자 정도입니다. 이 블록만으로도 화면 맞춤의 스크롤 상자 삽입이 반드시 필요합니다.
+</div>
+
+<h2>4. 설정 파일 예시</h2>
+
+<h3>환경 변수</h3>
+<pre class="code-light"><span class="cmt"># 폐쇄망 배포용 환경 변수 예시</span>
+NODE_ENV=production
+PORT=3000
+JWT_SECRET=<span class="str">"배포 시 반드시 교체할 것 — 기본값 사용 금지"</span>
+ADMIN_INITIAL_PASSWORD=<span class="str">"admin1234"</span>
+DATA_DIR=<span class="str">"/var/lib/docvault/data"</span>
+LOG_LEVEL=info</pre>
+
+<h3>기동 스크립트</h3>
+<pre class="term"><span class="prompt">deploy@vault-01</span>:<span class="path">/opt/docvault</span>$ NODE_ENV=production DATA_DIR=/var/lib/docvault/data JWT_SECRET="$(cat /etc/docvault/jwt.secret)" node server/dist/index.js --host 0.0.0.0 --port 3000 &gt;&gt; /var/log/docvault/server.log 2&gt;&amp;1 &amp;
+[1] 24817
+<span class="prompt">deploy@vault-01</span>:<span class="path">/opt/docvault</span>$ tail -n 3 /var/log/docvault/server.log
+마이그레이션 12건 적용 완료 (4.8초)
+admin 계정 확인됨 — 시드 생략
+서버 준비 완료 http://0.0.0.0:3000</pre>
+
+<h2>5. 확인 항목</h2>
+<ul>
+  <li>코드 블록 <b>각각</b>이 독립된 가로 스크롤 상자가 되는가</li>
+  <li>어두운 터미널 블록에서도 스크롤 상자의 배경·모서리가 자연스러운가</li>
+  <li>줄 번호 블록에서 번호와 코드 줄이 어긋나지 않는가</li>
+  <li>등폭 표(<code>┌─┬─┐</code>)의 선이 배율을 바꿔도 어긋나지 않는가</li>
+  <li>긴 줄 때문에 문서 본문 전체가 가로로 밀리지는 않는가</li>
+  <li>목차에 h1 1개, h2 5개, h3 4개가 잡히는가</li>
+</ul>
+
+<footer>
+  코드·터미널 시료 · pre 블록 8개(최장 줄 약 220자) · 외부 리소스 없음 · 글자 크기는 전부 px
+</footer>
+</div>
+</body>
+</html>
