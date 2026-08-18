@@ -25,6 +25,9 @@ export const config = {
   isProduction: process.env.NODE_ENV === 'production',
 } as const;
 
+// 기본 비밀키로 운영에 뜨면 누구나 admin 통행증을 위조할 수 있다 — 경고는 아무도 안 보므로 기동을 막는다.
+// 뚫린 채 도는 것보다 안 뜨는 편이 낫다: 중단은 즉시 알아채지만 유출은 영영 모른다.
 if (config.isProduction && config.jwtSecret === 'dev-only-secret-change-me') {
-  console.warn('[docvault] WARNING: JWT_SECRET is not set. Set it before exposing this server.');
+  console.error('[docvault] FATAL: JWT_SECRET is not set. Set it in .env before starting in production.');
+  process.exit(1);
 }
