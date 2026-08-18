@@ -712,15 +712,30 @@ cd ~/docvault && git pull
 
 #### 방법 1. 내 PC에서 한 줄 (제일 쉽고 안전)
 
-이미 3장 "방법 B"에서 SSH 키를 만들어 뒀다면, PC의 PowerShell에서 이 한 줄이면 끝입니다.
-
 ```powershell
-ssh 이름@mydocvault.duckdns.org "~/docvault/scripts/update.sh"
+ssh 계정이름@내도메인 "~/docvault/scripts/update.sh"
 ```
 
-주소로 **DuckDNS 이름을 그대로 씁니다.** 7장에서 5분마다 IP를 갱신하도록 걸어 뒀으니, VM을 껐다 켜서 외부 IP가 바뀌어도 이 주소는 계속 맞습니다. (IP를 직접 적으면 재시작 때마다 틀려집니다.)
+한 줄이지만 **미리 맞춰야 할 것이 셋** 있습니다. 하나라도 틀리면 `Permission denied (publickey)`가 납니다.
 
-구글 CLI를 쓰면 방화벽·키 설정 없이 브라우저 SSH와 똑같은 통로로 갑니다. 설치 후 최초 1회 `gcloud auth login`:
+> ⚠️ **`계정이름`, `내도메인`은 반드시 자기 값으로 바꾸세요.** 이 가이드의 `mydocvault.duckdns.org`는 **예시**입니다. DuckDNS는 누구나 이름을 선점할 수 있어서, 예시를 그대로 치면 **남의 서버에 접속을 시도하게 됩니다.** 내 도메인은 서버에서 `grep DOCVAULT_DOMAIN ~/docvault/.env`로 확인하고, 접속한 IP가 내 VM의 외부 IP와 같은지 콘솔에서 대조하세요. 남의 host key를 이미 받아 뒀다면 `ssh-keygen -R 그도메인`으로 지웁니다.
+
+**① 열쇠(SSH 키)가 PC에 있어야 합니다.** 브라우저 SSH만 써 왔다면 없는 게 정상입니다 — 그건 구글이 대신 열쇠를 만들어 주는 방식이라 내 PC에는 아무것도 안 남습니다. `ls ~/.ssh`에 `id_ed25519`가 없으면 3장 방법 B의 키 생성부터 하세요.
+
+**② 그 열쇠의 짝(공개키)이 서버에 등록돼 있어야 합니다.** GCP 콘솔 → Compute Engine → **메타데이터 → SSH 키 → 항목 추가**에 `id_ed25519.pub` 한 줄을 붙여넣고 저장합니다.
+
+**③ 계정 이름이 맞아야 합니다.** `docvault`가 아닙니다 — 프로젝트 이름일 뿐 리눅스 계정이 아닙니다. GCP는 구글 계정에서 계정 이름을 만듭니다(`uss02039@gmail.com` → `uss02039`). 브라우저 SSH로 들어가 **`whoami`** 를 치면 진짜 이름이 나옵니다. 메타데이터로 키를 넣었다면 공개키 맨 끝 `이름@PC`의 **@ 앞부분**이 그 계정 이름이 됩니다.
+
+주소로 **DuckDNS 이름을 씁니다.** 7장에서 5분마다 IP를 갱신하도록 걸어 뒀으니, VM을 껐다 켜서 외부 IP가 바뀌어도 이 주소는 계속 맞습니다. (IP를 직접 적으면 재시작 때마다 틀려집니다.)
+
+**셋 다 건너뛰는 지름길 — 구글 CLI.** 키 생성·등록·계정 이름을 전부 알아서 처리하고, 브라우저 SSH와 똑같은 통로로 가서 방화벽도 건드릴 필요가 없습니다. [Google Cloud CLI 설치](https://cloud.google.com/sdk/docs/install) 후 최초 1회만:
+
+```powershell
+gcloud auth login
+gcloud config set project 프로젝트ID
+```
+
+그다음부터는 이 한 줄이 배포입니다 (VM 이름·존은 콘솔의 VM 목록에 적혀 있습니다):
 
 ```powershell
 gcloud compute ssh docvault --zone=asia-northeast3-a --command "~/docvault/scripts/update.sh"
@@ -747,6 +762,8 @@ crontab -e
 `.github/workflows/docker.yml`에 배포 단계를 붙여, 이미지 빌드가 끝나면 깃허브가 서버에 SSH로 접속해 스크립트를 실행하게 하는 방법입니다. 가장 자동이지만 대가가 있습니다 — **깃허브 빌드 서버가 우리 서버에 들어올 수 있어야 하므로 22번 포트를 인터넷에 열고 배포용 열쇠를 깃허브에 맡겨야 합니다.** 혼자 쓰는 서버에서는 방법 1~2로 충분하고, 열어 두는 문이 늘어나는 만큼 관리할 위험도 늘어난다는 점을 기억하세요.
 
 > **정리**: 손이 제일 덜 가면서 위험도 안 늘리는 조합은 **평소엔 방법 2(cron)로 두고, 급할 때 방법 1로 즉시 당겨오는 것**입니다. 어느 쪽이든 구글 콘솔에 들어갈 일은 없어집니다.
+>
+> 순서를 고른다면 **방법 2를 먼저** 하세요. 브라우저 SSH로 한 번만 들어가 cron 두 줄을 걸면 그날로 손이 떨어지고, 방법 1의 키·계정 이름 맞추기는 나중에 여유 있을 때 해도 됩니다.
 
 ### 최초 1회 설정: GHCR 패키지 공개 전환
 
