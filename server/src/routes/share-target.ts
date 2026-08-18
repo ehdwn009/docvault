@@ -1,22 +1,21 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { getCookie } from 'hono/cookie';
-import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES, SESSION_COOKIE } from '../constants.js';
+import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES } from '../constants.js';
 import { db } from '../db/index.js';
-import { files, users } from '../db/schema.js';
+import { files } from '../db/schema.js';
 import { ALL_EXTENSIONS, extensionOf } from '../lib/filetypes.js';
-import { verifySessionToken } from '../lib/session.js';
+import { uniqueFileName } from '../lib/naming.js';
 import { saveBinary } from '../lib/storage.js';
+import { resolveSessionUser } from '../middleware/auth.js';
 
 // PWA 공유 시트 수신 (IA — 공유 시트): 폰의 "공유 → docvault"가 여기로 POST한다.
-// /api/v1 밖(매니페스트가 고정 주소를 요구)이라 인증을 직접 검사한다.
+// /api/v1 밖(매니페스트가 고정 주소를 요구)이라 authGuard를 안 거치므로,
+// 같은 판정을 쓰도록 resolveSessionUser를 호출한다(검사 단계가 갈라지지 않게).
 // OS 공유 흐름에서는 에러 페이지가 최악의 경험이라, 실패는 조용히 건너뛰고 홈으로 돌려보낸다.
 export const shareTargetRoutes = new Hono().post('/', async (c) => {
-  const token = getCookie(c, SESSION_COOKIE);
-  const userId = token ? await verifySessionToken(token) : null;
-  const user =
-    userId !== null ? db.select().from(users).where(eq(users.id, userId)).get() : undefined;
-  if (!user || !user.isActive) return c.redirect('/');
+  const session = await resolveSessionUser(c);
+  if (!session.ok) return c.redirect('/');
+  const user = session.user;
 
   const nameTaken = (n: string) =>
     db
@@ -25,7 +24,7 @@ export const shareTargetRoutes = new Hono().post('/', async (c) => {
       .where(
         and(
           eq(files.ownerId, user.id),
-          sql`${files.folderId} IS NULL`,
+          isNull(files.folderId),
           eq(files.name, n),
           isNull(files.deletedAt),
         ),
@@ -33,14 +32,7 @@ export const shareTargetRoutes = new Hono().post('/', async (c) => {
       .get() !== undefined;
 
   // 공유되는 스크린샷은 이름이 늘 같아서(image.png 등) 충돌 시 자동으로 번호를 붙인다
-  const uniqueName = (name: string) => {
-    if (!nameTaken(name)) return name;
-    const ext = extensionOf(name);
-    const stem = ext ? name.slice(0, -ext.length) : name;
-    let n = 2;
-    while (nameTaken(`${stem} (${n})${ext}`)) n++;
-    return `${stem} (${n})${ext}`;
-  };
+  const uniqueName = (name: string) => uniqueFileName(name, nameTaken);
 
   const body = await c.req.parseBody({ all: true });
   const raw = body['files'];

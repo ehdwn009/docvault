@@ -10,7 +10,9 @@ type FileAccess = {
   deletedAt?: number | null;
 };
 
-/** 파일 자체가 공유이거나, 상위 폴더 체인 중 하나라도 공유면 열람 공개다 (API 명세 — 공유 폴더 하위 파일) */
+/** 파일 자체가 공유이거나, 상위 폴더 체인 중 하나라도 공유면 열람 공개다 (API 명세 — 공유 폴더 하위 파일).
+ *  부모를 거슬러 오르는 반복에 순환 방어가 없는 것은 routes/folders.ts의 wouldCycle이
+ *  "자기 하위로의 이동"을 막아 순환이 생길 수 없기 때문이다. 폴더 이동 경로를 새로 만들면 그쪽에도 같은 검사가 필요하다 */
 export function isEffectivelyShared(file: { isShared: number; folderId?: number | null }): boolean {
   if (file.isShared === 1) return true;
   let cursor = file.folderId ?? null;

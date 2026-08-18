@@ -24,6 +24,9 @@ export const MAX_VERSIONS_PER_FILE = 20;
 /** 휴지통 보관 기간 — 지나면 자동 영구 삭제 (IA — 휴지통) */
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** 휴지통 자동 비움 주기 — 기동 시 1회 실행 후 이 간격으로 반복 */
+export const TRASH_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -35,3 +38,20 @@ export const MAX_ARCHIVE_ENTRIES = 10000;
 
 /** 내보내기 요청 URL에 직접 나열할 수 있는 id 개수 (API-040) — URL 길이 한계 */
 export const MAX_ARCHIVE_ID_PARAMS = 500;
+
+/** md·텍스트 본문 글자 크기(px) 범위 — 문서가 자기 크기를 갖지 않으므로 배율이 아니라 절대값으로 다룬다 */
+export const FONT_SIZE_MIN = 12;
+export const FONT_SIZE_MAX = 24;
+export const FONT_SIZE_DEFAULT = 16;
+
+/** 뷰어 설정의 기본값 — 설정 행이 없는 사용자와 새로 만드는 행이 같은 값에서 출발하게 한다 (API-071).
+    schema.ts의 .default()는 DB 차원의 백스톱이고, 앱이 참조하는 기본값은 여기 하나다 */
+export const DEFAULT_USER_SETTINGS = {
+  viewerTheme: 'light' as const,
+  fontSize: FONT_SIZE_DEFAULT,
+  htmlFontScale: FONT_SCALE_DEFAULT,
+  fontFamily: null as string | null,
+  lineHeight: null as string | null,
+  contentWidth: 'normal' as const,
+  lastSeenVersion: null as string | null,
+};

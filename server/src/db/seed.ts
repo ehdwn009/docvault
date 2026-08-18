@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { sql } from 'drizzle-orm';
 import { config } from '../config.js';
+import { BCRYPT_ROUNDS, DEFAULT_USER_SETTINGS } from '../constants.js';
 import { db } from './index.js';
 import { users, userSettings } from './schema.js';
 
@@ -14,7 +15,7 @@ export function seedAdmin() {
     .insert(users)
     .values({
       username: 'admin',
-      passwordHash: bcrypt.hashSync(config.adminInitialPassword, 10),
+      passwordHash: bcrypt.hashSync(config.adminInitialPassword, BCRYPT_ROUNDS),
       displayName: 'Administrator',
       role: 'admin',
       isActive: 1,
@@ -24,7 +25,8 @@ export function seedAdmin() {
     .returning()
     .get();
 
-  db.insert(userSettings).values({ userId: admin.id, updatedAt: now }).run();
+  // 설정 기본값은 constants.ts 한 곳에서만 온다 — 행이 없는 사용자(me.ts)와 같은 값에서 출발하도록
+  db.insert(userSettings).values({ userId: admin.id, ...DEFAULT_USER_SETTINGS, updatedAt: now }).run();
 
   console.log(
     `[docvault] Seeded initial admin account (username: admin). ` +

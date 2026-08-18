@@ -1,7 +1,13 @@
 import { desc, eq, isNotNull, and } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FONT_SCALE_DEFAULT, FONT_SCALE_MAX, FONT_SCALE_MIN } from '../constants.js';
+import {
+  DEFAULT_USER_SETTINGS,
+  FONT_SCALE_MAX,
+  FONT_SCALE_MIN,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+} from '../constants.js';
 import { db } from '../db/index.js';
 import { files, userFileState, userSettings } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
@@ -9,19 +15,9 @@ import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-const DEFAULT_SETTINGS = {
-  viewerTheme: 'light' as const,
-  fontSize: 16,
-  htmlFontScale: FONT_SCALE_DEFAULT,
-  fontFamily: null,
-  lineHeight: null,
-  contentWidth: 'normal' as const,
-  lastSeenVersion: null as string | null,
-};
-
 const settingsSchema = z.object({
   viewerTheme: z.enum(['light', 'dark', 'sepia']).optional(),
-  fontSize: z.number().int().min(12).max(24).optional(),
+  fontSize: z.number().int().min(FONT_SIZE_MIN).max(FONT_SIZE_MAX).optional(),
   htmlFontScale: z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).optional(),
   fontFamily: z.string().max(100).nullable().optional(),
   lineHeight: z.string().max(20).nullable().optional(),
@@ -65,7 +61,7 @@ export const meRoutes = new Hono<AppEnv>()
       .from(userSettings)
       .where(eq(userSettings.userId, c.get('user').id))
       .get();
-    return c.json({ settings: row ? pickSettings(row) : DEFAULT_SETTINGS });
+    return c.json({ settings: row ? pickSettings(row) : DEFAULT_USER_SETTINGS });
   })
 
   // API-072: 뷰어 설정 저장 (부분 갱신 upsert)
@@ -74,7 +70,7 @@ export const meRoutes = new Hono<AppEnv>()
     const patch = c.req.valid('json');
 
     const existing = db.select().from(userSettings).where(eq(userSettings.userId, userId)).get();
-    const merged = { ...DEFAULT_SETTINGS, ...(existing ? pickSettings(existing) : {}), ...patch };
+    const merged = { ...DEFAULT_USER_SETTINGS, ...(existing ? pickSettings(existing) : {}), ...patch };
 
     const row = db
       .insert(userSettings)

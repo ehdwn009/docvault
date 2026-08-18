@@ -1,4 +1,4 @@
-﻿import { createReadStream } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { and, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -23,6 +23,7 @@ import {
 } from '../lib/archive.js';
 import { fail } from '../lib/errors.js';
 import { ALL_EXTENSIONS, extensionOf } from '../lib/filetypes.js';
+import { uniqueFileName } from '../lib/naming.js';
 import { binaryAbsPath, copyBinary, deleteBinary, saveBinary } from '../lib/storage.js';
 import { jsonBody, nameField, parseId, parseIdList } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
@@ -51,7 +52,7 @@ function duplicateFileName(ownerId: number, folderId: number | null, name: strin
     .where(
       and(
         eq(files.ownerId, ownerId),
-        folderId === null ? sql`${files.folderId} IS NULL` : eq(files.folderId, folderId),
+        folderId === null ? isNull(files.folderId) : eq(files.folderId, folderId),
         eq(files.name, name),
         isNull(files.deletedAt), // 휴지통의 파일은 이름을 점유하지 않는다
       ),
@@ -105,19 +106,23 @@ export const fileRoutes = new Hono<AppEnv>()
       }
     }
 
-    // 저장 전에 전체 파일을 먼저 검증한다 — 일부만 올라가는 어중간한 결과를 만들지 않기 위해
+    // 저장 전에 전체 파일을 먼저 검증한다 — 일부만 올라가는 어중간한 결과를 만들지 않기 위해.
+    // seen은 이번 요청 안의 중복 — DB만 보면 같은 이름 두 개가 한 번에 통과한다
+    const seen = new Set<string>();
     for (const file of uploads) {
       const meta = ALL_EXTENSIONS[extensionOf(file.name)];
       if (!meta) {
         return fail(c, 400, 'UNSUPPORTED_TYPE', `${file.name}: 허용되지 않는 형식입니다 (${Object.keys(ALL_EXTENSIONS).join(', ')})`);
       }
       const isBinary = meta.fileType === 'image' || meta.fileType === 'pdf';
-      if (file.size > (isBinary ? MAX_BINARY_FILE_BYTES : MAX_TEXT_FILE_BYTES)) {
-        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: ${isBinary ? '바이너리는 50MB' : '텍스트는 10MB'}까지 가능합니다`);
+      const limit = isBinary ? MAX_BINARY_FILE_BYTES : MAX_TEXT_FILE_BYTES;
+      if (file.size > limit) {
+        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: ${Math.round(limit / 1024 / 1024)}MB까지 가능합니다`);
       }
-      if (duplicateFileName(user.id, folderId, file.name)) {
+      if (seen.has(file.name) || duplicateFileName(user.id, folderId, file.name)) {
         return fail(c, 409, 'CONFLICT', `${file.name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
       }
+      seen.add(file.name);
     }
 
     const now = Date.now();
@@ -429,14 +434,9 @@ export const fileRoutes = new Hono<AppEnv>()
     if (folderId !== null && !db.select().from(folders).where(eq(folders.id, folderId)).get()) {
       folderId = null;
     }
-    let name = file.name;
-    if (duplicateFileName(file.ownerId, folderId, name, file.id)) {
-      const ext = extensionOf(name);
-      const stem = ext ? name.slice(0, -ext.length) : name;
-      let n = 2;
-      while (duplicateFileName(file.ownerId, folderId, `${stem} (${n})${ext}`, file.id)) n++;
-      name = `${stem} (${n})${ext}`;
-    }
+    const name = uniqueFileName(file.name, (n) =>
+      duplicateFileName(file.ownerId, folderId, n, file.id),
+    );
 
     db.update(files).set({ deletedAt: null, folderId, name }).where(eq(files.id, id)).run();
     return c.json({ ok: true });
@@ -473,12 +473,11 @@ export const fileRoutes = new Hono<AppEnv>()
     const targetFolder = file.ownerId === user.id ? file.folderId : null;
 
     // "이름 (사본).md", 충돌 시 "이름 (사본 2).md" ...
-    const ext = extensionOf(file.name);
-    const stem = ext ? file.name.slice(0, -ext.length) : file.name;
-    let copyName = `${stem} (사본)${ext}`;
-    for (let n = 2; duplicateFileName(user.id, targetFolder, copyName); n++) {
-      copyName = `${stem} (사본 ${n})${ext}`;
-    }
+    const copyName = uniqueFileName(
+      file.name,
+      (n) => duplicateFileName(user.id, targetFolder, n),
+      (n) => (n === 1 ? ' (사본)' : ` (사본 ${n})`),
+    );
 
     const now = Date.now();
     const created = db

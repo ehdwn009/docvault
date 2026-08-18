@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { APP_VERSION, config } from './config.js';
+import { TRASH_PURGE_INTERVAL_MS } from './constants.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
 import { purgeExpiredTrash } from './lib/trash.js';
@@ -26,7 +27,7 @@ seedAdmin();
 
 // 휴지통 자동 비움 — 기동 시 1회 + 하루 주기 (IA — 휴지통 30일 보관)
 purgeExpiredTrash();
-setInterval(purgeExpiredTrash, 24 * 60 * 60 * 1000);
+setInterval(purgeExpiredTrash, TRASH_PURGE_INTERVAL_MS);
 
 const app = new Hono();
 
@@ -56,7 +57,9 @@ api.route('/shared', sharedRoutes);
 api.route('/tags', tagRoutes);
 
 app.route('/api/v1', api);
-app.route('/share-target', shareTargetRoutes); // PWA 공유 시트 수신 (매니페스트 share_target)
+// PWA 공유 시트 수신. deny by default의 유일한 예외 — 매니페스트 share_target이 고정 주소를
+// 요구해 /api/v1 밖에 두었고, 그래서 라우트가 resolveSessionUser로 인증을 직접 검사한다.
+app.route('/share-target', shareTargetRoutes);
 
 // SPA 정적 서빙: 빌드 결과물이 있으면 서빙하고, 미지의 경로는 index.html로 폴백(딥링크 지원)
 if (fs.existsSync(config.clientDist)) {
