@@ -44,6 +44,16 @@ export const FONT_SIZE_MIN = 12;
 export const FONT_SIZE_MAX = 24;
 export const FONT_SIZE_DEFAULT = 16;
 
+/** 사용자×파일 열람 상태의 기본값 — 상태 행이 없는 파일에 응답으로 실어 보낸다 (API-021·031).
+    클라이언트가 "state가 없을 때"를 따로 분기하지 않도록 서버가 채워서 내려준다 */
+export const DEFAULT_FILE_STATE = {
+  isFavorite: 0,
+  lastOpenedAt: null as number | null,
+  readingPosition: null as { anchor?: string | null; offset?: number } | null,
+  viewerFit: 1,
+  fontScale: null as number | null,
+};
+
 /** 뷰어 설정의 기본값 — 설정 행이 없는 사용자와 새로 만드는 행이 같은 값에서 출발하게 한다 (API-071).
     schema.ts의 .default()는 DB 차원의 백스톱이고, 앱이 참조하는 기본값은 여기 하나다 */
 export const DEFAULT_USER_SETTINGS = {

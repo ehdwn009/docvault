@@ -53,6 +53,26 @@ export const DEFAULT_FILE_STATE: TreeFile['state'] = {
   fontScale: null,
 };
 
+/**
+ * 트리 밖에서 얻은 부분 데이터(공유 트리·검색 결과·메타 조회·관리자 목록)를 뷰어가 받는
+ * TreeFile 모양으로 채운다. 빠진 칸은 기본값으로 — 뷰어는 본문·상태를 따로 조회하므로
+ * 여기 값들은 목록 표시용이다.
+ */
+export function toTreeFile(
+  f: Partial<TreeFile> & Pick<TreeFile, 'id' | 'name' | 'fileType'>,
+): TreeFile {
+  return {
+    folderId: null,
+    sizeBytes: 0,
+    isShared: 0,
+    sortOrder: 0,
+    updatedAt: 0,
+    ...f,
+    tags: f.tags ?? [],
+    state: f.state ?? { ...DEFAULT_FILE_STATE },
+  };
+}
+
 export type Tag = { id: number; name: string; color: string };
 
 export type SharedFolder = { id: number; parentId: number | null; name: string; ownerName: string };

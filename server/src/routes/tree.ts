@@ -1,5 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { DEFAULT_FILE_STATE } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, fileTags, folders, userFileState } from '../db/schema.js';
 import type { AppEnv } from '../types.js';
@@ -71,7 +72,7 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
               viewerFit: s.viewerFit,
               fontScale: s.fontScale,
             }
-          : { isFavorite: 0, lastOpenedAt: null, readingPosition: null, viewerFit: 1, fontScale: null },
+          : DEFAULT_FILE_STATE,
       };
     }),
   });

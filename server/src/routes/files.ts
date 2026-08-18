@@ -4,6 +4,7 @@ import { and, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
+  DEFAULT_FILE_STATE,
   MAX_ARCHIVE_ENTRIES,
   MAX_ARCHIVE_ID_PARAMS,
   MAX_BINARY_FILE_BYTES,
@@ -154,7 +155,7 @@ export const fileRoutes = new Hono<AppEnv>()
       created.push({
         ...toFileMeta(row),
         tags: [] as number[],
-        state: { isFavorite: 0, lastOpenedAt: null, readingPosition: null, viewerFit: 1, fontScale: null },
+        state: DEFAULT_FILE_STATE,
       });
     }
 

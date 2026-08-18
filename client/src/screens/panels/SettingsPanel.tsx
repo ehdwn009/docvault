@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
-import { FONT_SCALE_MAX, FONT_SCALE_MIN } from '../../lib/constants';
+import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/constants';
 import { downloadArchive } from '../../lib/download';
 
 type Props = {
@@ -60,8 +60,8 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
           글자 크기: {settings.fontSize}px
           <input
             type="range"
-            min={12}
-            max={24}
+            min={FONT_SIZE_MIN}
+            max={FONT_SIZE_MAX}
             value={settings.fontSize}
             onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
             className="mt-1 w-full accent-slate-300"

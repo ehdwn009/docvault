@@ -10,7 +10,7 @@ import UpdateNotes from '../components/UpdateNotes';
 import {
   api,
   ApiError,
-  DEFAULT_FILE_STATE,
+  toTreeFile,
   uploadFiles,
   type Changelog,
   type SharedFile,
@@ -20,8 +20,9 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
-import { FONT_SCALE_DEFAULT } from '../lib/constants';
+import { DEFAULT_USER_SETTINGS } from '../lib/constants';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
+import { runGuarded } from '../lib/guard';
 import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
 import AdminPanel from './panels/AdminPanel';
@@ -33,16 +34,6 @@ import Viewer from './Viewer';
 type Panel = 'files' | 'favorites' | 'shared' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
 
-const DEFAULT_SETTINGS: UserSettings = {
-  viewerTheme: 'light',
-  fontSize: 16,
-  htmlFontScale: FONT_SCALE_DEFAULT,
-  fontFamily: null,
-  lineHeight: null,
-  contentWidth: 'normal',
-  lastSeenVersion: null,
-};
-
 const PANEL_TITLE: Record<Panel, string> = {
   files: '내 파일',
   favorites: '즐겨찾기',
@@ -53,18 +44,14 @@ const PANEL_TITLE: Record<Panel, string> = {
 
 /** 공유 트리 항목을 뷰어가 받는 TreeFile 형태로 맞춘다 (내 트리에 없는 파일) */
 function sharedToTreeFile(f: SharedFile): TreeFile {
-  return {
+  return toTreeFile({
     id: f.id,
     folderId: f.folderId,
     name: f.name,
     fileType: f.fileType,
-    sizeBytes: 0,
-    isShared: 1,
-    sortOrder: 0,
     updatedAt: f.updatedAt,
-    tags: [],
-    state: { ...DEFAULT_FILE_STATE },
-  };
+    isShared: 1,
+  });
 }
 
 /** OS 드래그의 폴더 항목을 재귀 순회해 상대 경로 목록으로 만든다 (IA — 폴더 업로드) */
@@ -105,7 +92,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
   const [selected, setSelected] = useState<TreeFile | null>(null);
   const [panel, setPanel] = useState<Panel>('files');
-  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagFilter, setTagFilter] = useState<number | null>(null);
   const [tagEditorFile, setTagEditorFile] = useState<TreeFile | null>(null);
@@ -152,9 +139,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     const inTree = treeRef.current.files.find((f) => f.id === id);
     if (inTree) return inTree;
     const meta = await api<Omit<TreeFile, 'tags' | 'state'>>(`/files/${id}`).catch(() => null);
-    return meta
-      ? { ...meta, tags: [], state: { ...DEFAULT_FILE_STATE } }
-      : null;
+    return meta ? toTreeFile(meta) : null;
   }, []);
 
   // 초기 로드 + 딥링크(/f/{id}) 복원
@@ -240,14 +225,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   /** 트리 조작 공통 래퍼: 에러는 토스트로, 성공하면 트리 재조회 */
   const guard = useCallback(
-    async (fn: () => Promise<unknown>) => {
-      try {
-        await fn();
-        await loadTree();
-      } catch (e) {
-        toast(e instanceof ApiError ? e.message : '작업에 실패했습니다', 'error');
-      }
-    },
+    (fn: () => Promise<unknown>) => runGuarded(fn, loadTree),
     [loadTree],
   );
 

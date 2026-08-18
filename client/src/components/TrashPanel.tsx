@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError } from '../lib/api';
+import { api } from '../lib/api';
 import { confirmDialog } from '../lib/dialog';
-import { toast } from '../lib/toast';
+import { runGuarded } from '../lib/guard';
 
 type TrashedFile = {
   id: number;
@@ -28,17 +28,11 @@ export default function TrashPanel({
   }, []);
   useEffect(load, [load]);
 
-  const run = (fn: () => Promise<unknown>) => {
-    void (async () => {
-      try {
-        await fn();
-        load();
-        onChanged();
-      } catch (e) {
-        toast(e instanceof ApiError ? e.message : '작업에 실패했습니다', 'error');
-      }
-    })();
-  };
+  const run = (fn: () => Promise<unknown>) =>
+    void runGuarded(fn, () => {
+      load();
+      onChanged(); // 휴지통 조작은 트리에도 반영해야 한다 (복원·영구삭제 모두)
+    });
 
   return (
     <div

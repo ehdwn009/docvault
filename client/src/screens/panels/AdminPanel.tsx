@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, DEFAULT_FILE_STATE, type TreeFile, type User } from '../../lib/api';
+import { api, toTreeFile, type TreeFile, type User } from '../../lib/api';
 import { confirmDialog, promptDialog } from '../../lib/dialog';
+import { runGuarded } from '../../lib/guard';
 
 type Stats = {
   userCount: number;
@@ -55,12 +56,8 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
 
   async function run(fn: () => Promise<unknown>) {
     setError(null);
-    try {
-      await fn();
-      reload();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : '작업에 실패했습니다');
-    }
+    // 관리자 작업의 실패는 토스트가 아니라 패널 안에 띄운다 — 작업한 자리 바로 옆이라야 보인다
+    await runGuarded(fn, reload, setError);
   }
 
   return (
@@ -123,12 +120,7 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
                   <button
                     key={f.id}
                     onClick={() =>
-                      onSelectFile({
-                        ...f,
-                        sortOrder: 0,
-                        tags: [],
-                        state: { ...DEFAULT_FILE_STATE },
-                      })
+                      onSelectFile(toTreeFile(f))
                     }
                     className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
                   >
