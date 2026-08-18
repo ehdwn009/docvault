@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // 브라우저 기본 confirm/prompt 대체 — 앱 스타일의 모달. DialogHost는 App에 1회 마운트.
 
@@ -42,6 +42,7 @@ export function choiceDialog(
 export function DialogHost() {
   const [req, setReq] = useState<DialogRequest | null>(null);
   const [value, setValue] = useState('');
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     open = (r) => {
@@ -52,6 +53,12 @@ export function DialogHost() {
       open = null;
     };
   }, []);
+
+  // 키 사건은 포커스가 있는 요소에서 올라온다 — prompt는 입력창이, confirm은 확인 버튼이
+  // 자동 포커스를 받지만 choice는 받을 것이 없어 Esc가 닿지 않는다. 그때만 껍데기에 포커스를 준다.
+  useEffect(() => {
+    if (req?.kind === 'choice') overlayRef.current?.focus();
+  }, [req]);
 
   if (!req) return null;
 
@@ -69,7 +76,9 @@ export function DialogHost() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      ref={overlayRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 outline-none"
       onMouseDown={(e) => e.target === e.currentTarget && close(false)}
       onKeyDown={(e) => {
         if (e.key === 'Escape') close(false);

@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, type TreeFile } from '../lib/api';
+import { api, toTreeFile, type TreeFile } from '../lib/api';
 
-type SearchResult = { id: number; name: string; fileType: string; snippet: string };
+type SearchResult = {
+  id: number;
+  name: string;
+  fileType: TreeFile['fileType'];
+  folderId: number | null;
+  isShared: number;
+  snippet: string;
+};
 
 type Props = {
   files: TreeFile[];
@@ -44,8 +51,20 @@ export default function CommandPalette({ files, onPick, onClose }: Props) {
   const items = useMemo(() => {
     const seen = new Set(nameMatches.map((f) => f.id));
     const bodyMatches = serverResults
-      .filter((r) => !seen.has(r.id) && fileById.has(r.id))
-      .map((r) => ({ file: fileById.get(r.id)!, snippet: r.snippet }));
+      .filter((r) => !seen.has(r.id))
+      .map((r) => ({
+        // 내 트리에 없는 파일(공유 문서)도 열 수 있게 부분 데이터로 채운다 — 서버 검색은 공유도 찾아 준다
+        file:
+          fileById.get(r.id) ??
+          toTreeFile({
+            id: r.id,
+            name: r.name,
+            fileType: r.fileType,
+            folderId: r.folderId,
+            isShared: r.isShared,
+          }),
+        snippet: r.snippet,
+      }));
     return [
       ...nameMatches.map((f) => ({ file: f, snippet: null as string | null })),
       ...bodyMatches,
