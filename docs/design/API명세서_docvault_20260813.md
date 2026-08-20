@@ -13,8 +13,9 @@
 |---|---|---|
 | VALIDATION_ERROR | 400 | 입력값 오류 (zod 검증 실패) |
 | UNAUTHORIZED | 401 | 미로그인 / 세션 만료 |
-| FORBIDDEN | 403 | 권한 없음 (타인 파일, 관리자 전용, 비활성 계정) |
-| NOT_FOUND | 404 | 대상 없음 |
+| FORBIDDEN | 403 | 권한 없음 (관리자 전용, 비활성 계정, **열람은 되지만 수정 권한이 없는 경우**) |
+| TOO_MANY_ATTEMPTS | 429 | 로그인 시도 초과 (Retry-After 헤더에 대기 초) |
+| NOT_FOUND | 404 | 대상 없음, **또는 열람 권한이 없는 자원** (403은 존재를 알려 주므로 통일 — 정보 노출 방지) |
 | CONFLICT | 409 | 중복 (username, 같은 폴더 내 동일 이름 등) |
 | PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과 |
 

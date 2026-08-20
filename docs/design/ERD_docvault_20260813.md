@@ -29,6 +29,7 @@ erDiagram
         integer created_at "unix ms"
         integer updated_at
         integer last_signed_in
+        integer session_epoch "이 시각 이전 발급 토큰은 무효 (비밀번호 변경 시 갱신)"
     }
     FOLDERS {
         integer id PK
@@ -101,7 +102,7 @@ erDiagram
 
 | 엔티티 | 설명 |
 |---|---|
-| USERS | 관리자가 발급하는 로컬 계정. 회원가입 경로 없음. 초기 시드로 admin 계정 1개 생성 |
+| USERS | 관리자가 발급하는 로컬 계정. 회원가입 경로 없음. 초기 시드로 admin 계정 1개 생성. `session_epoch`는 발급된 세션 토큰을 한꺼번에 무효화하는 장치 — 토큰이 담고 온 값과 다르면 거부한다 |
 | FOLDERS | 사용자별 폴더 트리. parent_id 자기참조로 무제한 중첩 |
 | FILES | 파일 메타데이터 + 텍스트 본문. 바이너리는 storage_path로 디스크 참조 |
 | FILE_VERSIONS | 편집 저장 시점의 본문 스냅샷. 파일당 최근 20개 유지 |
