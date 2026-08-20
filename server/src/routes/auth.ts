@@ -35,7 +35,7 @@ export const authRoutes = new Hono<AppEnv>()
   .post('/login', jsonBody(loginSchema), async (c) => {
     const { username, password } = c.req.valid('json');
 
-    // IP+아이디 조합으로 시도를 센다 (9-5 S-03). 프록시 뒤라 원 IP는 헤더에서 온다 —
+    // IP+아이디 조합으로 시도를 센다. 프록시 뒤라 원 IP는 헤더에서 온다 —
     // 헤더는 위조 가능하지만, 최악이어도 "공격자가 자기 카운터를 우회"할 뿐 정상 사용자는 보호된다.
     const clientIp =
       c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? 'local';
@@ -48,7 +48,7 @@ export const authRoutes = new Hono<AppEnv>()
 
     const user = db.select().from(users).where(eq(users.username, username)).get();
     // 계정이 없어도 더미 해시로 bcrypt를 돌린다 — 안 돌리면 응답이 38배 빨라져
-    // "그 아이디는 없다"가 시간으로 새어 나간다 (9-5 S-01). 메시지를 숨겨도 시간이 말한다.
+    // "그 아이디는 없다"가 시간으로 새어 나간다. 메시지를 숨겨도 시간이 말한다.
     const passwordOk = bcrypt.compareSync(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
     // ID 오류인지 비밀번호 오류인지 구분해 알려주지 않는다 (API-001 — 계정 존재 여부 노출 방지)
     if (!user || !passwordOk) {
@@ -98,7 +98,7 @@ export const authRoutes = new Hono<AppEnv>()
       return fail(c, 401, 'INVALID_CREDENTIALS', '현재 비밀번호가 올바르지 않습니다');
     }
 
-    // sessionEpoch를 올려 이 시각 이전에 발급된 토큰을 전부 무효화한다 (9-5 S-04).
+    // sessionEpoch를 올려 이 시각 이전에 발급된 토큰을 전부 무효화한다.
     // 비밀번호를 바꾸는 이유가 대개 "털린 것 같아서"인데, 옛 세션이 살아 있으면 그 목적이 무너진다.
     const now = Date.now();
     db.update(users)

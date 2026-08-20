@@ -33,7 +33,7 @@ export async function resolveSessionUser(c: Context): Promise<SessionResolution>
   const user = db.select().from(users).where(eq(users.id, verified.userId)).get();
   if (!user) return { ok: false, reason: 'no-user' };
   if (!user.isActive) return { ok: false, reason: 'inactive' };
-  // 토큰이 담고 있는 epoch가 현재 값과 다르면 그 사이에 비밀번호가 바뀐 것 — 무효로 본다 (9-5 S-04)
+  // 토큰이 담고 있는 epoch가 현재 값과 다르면 그 사이에 비밀번호가 바뀐 것 — 무효로 본다
   if (verified.epoch !== user.sessionEpoch) return { ok: false, reason: 'stale' };
 
   return { ok: true, user };
