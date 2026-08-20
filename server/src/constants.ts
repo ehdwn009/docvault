@@ -44,6 +44,20 @@ export const FONT_SIZE_MIN = 12;
 export const FONT_SIZE_MAX = 24;
 export const FONT_SIZE_DEFAULT = 16;
 
+/** 로그인 시도 제한 (9-5 S-03). IP+아이디 조합당 창 안에서 이만큼만 허용한다.
+    사람이 오타로 5번을 넘기는 일은 드물고, 사전 공격에는 충분히 가혹한 값 */
+export const LOGIN_RATE_LIMIT = {
+  WINDOW_MS: 10 * 60 * 1000,
+  MAX_ATTEMPTS: 10,
+  /** 이 개수를 넘을 때만 만료 항목을 청소한다 — 매 요청 전체 순회를 피하려고 */
+  SWEEP_THRESHOLD: 1000,
+} as const;
+
+/** 존재하지 않는 계정에도 bcrypt를 돌려 응답 시간을 맞추기 위한 더미 해시 (9-5 S-01).
+    실제 비밀번호와 무관한 값이며, 어떤 입력과도 일치하지 않는다 */
+export const DUMMY_PASSWORD_HASH =
+  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+
 /** 사용자×파일 열람 상태의 기본값 — 상태 행이 없는 파일에 응답으로 실어 보낸다 (API-021·031).
     클라이언트가 "state가 없을 때"를 따로 분기하지 않도록 서버가 채워서 내려준다 */
 export const DEFAULT_FILE_STATE = {

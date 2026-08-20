@@ -33,6 +33,20 @@ const app = new Hono();
 
 app.use(logger());
 
+// 보안 헤더 (9-5 S-05). 비용이 거의 0이라 규모와 무관하게 켜 둔다.
+// CSP는 앱 자체용 — 업로드된 문서는 별도로 iframe sandbox와 CSP: sandbox로 격리한다(files.ts).
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff'); // 타입 추측으로 스크립트가 실행되는 것 방지
+  c.header('X-Frame-Options', 'DENY'); // 클릭재킹 — 남의 페이지가 우리 앱을 iframe으로 덮지 못하게
+  c.header('Referrer-Policy', 'same-origin'); // 외부로 나갈 때 문서 주소(딥링크)를 흘리지 않게
+  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // HSTS는 https로 들어온 요청에만 — http에 붙이면 무시되고, 개발(localhost)에 붙으면 방해가 된다
+  if (config.isProduction) {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+});
+
 const api = new Hono<AppEnv>();
 api.use('*', authGuard);
 api.get('/health', (c) => c.json({ status: 'ok', version: APP_VERSION }));

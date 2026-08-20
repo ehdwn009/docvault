@@ -18,6 +18,9 @@ export const users = sqliteTable('users', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
   lastSignedIn: integer('last_signed_in'),
+  /** 이 시각보다 먼저 발급된 세션 토큰은 무효 — 비밀번호 변경·강제 로그아웃 시 갱신한다.
+      JWT는 서버에 상태를 두지 않아 토큰을 개별 취소할 수 없으므로, "언제 이후 것만 유효"로 끊는다 */
+  sessionEpoch: integer('session_epoch').notNull().default(0),
 });
 
 export const folders = sqliteTable('folders', {

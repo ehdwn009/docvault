@@ -1,7 +1,9 @@
 import { eq } from 'drizzle-orm';
+import type { Context } from 'hono';
 import { db } from '../db/index.js';
 import { folders } from '../db/schema.js';
 import type { SessionUser } from '../types.js';
+import { fail } from './errors.js';
 
 type FileAccess = {
   ownerId: number;
@@ -52,4 +54,21 @@ export function canReadFolder(
   if (folder.ownerId === user.id || user.role === 'admin') return true;
   // 자신의 공유 여부 + 상위 체인 상속을 파일과 같은 규칙으로 판정한다
   return isEffectivelyShared({ isShared: folder.isShared, folderId: folder.parentId });
+}
+
+/**
+ * 권한 거부 응답도 한곳에서 만든다 (9-5 S-02).
+ *
+ * 열람 권한조차 없으면 403이 아니라 **404**를 준다 — 403은 "그건 존재한다"를 알려 주므로,
+ * id를 훑으면 서버에 어떤 파일이 있는지 전부 새어 나간다.
+ * 반대로 열람은 되는데(공유받음) 수정만 막히는 경우는 이미 존재를 아는 상태라 403이 정직하다.
+ */
+export function failFileAccess(
+  c: Context,
+  user: SessionUser,
+  file: FileAccess,
+  action: string,
+): Response {
+  if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+  return fail(c, 403, 'FORBIDDEN', `${action} 권한이 없습니다`);
 }

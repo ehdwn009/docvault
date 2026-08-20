@@ -13,7 +13,7 @@ import {
 } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, fileTags, fileVersions, folders, tags } from '../db/schema.js';
-import { canReadFile, canWriteFile } from '../lib/access.js';
+import { canReadFile, canWriteFile, failFileAccess } from '../lib/access.js';
 import {
   ArchiveTooLargeError,
   buildManifest,
@@ -241,7 +241,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
     // 스크립트가 실행될 수 있는 형식(html·svg 등)은 문서로 직접 열려도 무해하도록 격리
@@ -267,7 +267,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canReadFile(c.get('user'), file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(c.get('user'), file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     return c.json(toFileMeta(file));
   })
@@ -280,7 +280,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
     if (file.contentText === null) {
       return fail(c, 400, 'VALIDATION_ERROR', '바이너리 파일은 /raw로 받아야 합니다');
     }
@@ -303,7 +303,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '수정 권한이 없습니다');
+    if (!canWriteFile(user, file)) return failFileAccess(c, user, file, '수정');
     if (file.contentText === null) {
       return fail(c, 400, 'VALIDATION_ERROR', '바이너리 파일은 본문 저장을 지원하지 않습니다');
     }
@@ -358,7 +358,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '수정 권한이 없습니다');
+    if (!canWriteFile(user, file)) return failFileAccess(c, user, file, '수정');
 
     let typePatch = {};
     if (patch.name !== undefined) {
@@ -413,7 +413,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '삭제 권한이 없습니다');
+    if (!canWriteFile(user, file)) return failFileAccess(c, user, file, '삭제');
 
     db.update(files).set({ deletedAt: Date.now() }).where(eq(files.id, id)).run();
     return c.json({ ok: true });
@@ -468,7 +468,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     // 내 파일이면 같은 폴더에, 남의 공유 파일이면 내 루트에 복사한다
     const targetFolder = file.ownerId === user.id ? file.folderId : null;
@@ -508,7 +508,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     const versions = db
       .select({
@@ -533,7 +533,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     const version = db
       .select()
@@ -559,7 +559,7 @@ export const fileRoutes = new Hono<AppEnv>()
 
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
-    if (!canWriteFile(user, file)) return fail(c, 403, 'FORBIDDEN', '수정 권한이 없습니다');
+    if (!canWriteFile(user, file)) return failFileAccess(c, user, file, '수정');
     if (file.contentText === null) {
       return fail(c, 400, 'VALIDATION_ERROR', '바이너리 파일은 버전을 지원하지 않습니다');
     }

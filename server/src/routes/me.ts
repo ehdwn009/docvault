@@ -94,7 +94,7 @@ export const meRoutes = new Hono<AppEnv>()
     const file = db.select().from(files).where(eq(files.id, id)).get();
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
     // 공유 파일 열람자도 자신만의 즐겨찾기·읽던 위치를 가진다 (ERD — USER_FILE_STATE 설계 의도)
-    if (!canReadFile(user, file)) return fail(c, 403, 'FORBIDDEN', '접근 권한이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     const existing = db
       .select()

@@ -15,7 +15,7 @@ const PUBLIC_PATHS = new Set(['/api/v1/health', '/api/v1/auth/login']);
 
 export type SessionResolution =
   | { ok: true; user: typeof users.$inferSelect }
-  | { ok: false; reason: 'no-token' | 'invalid-token' | 'no-user' | 'inactive' };
+  | { ok: false; reason: 'no-token' | 'invalid-token' | 'no-user' | 'inactive' | 'stale' };
 
 /**
  * 쿠키 → JWT 검증 → DB 재확인 → 활성 확인까지의 판정을 한 곳에 둔다.
@@ -26,13 +26,15 @@ export async function resolveSessionUser(c: Context): Promise<SessionResolution>
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return { ok: false, reason: 'no-token' };
 
-  const userId = await verifySessionToken(token);
-  if (userId === null) return { ok: false, reason: 'invalid-token' };
+  const verified = await verifySessionToken(token);
+  if (verified === null) return { ok: false, reason: 'invalid-token' };
 
   // 토큰만 믿지 않고 매 요청 DB를 확인한다 — 삭제·비활성화가 세션 만료를 기다리지 않고 즉시 반영되게.
-  const user = db.select().from(users).where(eq(users.id, userId)).get();
+  const user = db.select().from(users).where(eq(users.id, verified.userId)).get();
   if (!user) return { ok: false, reason: 'no-user' };
   if (!user.isActive) return { ok: false, reason: 'inactive' };
+  // 토큰이 담고 있는 epoch가 현재 값과 다르면 그 사이에 비밀번호가 바뀐 것 — 무효로 본다 (9-5 S-04)
+  if (verified.epoch !== user.sessionEpoch) return { ok: false, reason: 'stale' };
 
   return { ok: true, user };
 }
@@ -49,7 +51,7 @@ export const authGuard = createMiddleware<AppEnv>(async (c, next) => {
       'UNAUTHORIZED',
       session.reason === 'no-token'
         ? '로그인이 필요합니다'
-        : session.reason === 'invalid-token'
+        : session.reason === 'invalid-token' || session.reason === 'stale'
           ? '세션이 만료되었습니다'
           : '존재하지 않는 계정입니다',
     );
