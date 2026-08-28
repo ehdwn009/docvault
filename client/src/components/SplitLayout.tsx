@@ -76,7 +76,9 @@ export default function SplitLayout({ panes, activeIdx, isWide, ratio, onRatioCh
   );
 
   if (panes.length === 1) {
-    return <div className="min-h-0 flex-1">{paneBox(0)}</div>;
+    // flex 컨테이너여야 paneBox의 flex-1이 높이를 받는다 — 아니면 뷰어의 h-full 사슬이
+    // 끊겨 본문이 잘리고 스크롤이 죽는다 (v0.15.1에서 수정)
+    return <div className="flex min-h-0 flex-1 flex-col">{paneBox(0)}</div>;
   }
 
   const mainDivider = (
