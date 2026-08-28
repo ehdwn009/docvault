@@ -4,6 +4,8 @@ import FileGrid from '../components/FileGrid';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
+import SplitLayout from '../components/SplitLayout';
+import TabBar from '../components/TabBar';
 import TrashPanel from '../components/TrashPanel';
 import TagEditor from '../components/TagEditor';
 import UpdateNotes from '../components/UpdateNotes';
@@ -91,7 +93,16 @@ function fileIdFromPath(pathname: string): number | null {
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
-  const [selected, setSelected] = useState<TreeFile | null>(null);
+  // 탭 = "열려 있는" 문서들, 칸(pane) = 그중 화면에 "보이는" 부분집합 (IA — 탭 바 + 분할 보기)
+  const [tabs, setTabs] = useState<TreeFile[]>([]);
+  const [panes, setPanes] = useState<TreeFile[]>([]);
+  const [activeIdx, setActiveIdx] = useState(0); // 활성 칸 — 탭 클릭·단축키·URL이 향하는 곳
+  const [splitRatio, setSplitRatio] = useState(50); // 첫 칸의 크기 비율(%) — 구분선 드래그로 조절
+  // 줄 번호 앵커(#L16-L26)로 연 파일의 하이라이트 범위 — 링크가 "파일 속 한 지점"을 가리킬 때
+  const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
+  // 분할 방향·상한은 화면 폭 기준: 넓으면 좌우 최대 4칸, 좁으면 상하 최대 2칸 (IA — 반응형 기준 768px)
+  const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
+  const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
   const [panel, setPanel] = useState<Panel>('files');
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -116,16 +127,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const dirUploadRef = useRef<HTMLInputElement | null>(null);
   const uploadFolderRef = useRef<number | null>(null);
   const treeRef = useRef<Tree>(tree);
-  const dirtyRef = useRef(false); // 편집기의 미저장 변경 여부 — 파일 전환 가드용
+  // 칸마다 편집기가 따로 있을 수 있어 미저장 여부를 파일별로 기억한다 — 전환·닫기 가드용
+  const dirtyMapRef = useRef(new Map<number, boolean>());
 
   const loadTree = useCallback(async (): Promise<Tree | null> => {
     const t = await api<Tree>('/tree').catch(() => null);
     if (t) {
       setTree(t);
       treeRef.current = t;
-      // 이름변경·이동이 반영되도록 선택 파일을 새 트리와 동기화.
-      // 트리에 없으면(공유 파일 열람 중) 선택을 유지한다 — 삭제는 deleteFile에서 직접 해제
-      setSelected((prev) => (prev ? (t.files.find((f) => f.id === prev.id) ?? prev) : null));
+      // 이름변경·이동이 반영되도록 열린 문서들을 새 트리와 동기화.
+      // 트리에 없으면(공유 파일 열람 중) 그대로 유지 — 삭제는 deleteFile에서 직접 닫는다
+      const refresh = (list: TreeFile[]) => list.map((x) => t.files.find((f) => f.id === x.id) ?? x);
+      setTabs(refresh);
+      setPanes(refresh);
     }
     return t;
   }, []);
@@ -143,6 +157,203 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     return meta ? toTreeFile(meta) : null;
   }, []);
 
+  const maxPanes = isWide ? 4 : 2;
+
+  /** 칸에 있던 문서를 교체·닫기 전 미저장 편집 확인 */
+  const confirmReplace = useCallback(async (target: TreeFile | undefined, incomingId: number | null) => {
+    if (!target || target.id === incomingId) return true;
+    if (!dirtyMapRef.current.get(target.id)) return true;
+    const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
+      message: '이동하면 작성한 내용이 사라집니다.',
+      danger: true,
+    });
+    if (ok) dirtyMapRef.current.delete(target.id);
+    return ok;
+  }, []);
+
+  const ensureTab = useCallback((file: TreeFile) => {
+    setTabs((prev) => (prev.some((t) => t.id === file.id) ? prev : [...prev, file]));
+  }, []);
+
+  /** 파일 열기 — 이미 보이는 문서면 그 칸을 활성화, 아니면 활성 칸의 내용을 교체 */
+  const selectFile = useCallback(
+    async (file: TreeFile, opts?: { pushUrl?: boolean }) => {
+      const existing = panes.findIndex((p) => p.id === file.id);
+      if (existing !== -1) {
+        setActiveIdx(existing);
+      } else {
+        const targetIdx = Math.max(0, Math.min(activeIdx, panes.length - 1));
+        if (!(await confirmReplace(panes[targetIdx], file.id))) return;
+        setPanes((prev) => {
+          if (prev.length === 0) return [file];
+          const next = [...prev];
+          next[Math.min(targetIdx, next.length - 1)] = file;
+          return next;
+        });
+        setActiveIdx(targetIdx);
+      }
+      ensureTab(file);
+      setDrawerOpen(false);
+      if (opts?.pushUrl !== false && location.pathname !== `/f/${file.id}`) {
+        history.pushState(null, '', `/f/${file.id}`);
+      }
+    },
+    [panes, activeIdx, confirmReplace, ensureTab],
+  );
+
+  /** 분할로 열기 — 보던 문서는 제자리, 새 문서가 새 칸으로 (IA — 배치 규칙) */
+  const openSplit = useCallback(
+    async (file: TreeFile) => {
+      ensureTab(file);
+      const existing = panes.findIndex((p) => p.id === file.id);
+      if (existing !== -1) {
+        setActiveIdx(existing);
+      } else if (panes.length === 0) {
+        setPanes([file]);
+        setActiveIdx(0);
+      } else if (panes.length < maxPanes) {
+        setPanes((prev) => [...prev, file]);
+        setActiveIdx(panes.length);
+      } else {
+        // 상한이면 마지막 칸을 교체한다 — 나머지는 탭에 대기
+        if (!(await confirmReplace(panes[panes.length - 1], file.id))) return;
+        setPanes((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = file;
+          return next;
+        });
+        setActiveIdx(panes.length - 1);
+      }
+      setDrawerOpen(false);
+      if (location.pathname !== `/f/${file.id}`) history.pushState(null, '', `/f/${file.id}`);
+    },
+    [panes, maxPanes, confirmReplace, ensureTab],
+  );
+
+  /** 문서 속 상대 경로 링크를 내 트리의 파일로 번역해 연다 (IA — 문서 내부 링크).
+      링크를 품은 문서의 폴더에서 출발해 `../`·하위 폴더명을 따라간다 */
+  const openByPath = useCallback(
+    (from: TreeFile, rawPath: string, split: boolean) => {
+      const t = treeRef.current;
+      const path = rawPath.split('#')[0]!; // 줄 번호 앵커(#L16-L26)는 떼고 파일만 연다
+      if (!path) return;
+      const byId = new Map(t.folders.map((f) => [f.id, f]));
+
+      // 경로가 /로 시작하면 최상위부터, 아니면 현재 문서의 폴더부터
+      let dir: number | null = path.startsWith('/') ? null : from.folderId;
+      const segments = path.replace(/^\//, '').split('/').filter((s) => s !== '' && s !== '.');
+      const targetName = segments.pop();
+      if (!targetName) return;
+
+      for (const seg of segments) {
+        if (seg === '..') {
+          // 최상위의 부모는 없다 — 업로드 범위 밖을 가리키는 링크는 최상위에서 계속 찾아본다
+          dir = dir === null ? null : (byId.get(dir)?.parentId ?? null);
+        } else {
+          const child = t.folders.find((f) => f.parentId === dir && f.name === seg);
+          if (!child) {
+            toast(`연결된 파일을 찾을 수 없습니다 (${rawPath})`, 'error');
+            return;
+          }
+          dir = child.id;
+        }
+      }
+      const target = t.files.find((f) => f.folderId === dir && f.name === targetName);
+      if (!target) {
+        toast(`연결된 파일을 찾을 수 없습니다 (${rawPath})`, 'error');
+        return;
+      }
+      // 줄 번호 앵커면 그 줄로 이동·하이라이트, 아니면 이 파일의 이전 하이라이트를 지운다
+      const anchor = rawPath.match(/#L(\d+)(?:-L?(\d+))?$/i);
+      if (anchor) {
+        const start = Number(anchor[1]);
+        const end = Number(anchor[2] ?? anchor[1]);
+        setLineJump({ fileId: target.id, start: Math.min(start, end), end: Math.max(start, end) });
+      } else {
+        setLineJump((prev) => (prev?.fileId === target.id ? null : prev));
+      }
+      if (split) void openSplit(target);
+      else void selectFile(target);
+    },
+    [openSplit, selectFile],
+  );
+
+  /** 탭·칸에서 파일들을 정리한다 (삭제·탭 닫기 공용). URL도 새 활성 문서로 맞춘다 */
+  const detachFiles = useCallback(
+    (ids: number[]) => {
+      const idSet = new Set(ids);
+      for (const id of ids) dirtyMapRef.current.delete(id);
+      setLineJump((prev) => (prev && idSet.has(prev.fileId) ? null : prev));
+      const nextTabs = tabs.filter((t) => !idSet.has(t.id));
+      let nextPanes = panes.filter((p) => !idSet.has(p.id));
+      // 보이는 칸이 다 닫혔으면 마지막 탭을 대신 보여준다 — 빈 화면보다 이어 보기가 자연스럽다
+      if (nextPanes.length === 0 && nextTabs.length > 0) nextPanes = [nextTabs[nextTabs.length - 1]!];
+      setTabs(nextTabs);
+      setPanes(nextPanes);
+      const na = Math.max(0, Math.min(activeIdx, nextPanes.length - 1));
+      setActiveIdx(na);
+      history.replaceState(null, '', nextPanes[na] ? `/f/${nextPanes[na].id}` : '/');
+    },
+    [tabs, panes, activeIdx],
+  );
+
+  /** 탭 닫기 — 문서를 완전히 닫는다 (미저장 확인 포함) */
+  const closeTab = useCallback(
+    async (file: TreeFile) => {
+      if (dirtyMapRef.current.get(file.id)) {
+        const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
+          message: '닫으면 작성한 내용이 사라집니다.',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      detachFiles([file.id]);
+    },
+    [detachFiles],
+  );
+
+  /** 칸 닫기 — 화면에서만 치우고 탭에는 남긴다 */
+  const closePane = useCallback(
+    (idx: number) => {
+      const next = panes.filter((_, i) => i !== idx);
+      setPanes(next);
+      const na = Math.max(0, Math.min(activeIdx > idx ? activeIdx - 1 : activeIdx, next.length - 1));
+      setActiveIdx(na);
+      if (next[na]) history.replaceState(null, '', `/f/${next[na].id}`);
+    },
+    [panes, activeIdx],
+  );
+
+  const activatePane = useCallback(
+    (idx: number) => {
+      if (idx === activeIdx || idx >= panes.length) return;
+      setActiveIdx(idx);
+      // 활성 칸 이동은 히스토리를 쌓지 않는다 — 뒤로가기가 칸 사이를 오가면 어지럽다
+      if (panes[idx]) history.replaceState(null, '', `/f/${panes[idx].id}`);
+    },
+    [activeIdx, panes],
+  );
+
+  /** 2분할 자리 바꾸기 — 경우의 수가 하나라 버튼 한 번 (IA — 자리 바꾸기) */
+  const swapPanes = useCallback(() => {
+    setPanes((prev) => (prev.length === 2 ? [prev[1]!, prev[0]!] : prev));
+    setActiveIdx((i) => (panes.length === 2 ? 1 - i : i));
+  }, [panes.length]);
+
+  // 화면 폭 변화 감지 + 좁아지면 상한(2칸)으로 접기 — 접힌 문서는 탭에 남는다
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsWide(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => {
+    if (!isWide && panes.length > 2) {
+      setPanes((prev) => prev.slice(0, 2));
+      setActiveIdx((i) => Math.min(i, 1));
+    }
+  }, [isWide, panes.length]);
+
   // 초기 로드 + 딥링크(/f/{id}) 복원
   useEffect(() => {
     void (async () => {
@@ -150,7 +361,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       const id = fileIdFromPath(location.pathname);
       if (id !== null) {
         const f = await resolveFile(id);
-        if (f) setSelected(f);
+        if (f) {
+          setTabs([f]);
+          setPanes([f]);
+          setActiveIdx(0);
+        }
       }
     })();
     void api<{ settings: UserSettings }>('/me/settings')
@@ -196,33 +411,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       .catch(() => toast('업데이트 기록을 불러오지 못했습니다', 'error'));
   }
 
-  // 뒤로가기/앞으로가기
+  // 뒤로가기/앞으로가기 — URL은 활성 문서 하나만 가리킨다 (탭·분할 구성은 세션 한정)
   useEffect(() => {
     const handler = () => {
       const id = fileIdFromPath(location.pathname);
-      if (id === null) setSelected(null);
-      else void resolveFile(id).then((f) => f && setSelected(f));
+      if (id === null) setPanes([]);
+      else void resolveFile(id).then((f) => f && void selectFile(f, { pushUrl: false }));
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
-  }, [resolveFile]);
-
-  /** 파일 선택 — 미저장 편집 확인 → URL 갱신 → 모바일 드로어 닫기 */
-  const selectFile = useCallback(async (file: TreeFile) => {
-    if (dirtyRef.current) {
-      const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
-        message: '이동하면 작성한 내용이 사라집니다.',
-        danger: true,
-      });
-      if (!ok) return;
-      dirtyRef.current = false;
-    }
-    setSelected(file);
-    setDrawerOpen(false);
-    if (location.pathname !== `/f/${file.id}`) {
-      history.pushState(null, '', `/f/${file.id}`);
-    }
-  }, []);
+  }, [resolveFile, selectFile]);
 
   /** 트리 조작 공통 래퍼: 에러는 토스트로, 성공하면 트리 재조회 */
   const guard = useCallback(
@@ -596,10 +794,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     },
     // 삭제는 확인 없이 휴지통으로 — 실행 취소(복원)가 안전망이라 대화상자보다 빠르고 안전하다
     deleteFile: (id) => {
-      if (selected?.id === id) {
-        setSelected(null);
-        history.replaceState(null, '', '/');
-      }
+      if (tabs.some((t) => t.id === id)) detachFiles([id]);
       void guard(async () => {
         await api(`/files/${id}`, { method: 'DELETE' });
         toast('휴지통으로 이동했습니다', 'success', {
@@ -611,6 +806,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       });
     },
     copyFile: (id) => void guard(() => api(`/files/${id}/copy`, { method: 'POST' })),
+    openSplit: (file) => void openSplit(file),
     downloadFile: (file) => downloadFile(file.id, file.name),
     downloadFolder: (folder) => downloadArchive({ folderIds: [folder.id] }),
     uploadTo: (folderId) => {
@@ -679,10 +875,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   function bulkDelete() {
     const ids = [...checked];
-    if (selected && checked.has(selected.id)) {
-      setSelected(null);
-      history.replaceState(null, '', '/');
-    }
+    if (tabs.some((t) => checked.has(t.id))) detachFiles(ids);
     setChecked(new Set());
     void guard(async () => {
       for (const id of ids) await api(`/files/${id}`, { method: 'DELETE' });
@@ -1002,20 +1195,47 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       </div>
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
-      <main className="min-w-0 flex-1">
-        {selected ? (
-          <Viewer
-            file={selected}
-            settings={settings}
-            immersive={immersive}
-            onToggleImmersive={() => setImmersive((v) => !v)}
-            onContentSaved={() => void loadTree()}
-            onStateChanged={() => void loadTree()}
-            onToggleFavorite={toggleFavorite}
-            onDirtyChange={(d) => (dirtyRef.current = d)}
+      <main className="flex min-w-0 flex-1 flex-col">
+        {tabs.length > 0 && !immersive && (
+          <TabBar
+            tabs={tabs}
+            activeId={selected?.id ?? null}
+            paneIds={panes.map((p) => p.id)}
+            onPick={(f) => void selectFile(f)}
+            onClose={(f) => void closeTab(f)}
+          />
+        )}
+        {panes.length > 0 ? (
+          <SplitLayout
+            panes={panes}
+            activeIdx={activeIdx}
+            isWide={isWide}
+            ratio={splitRatio}
+            onRatioChange={setSplitRatio}
+            onActivate={activatePane}
+            onSwap={swapPanes}
+            renderPane={(f, i) => (
+              <Viewer
+                key={f.id}
+                file={f}
+                settings={settings}
+                immersive={immersive}
+                onToggleImmersive={() => setImmersive((v) => !v)}
+                onContentSaved={() => void loadTree()}
+                onStateChanged={() => void loadTree()}
+                onToggleFavorite={toggleFavorite}
+                onDirtyChange={(d) => {
+                  if (d) dirtyMapRef.current.set(f.id, true);
+                  else dirtyMapRef.current.delete(f.id);
+                }}
+                onClosePane={panes.length > 1 ? () => closePane(i) : undefined}
+                onOpenLink={(path, split) => openByPath(f, path, split)}
+                jumpLines={lineJump?.fileId === f.id ? lineJump : undefined}
+              />
+            )}
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-600">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-sm text-slate-600">
             <p>좌측에서 파일을 선택하거나, 여기로 파일을 끌어다 놓으세요</p>
             <p>
               <span className="rounded border border-slate-800 px-1.5 py-0.5 text-xs">Ctrl+K</span>{' '}

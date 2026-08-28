@@ -16,6 +16,12 @@ type Props = {
   onStateChanged: () => void;
   onToggleFavorite: (file: TreeFile) => void;
   onDirtyChange: (dirty: boolean) => void;
+  /** 분할 중일 때만 옴 — 이 칸을 화면에서 닫는다 (문서는 탭에 남음) */
+  onClosePane?: () => void;
+  /** 문서 속 상대 경로 링크로 다른 파일 열기 — (경로, 분할로 열지) (IA — 문서 내부 링크) */
+  onOpenLink?: (path: string, split: boolean) => void;
+  /** 줄 번호 앵커(#L16-L26)로 열렸을 때 하이라이트·이동할 줄 범위 */
+  jumpLines?: { start: number; end: number };
 };
 
 const THEME_BG: Record<UserSettings['viewerTheme'], string> = {
@@ -36,7 +42,7 @@ type Heading = { text: string; level: number; jump: () => void };
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, onOpenLink, jumpLines }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -89,6 +95,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
   useEffect(() => {
     if (!data || mode !== 'view' || data.fileType === 'html') return;
+    if (jumpLines) return; // 줄 앵커로 열렸으면 렌더러가 그 줄로 데려간다 — 읽던 위치 복원과 겹치지 않게
     const offset = file.state.readingPosition?.offset;
     if (offset && scrollRef.current) {
       requestAnimationFrame(() => {
@@ -223,6 +230,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   const actions = (
     <>
+      {onClosePane && (
+        <button onClick={onClosePane} title="이 칸 닫기 (문서는 탭에 남음)" className={actionButton(false)}>
+          ✕
+        </button>
+      )}
       {(data.fileType === 'md' || data.fileType === 'html') && (
         <button onClick={() => setShowToc((v) => !v)} className={actionButton(showToc)}>
           목차
@@ -376,7 +388,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             >
               {Renderer ? (
                 <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
-                  <Renderer content={data.content} theme={settings.viewerTheme} fileName={file.name} />
+                  <Renderer
+                    content={data.content}
+                    theme={settings.viewerTheme}
+                    fileName={file.name}
+                    onFileLink={onOpenLink}
+                    highlightLines={jumpLines}
+                  />
                 </Suspense>
               ) : (
                 <p className="text-sm text-slate-500">이 형식({data.fileType})의 뷰어는 아직 없습니다</p>

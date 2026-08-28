@@ -11,6 +11,10 @@ export type RendererProps = {
   theme?: ViewerTheme;
   /** 파일 이름 — 코드 렌더러가 확장자로 강조 언어를 고르는 데 쓴다 */
   fileName?: string;
+  /** 문서 속 상대 경로 링크 클릭 — (경로, 분할로 열지). md 렌더러용 */
+  onFileLink?: (path: string, split: boolean) => void;
+  /** 줄 번호 앵커(#L16-L26)로 열렸을 때 하이라이트할 줄 범위 — 코드 렌더러용 */
+  highlightLines?: { start: number; end: number };
   /** 열람 시작 시 복원할 스크롤 위치 — iframe 내부에서 스크롤되는 html 렌더러용 */
   initialOffset?: number;
   /** 렌더러 내부 스크롤 보고 — 부모가 읽던 위치 저장에 사용 (html 렌더러용) */

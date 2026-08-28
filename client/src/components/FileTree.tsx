@@ -26,6 +26,8 @@ export type TreeActions = {
   moveFile: (id: number, folderId: number | null) => void;
   deleteFile: (id: number) => void;
   copyFile: (id: number) => void;
+  /** 분할 칸에 열기 — 보던 문서 옆(모바일은 아래) (IA — 탭 바 + 분할 보기) */
+  openSplit: (file: TreeFile) => void;
   downloadFile: (file: TreeFile) => void;
   /** 폴더를 하위 구조 그대로 ZIP 하나로 (API-040) */
   downloadFolder: (folder: TreeFolder) => void;
@@ -239,6 +241,8 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
   const fileMenu = (file: TreeFile): MenuItem[] => [
     // 터치 기기의 선택 모드 진입점 (PC는 Ctrl+클릭)
     { label: checked.has(file.id) ? '선택 해제' : '선택', action: () => toggleCheck(file.id) },
+    // PC는 Alt+클릭도 같은 동작 (Ctrl+클릭은 다중 선택이 선점)
+    { label: '분할로 열기', action: () => actions.openSplit(file) },
     {
       label: '이름 변경',
       action: () => setRenaming({ kind: 'file', id: file.id, value: file.name }),
@@ -332,8 +336,9 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 }
               }}
               onClick={(e) => {
-                // Ctrl/⌘ 클릭 = 선택 토글, Shift = 범위, 선택 모드 중엔 클릭도 토글 — 아니면 평소처럼 열람
+                // Ctrl/⌘ 클릭 = 선택 토글, Alt = 분할로 열기, Shift = 범위, 선택 모드 중엔 클릭도 토글
                 if (e.ctrlKey || e.metaKey) toggleCheck(file.id);
+                else if (e.altKey) actions.openSplit(file);
                 else if (e.shiftKey && selectionMode) rangeCheck(file.id);
                 else if (selectionMode) toggleCheck(file.id);
                 else onSelect(file);
