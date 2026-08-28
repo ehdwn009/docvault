@@ -334,11 +334,17 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         </button>
       )}
       {!immersive && (
-      // 터치에서는 스크롤 방향에 따라 헤더가 접힌다 (IA — 크롬 자동 숨김)
+      // 터치에서는 스크롤 방향에 따라 헤더가 접힌다 (IA — 크롬 자동 숨김).
+      // 접힘용 overflow-hidden·max-h는 터치에만 건다 — PC에 걸면 헤더 아래로 펼쳐지는
+      // ⋯ 팝오버 메뉴가 이 상자에 잘려서 안 보인다
       <div
-        className={`overflow-hidden transition-all duration-200 ${
-          !isPc && chromeHidden && mode === 'view' ? 'max-h-0 opacity-0' : 'max-h-14'
-        }`}
+        className={
+          isPc
+            ? ''
+            : `overflow-hidden transition-all duration-200 ${
+                chromeHidden && mode === 'view' ? 'max-h-0 opacity-0' : 'max-h-14'
+              }`
+        }
       >
       <div
         // touch-none: 헤더에서 시작한 터치를 브라우저 제스처(스크롤·내비게이션)가 가로채지 않게 —
