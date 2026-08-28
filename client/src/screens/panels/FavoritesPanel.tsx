@@ -14,7 +14,7 @@ export default function FavoritesPanel({ files, selectedId, onSelect }: Props) {
     );
   }
   return (
-    <div className="space-y-0.5 px-2">
+    <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
       {favorites.map((file) => (
         <button
           key={file.id}
