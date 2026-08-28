@@ -22,7 +22,23 @@ type Props = {
   onOpenLink?: (path: string, split: boolean) => void;
   /** 줄 번호 앵커(#L16-L26)로 열렸을 때 하이라이트·이동할 줄 범위 */
   jumpLines?: { start: number; end: number };
+  /** ⋯ 메뉴 "분할 보기" — 이미 열린 다른 탭과 분할. 대기 탭이 없으면 안 옴 (IA — 분할 컨트롤러) */
+  onSplitView?: () => void;
+  /** 터치 전용: 파일명 탭 → 문서 스위처 시트 (IA — 모바일 재편) */
+  onOpenSwitcher?: () => void;
+  /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
+  onSwipeTab?: (dir: 1 | -1) => void;
+  /** 크롬 자동 숨김 상태 — 스크롤 방향은 이 뷰어가 보고하고(onChromeHint), 판정은 부모가 든다 */
+  chromeHidden?: boolean;
+  onChromeHint?: (hide: boolean) => void;
 };
+
+/** 크롬 자동 숨김 판정값 — 문서 상단 근처면 무조건 보이고, 이만큼 움직여야 방향으로 친다 */
+const CHROME_SHOW_NEAR_TOP = 48;
+const CHROME_SCROLL_DELTA = 8;
+/** 헤더 스와이프 판정 — 가로로 이만큼, 세로 이탈은 이 이하 */
+const SWIPE_MIN_X = 60;
+const SWIPE_MAX_Y = 40;
 
 const THEME_BG: Record<UserSettings['viewerTheme'], string> = {
   light: 'bg-white',
@@ -42,7 +58,7 @@ type Heading = { text: string; level: number; jump: () => void };
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, onOpenLink, jumpLines }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, chromeHidden, onChromeHint }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -56,6 +72,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const scrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | undefined>(undefined);
   const scaleSaveRef = useRef<number | undefined>(undefined);
+  const lastScrollYRef = useRef(0); // 크롬 자동 숨김의 방향 판정 기준
+  // 스와이프 추적 — 브라우저가 제스처를 가로채면 touchend 대신 touchcancel이 와서 last를 대신 쓴다
+  const swipeRef = useRef<{ x: number; y: number; lastX: number; lastY: number } | null>(null);
+  // 읽기 진행률(%) — 터치에서 크롬이 숨어도 위치 감을 주는 2px 줄. null이면 표시 안 함
+  const [progress, setProgress] = useState<number | null>(null);
 
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
@@ -89,7 +110,16 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     setFit(file.state.viewerFit !== 0);
     setFontScale(file.state.fontScale);
     setShowMenu(false);
+    // 문서를 바꾸면 크롬은 일단 보이고 진행률은 새로 잰다
+    setProgress(null);
+    lastScrollYRef.current = 0;
+    onChromeHint?.(false);
   }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 편집기로 들어가면 크롬을 되살린다 — 도구가 숨은 채 편집을 시작하면 당황스럽다
+  useEffect(() => {
+    if (mode === 'edit') onChromeHint?.(false);
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
@@ -98,6 +128,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     if (jumpLines) return; // 줄 앵커로 열렸으면 렌더러가 그 줄로 데려간다 — 읽던 위치 복원과 겹치지 않게
     const offset = file.state.readingPosition?.offset;
     if (offset && scrollRef.current) {
+      // 복원 스크롤은 사용자 스크롤이 아니다 — 기준값을 먼저 맞춰 크롬이 숨지 않게 한다
+      lastScrollYRef.current = offset;
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = offset;
       });
@@ -141,8 +173,30 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     [file.id],
   );
 
+  /** 스크롤 위치 하나에서 세 가지를 뽑는다: 읽던 위치 저장 + 크롬 숨김 힌트 + 진행률 */
+  const reportScroll = useCallback(
+    (y: number, denom: number | null) => {
+      if (onChromeHint) {
+        const last = lastScrollYRef.current;
+        if (y < CHROME_SHOW_NEAR_TOP) onChromeHint(false);
+        else if (y - last > CHROME_SCROLL_DELTA) onChromeHint(true);
+        else if (last - y > CHROME_SCROLL_DELTA) onChromeHint(false);
+        lastScrollYRef.current = y;
+      }
+      if (denom !== null) {
+        // 짧은 문서는 줄이 의미 없다 — 화면 반 이상 스크롤될 때만 표시
+        const next = denom > 300 ? Math.min(100, Math.round((y / denom) * 100)) : null;
+        setProgress((prev) => (prev === next ? prev : next));
+      }
+      saveOffset(y);
+    },
+    [onChromeHint, saveOffset],
+  );
+
   function handleScroll() {
-    saveOffset(scrollRef.current?.scrollTop ?? 0);
+    const el = scrollRef.current;
+    if (!el) return;
+    reportScroll(el.scrollTop, el.scrollHeight - el.clientHeight);
   }
 
   // 격리된 문서 안의 클릭은 부모에 닿지 않는다 — 렌더러가 알려 주면 팝오버를 닫는다
@@ -219,6 +273,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   // 자주 쓰는 것(목차)만 남기고 나머지는 더보기로 접는다
   const menuItems: ViewerAction[] = [
+    // 이미 열린 탭끼리 분할 — 트리의 "분할로 열기"(새 문서)와 역할을 나눈다 (IA)
+    ...(onSplitView ? [{ label: '◫ 분할 보기', onClick: onSplitView }] : []),
     { label: '몰입 모드', onClick: onToggleImmersive },
     ...(isBinary
       ? []
@@ -278,7 +334,52 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         </button>
       )}
       {!immersive && (
-      <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:pl-14">
+      // 터치에서는 스크롤 방향에 따라 헤더가 접힌다 (IA — 크롬 자동 숨김)
+      <div
+        className={`overflow-hidden transition-all duration-200 ${
+          !isPc && chromeHidden && mode === 'view' ? 'max-h-0 opacity-0' : 'max-h-14'
+        }`}
+      >
+      <div
+        // touch-none: 헤더에서 시작한 터치를 브라우저 제스처(스크롤·내비게이션)가 가로채지 않게 —
+        // 가로채면 touchend 대신 touchcancel이 와서 스와이프가 끊긴다
+        className="touch-none flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:pl-14"
+        // 헤더 좌우 스와이프 = 이전/다음 문서 (본문 스와이프는 스크롤과 싸우므로 헤더 한정)
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          if (t) swipeRef.current = { x: t.clientX, y: t.clientY, lastX: t.clientX, lastY: t.clientY };
+        }}
+        onTouchMove={(e) => {
+          const t = e.touches[0];
+          const s = swipeRef.current;
+          if (t && s) {
+            s.lastX = t.clientX;
+            s.lastY = t.clientY;
+          }
+        }}
+        onTouchEnd={(e) => {
+          const s = swipeRef.current;
+          swipeRef.current = null;
+          if (!s || !onSwipeTab) return;
+          const t = e.changedTouches[0];
+          const endX = t?.clientX ?? s.lastX;
+          const endY = t?.clientY ?? s.lastY;
+          const dx = endX - s.x;
+          if (Math.abs(dx) >= SWIPE_MIN_X && Math.abs(endY - s.y) <= SWIPE_MAX_Y) {
+            onSwipeTab(dx < 0 ? 1 : -1);
+          }
+        }}
+        onTouchCancel={() => {
+          // 가로채임 — 그동안 추적한 last 좌표로 판정을 이어간다
+          const s = swipeRef.current;
+          swipeRef.current = null;
+          if (!s || !onSwipeTab) return;
+          const dx = s.lastX - s.x;
+          if (Math.abs(dx) >= SWIPE_MIN_X && Math.abs(s.lastY - s.y) <= SWIPE_MAX_Y) {
+            onSwipeTab(dx < 0 ? 1 : -1);
+          }
+        }}
+      >
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
@@ -286,20 +387,35 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         >
           ★
         </button>
-        <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
+        {onOpenSwitcher ? (
+          // 터치: 파일명이 곧 문서 스위처 버튼 — 탭 바 대신 시트로 오간다 (IA — 문서 스위처)
+          <button onClick={onOpenSwitcher} className="flex min-w-0 items-center gap-1.5 text-left">
+            <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
+            <span className="shrink-0 text-xs text-slate-500">▾</span>
+          </button>
+        ) : (
+          <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
+        )}
         <span className="text-xs text-slate-500 touch:hidden">
           {new Date(data.updatedAt).toLocaleString()} 수정
         </span>
         {/* PC는 헤더 오른쪽에, 터치 기기는 아래 도구막대에 둔다 */}
         {isPc && <div className="ml-auto flex gap-2">{actions}</div>}
       </div>
+      </div>
       )}
-      <div className="flex min-h-0 flex-1">
-        {/* SCR-151: 목차 — 데스크톱은 인라인 사이드 패널, 터치 기기는 오버레이 드로어 */}
+      <div className="relative flex min-h-0 flex-1">
+        {/* 읽기 진행률 — 터치에서 크롬이 숨어도 위치 감을 주는 얇은 줄 (IA — 크롬 자동 숨김) */}
+        {!isPc && progress !== null && mode === 'view' && (
+          <div className="absolute inset-x-0 top-0 z-10 h-0.5 bg-slate-800/60">
+            <div className="h-full bg-sky-500 transition-[width] duration-150" style={{ width: `${progress}%` }} />
+          </div>
+        )}
+        {/* SCR-151: 목차 — 데스크톱은 인라인 사이드 패널, 터치 기기는 바텀 시트 (IA — 모바일 재편) */}
         {showToc && (
           <>
             <div className="fixed inset-0 z-20 bg-black/50 pc:hidden" onClick={() => setShowToc(false)} />
-            <nav className="w-56 shrink-0 overflow-auto overscroll-contain border-r border-slate-800 py-3 touch:fixed touch:inset-y-0 touch:left-0 touch:z-30 touch:w-64 touch:bg-slate-950">
+            <nav className="w-56 shrink-0 overflow-auto overscroll-contain border-r border-slate-800 py-3 touch:fixed touch:inset-x-0 touch:bottom-0 touch:top-auto touch:z-30 touch:max-h-[70vh] touch:w-auto touch:rounded-t-2xl touch:border-r-0 touch:border-t touch:border-slate-700 touch:bg-slate-900 touch:pb-[calc(env(safe-area-inset-bottom)+12px)]">
               {headings.length === 0 ? (
                 <p className="px-3 text-xs text-slate-600">표시할 헤딩이 없습니다</p>
               ) : (
@@ -373,7 +489,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               content={data.content}
               theme={settings.viewerTheme}
               initialOffset={file.state.readingPosition?.offset ?? 0}
-              onScrollOffset={saveOffset}
+              onScrollOffset={(o) => reportScroll(o, null)}
               onToc={setHeadings}
               onInteract={closeMenu}
               fit={fit}
@@ -421,8 +537,14 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       {/* 터치 기기의 아래쪽 도구막대 — 엄지가 닿는 자리에 조작을 모은다 (몰입 모드에서는 숨긴다).
           목차는 w-full로 남는 폭을 채우고 더보기는 오른쪽 끝에 — 목차가 없는 형식에서도 자리가 유지된다 */}
       {!isPc && !immersive && (
-        <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950 px-3 py-2">
-          {actions}
+        <div
+          className={`overflow-hidden transition-all duration-200 ${
+            chromeHidden && mode === 'view' ? 'max-h-0 opacity-0' : 'max-h-16'
+          }`}
+        >
+          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+            {actions}
+          </div>
         </div>
       )}
     </div>

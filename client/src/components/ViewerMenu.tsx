@@ -34,6 +34,10 @@ type Props = {
 
 const clamp = (v: number) => Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, v));
 
+// 터치 기기에서는 팝오버 대신 바텀 시트로 — 메뉴가 엄지 앞에 오게 (IA — 모바일 재편).
+// 기기 특성이라 실행 중 안 바뀌므로 한 번만 잰다 (CSS pc:/touch: 변형과 같은 판정)
+const IS_TOUCH = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
 // SCR-150의 더보기 메뉴 — 헤더에 버튼이 늘어나는 걸 막으려고 뷰어의 조작을 한곳에 모았다.
 // 여는 버튼까지 이 컴포넌트가 들고 있는 이유: 버튼이 "바깥"으로 판정되면 바깥 클릭이 닫고
 // 곧바로 버튼의 클릭이 다시 여는 탓에 한 번 더 눌러도 안 닫히는 것처럼 보인다.
@@ -109,12 +113,21 @@ export default function ViewerMenu({
       <button onClick={onToggle} className={buttonClass(open)} title="더보기">
         ⋯
       </button>
+      {open && IS_TOUCH && (
+        // 시트의 배경막 — ref 안에 있어서 바깥 클릭 판정을 안 타므로 직접 닫는다
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+      )}
       {open && (
         <div
-          className={`absolute right-0 z-40 w-60 rounded-md border border-slate-700 bg-slate-900 p-3 shadow-xl ${
-            placement === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}
+          className={
+            IS_TOUCH
+              ? 'fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-slate-700 bg-slate-900 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)]'
+              : `absolute right-0 z-40 w-60 rounded-md border border-slate-700 bg-slate-900 p-3 shadow-xl ${
+                  placement === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
+                }`
+          }
         >
+          {IS_TOUCH && <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-600" />}
           {display && (
             <>
               <div className="flex items-center justify-between">

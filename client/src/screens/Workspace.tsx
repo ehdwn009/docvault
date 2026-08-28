@@ -6,6 +6,7 @@ import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
 import SplitLayout from '../components/SplitLayout';
 import TabBar from '../components/TabBar';
+import TabSwitcher from '../components/TabSwitcher';
 import TrashPanel from '../components/TrashPanel';
 import TagEditor from '../components/TagEditor';
 import UpdateNotes from '../components/UpdateNotes';
@@ -90,6 +91,10 @@ function fileIdFromPath(pathname: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+// CSS의 touch 변형과 같은 판정 — 터치 기기는 탭 바 대신 문서 스위처, 크롬 자동 숨김을 쓴다
+// (기기 특성이라 실행 중 안 바뀌므로 한 번만 잰다) (IA — 모바일 재편)
+const IS_TOUCH = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
@@ -100,6 +105,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [splitRatio, setSplitRatio] = useState(50); // 첫 칸의 크기 비율(%) — 구분선 드래그로 조절
   // 줄 번호 앵커(#L16-L26)로 연 파일의 하이라이트 범위 — 링크가 "파일 속 한 지점"을 가리킬 때
   const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
+  // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대)을 접는다 (IA — 크롬 자동 숨김)
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
   // 분할 방향·상한은 화면 폭 기준: 넓으면 좌우 최대 4칸, 좁으면 상하 최대 2칸 (IA — 반응형 기준 768px)
   const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
@@ -339,6 +347,48 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     setPanes((prev) => (prev.length === 2 ? [prev[1]!, prev[0]!] : prev));
     setActiveIdx((i) => (panes.length === 2 ? 1 - i : i));
   }, [panes.length]);
+
+  /** 분할 해제 — 활성 칸만 남긴다. 나머지 문서는 탭에 그대로 (IA — 분할 컨트롤러) */
+  const unsplit = useCallback(() => {
+    setPanes((prev) => {
+      const keep = prev[Math.min(activeIdx, prev.length - 1)];
+      return keep ? [keep] : prev;
+    });
+    setActiveIdx(0);
+  }, [activeIdx]);
+
+  /** ⋯ 메뉴 "분할 보기" — 이미 열린 탭끼리 분할. 대기 탭 하나면 즉시, 여럿이면 골라서 */
+  const splitCandidates = tabs.filter((t) => !panes.some((p) => p.id === t.id));
+  const splitView = useCallback(async () => {
+    const candidates = tabs.filter((t) => !panes.some((p) => p.id === t.id));
+    if (candidates.length === 0) return;
+    if (candidates.length === 1) {
+      void openSplit(candidates[0]!);
+      return;
+    }
+    const picked = await choiceDialog('분할로 볼 문서', {
+      choices: candidates.map((t) => ({ label: t.name, value: String(t.id) })),
+    });
+    const target = candidates.find((t) => String(t.id) === picked);
+    if (target) void openSplit(target);
+  }, [tabs, panes, openSplit]);
+
+  /** 헤더 스와이프로 이전/다음 탭 (터치 전용) — 끝에서 반대편으로 순환한다 (막다른 방향 없게) */
+  const switchTab = useCallback(
+    (dir: 1 | -1) => {
+      if (!selected || tabs.length < 2) return;
+      const idx = tabs.findIndex((t) => t.id === selected.id);
+      if (idx === -1) return;
+      const next = tabs[(idx + dir + tabs.length) % tabs.length];
+      if (next && next.id !== selected.id) void selectFile(next);
+    },
+    [tabs, selected, selectFile],
+  );
+
+  // 마지막 탭이 닫히면 스위처 시트도 같이 닫는다
+  useEffect(() => {
+    if (tabs.length === 0) setSwitcherOpen(false);
+  }, [tabs.length]);
 
   // 화면 폭 변화 감지 + 좁아지면 상한(2칸)으로 접기 — 접힌 문서는 탭에 남는다
   useEffect(() => {
@@ -1196,7 +1246,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {tabs.length > 0 && !immersive && (
+        {/* 터치에서는 탭 바 대신 문서 스위처 시트를 쓴다 (IA — 모바일 재편) */}
+        {!IS_TOUCH && tabs.length > 0 && !immersive && (
           <TabBar
             tabs={tabs}
             activeId={selected?.id ?? null}
@@ -1214,6 +1265,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             onRatioChange={setSplitRatio}
             onActivate={activatePane}
             onSwap={swapPanes}
+            onUnsplit={unsplit}
             renderPane={(f, i) => (
               <Viewer
                 key={f.id}
@@ -1231,9 +1283,36 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onClosePane={panes.length > 1 ? () => closePane(i) : undefined}
                 onOpenLink={(path, split) => openByPath(f, path, split)}
                 jumpLines={lineJump?.fileId === f.id ? lineJump : undefined}
+                onSplitView={splitCandidates.length > 0 ? () => void splitView() : undefined}
+                onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
+                onSwipeTab={IS_TOUCH ? switchTab : undefined}
+                chromeHidden={chromeHidden}
+                onChromeHint={IS_TOUCH ? setChromeHidden : undefined}
               />
             )}
           />
+        ) : IS_TOUCH && tree.files.some((f) => f.state.lastOpenedAt !== null) ? (
+          // 터치 첫 화면: 폰에서 앱을 여는 순간의 질문은 "어디까지 읽었지?"다 (IA — 이어 읽기 첫 화면)
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
+            <p className="text-xs font-medium text-slate-500">이어 읽기</p>
+            {[...tree.files]
+              .filter((f) => f.state.lastOpenedAt !== null)
+              .sort((a, b) => (b.state.lastOpenedAt ?? 0) - (a.state.lastOpenedAt ?? 0))
+              .slice(0, 3)
+              .map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => void selectFile(f)}
+                  className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-4 text-left transition active:bg-slate-800"
+                >
+                  <p className="truncate font-medium text-slate-200">{f.name}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {new Date(f.state.lastOpenedAt!).toLocaleString()} 열람 · 이어 읽기 →
+                  </p>
+                </button>
+              ))}
+            <p className="mt-2 text-xs text-slate-600">다른 문서는 ☰ 메뉴에서</p>
+          </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-sm text-slate-600">
             <p>좌측에서 파일을 선택하거나, 여기로 파일을 끌어다 놓으세요</p>
@@ -1244,6 +1323,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </div>
         )}
       </main>
+
+      {switcherOpen && (
+        <TabSwitcher
+          tabs={tabs}
+          activeId={selected?.id ?? null}
+          paneIds={panes.map((p) => p.id)}
+          onPick={(f) => void selectFile(f)}
+          onSplit={(f) => void openSplit(f)}
+          onCloseTab={(f) => void closeTab(f)}
+          onClose={() => setSwitcherOpen(false)}
+        />
+      )}
 
       {paletteOpen && (
         <CommandPalette
