@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
-import { api, ApiError, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
+import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { FONT_SCALE_DEFAULT } from '../lib/constants';
 import { renderers } from '../renderers';
 import Editor from './Editor';
@@ -51,8 +51,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const debounceRef = useRef<number | undefined>(undefined);
   const scaleSaveRef = useRef<number | undefined>(undefined);
 
-  // 이미지·PDF는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
-  const isBinary = file.fileType === 'image' || file.fileType === 'pdf';
+  // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
+  const isBinary = !isTextFileType(file.fileType);
 
   useEffect(() => {
     setData(null);
@@ -320,6 +320,39 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             <div className="flex min-h-full items-center justify-center p-6">
               <img src={`/api/v1/files/${file.id}/raw`} alt={file.name} className="max-w-full" />
             </div>
+          ) : file.fileType === 'video' ? (
+            <div className="flex min-h-full items-center justify-center p-6">
+              {/* key=파일 id: 파일을 바꿔 열면 재생 상태를 버리고 새로 시작한다 */}
+              <video key={file.id} src={`/api/v1/files/${file.id}/raw`} controls className="max-h-full max-w-full" />
+            </div>
+          ) : file.fileType === 'audio' ? (
+            <div className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
+              <span className="text-5xl">🎵</span>
+              <p className="max-w-full truncate text-sm text-slate-400">{file.name}</p>
+              <audio key={file.id} src={`/api/v1/files/${file.id}/raw`} controls className="w-full max-w-xl" />
+            </div>
+          ) : file.fileType === 'binary' ? (
+            // 미리보기 없는 형식 — "보관돼 있고, 여기서 꺼내가면 된다"는 화면 (아키텍처 — 전량 수용 정책)
+            <div className="flex min-h-full items-center justify-center p-6">
+              <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/60 px-8 py-10 text-center">
+                <span className="text-5xl">📦</span>
+                <p className="w-full truncate font-medium text-slate-200" title={file.name}>{file.name}</p>
+                <p className="text-xs text-slate-500">
+                  {file.sizeBytes >= 1024 * 1024
+                    ? `${(file.sizeBytes / 1024 / 1024).toFixed(1)}MB`
+                    : `${Math.max(1, Math.round(file.sizeBytes / 1024))}KB`}
+                  {file.updatedAt > 0 && ` · ${new Date(file.updatedAt).toLocaleDateString()}`}
+                </p>
+                <p className="text-xs text-slate-500">이 형식은 미리보기를 지원하지 않습니다</p>
+                <a
+                  href={`/api/v1/files/${file.id}/raw`}
+                  download={file.name}
+                  className="mt-2 rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+                >
+                  ⬇ 다운로드
+                </a>
+              </div>
+            </div>
           ) : file.fileType === 'html' && Renderer ? (
             // 앱형 HTML은 여백·폭 제한 없이 화면을 꽉 채워 렌더링한다
             // key=파일 id: 파일을 바꿔 열면 iframe을 새로 만들어 읽던 위치를 그 파일 기준으로 심는다
@@ -343,7 +376,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             >
               {Renderer ? (
                 <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
-                  <Renderer content={data.content} theme={settings.viewerTheme} />
+                  <Renderer content={data.content} theme={settings.viewerTheme} fileName={file.name} />
                 </Suspense>
               ) : (
                 <p className="text-sm text-slate-500">이 형식({data.fileType})의 뷰어는 아직 없습니다</p>

@@ -45,7 +45,10 @@ export const files = sqliteTable('files', {
     .references(() => users.id, { onDelete: 'cascade' }),
   folderId: integer('folder_id').references(() => folders.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  fileType: text('file_type', { enum: ['md', 'html', 'code', 'text', 'image', 'pdf'] }).notNull(),
+  // enum은 TS 타입 제약일 뿐 SQLite에 CHECK를 만들지 않는다 — 값 추가에 마이그레이션 불필요
+  fileType: text('file_type', {
+    enum: ['md', 'html', 'code', 'text', 'image', 'pdf', 'audio', 'video', 'binary'],
+  }).notNull(),
   mimeType: text('mime_type').notNull(),
   sizeBytes: integer('size_bytes').notNull().default(0),
   /** 텍스트 계열만. 바이너리는 null */

@@ -30,8 +30,11 @@ export const TRASH_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 
-/** 바이너리(이미지·PDF) 업로드 크기 제한 50MB (API-031 로드맵) */
+/** 바이너리 업로드 크기 제한 50MB (API-031) */
 export const MAX_BINARY_FILE_BYTES = 50 * 1024 * 1024;
+
+/** 모르는 확장자를 텍스트/바이너리로 분류할 때 검사하는 앞부분 크기 (API-031 전량 수용 정책) */
+export const TEXT_SNIFF_BYTES = 8 * 1024;
 
 /** ZIP 내보내기 한 번에 담을 수 있는 최대 파일 수 (API-040) — 폭주 방지용 상한 */
 export const MAX_ARCHIVE_ENTRIES = 10000;

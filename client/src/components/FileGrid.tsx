@@ -6,6 +6,9 @@ const TYPE_ICON: Record<string, string> = {
   text: '📄',
   code: '💻',
   pdf: '📕',
+  audio: '🎵',
+  video: '🎬',
+  binary: '📦',
 };
 
 // SCR-110 격자 보기 — 이미지 썸네일 중심의 대안 뷰. 정리 작업(다중 선택·이동)은 목록 보기가 담당

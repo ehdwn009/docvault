@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES } from '../constants.js';
 import { db } from '../db/index.js';
 import { files } from '../db/schema.js';
-import { ALL_EXTENSIONS, extensionOf } from '../lib/filetypes.js';
+import { classifyUpload, isTextType } from '../lib/filetypes.js';
 import { uniqueFileName } from '../lib/naming.js';
 import { saveBinary } from '../lib/storage.js';
 import { resolveSessionUser } from '../middleware/auth.js';
@@ -40,9 +40,8 @@ export const shareTargetRoutes = new Hono().post('/', async (c) => {
   const now = Date.now();
 
   for (const file of uploads) {
-    const meta = ALL_EXTENSIONS[extensionOf(file.name)];
-    if (!meta) continue;
-    const isBinary = meta.fileType === 'image' || meta.fileType === 'pdf';
+    const meta = await classifyUpload(file); // 업로드와 같은 전량 수용 정책 (API-031)
+    const isBinary = !isTextType(meta.fileType);
     if (file.size > (isBinary ? MAX_BINARY_FILE_BYTES : MAX_TEXT_FILE_BYTES)) continue;
     db.insert(files)
       .values({

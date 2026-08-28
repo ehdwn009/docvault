@@ -46,7 +46,7 @@ erDiagram
         integer owner_id FK
         integer folder_id FK "null=루트"
         text name
-        text file_type "md|html|code|text|image|pdf"
+        text file_type "md|html|code|text|image|pdf|audio|video|binary (2026-08-27)"
         text mime_type
         integer size_bytes
         text content_text "텍스트 계열만, 바이너리는 null"
@@ -104,7 +104,7 @@ erDiagram
 |---|---|
 | USERS | 관리자가 발급하는 로컬 계정. 회원가입 경로 없음. 초기 시드로 admin 계정 1개 생성. `session_epoch`는 발급된 세션 토큰을 한꺼번에 무효화하는 장치 — 토큰이 담고 온 값과 다르면 거부한다 |
 | FOLDERS | 사용자별 폴더 트리. parent_id 자기참조로 무제한 중첩 |
-| FILES | 파일 메타데이터 + 텍스트 본문. 바이너리는 storage_path로 디스크 참조 |
+| FILES | 파일 메타데이터 + 텍스트 본문. 바이너리는 storage_path로 디스크 참조. file_type은 저장·렌더링 방식을 결정: md/html/code/text는 텍스트(DB 본문), image/pdf/audio/video/binary는 바이너리(디스크) |
 | FILE_VERSIONS | 편집 저장 시점의 본문 스냅샷. 파일당 최근 20개 유지 |
 | TAGS | 사용자별 색상 태그 |
 | FILE_TAGS | 파일-태그 다대다 연결 (복합 PK) |
@@ -121,6 +121,7 @@ erDiagram
 - **글자 크기 2층 구조 (2026-08-18)**: HTML 글자 크기는 USER_SETTINGS.html_font_scale(전역 기본 배율)과 USER_FILE_STATE.font_scale(이 파일만의 배율)로 나뉩니다. font_scale이 **NULL이면 전역을 따르고**, 값이 있으면 그것으로 **대체**합니다(곱하지 않습니다). NULL을 "없음"으로 쓰기 때문에 대부분의 파일은 전역 설정을 바꾸면 같이 따라오고, 유별난 문서만 자기 값을 갖습니다 — 그래서 UI에는 반드시 "기본값 따르기"(= NULL로 되돌리기)가 있어야 합니다. font_scale은 형식을 가리지 않습니다 — HTML은 문서 자신의 크기를 100%로, md·텍스트는 USER_SETTINGS.font_size를 100%로 삼을 뿐 규칙은 같습니다(전역 기본 배율 html_font_scale은 HTML에만 있습니다).
 - 즐겨찾기·읽던 위치는 파일 속성이 아니라 USER_FILE_STATE(사용자×파일)에 둡니다. 공유 파일을 열람하는 다른 사용자도 자신만의 즐겨찾기·읽던 위치를 가질 수 있게 하기 위한 구조입니다 (기존 Manus 버전에서 파일에 붙어 있던 isFavorite의 개선).
 - 공유는 v1에서는 파일/폴더의 is_shared 플래그(전체 사용자 대상 열람 공개, 관리자만 토글)로 구현하고, 추후 특정 사용자 대상 공유가 필요해지면 SHARES(file_id, grantee_id, permission) 테이블로 확장합니다.
+- **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.
 
 ## 비고
 

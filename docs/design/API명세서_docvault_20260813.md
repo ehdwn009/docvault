@@ -127,14 +127,14 @@
 | 항목 | 내용 |
 |---|---|
 | 메서드 / 경로 | POST /files (multipart/form-data) |
-| 설명 | 확장자·MIME 화이트리스트 검사 → 텍스트 계열은 본문을 DB에, 바이너리는 디스크에 저장. 여러 파일 동시 업로드 지원 |
+| 설명 | 모든 확장자 수용(2026-08-27, 전량 수용 정책) → 확장자·내용 검사로 형식을 분류해 텍스트 계열은 본문을 DB에, 바이너리는 디스크에 저장. 여러 파일 동시 업로드 지원 |
 | 인증 필요 | 예 |
 
 ### Request
 **Body (multipart)**
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| files | File[] | Y | 업로드 파일 (v1 허용: .md .markdown .html .txt / 로드맵: 코드·이미지·PDF) |
+| files | File[] | Y | 업로드 파일. 확장자 제한 없음 — 아는 확장자는 md/html/code/text/image/pdf/audio/video로, 모르는 확장자는 내용 검사(UTF-8·NUL 없음·10MB 이하)로 text 또는 binary로 분류 |
 | folderId | number | N | 대상 폴더. 생략 시 루트 |
 
 ### Response
@@ -146,8 +146,9 @@
 **에러**
 | 코드 | HTTP | 설명 |
 |---|---|---|
-| UNSUPPORTED_TYPE | 400 | 허용되지 않는 확장자/MIME |
-| PAYLOAD_TOO_LARGE | 413 | 파일당 크기 제한 초과 (텍스트 10MB, 추후 바이너리 50MB) |
+| PAYLOAD_TOO_LARGE | 413 | 파일당 크기 제한 초과 (텍스트 10MB, 바이너리 50MB) |
+
+업로드에서 UNSUPPORTED_TYPE은 더 이상 발생하지 않습니다(전량 수용). 이름 변경(API-035)에서 저장 방식의 경계(텍스트↔바이너리)를 넘는 확장자 변경 시에만 남아 있습니다.
 
 ---
 

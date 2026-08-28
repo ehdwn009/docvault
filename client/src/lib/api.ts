@@ -23,11 +23,27 @@ export type TreeFolder = {
   sortOrder: number;
 };
 
+export type FileType =
+  | 'md'
+  | 'html'
+  | 'code'
+  | 'text'
+  | 'image'
+  | 'pdf'
+  | 'audio'
+  | 'video'
+  | 'binary';
+
+/** 텍스트 계열(본문 조회·편집·버전이 있는 형식) 판정 — 서버 filetypes.ts의 경계와 같아야 한다 */
+export function isTextFileType(fileType: string): boolean {
+  return fileType === 'md' || fileType === 'html' || fileType === 'code' || fileType === 'text';
+}
+
 export type TreeFile = {
   id: number;
   folderId: number | null;
   name: string;
-  fileType: 'md' | 'html' | 'code' | 'text' | 'image' | 'pdf';
+  fileType: FileType;
   sizeBytes: number;
   isShared: number;
   sortOrder: number;

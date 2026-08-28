@@ -9,7 +9,13 @@ const TYPE_BADGE: Record<string, string> = {
   code: 'text-emerald-400',
   image: 'text-purple-400',
   pdf: 'text-red-400',
+  audio: 'text-pink-400',
+  video: 'text-rose-400',
+  binary: 'text-slate-500',
 };
+
+// 뱃지가 이름 자리를 잡아먹지 않게 긴 타입명은 줄여 쓴다
+const BADGE_LABEL: Record<string, string> = { binary: 'bin', audio: 'aud', video: 'vid' };
 
 export type TreeActions = {
   createFolder: (parentId: number | null) => void;
@@ -348,7 +354,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 </span>
               )}
               <span className={`font-mono text-[10px] uppercase ${TYPE_BADGE[file.fileType] ?? ''}`}>
-                {file.fileType}
+                {BADGE_LABEL[file.fileType] ?? file.fileType}
               </span>
               {isRenaming ? renameInput(renaming) : <span className="truncate">{file.name}</span>}
               <span className="ml-auto flex shrink-0 items-center gap-1">

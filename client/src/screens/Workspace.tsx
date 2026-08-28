@@ -10,6 +10,7 @@ import UpdateNotes from '../components/UpdateNotes';
 import {
   api,
   ApiError,
+  isTextFileType,
   toTreeFile,
   uploadFiles,
   type Changelog,
@@ -287,7 +288,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           remain.push(f);
           continue;
         }
-        if (existing.fileType === 'image' || existing.fileType === 'pdf') {
+        if (!isTextFileType(existing.fileType)) {
           // 바이너리는 본문 교체 API가 없어 삭제 후 재업로드 (버전이 없는 형식이라 대체와 동일)
           await api(`/files/${existing.id}`, { method: 'DELETE' });
           remain.push(f);
@@ -799,11 +800,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {panel === 'files' && (
           <>
             <div className="flex gap-2 px-3">
+              {/* accept 없음 — 어떤 파일이든 받아서 서버가 분류한다 (API-031 전량 수용 정책) */}
               <input
                 ref={uploadRef}
                 type="file"
                 multiple
-                accept=".md,.markdown,.html,.txt,.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf"
                 className="hidden"
                 onChange={(e) => {
                   const folderId = uploadFolderRef.current;
@@ -814,7 +815,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               />
               <button
                 onClick={() => actions.uploadTo(null)}
-                title="md·html·txt·이미지·PDF"
+                title="모든 형식 (문서·코드·이미지·PDF·오디오·비디오·기타)"
                 className="flex-1 rounded-md border border-dashed border-slate-700 py-2 text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 + 업로드

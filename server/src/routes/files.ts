@@ -23,7 +23,15 @@ import {
   type ArchiveScope,
 } from '../lib/archive.js';
 import { fail } from '../lib/errors.js';
-import { ALL_EXTENSIONS, extensionOf } from '../lib/filetypes.js';
+import {
+  ALL_EXTENSIONS,
+  classifyUpload,
+  extensionOf,
+  GENERIC_BINARY,
+  isTextType,
+  UNKNOWN_TEXT,
+  type TypeMeta,
+} from '../lib/filetypes.js';
 import { uniqueFileName } from '../lib/naming.js';
 import { binaryAbsPath, copyBinary, deleteBinary, saveBinary } from '../lib/storage.js';
 import { jsonBody, nameField, parseId, parseIdList } from '../lib/validate.js';
@@ -109,14 +117,12 @@ export const fileRoutes = new Hono<AppEnv>()
 
     // 저장 전에 전체 파일을 먼저 검증한다 — 일부만 올라가는 어중간한 결과를 만들지 않기 위해.
     // seen은 이번 요청 안의 중복 — DB만 보면 같은 이름 두 개가 한 번에 통과한다
+    // 확장자는 거절하지 않는다 — 아는 형식은 맵, 모르는 형식은 내용 검사로 분류 (전량 수용 정책)
     const seen = new Set<string>();
+    const classified: TypeMeta[] = [];
     for (const file of uploads) {
-      const meta = ALL_EXTENSIONS[extensionOf(file.name)];
-      if (!meta) {
-        return fail(c, 400, 'UNSUPPORTED_TYPE', `${file.name}: 허용되지 않는 형식입니다 (${Object.keys(ALL_EXTENSIONS).join(', ')})`);
-      }
-      const isBinary = meta.fileType === 'image' || meta.fileType === 'pdf';
-      const limit = isBinary ? MAX_BINARY_FILE_BYTES : MAX_TEXT_FILE_BYTES;
+      const meta = await classifyUpload(file);
+      const limit = isTextType(meta.fileType) ? MAX_TEXT_FILE_BYTES : MAX_BINARY_FILE_BYTES;
       if (file.size > limit) {
         return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: ${Math.round(limit / 1024 / 1024)}MB까지 가능합니다`);
       }
@@ -124,13 +130,14 @@ export const fileRoutes = new Hono<AppEnv>()
         return fail(c, 409, 'CONFLICT', `${file.name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
       }
       seen.add(file.name);
+      classified.push(meta);
     }
 
     const now = Date.now();
     const created = [];
-    for (const file of uploads) {
-      const { fileType, mimeType } = ALL_EXTENSIONS[extensionOf(file.name)]!;
-      const isBinary = fileType === 'image' || fileType === 'pdf';
+    for (const [i, file] of uploads.entries()) {
+      const { fileType, mimeType } = classified[i]!;
+      const isBinary = !isTextType(fileType);
       // 텍스트는 DB 본문, 바이너리는 디스크 + 경로만 (아키텍처 — 저장 전략)
       const contentText = isBinary ? null : await file.text();
       const storagePath = isBinary
@@ -243,7 +250,11 @@ export const fileRoutes = new Hono<AppEnv>()
     if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
     if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
-    c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    // 미리보기 없는 보관 전용 형식은 브라우저가 문서로 열지 않고 내려받게 한다 (아키텍처 — 바이너리 서빙 보안)
+    const disposition = file.fileType === 'binary' ? 'attachment' : 'inline';
+    c.header('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    // 선언한 MIME과 다르게 브라우저가 내용을 추측해 실행형으로 취급하는 것 방지
+    c.header('X-Content-Type-Options', 'nosniff');
     // 스크립트가 실행될 수 있는 형식(html·svg 등)은 문서로 직접 열려도 무해하도록 격리
     if (file.mimeType === 'image/svg+xml' || file.contentText !== null) {
       c.header('Content-Security-Policy', 'sandbox');
@@ -251,6 +262,25 @@ export const fileRoutes = new Hono<AppEnv>()
 
     if (file.storagePath) {
       c.header('Content-Type', file.mimeType);
+      c.header('Accept-Ranges', 'bytes');
+
+      // 오디오·비디오 탐색(seek)은 브라우저가 Range로 중간부터 다시 받는 것 — 단일 구간만 지원
+      const range = c.req.header('range')?.match(/^bytes=(\d*)-(\d*)$/);
+      if (range && (range[1] !== '' || range[2] !== '')) {
+        const size = file.sizeBytes;
+        // "start-", "start-end", "-suffix(뒤에서 n바이트)" 세 표기를 모두 흡수한다
+        const start = range[1] !== '' ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+        const end = range[1] !== '' && range[2] !== '' ? Math.min(Number(range[2]), size - 1) : size - 1;
+        if (start >= size || start > end) {
+          c.header('Content-Range', `bytes */${size}`);
+          return c.body(null, 416);
+        }
+        c.header('Content-Range', `bytes ${start}-${end}/${size}`);
+        c.header('Content-Length', String(end - start + 1));
+        const partial = Readable.toWeb(createReadStream(binaryAbsPath(file.storagePath), { start, end }));
+        return c.body(partial as ReadableStream, 206);
+      }
+
       c.header('Content-Length', String(file.sizeBytes));
       const stream = Readable.toWeb(createReadStream(binaryAbsPath(file.storagePath)));
       return c.body(stream as ReadableStream);
@@ -362,15 +392,24 @@ export const fileRoutes = new Hono<AppEnv>()
 
     let typePatch = {};
     if (patch.name !== undefined) {
-      // 확장자가 바뀌면 fileType·mimeType도 함께 바뀐다. 지원 외 확장자로의 변경은 거부
-      const meta = ALL_EXTENSIONS[extensionOf(patch.name)];
-      if (!meta) {
-        return fail(c, 400, 'UNSUPPORTED_TYPE', `허용되지 않는 확장자입니다 (${Object.keys(ALL_EXTENSIONS).join(', ')})`);
-      }
-      // 저장 방식이 갈리는 경계(텍스트↔바이너리)는 이름 변경으로 넘을 수 없다
+      // 확장자가 바뀌면 fileType·mimeType도 함께 바뀐다. 모르는 확장자는 저장 방식을
+      // 유지하는 쪽으로 분류한다 (텍스트 파일 → text, 바이너리 파일 → binary)
       const wasBinary = file.storagePath !== null;
-      const willBeBinary = meta.fileType === 'image' || meta.fileType === 'pdf';
-      if (wasBinary !== willBeBinary || (wasBinary && meta.fileType !== file.fileType)) {
+      const meta =
+        ALL_EXTENSIONS[extensionOf(patch.name)] ?? (wasBinary ? GENERIC_BINARY : UNKNOWN_TEXT);
+      // 저장 방식이 갈리는 경계(텍스트↔바이너리)는 이름 변경으로 넘을 수 없다
+      const willBeBinary = !isTextType(meta.fileType);
+      if (wasBinary !== willBeBinary) {
+        return fail(c, 400, 'UNSUPPORTED_TYPE', '형식이 다른 확장자로는 변경할 수 없습니다');
+      }
+      // 미리보기 방식이 있는 바이너리 형식끼리(image↔pdf↔audio↔video)는 내용이 그대로라
+      // 이름만 바꾸면 미리보기가 깨진다 — 보관 전용(binary)을 오가는 변경만 허용
+      if (
+        wasBinary &&
+        meta.fileType !== file.fileType &&
+        meta.fileType !== 'binary' &&
+        file.fileType !== 'binary'
+      ) {
         return fail(c, 400, 'UNSUPPORTED_TYPE', '형식이 다른 확장자로는 변경할 수 없습니다');
       }
       typePatch = meta;
