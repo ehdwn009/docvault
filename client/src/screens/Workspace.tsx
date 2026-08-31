@@ -6,6 +6,7 @@ import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
 import SplitLayout from '../components/SplitLayout';
 import TabBar from '../components/TabBar';
+import TabDropOverlay from '../components/TabDropOverlay';
 import TabSwitcher from '../components/TabSwitcher';
 import TrashPanel from '../components/TrashPanel';
 import TagEditor from '../components/TagEditor';
@@ -108,6 +109,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대)을 접는다 (IA — 크롬 자동 숨김)
   const [chromeHidden, setChromeHidden] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
+  // 드래그 중인 탭 — 있으면 본문 위에 드롭 존 오버레이를 깐다 (IA — 탭 드래그 배치)
+  const [dragTab, setDragTab] = useState<TreeFile | null>(null);
   // 분할 방향·상한은 화면 폭 기준: 넓으면 좌우 최대 4칸, 좁으면 상하 최대 2칸 (IA — 반응형 기준 768px)
   const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
@@ -318,6 +321,59 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       detachFiles([file.id]);
     },
     [detachFiles],
+  );
+
+  /** 여러 탭 한 번에 닫기 — 미저장 문서가 섞여 있으면 확인 한 번 (IA — 탭 우클릭 메뉴) */
+  const closeTabs = useCallback(
+    async (files: TreeFile[]) => {
+      if (files.length === 0) return;
+      if (files.some((f) => dirtyMapRef.current.get(f.id))) {
+        const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
+          message: '닫으면 작성한 내용이 사라집니다.',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      detachFiles(files.map((f) => f.id));
+    },
+    [detachFiles],
+  );
+
+  /** 탭 순서 바꾸기 — beforeId 앞에 삽입, null이면 맨 뒤 (IA — 탭 드래그 배치) */
+  const reorderTabs = useCallback((fromId: number, beforeId: number | null) => {
+    setTabs((prev) => {
+      const from = prev.find((t) => t.id === fromId);
+      if (!from || fromId === beforeId) return prev;
+      const rest = prev.filter((t) => t.id !== fromId);
+      const at = beforeId === null ? rest.length : rest.findIndex((t) => t.id === beforeId);
+      return at === -1 ? prev : [...rest.slice(0, at), from, ...rest.slice(at)];
+    });
+  }, []);
+
+  /** 드롭 존의 기존 칸에 놓기 — 이미 다른 칸에 보이는 문서면 복제 대신 두 칸을 맞바꾼다 */
+  const dropOnPane = useCallback(
+    async (file: TreeFile, idx: number) => {
+      if (!panes[idx]) return;
+      const existing = panes.findIndex((p) => p.id === file.id);
+      if (existing === idx) return;
+      if (existing !== -1) {
+        setPanes((prev) => {
+          const next = [...prev];
+          [next[idx], next[existing]] = [next[existing]!, next[idx]!];
+          return next;
+        });
+      } else {
+        if (!(await confirmReplace(panes[idx], file.id))) return;
+        setPanes((prev) => {
+          const next = [...prev];
+          if (next[idx]) next[idx] = file;
+          return next;
+        });
+      }
+      setActiveIdx(idx);
+      if (location.pathname !== `/f/${file.id}`) history.pushState(null, '', `/f/${file.id}`);
+    },
+    [panes, confirmReplace],
   );
 
   /** 칸 닫기 — 화면에서만 치우고 탭에는 남긴다 */
@@ -1254,9 +1310,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             paneIds={panes.map((p) => p.id)}
             onPick={(f) => void selectFile(f)}
             onClose={(f) => void closeTab(f)}
+            onSplit={(f) => void openSplit(f)}
+            onCloseOthers={(f) => void closeTabs(tabs.filter((t) => t.id !== f.id))}
+            onCloseRight={(f) => void closeTabs(tabs.slice(tabs.findIndex((t) => t.id === f.id) + 1))}
+            onReorder={reorderTabs}
+            onDragState={setDragTab}
           />
         )}
         {panes.length > 0 ? (
+          <div className="relative flex min-h-0 flex-1 flex-col">
           <SplitLayout
             panes={panes}
             activeIdx={activeIdx}
@@ -1291,6 +1353,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               />
             )}
           />
+          {dragTab && (
+            <TabDropOverlay
+              panes={panes}
+              isWide={isWide}
+              ratio={splitRatio}
+              canAdd={panes.length < maxPanes}
+              onDropPane={(i) => void dropOnPane(dragTab, i)}
+              onDropNew={() => void openSplit(dragTab)}
+            />
+          )}
+          </div>
         ) : IS_TOUCH && tree.files.some((f) => f.state.lastOpenedAt !== null) ? (
           // 터치 첫 화면: 폰에서 앱을 여는 순간의 질문은 "어디까지 읽었지?"다 (IA — 이어 읽기 첫 화면)
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">

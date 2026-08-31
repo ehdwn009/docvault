@@ -3,7 +3,7 @@ import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { FONT_SCALE_DEFAULT } from '../lib/constants';
-import { renderers } from '../renderers';
+import { CodeRenderer, renderers } from '../renderers';
 import Editor from './Editor';
 
 type Props = {
@@ -81,6 +81,18 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
 
+  // 렌더링 대신 코드(강조+줄 번호)로 볼 수 있는 형식 — code 형식은 이미 코드 뷰어라 제외
+  const canCodeView =
+    !isBinary && (file.fileType === 'md' || file.fileType === 'html' || file.fileType === 'text');
+  // 코드로 보기 — 세션 한정 임시 모드. 줄 앵커로 열리면 자동으로 켠다 (IA — 코드로 보기)
+  const [codeView, setCodeView] = useState(() => canCodeView && !!jumpLines);
+  // 줄을 가리키는 링크는 "코드를 보라"는 뜻으로 해석한다
+  useEffect(() => {
+    if (jumpLines && canCodeView) setCodeView(true);
+  }, [jumpLines, canCodeView]);
+  const codeViewRef = useRef(codeView);
+  codeViewRef.current = codeView;
+
   useEffect(() => {
     setData(null);
     setError(null);
@@ -110,6 +122,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     setFit(file.state.viewerFit !== 0);
     setFontScale(file.state.fontScale);
     setShowMenu(false);
+    setCodeView(!!jumpLines && canCodeView);
     // 문서를 바꾸면 크롬은 일단 보이고 진행률은 새로 잰다
     setProgress(null);
     lastScrollYRef.current = 0;
@@ -162,6 +175,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 읽던 위치 저장 — 바깥 div 스크롤(md 등)과 iframe 내부 스크롤 보고(html)가 공유한다
   const saveOffset = useCallback(
     (offset: number) => {
+      // 코드 보기는 검사용 임시 모드 — 렌더링 보기의 읽던 위치를 덮어쓰지 않는다 (IA — 코드로 보기)
+      if (codeViewRef.current) return;
       window.clearTimeout(debounceRef.current);
       debounceRef.current = window.setTimeout(() => {
         void api(`/me/files/${file.id}/state`, {
@@ -254,6 +269,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   }
 
   const Renderer = renderers[data.fileType];
+  // 코드로 보기가 켜지면 형식별 렌더러 대신 코드 뷰어로 같은 본문을 그린다 (IA — 코드로 보기)
+  const showAsCode = codeView && canCodeView;
+  const BodyRenderer = showAsCode ? CodeRenderer : Renderer;
   const isFavorite = file.state.isFavorite === 1;
   // 파일별 값이 있으면 그것을, 없으면 전역 기본값을 쓴다 (대체이지 곱하기가 아니다).
   // md·텍스트의 전역 기본은 설정의 글자 크기(px) 자체라 배율 100%가 기준이고,
@@ -275,6 +293,10 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const menuItems: ViewerAction[] = [
     // 이미 열린 탭끼리 분할 — 트리의 "분할로 열기"(새 문서)와 역할을 나눈다 (IA)
     ...(onSplitView ? [{ label: '◫ 분할 보기', onClick: onSplitView }] : []),
+    // 같은 본문을 보여주는 방식만 바꾼다 — md 설명 옆에 html "코드"를 두고 읽는 흐름용 (IA)
+    ...(canCodeView
+      ? [{ label: codeView ? '문서로 보기' : '코드로 보기', onClick: () => setCodeView((v) => !v), active: codeView }]
+      : []),
     { label: '몰입 모드', onClick: onToggleImmersive },
     ...(isBinary
       ? []
@@ -291,7 +313,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ✕
         </button>
       )}
-      {(data.fileType === 'md' || data.fileType === 'html') && (
+      {(data.fileType === 'md' || data.fileType === 'html') && !codeView && (
         <button onClick={() => setShowToc((v) => !v)} className={actionButton(showToc)}>
           목차
         </button>
@@ -314,7 +336,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                 onScaleChange: changeScale,
                 onResetScale: resetScale,
                 fit:
-                  data.fileType === 'html' ? { on: fit, onChange: changeFit } : undefined,
+                  data.fileType === 'html' && !showAsCode
+                    ? { on: fit, onChange: changeFit }
+                    : undefined,
               }
         }
       />
@@ -487,7 +511,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                 </a>
               </div>
             </div>
-          ) : file.fileType === 'html' && Renderer ? (
+          ) : file.fileType === 'html' && Renderer && !showAsCode ? (
             // 앱형 HTML은 여백·폭 제한 없이 화면을 꽉 채워 렌더링한다
             // key=파일 id: 파일을 바꿔 열면 iframe을 새로 만들어 읽던 위치를 그 파일 기준으로 심는다
             <Renderer
@@ -508,9 +532,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
               style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
             >
-              {Renderer ? (
+              {BodyRenderer ? (
                 <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
-                  <Renderer
+                  <BodyRenderer
                     content={data.content}
                     theme={settings.viewerTheme}
                     fileName={file.name}

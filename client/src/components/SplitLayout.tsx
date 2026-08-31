@@ -24,6 +24,15 @@ const DRAG_THRESHOLD = 6;
 /** 컨트롤러의 비율 프리셋 — 폰에서 원하는 비율은 연속값이 아니라 이 셋이다 (IA — 분할 컨트롤러) */
 const PRESETS = [66, 50, 34];
 
+/** 칸들을 두 묶음으로 배치하는 규칙 — 채우는 순서: 좌 → 우상 → 우하 → 좌하.
+    드롭 존 오버레이(TabDropOverlay)도 같은 기하를 그려야 해서 함수로 공유한다 */
+export function paneGroups(count: number): number[][] {
+  return count <= 1 ? [[0]]
+    : count === 2 ? [[0], [1]]
+    : count === 3 ? [[0], [1, 2]]
+    : [[0, 3], [1, 2]];
+}
+
 // SCR-154·155: 분할 레이아웃 + 컨트롤러 — 프리셋: 1칸 / 2=좌우(모바일 상하) / 3=좌1+우2 / 4=2×2.
 // 구분선 손잡이는 "잡는 것"이 아니라 "컨트롤러를 여는 버튼"이 기본이고, 드래그는 보조 (IA)
 export default function SplitLayout({ panes, activeIdx, isWide, ratio, onRatioChange, onActivate, onSwap, onUnsplit, renderPane }: Props) {
@@ -77,12 +86,7 @@ export default function SplitLayout({ panes, activeIdx, isWide, ratio, onRatioCh
     </div>
   );
 
-  /** 칸들을 두 묶음으로 배치 — 채우는 순서: 좌 → 우상 → 우하 → 좌하 */
-  const groups: number[][] =
-    panes.length <= 1 ? [[0]]
-    : panes.length === 2 ? [[0], [1]]
-    : panes.length === 3 ? [[0], [1, 2]]
-    : [[0, 3], [1, 2]];
+  const groups = paneGroups(panes.length);
 
   const column = (idxs: number[]) => (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -113,10 +117,12 @@ export default function SplitLayout({ panes, activeIdx, isWide, ratio, onRatioCh
         isWide ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
       }`}
     >
-      {/* 보이는 바는 얇게, 잡히는 영역은 넓게 — 터치 최소 타깃을 투명 존으로 확보 (IA) */}
+      {/* 보이는 바는 얇게, 잡히는 영역은 넓게 — 터치 최소 타깃을 투명 존으로 확보 (IA).
+          단 PC의 좌우 분할에서는 왼쪽으로 안 넓힌다 — 왼쪽 칸의 세로 스크롤바가 구분선에
+          붙어 있어, 넓은 존이 덮으면 스크롤바를 집을 수 없다 (IA — 히트 존 보정) */}
       <div
         onPointerDown={handleDividerDown}
-        className={`absolute z-10 ${isWide ? '-left-3 -right-3 inset-y-0 cursor-col-resize' : '-top-3 -bottom-3 inset-x-0 cursor-row-resize'}`}
+        className={`absolute z-10 ${isWide ? '-left-3 -right-3 inset-y-0 cursor-col-resize pc:left-0' : '-top-3 -bottom-3 inset-x-0 cursor-row-resize'}`}
       />
       {/* 알약 손잡이 — "여기를 탭하면 분할 조작"의 표식 */}
       <div
