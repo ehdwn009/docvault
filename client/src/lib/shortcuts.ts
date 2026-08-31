@@ -15,8 +15,13 @@ export type Shortcut = {
 
 export const SHORTCUTS: Shortcut[] = [
   { context: '전체', input: 'Ctrl+K', effect: '커맨드 팔레트 열기/닫기' },
+  { context: '전체', input: '? 또는 Ctrl+/', effect: '이 단축키 도움말 열기/닫기', pcOnly: true },
+  { context: '전체', input: 'Ctrl+B', effect: '왼쪽 패널 접기/펴기', pcOnly: true },
   { context: '전체', input: 'Esc', effect: '몰입 모드·팝업·메뉴 닫기' },
   { context: '전체', input: '파일 끌어다 놓기', effect: '업로드 (트리의 폴더 위에 놓으면 그 폴더로)' },
+  { context: '뷰어', input: 'E', effect: '활성 문서 편집', pcOnly: true },
+  { context: '뷰어', input: 'Z', effect: '몰입 모드 켜기/끄기', pcOnly: true },
+  { context: '뷰어', input: 'Alt+1~4', effect: '분할 칸 활성화 (왼쪽부터 번호순)', pcOnly: true },
   { context: '편집기', input: 'Ctrl+S', effect: '저장' },
   { context: '파일 트리', input: 'Alt+클릭', effect: '분할로 열기', pcOnly: true },
   { context: '파일 트리', input: 'Ctrl+클릭', effect: '다중 선택 켜기/추가', pcOnly: true },

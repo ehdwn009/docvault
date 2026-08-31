@@ -18,6 +18,8 @@ type Props = {
   onDirtyChange: (dirty: boolean) => void;
   /** 분할 중일 때만 옴 — 이 칸을 화면에서 닫는다 (문서는 탭에 남음) */
   onClosePane?: () => void;
+  /** 활성 칸 여부 — E(편집) 단축키는 활성 칸의 뷰어만 받는다 */
+  isActive?: boolean;
   /** 문서 속 상대 경로 링크로 다른 파일 열기 — (경로, 분할로 열지) (IA — 문서 내부 링크) */
   onOpenLink?: (path: string, split: boolean) => void;
   /** 줄 번호 앵커(#L16-L26)로 열렸을 때 하이라이트·이동할 줄 범위 */
@@ -40,10 +42,14 @@ const CHROME_SCROLL_DELTA = 8;
 const SWIPE_MIN_X = 60;
 const SWIPE_MAX_Y = 40;
 
+// 앱 테마와 독립인 본문 배경 — 앱 테마 변수의 영향을 받지 않게 고정 색으로 지정한다
 const THEME_BG: Record<UserSettings['viewerTheme'], string> = {
   light: 'bg-white',
-  dark: 'bg-slate-950',
   sepia: 'bg-[#f4ecd8]',
+  green: 'bg-[#e9f0e3]',
+  gray: 'bg-[#e2e4e8]',
+  dark: 'bg-[#020617]',
+  night: 'bg-[#1f2430]',
 };
 const WIDTH: Record<UserSettings['contentWidth'], string> = {
   narrow: 'max-w-xl',
@@ -58,7 +64,7 @@ type Heading = { text: string; level: number; jump: () => void };
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, chromeHidden, onChromeHint }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, chromeHidden, onChromeHint }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -133,6 +139,22 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   useEffect(() => {
     if (mode === 'edit') onChromeHint?.(false);
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // E = 편집 — ⋯ 메뉴의 "편집 (E)" 표기 이행. 활성 칸에서만, 입력 중·수식키 조합은 무시
+  // (IA — 신규 단축키. HTML 문서 iframe 안을 클릭한 상태에서는 키가 iframe에 머물러 안 온다)
+  useEffect(() => {
+    if (!isActive || mode !== 'view' || !data || data.readonly) return;
+    const handler = (e: KeyboardEvent) => {
+      const t = e.target;
+      const typing =
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.toLowerCase() === 'e') setMode('edit');
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isActive, mode, data]);
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)

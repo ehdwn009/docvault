@@ -11,6 +11,77 @@
   font-size: inherit;
 }
 
+/* ── 앱 테마 (IA — 앱 테마 프리셋) ─────────────────────────────────────────
+   Tailwind 4의 색 유틸리티는 CSS 변수(var(--color-slate-950) 등)를 참조한다.
+   그래서 [data-app-theme=…] 아래에서 slate(표면·글자)·sky(강조) 램프만 재정의하면
+   컴포넌트 클래스를 한 줄도 안 고치고 앱 전체가 그 색으로 바뀐다.
+   라이트 테마는 램프를 "뒤집는다" — 코드의 의미 체계(bg-slate-950=앱 배경,
+   text-slate-100=본문 글자)가 어두움 기준으로 짜여 있어, 950을 밝게 100을 어둡게
+   주면 의미가 그대로 유지된다. 뷰어 본문·코드 뷰어는 고정 색이라 영향받지 않는다.
+   주의: gray 램프는 건드리지 않는다 — prose(typography)가 gray를 쓴다. */
+
+:root {
+  color-scheme: dark; /* 스크롤바·네이티브 컨트롤도 앱과 같은 명암으로 */
+}
+
+/* 그래파이트 — 무채색 다크 (zinc 램프) */
+[data-app-theme='graphite'] {
+  --color-slate-50: #fafafa; --color-slate-100: #f4f4f5; --color-slate-200: #e4e4e7;
+  --color-slate-300: #d4d4d8; --color-slate-400: #a1a1aa; --color-slate-500: #71717a;
+  --color-slate-600: #52525b; --color-slate-700: #3f3f46; --color-slate-800: #27272a;
+  --color-slate-900: #18181b; --color-slate-950: #0b0b0d;
+}
+
+/* 딥 그린 — 짙은 숲색 표면 + 에메랄드 강조 */
+[data-app-theme='forest'] {
+  --color-slate-50: #f2faf6; --color-slate-100: #e4f5ec; --color-slate-200: #cbe8da;
+  --color-slate-300: #a7d3bf; --color-slate-400: #79b598; --color-slate-500: #569478;
+  --color-slate-600: #40725d; --color-slate-700: #2c5343; --color-slate-800: #1c3a2e;
+  --color-slate-900: #10281e; --color-slate-950: #081711;
+  --color-sky-50: #ecfdf5; --color-sky-100: #d1fae5; --color-sky-200: #a7f3d0;
+  --color-sky-300: #6ee7b7; --color-sky-400: #34d399; --color-sky-500: #10b981;
+  --color-sky-600: #059669; --color-sky-700: #047857; --color-sky-800: #065f46;
+  --color-sky-900: #064e3b; --color-sky-950: #022c22;
+}
+
+/* 오베르진 — 가지색 표면 + 보라 강조 */
+[data-app-theme='aubergine'] {
+  --color-slate-50: #f8f1fb; --color-slate-100: #efe2f4; --color-slate-200: #ddc9e6;
+  --color-slate-300: #c5a8d3; --color-slate-400: #a37fb5; --color-slate-500: #825b95;
+  --color-slate-600: #654078; --color-slate-700: #4a2c5a; --color-slate-800: #352040;
+  --color-slate-900: #241329; --color-slate-950: #150a19;
+  --color-sky-50: #f5f3ff; --color-sky-100: #ede9fe; --color-sky-200: #ddd6fe;
+  --color-sky-300: #c4b5fd; --color-sky-400: #a78bfa; --color-sky-500: #8b5cf6;
+  --color-sky-600: #7c3aed; --color-sky-700: #6d28d9; --color-sky-800: #5b21b6;
+  --color-sky-900: #4c1d95; --color-sky-950: #2e1065;
+}
+
+/* 페이퍼 — 라이트 (슬레이트 램프 반전) */
+[data-app-theme='paper'] {
+  color-scheme: light;
+  --color-slate-50: #020617; --color-slate-100: #0f172a; --color-slate-200: #1f2937;
+  --color-slate-300: #334155; --color-slate-400: #475569; --color-slate-500: #64748b;
+  --color-slate-600: #8b98a8; --color-slate-700: #c0c9d4; --color-slate-800: #d8dee6;
+  --color-slate-900: #e9edf1; --color-slate-950: #f4f6f8;
+  --color-sky-50: #082f49; --color-sky-100: #0c4a6e; --color-sky-200: #075985;
+  --color-sky-300: #0369a1; --color-sky-400: #0284c7; --color-sky-500: #0ea5e9;
+  --color-sky-600: #38bdf8; --color-sky-700: #7cc8f4; --color-sky-800: #a9d4f5;
+  --color-sky-900: #d3e9fb; --color-sky-950: #e8f4fd;
+}
+
+/* 아이보리 — 라이트 웜 (미색 표면 + 앰버 강조) */
+[data-app-theme='ivory'] {
+  color-scheme: light;
+  --color-slate-50: #0f0d0a; --color-slate-100: #1b1915; --color-slate-200: #2d2a22;
+  --color-slate-300: #423d32; --color-slate-400: #5a5344; --color-slate-500: #7a715c;
+  --color-slate-600: #a09478; --color-slate-700: #cec0a0; --color-slate-800: #e3d8bf;
+  --color-slate-900: #f2ead8; --color-slate-950: #faf6ec;
+  --color-sky-50: #271003; --color-sky-100: #451a03; --color-sky-200: #78350f;
+  --color-sky-300: #92400e; --color-sky-400: #b45309; --color-sky-500: #d97706;
+  --color-sky-600: #f59e0b; --color-sky-700: #fcd34d; --color-sky-800: #fde68a;
+  --color-sky-900: #fef3c7; --color-sky-950: #fffbeb;
+}
+
 /* 앱 껍데기는 고정 — 스크롤은 지정된 내부 컨테이너(트리·본문 등)에서만 일어난다.
    모바일의 고무줄 바운스·당겨서 새로고침이 앱 전체를 흔드는 것도 여기서 차단. */
 html,

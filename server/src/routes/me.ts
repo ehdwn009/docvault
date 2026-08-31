@@ -16,7 +16,7 @@ import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
 const settingsSchema = z.object({
-  viewerTheme: z.enum(['light', 'dark', 'sepia']).optional(),
+  viewerTheme: z.enum(['light', 'sepia', 'green', 'gray', 'dark', 'night']).optional(),
   fontSize: z.number().int().min(FONT_SIZE_MIN).max(FONT_SIZE_MAX).optional(),
   htmlFontScale: z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).optional(),
   fontFamily: z.string().max(100).nullable().optional(),

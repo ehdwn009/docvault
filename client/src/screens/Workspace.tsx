@@ -4,6 +4,7 @@ import FileGrid from '../components/FileGrid';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
+import ShortcutsHelp from '../components/ShortcutsHelp';
 import SplitLayout from '../components/SplitLayout';
 import TabBar from '../components/TabBar';
 import TabDropOverlay from '../components/TabDropOverlay';
@@ -135,6 +136,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     localStorage.getItem('dv_viewmode') === 'grid' ? 'grid' : 'list',
   );
   const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
+  const [shortcutsOpen, setShortcutsOpen] = useState(false); // 단축키 치트시트 (SCR-145)
   const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
   const dirUploadRef = useRef<HTMLInputElement | null>(null);
@@ -834,17 +836,41 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     };
   }, [uploadDropped]);
 
-  // Ctrl+K: 커맨드 팔레트 (IA — 단축키)
+  // 전역 단축키 — Ctrl+K 팔레트, Ctrl+B 패널 접기, ?·Ctrl+/ 단축키 도움말, Z 몰입, Alt+1~4 칸 활성화
+  // (IA — 단축키 도움말 + 신규 단축키). 글자 키(?·Z)는 입력 중이면 삼키지 않는다
   useEffect(() => {
+    const isTyping = (t: EventTarget | null) =>
+      t instanceof HTMLElement &&
+      (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((open) => !open);
+      } else if (mod && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setPanelCollapsed((v) => !v);
+      } else if (mod && !e.altKey && e.key === '/') {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+      } else if (e.altKey && !mod && /^[1-4]$/.test(e.key)) {
+        const idx = Number(e.key) - 1;
+        if (idx < panes.length) {
+          e.preventDefault();
+          activatePane(idx);
+        }
+      } else if (!mod && !e.altKey && !isTyping(e.target)) {
+        if (e.key === '?') {
+          e.preventDefault();
+          setShortcutsOpen((v) => !v);
+        } else if (e.key.toLowerCase() === 'z' && panes.length > 0) {
+          setImmersive((v) => !v);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [panes.length, activatePane]);
 
   // Escape로 몰입 모드 종료
   useEffect(() => {
@@ -1312,7 +1338,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         )}
 
         {panel === 'settings' && (
-          <SettingsPanel settings={settings} onChange={changeSettings} onShowChangelog={showChangelog} />
+          <SettingsPanel
+            settings={settings}
+            onChange={changeSettings}
+            onShowChangelog={showChangelog}
+            onShowShortcuts={() => setShortcutsOpen(true)}
+          />
         )}
 
         {panel === 'admin' && user.role === 'admin' && (
@@ -1364,6 +1395,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   else dirtyMapRef.current.delete(f.id);
                 }}
                 onClosePane={panes.length > 1 ? () => closePane(i) : undefined}
+                isActive={panes.length === 1 || i === activeIdx}
                 onOpenLink={(path, split) => openByPath(f, path, split)}
                 jumpLines={lineJump?.fileId === f.id ? lineJump : undefined}
                 onSplitView={splitCandidates.length > 0 ? () => void splitView() : undefined}
@@ -1437,6 +1469,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           onClose={() => setPaletteOpen(false)}
         />
       )}
+
+      {shortcutsOpen && <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />}
 
       {trashOpen && (
         <TrashPanel onChanged={() => void loadTree()} onClose={() => setTrashOpen(false)} />

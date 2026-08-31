@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
+import { APP_THEMES, applyAppTheme, getAppTheme, type AppThemeId } from '../../lib/appTheme';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/constants';
 import { downloadArchive } from '../../lib/download';
 
@@ -7,17 +8,21 @@ type Props = {
   settings: UserSettings;
   onChange: (patch: Partial<UserSettings>) => void;
   onShowChangelog: () => void;
+  /** 단축키 치트시트 열기 — ? 키와 같은 오버레이 (SCR-145) */
+  onShowShortcuts: () => void;
 };
 
 const selectClass =
   'mt-1 w-full rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-400';
 
 // SCR-140: 설정 패널 — 뷰어 설정(SCR-141) + 비밀번호 변경(SCR-142) + 정보·업데이트 기록(SCR-144)
-export default function SettingsPanel({ settings, onChange, onShowChangelog }: Props) {
+export default function SettingsPanel({ settings, onChange, onShowChangelog, onShowShortcuts }: Props) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [withManifest, setWithManifest] = useState(true);
+  // 앱 테마는 기기별 취향이라 서버 설정이 아니라 localStorage (IA — 앱 테마 프리셋)
+  const [appTheme, setAppTheme] = useState<AppThemeId>(getAppTheme);
 
   async function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -41,18 +46,52 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
   return (
     <div className="space-y-6 px-4 py-2">
       <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">앱 테마</h3>
+        <p className="mt-1 text-xs text-slate-500">앱 전체(메뉴·패널·탭)의 색. 이 기기에만 적용됩니다.</p>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {APP_THEMES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => {
+                applyAppTheme(t.id);
+                setAppTheme(t.id);
+              }}
+              className={`rounded-md border p-1.5 text-center transition ${
+                appTheme === t.id
+                  ? 'border-sky-500 bg-slate-800'
+                  : 'border-slate-700 hover:border-slate-500'
+              }`}
+            >
+              {/* 색 견본: 배경 위에 표면·강조색 — 고르기 전에 분위기가 보이게 */}
+              <span
+                className="flex h-7 items-center justify-center gap-1 rounded"
+                style={{ background: t.swatch[0] }}
+              >
+                <span className="h-3 w-3 rounded-sm" style={{ background: t.swatch[1] }} />
+                <span className="h-3 w-3 rounded-full" style={{ background: t.swatch[2] }} />
+              </span>
+              <span className="mt-1 block truncate text-[10px] text-slate-400">{t.name}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">뷰어 설정</h3>
 
         <label className="mt-3 block text-sm text-slate-300">
-          테마
+          본문 테마
           <select
             value={settings.viewerTheme}
             onChange={(e) => onChange({ viewerTheme: e.target.value as UserSettings['viewerTheme'] })}
             className={selectClass}
           >
             <option value="light">라이트</option>
-            <option value="dark">다크</option>
             <option value="sepia">세피아</option>
+            <option value="green">북 그린</option>
+            <option value="gray">그레이</option>
+            <option value="dark">다크</option>
+            <option value="night">나이트 (부드러운 다크)</option>
           </select>
         </label>
 
@@ -100,6 +139,19 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog }: P
             <option value="wide">넓게</option>
           </select>
         </label>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">단축키 · 제스처</h3>
+        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+          숨어 있는 단축키와 제스처 전체 목록. 어디서든 <kbd className="rounded border border-slate-700 bg-slate-800 px-1">?</kbd> 키로도 열 수 있어요.
+        </p>
+        <button
+          onClick={onShowShortcuts}
+          className="mt-2 w-full rounded-md border border-slate-700 py-1.5 text-sm text-slate-300 transition hover:bg-slate-900"
+        >
+          전체 목록 보기
+        </button>
       </section>
 
       <section>

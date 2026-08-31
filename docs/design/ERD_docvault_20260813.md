@@ -87,7 +87,7 @@ erDiagram
     }
     USER_SETTINGS {
         integer user_id PK, FK
-        text viewer_theme "light|dark|sepia"
+        text viewer_theme "light|sepia|green|gray|dark|night"
         integer font_size "md 본문 절대 크기(px)"
         integer html_font_scale "HTML 글자 배율 전역 기본(%)"
         text font_family

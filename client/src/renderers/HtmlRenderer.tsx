@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ViewerTheme } from '../lib/api';
+import { isDarkViewerTheme, type ViewerTheme } from '../lib/api';
 import type { RendererTocItem } from './index';
 
 // HTML은 iframe sandbox로 격리 렌더링한다 (아키텍처 — 보안 경계).
@@ -17,10 +17,17 @@ const STORAGE_SHIM = `<script>(function(){try{void window.localStorage}catch(e){
 // 심이 하는 일: ① 앵커 클릭을 가로채 스크롤로 변환 ② 스크롤 위치·헤딩 목록을 postMessage로
 // 부모에 보고(이어 읽기·목차) ③ 부모의 이동(goto)·테마(theme) 메시지 수행 ④ 심어 둔 위치·테마 복원.
 // 격리 오리진이라 postMessage가 유일한 통신 수단이다.
+/** 문서에 남기는 data-theme 표식은 기존 3값(light/dark/sepia) 계약 유지 —
+    새 테마는 가장 가까운 값으로 접는다 (IA — 뷰어 테마 확장) */
+function collapseTheme(theme: ViewerTheme): 'light' | 'dark' | 'sepia' {
+  if (isDarkViewerTheme(theme)) return 'dark';
+  return theme === 'sepia' || theme === 'green' || theme === 'gray' ? 'sepia' : 'light';
+}
+
 function navShim(restoreOffset: number, theme: ViewerTheme): string {
   const offset = Math.max(0, Math.floor(restoreOffset));
   // 문서가 원하면 CSS에서 [data-theme="dark"]로 뷰어 테마를 따를 수 있게 표식만 남긴다 (강제하지 않음)
-  const safeTheme = theme === 'dark' || theme === 'sepia' ? theme : 'light';
+  const safeTheme = collapseTheme(theme);
   return `<script>(function(){
 var se=function(){return document.scrollingElement||document.documentElement};
 document.documentElement.dataset.theme='${safeTheme}';
@@ -272,7 +279,7 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, onScro
     const win = frameRef.current?.contentWindow;
     if (!win) return;
     if (theme && theme !== sent.current.theme) {
-      win.postMessage({ type: 'docvault:theme', theme }, '*');
+      win.postMessage({ type: 'docvault:theme', theme: collapseTheme(theme) }, '*');
       sent.current.theme = theme;
     }
     if (fit !== sent.current.fit) {

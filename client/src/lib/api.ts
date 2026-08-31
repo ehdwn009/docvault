@@ -101,7 +101,12 @@ export type SharedFile = {
   ownerName: string;
 };
 
-export type ViewerTheme = 'light' | 'dark' | 'sepia';
+export type ViewerTheme = 'light' | 'sepia' | 'green' | 'gray' | 'dark' | 'night';
+
+/** 다크 계열 판정 — 렌더러들이 글자색·prose 반전을 고를 때 쓴다.
+    theme === 'dark' 직접 비교 금지: 테마를 더할 때 판정이 누락된다 (IA — 뷰어 테마 확장) */
+export const isDarkViewerTheme = (t: ViewerTheme | undefined): boolean =>
+  t === 'dark' || t === 'night';
 
 export type UserSettings = {
   viewerTheme: ViewerTheme;

@@ -125,7 +125,7 @@ export const userSettings = sqliteTable('user_settings', {
   userId: integer('user_id')
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
-  viewerTheme: text('viewer_theme', { enum: ['light', 'dark', 'sepia'] })
+  viewerTheme: text('viewer_theme', { enum: ['light', 'sepia', 'green', 'gray', 'dark', 'night'] })
     .notNull()
     .default('light'),
   fontSize: integer('font_size').notNull().default(16),

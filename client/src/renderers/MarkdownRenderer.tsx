@@ -5,7 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 // 인식되지 않는다 — CJK 문서에서 빈번하므로 플러그인으로 완화한다
 import remarkCjkFriendly from 'remark-cjk-friendly';
 import remarkGfm from 'remark-gfm';
-import type { ViewerTheme } from '../lib/api';
+import { isDarkViewerTheme, type ViewerTheme } from '../lib/api';
 import Mermaid from './Mermaid';
 import 'highlight.js/styles/github-dark.css';
 
@@ -59,7 +59,7 @@ export default function MarkdownRenderer({
       // ```mermaid 블록은 다이어그램으로 렌더링
       code: ({ className, children, ...props }) => {
         if (className?.includes('language-mermaid')) {
-          return <Mermaid code={String(children).trim()} dark={theme === 'dark'} />;
+          return <Mermaid code={String(children).trim()} dark={isDarkViewerTheme(theme)} />;
         }
         return (
           <code className={className} {...props}>
@@ -79,7 +79,7 @@ export default function MarkdownRenderer({
   );
 
   return (
-    <div className={`prose ${theme === 'dark' ? 'prose-invert' : ''} max-w-none`}>
+    <div className={`prose ${isDarkViewerTheme(theme) ? 'prose-invert' : ''} max-w-none`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         rehypePlugins={[rehypeHighlight]}
