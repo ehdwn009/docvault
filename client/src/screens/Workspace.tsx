@@ -126,6 +126,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set()); // 다중 선택된 파일 id
+  // 선택된 폴더 — 패널의 업로드·새 폴더가 이 폴더를 대상으로 동작 (IA — 폴더 선택)
+  const [selectedFolder, setSelectedFolder] = useState<number | null>(null);
   const [movePickerOpen, setMovePickerOpen] = useState(false); // 일괄 이동 폴더 선택 모달
   const [trashOpen, setTrashOpen] = useState(false); // 휴지통 모달
   // 보기 모드는 기기별 취향이라 서버 설정이 아니라 localStorage에 둔다
@@ -445,6 +447,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   useEffect(() => {
     if (tabs.length === 0) setSwitcherOpen(false);
   }, [tabs.length]);
+
+  // 선택된 폴더가 삭제·이동으로 사라지면 선택도 푼다 — 없는 폴더로 업로드하지 않게
+  useEffect(() => {
+    if (selectedFolder !== null && !tree.folders.some((f) => f.id === selectedFolder)) {
+      setSelectedFolder(null);
+    }
+  }, [tree.folders, selectedFolder]);
 
   // 화면 폭 변화 감지 + 좁아지면 상한(2칸)으로 접기 — 접힌 문서는 탭에 남는다
   useEffect(() => {
@@ -1112,15 +1121,25 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   e.target.value = '';
                 }}
               />
+              {/* 폴더가 선택돼 있으면 업로드·새 폴더가 그 폴더로 들어간다 (IA — 폴더 선택) */}
               <button
-                onClick={() => actions.uploadTo(null)}
-                title="모든 형식 (문서·코드·이미지·PDF·오디오·비디오·기타)"
+                onClick={() => actions.uploadTo(selectedFolder)}
+                title={
+                  selectedFolder !== null
+                    ? `"${tree.folders.find((f) => f.id === selectedFolder)?.name}" 폴더에 업로드`
+                    : '모든 형식 (문서·코드·이미지·PDF·오디오·비디오·기타)'
+                }
                 className="flex-1 rounded-md border border-dashed border-slate-700 py-2 text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
-                + 업로드
+                + 업로드{selectedFolder !== null && ' 📁'}
               </button>
               <button
-                onClick={() => actions.createFolder(null)}
+                onClick={() => actions.createFolder(selectedFolder)}
+                title={
+                  selectedFolder !== null
+                    ? `"${tree.folders.find((f) => f.id === selectedFolder)?.name}" 안에 새 폴더`
+                    : '새 폴더'
+                }
                 className="rounded-md border border-dashed border-slate-700 px-3 text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 + 폴더
@@ -1142,7 +1161,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                     file: f,
                     relPath: f.webkitRelativePath || f.name,
                   }));
-                  void doUploadTree(items, null);
+                  void doUploadTree(items, selectedFolder);
                 }
                 e.target.value = '';
               }}
@@ -1260,6 +1279,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   isAdmin={user.role === 'admin'}
                   selectedId={selected?.id ?? null}
                   onSelect={(f) => void selectFile(f)}
+                  selectedFolderId={selectedFolder}
+                  onSelectFolder={setSelectedFolder}
                   actions={actions}
                   checked={checked}
                   onCheckChange={setChecked}

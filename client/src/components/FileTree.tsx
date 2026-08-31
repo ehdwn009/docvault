@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 
@@ -51,9 +51,14 @@ type Props = {
   /** 다중 선택된 파일 id — 하나라도 있으면 선택 모드 (SCR-110 다중 선택) */
   checked: Set<number>;
   onCheckChange: (next: Set<number>) => void;
+  /** 선택된 폴더 — 패널의 업로드·새 폴더가 이 폴더를 대상으로 동작한다 (IA — 폴더 선택) */
+  selectedFolderId: number | null;
+  onSelectFolder: (id: number | null) => void;
 };
 
 type Renaming = { kind: 'file' | 'folder'; id: number; value: string };
+/** 키보드 포커스가 놓인 행 — "선택"과 별개인 탐색용 커서 (IA — 키보드 탐색) */
+type FocusRow = { kind: 'file' | 'folder'; id: number };
 type Menu = { x: number; y: number; items: MenuItem[] };
 type DragPayload = { kind: 'file' | 'folder'; id: number } | { kind: 'files'; ids: number[] };
 
@@ -70,13 +75,15 @@ function setDragGhost(e: DragEvent, label: string) {
 }
 
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
-export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange }: Props) {
+export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange, selectedFolderId, onSelectFolder }: Props) {
   const tagColor = new Map(tags.map((t) => [t.id, t.color]));
   // "접힌 목록"이 아니라 "펼친 목록"으로 들고 있는다 — 빈 집합이 곧 전부 접힘(기본값)이다
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<Menu | null>(null);
   const [renaming, setRenaming] = useState<Renaming | null>(null);
   const [dropTarget, setDropTarget] = useState<number | 'root' | null>(null);
+  const [focus, setFocus] = useState<FocusRow | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const lastCheckClickRef = useRef<number | null>(null); // Shift 범위 선택의 기준점
   const selectionMode = checked.size > 0;
 
@@ -103,18 +110,24 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     });
   }, [selectedId, files, folders]);
 
-  /** 화면에 보이는 순서 그대로의 파일 id 목록 — Shift 범위 선택의 기준 (접힌 폴더 안은 제외) */
-  const visibleFileIds = (): number[] => {
-    const out: number[] = [];
+  /** 화면에 보이는 순서 그대로의 행 목록 — 키보드 탐색과 Shift 범위 선택의 기준 (접힌 폴더 안은 제외) */
+  const visibleRows = (): (FocusRow & { parentId: number | null })[] => {
+    const out: (FocusRow & { parentId: number | null })[] = [];
     const walk = (parentId: number | null) => {
       for (const folder of folders.filter((f) => f.parentId === parentId)) {
+        out.push({ kind: 'folder', id: folder.id, parentId });
         if (expanded.has(folder.id)) walk(folder.id);
       }
-      for (const file of files.filter((f) => f.folderId === parentId)) out.push(file.id);
+      for (const file of files.filter((f) => f.folderId === parentId)) {
+        out.push({ kind: 'file', id: file.id, parentId });
+      }
     };
     walk(null);
     return out;
   };
+
+  const visibleFileIds = (): number[] =>
+    visibleRows().filter((r) => r.kind === 'file').map((r) => r.id);
 
   const toggleCheck = (id: number) => {
     const next = new Set(checked);
@@ -135,6 +148,69 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(order[i]!);
     onCheckChange(next);
   };
+
+  // 포커스 행이 화면 밖이면 따라 스크롤 (IA — 키보드 탐색)
+  useEffect(() => {
+    if (!focus) return;
+    containerRef.current
+      ?.querySelector(`[data-row="${focus.kind === 'folder' ? 'd' : 'f'}${focus.id}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [focus]);
+
+  /** 트리 키보드 탐색 — ↑↓ 이동, →← 펼침/접기, Enter 열기, Space 선택, F2 이름, Delete 삭제 */
+  function handleTreeKey(e: ReactKeyboardEvent) {
+    if (renaming) return; // 이름 변경 중에는 입력창이 키를 갖는다
+    const rows = visibleRows();
+    if (rows.length === 0) return;
+    const idx = focus ? rows.findIndex((r) => r.kind === focus.kind && r.id === focus.id) : -1;
+    const row = idx === -1 ? null : rows[idx]!;
+    const moveTo = (i: number) => {
+      const r = rows[Math.max(0, Math.min(i, rows.length - 1))];
+      if (r) setFocus({ kind: r.kind, id: r.id });
+    };
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveTo(idx + 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveTo(idx === -1 ? 0 : idx - 1);
+    } else if (e.key === 'ArrowRight' && row?.kind === 'folder') {
+      e.preventDefault();
+      if (!expanded.has(row.id)) toggleExpand(row.id);
+      // 이미 펼쳐져 있으면 첫 자식으로 — 바로 다음 행이 자식일 때만 (빈 폴더면 제자리)
+      else if (rows[idx + 1]?.parentId === row.id) moveTo(idx + 1);
+    } else if (e.key === 'ArrowLeft' && row) {
+      e.preventDefault();
+      if (row.kind === 'folder' && expanded.has(row.id)) toggleExpand(row.id);
+      else if (row.parentId !== null) setFocus({ kind: 'folder', id: row.parentId });
+    } else if (e.key === 'Enter' && row) {
+      e.preventDefault();
+      if (row.kind === 'folder') {
+        toggleExpand(row.id);
+        onSelectFolder(row.id);
+      } else {
+        const file = files.find((f) => f.id === row.id);
+        if (file) onSelect(file);
+      }
+    } else if (e.key === ' ' && row?.kind === 'file') {
+      e.preventDefault(); // 스페이스의 페이지 스크롤 방지
+      toggleCheck(row.id);
+    } else if (e.key === 'F2' && row) {
+      e.preventDefault();
+      const name =
+        row.kind === 'folder'
+          ? folders.find((f) => f.id === row.id)?.name
+          : files.find((f) => f.id === row.id)?.name;
+      if (name !== undefined) setRenaming({ kind: row.kind, id: row.id, value: name });
+    } else if (e.key === 'Delete' && row) {
+      e.preventDefault();
+      // 파일은 휴지통 + 실행 취소 토스트, 폴더는 확인 대화상자 — 기존 삭제 흐름 그대로
+      if (row.kind === 'folder') actions.deleteFolder(row.id);
+      else actions.deleteFile(row.id);
+      moveTo(idx + 1 < rows.length ? idx + 1 : idx - 1);
+    }
+  }
 
   function openMenu(e: ReactMouseEvent, items: MenuItem[]) {
     e.preventDefault();
@@ -279,6 +355,8 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
       onKeyDown={(e) => {
         if (e.key === 'Enter') commitRename();
         if (e.key === 'Escape') setRenaming(null);
+        // 키보드로 끝냈으면 포커스를 트리로 돌려 탐색이 이어지게 (입력창이 사라지면 포커스도 증발한다)
+        if (e.key === 'Enter' || e.key === 'Escape') containerRef.current?.focus();
       }}
       onClick={(e) => e.stopPropagation()}
       className="w-full rounded border border-slate-600 bg-slate-800 px-1 py-0.5 text-sm text-slate-100 outline-none"
@@ -296,15 +374,29 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
           return (
             <div key={`d${folder.id}`}>
               <div
+                data-row={`d${folder.id}`}
                 draggable={!isRenaming}
                 onDragStart={(e) => startDrag(e, { kind: 'folder', id: folder.id }, `📁 ${folder.name}`)}
                 onDragOver={(e) => allowDrop(e, folder.id)}
                 onDragLeave={() => setDropTarget((t) => (t === folder.id ? null : t))}
                 onDrop={(e) => handleDrop(e, folder.id)}
-                onClick={() => toggleExpand(folder.id)}
+                // 클릭 = 펼침 토글 + 선택 — 선택된 폴더가 업로드·새 폴더의 대상이 된다 (IA — 폴더 선택)
+                onClick={() => {
+                  toggleExpand(folder.id);
+                  onSelectFolder(folder.id);
+                  setFocus({ kind: 'folder', id: folder.id });
+                }}
                 onContextMenu={(e) => openMenu(e, folderMenu(folder))}
                 className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-sm transition ${
-                  dropTarget === folder.id ? 'bg-sky-900/50 outline outline-1 outline-sky-600' : 'text-slate-400 hover:bg-slate-900'
+                  dropTarget === folder.id
+                    ? 'bg-sky-900/50 outline outline-1 outline-sky-600'
+                    : folder.id === selectedFolderId
+                      ? 'bg-slate-800 text-slate-200'
+                      : 'text-slate-400 hover:bg-slate-900'
+                } ${
+                  focus?.kind === 'folder' && focus.id === folder.id && dropTarget !== folder.id
+                    ? 'outline outline-1 outline-slate-500'
+                    : ''
                 }`}
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
               >
@@ -326,6 +418,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
           return (
             <div
               key={file.id}
+              data-row={`f${file.id}`}
               draggable={!isRenaming}
               onDragStart={(e) => {
                 // 선택된 파일을 끌면 선택 전체가 같이 움직인다
@@ -336,6 +429,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 }
               }}
               onClick={(e) => {
+                setFocus({ kind: 'file', id: file.id }); // 키보드 탐색이 여기서 이어진다
                 // Ctrl/⌘ 클릭 = 선택 토글, Alt = 분할로 열기, Shift = 범위, 선택 모드 중엔 클릭도 토글
                 if (e.ctrlKey || e.metaKey) toggleCheck(file.id);
                 else if (e.altKey) actions.openSplit(file);
@@ -350,6 +444,10 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   : file.id === selectedId
                     ? 'bg-slate-800 text-slate-100'
                     : 'text-slate-300 hover:bg-slate-900'
+              } ${
+                focus?.kind === 'file' && focus.id === file.id && !isChecked
+                  ? 'outline outline-1 outline-slate-500'
+                  : ''
               }`}
               style={{ paddingLeft: `${8 + depth * 14}px` }}
             >
@@ -382,10 +480,21 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
 
   return (
     <div
-      className={`min-h-full space-y-0.5 rounded pb-8 ${dropTarget === 'root' ? 'bg-sky-950/30' : ''}`}
+      ref={containerRef}
+      // tabIndex: 트리 안을 클릭하면 이 컨테이너가 포커스를 받아 키보드 탐색이 시작된다
+      tabIndex={0}
+      onKeyDown={handleTreeKey}
+      className={`min-h-full space-y-0.5 rounded pb-8 outline-none ${dropTarget === 'root' ? 'bg-sky-950/30' : ''}`}
       onDragOver={(e) => allowDrop(e, 'root')}
       onDragLeave={() => setDropTarget((t) => (t === 'root' ? null : t))}
       onDrop={(e) => handleDrop(e, null)}
+      // 빈 곳 클릭 = 폴더 선택 해제 ("이 폴더에서 작업 중" 상태를 푸는 유일한 손잡이)
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onSelectFolder(null);
+          setFocus(null);
+        }
+      }}
     >
       {folders.length === 0 && files.length === 0 ? (
         <p className="px-2 py-4 text-sm text-slate-600">파일이 없습니다. 업로드해 보세요.</p>
