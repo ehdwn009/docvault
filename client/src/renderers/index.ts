@@ -32,6 +32,8 @@ export type RendererProps = {
 // react-markdown + highlight.js가 무거워서 md·코드 렌더러는 지연 로드한다 (사용처는 Suspense로 감쌀 것)
 export const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 export const CodeRenderer = lazy(() => import('./CodeRenderer'));
+// pdf.js(약 1MB)도 지연 로드. 본문이 문자열이 아니라(바이너리) props 계약이 달라 아래 레지스트리에는 안 든다
+export const PdfRenderer = lazy(() => import('./PdfRenderer'));
 
 // 렌더러 레지스트리 — 새 형식 지원 시 여기에 컴포넌트만 등록하면 된다 (아키텍처 — 플러그인 구조)
 export const renderers: Partial<Record<string, ComponentType<RendererProps>>> = {

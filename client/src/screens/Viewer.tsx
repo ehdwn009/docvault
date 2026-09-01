@@ -3,7 +3,7 @@ import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { FONT_SCALE_DEFAULT } from '../lib/constants';
-import { CodeRenderer, renderers } from '../renderers';
+import { CodeRenderer, PdfRenderer, renderers } from '../renderers';
 import Editor from './Editor';
 
 type Props = {
@@ -83,6 +83,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const swipeRef = useRef<{ x: number; y: number; lastX: number; lastY: number } | null>(null);
   // 읽기 진행률(%) — 터치에서 크롬이 숨어도 위치 감을 주는 2px 줄. null이면 표시 안 함
   const [progress, setProgress] = useState<number | null>(null);
+  // PDF는 페이지 자리가 잡힌 뒤에야 스크롤 길이가 생긴다 — 그 전에 읽던 위치를 복원하면 0으로 뭉개진다
+  const [pdfReady, setPdfReady] = useState(false);
 
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
@@ -129,6 +131,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     setFontScale(file.state.fontScale);
     setShowMenu(false);
     setCodeView(!!jumpLines && canCodeView);
+    setPdfReady(false);
     // 문서를 바꾸면 크롬은 일단 보이고 진행률은 새로 잰다
     setProgress(null);
     lastScrollYRef.current = 0;
@@ -160,6 +163,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
   useEffect(() => {
     if (!data || mode !== 'view' || data.fileType === 'html') return;
+    if (data.fileType === 'pdf' && !pdfReady) return; // 페이지 자리가 잡히면 pdfReady가 다시 불러 준다
     if (jumpLines) return; // 줄 앵커로 열렸으면 렌더러가 그 줄로 데려간다 — 읽던 위치 복원과 겹치지 않게
     const offset = file.state.readingPosition?.offset;
     if (offset && scrollRef.current) {
@@ -169,8 +173,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         if (scrollRef.current) scrollRef.current.scrollTop = offset;
       });
     }
-    // 복원은 본문 로드 완료 시 1회
-  }, [data, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+    // 복원은 본문 로드 완료 시 1회 (PDF만 준비 신호를 한 번 더 기다린다)
+  }, [data, mode, pdfReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 목차: 렌더링된 DOM에서 헤딩을 수집한다 (지연 렌더러 대비 재시도 1회)
   // html은 격리 iframe 안이라 여기서 닿을 수 없다 — 렌더러 심이 onToc으로 대신 보고한다
@@ -349,10 +353,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         items={menuItems}
         display={
           // 글자 크기는 우리가 그리는 문서(md·텍스트·코드)와 HTML 모두에 준다.
-          // 이미지·PDF는 브라우저가 그리는 것이라 배율을 걸 자리가 없다
-          isBinary || !Renderer
+          // PDF도 우리가 canvas에 그리므로 같은 조작이 확대·축소가 된다.
+          // 이미지는 브라우저가 그리는 것이라 배율을 걸 자리가 없다
+          (isBinary && file.fileType !== 'pdf') || (!isBinary && !Renderer)
             ? null
             : {
+                label: file.fileType === 'pdf' ? '확대/축소' : undefined,
                 scale: effectiveScale,
                 isOverride: fontScale !== null,
                 onScaleChange: changeScale,
@@ -495,7 +501,16 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain ${THEME_BG[settings.viewerTheme]}`}
         >
           {file.fileType === 'pdf' ? (
-            <iframe src={`/api/v1/files/${file.id}/raw`} title={file.name} className="h-full w-full" />
+            // iframe(브라우저 내장 뷰어) 대신 직접 그린다 — iOS는 iframe 속 PDF의 1페이지만 그림처럼 보여줬다.
+            // key=파일 id: 파일을 바꾸면 문서·페이지 상태를 통째로 새로 만든다
+            <Suspense fallback={<p className="p-6 text-sm text-slate-500">PDF 뷰어 준비 중…</p>}>
+              <PdfRenderer
+                key={file.id}
+                fileId={file.id}
+                scale={effectiveScale}
+                onReady={() => setPdfReady(true)}
+              />
+            </Suspense>
           ) : file.fileType === 'image' ? (
             <div className="flex min-h-full items-center justify-center p-6">
               <img src={`/api/v1/files/${file.id}/raw`} alt={file.name} className="max-w-full" />

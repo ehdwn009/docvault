@@ -13,6 +13,8 @@ export type ViewerAction = {
 
 /** 표시 조작 — 글자 크기는 모든 문서 형식이, 화면 맞춤은 HTML만 갖는다 */
 export type DisplayOptions = {
+  /** 조작판 제목 — 기본 "글자 크기". PDF처럼 통째로 커지는 형식은 "확대/축소"로 바꿔 단다 */
+  label?: string;
   scale: number;
   isOverride: boolean;
   onScaleChange: (v: number) => void;
@@ -131,7 +133,7 @@ export default function ViewerMenu({
           {display && (
             <>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">글자 크기</span>
+                <span className="text-sm text-slate-300">{display.label ?? '글자 크기'}</span>
                 <span className={`text-xs ${display.isOverride ? 'text-sky-400' : 'text-slate-500'}`}>
                   {display.isOverride ? '이 문서만' : '기본값'}
                 </span>
