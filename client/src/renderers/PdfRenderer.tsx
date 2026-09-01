@@ -15,8 +15,10 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 // iOS는 iframe 속 PDF를 "1페이지짜리 원본 크기 그림"으로만 그려서 모바일에서 뷰어가 성립하지 않았다.
 // 전 페이지를 세로로 이어 붙여 부모의 스크롤(읽던 위치·진행률·크롬 숨김)을 그대로 태운다.
 
-/** 픽셀 밀도 상한 — 고밀도 폰(3x)에서 캔버스 메모리가 3²배로 뛰는 것을 막는다. 2x면 육안 차이 없음 */
-const MAX_PIXEL_RATIO = 2;
+/** 페이지당 캔버스 픽셀 상한 — 기기 픽셀 밀도(3x 등)는 그대로 살려 선명하게 그리되,
+    고배율 확대에서 메모리가 폭주하지 않게 총량만 막는다 (8M픽셀 ≈ 32MB).
+    밀도를 2로 고정했더니 3x 아이폰에서 글자가 흐릿했다 — 상한은 밀도가 아니라 총량에 건다 */
+const MAX_CANVAS_PIXELS = 8 * 1024 * 1024;
 /** 화면 밖 페이지도 이만큼 미리 그려 둔다(위아래 한 화면분) — 스크롤 시 흰 페이지가 보이지 않게 */
 const RENDER_MARGIN = '100% 0px';
 
@@ -201,7 +203,8 @@ function PdfPage({
       try {
         const page = await doc.getPage(pageNum);
         if (cancelled) return;
-        const ratio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+        const cssArea = cssWidth * ((cssWidth * size.height) / size.width);
+        const ratio = Math.min(window.devicePixelRatio || 1, Math.sqrt(MAX_CANVAS_PIXELS / cssArea));
         const viewport = page.getViewport({ scale: (cssWidth / size.width) * ratio });
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
