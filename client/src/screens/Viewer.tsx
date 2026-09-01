@@ -85,6 +85,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [progress, setProgress] = useState<number | null>(null);
   // PDF는 페이지 자리가 잡힌 뒤에야 스크롤 길이가 생긴다 — 그 전에 읽던 위치를 복원하면 0으로 뭉개진다
   const [pdfReady, setPdfReady] = useState(false);
+  // 서버의 최신 열람 상태 — 트리의 file.state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의
+  // 복원 기준으로 쓰면 낡은 위치로 되돌아간다. 열 때마다 서버에서 새로 받는다
+  const [freshState, setFreshState] = useState<TreeFile['state'] | null>(null);
+  // 아직 서버로 안 보낸 마지막 스크롤 위치 — 앱을 닫거나 문서를 바꿀 때 유실 없이 flush한다
+  const pendingRef = useRef<{ fileId: number; offset: number; ratio: number | null } | null>(null);
 
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
@@ -108,6 +113,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     setShowVersions(false);
     setShowToc(false);
     setHeadings([]);
+    setFreshState(null);
+    // 복원은 서버의 최신 상태 기준 — 실패하면 트리 캐시로라도 열리게 한다
+    api<{ state: TreeFile['state'] }>(`/me/files/${file.id}/state`)
+      .then((r) => setFreshState(r.state))
+      .catch(() => setFreshState(file.state));
     if (isBinary) {
       setData({ id: file.id, fileType: file.fileType, content: '', updatedAt: file.updatedAt, readonly: true });
     } else {
@@ -127,6 +137,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 파일을 바꿔 열면 그 파일에 저장해 둔 보기 설정(맞춤·배율)을 따른다.
   // file.id에만 반응시키는 이유: 조작 직후 트리가 갱신돼도 방금 누른 값을 도로 덮어쓰지 않게
   useEffect(() => {
+    flushPending(); // 이전 문서의 미전송 위치를 문서 전환 전에 내보낸다
     setFit(file.state.viewerFit !== 0);
     setFontScale(file.state.fontScale);
     setShowMenu(false);
@@ -137,6 +148,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     lastScrollYRef.current = 0;
     onChromeHint?.(false);
   }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 서버 최신 상태가 오면 보기 설정도 그쪽을 따른다 — 다른 기기에서 바꾼 배율·맞춤 반영
+  useEffect(() => {
+    if (!freshState) return;
+    setFit(freshState.viewerFit !== 0);
+    setFontScale(freshState.fontScale);
+  }, [freshState]);
 
   // 편집기로 들어가면 크롬을 되살린다 — 도구가 숨은 채 편집을 시작하면 당황스럽다
   useEffect(() => {
@@ -162,19 +180,34 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
   useEffect(() => {
-    if (!data || mode !== 'view' || data.fileType === 'html') return;
+    if (!data || !freshState || mode !== 'view' || data.fileType === 'html') return;
     if (data.fileType === 'pdf' && !pdfReady) return; // 페이지 자리가 잡히면 pdfReady가 다시 불러 준다
     if (jumpLines) return; // 줄 앵커로 열렸으면 렌더러가 그 줄로 데려간다 — 읽던 위치 복원과 겹치지 않게
-    const offset = file.state.readingPosition?.offset;
-    if (offset && scrollRef.current) {
-      // 복원 스크롤은 사용자 스크롤이 아니다 — 기준값을 먼저 맞춰 크롬이 숨지 않게 한다
-      lastScrollYRef.current = offset;
-      requestAnimationFrame(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = offset;
-      });
-    }
-    // 복원은 본문 로드 완료 시 1회 (PDF만 준비 신호를 한 번 더 기다린다)
-  }, [data, mode, pdfReady]); // eslint-disable-line react-hooks/exhaustive-deps
+    const pos = freshState.readingPosition;
+    const el = scrollRef.current;
+    if (!pos || !el) return;
+    // 비율(0~1) 우선 — px 오프셋은 화면 폭이 다른 기기에서는 엉뚱한 문단에 내려준다
+    const target = (denom: number) =>
+      pos.ratio != null && denom > 0 ? Math.round(pos.ratio * denom) : Math.floor(pos.offset ?? 0);
+    const first = target(el.scrollHeight - el.clientHeight);
+    if (first <= 0) return;
+    // 복원 스크롤은 사용자 스크롤이 아니다 — 기준값을 먼저 맞춰 크롬이 숨지 않게 한다
+    lastScrollYRef.current = first;
+    let retry: number | undefined;
+    requestAnimationFrame(() => {
+      el.scrollTop = first;
+      const applied = el.scrollTop; // 문서가 아직 짧으면 브라우저가 값을 깎는다
+      // 지연 렌더(md 하이라이트·이미지 등)로 높이가 늦게 자라는 문서 — 사용자가 안 움직였을 때만 재보정
+      retry = window.setTimeout(() => {
+        if (Math.abs(el.scrollTop - applied) > 4) return;
+        const t2 = target(el.scrollHeight - el.clientHeight);
+        lastScrollYRef.current = t2;
+        el.scrollTop = t2;
+      }, 600);
+    });
+    return () => window.clearTimeout(retry);
+    // 복원은 본문+최신 상태 도착 시 1회 (PDF만 준비 신호를 한 번 더 기다린다)
+  }, [data, mode, pdfReady, freshState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 목차: 렌더링된 DOM에서 헤딩을 수집한다 (지연 렌더러 대비 재시도 1회)
   // html은 격리 iframe 안이라 여기서 닿을 수 없다 — 렌더러 심이 onToc으로 대신 보고한다
@@ -198,25 +231,52 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     return () => window.clearTimeout(retry);
   }, [showToc, data, collectHeadings]);
 
+  /** 미전송 위치 즉시 전송 — keepalive라 페이지가 닫히는 중에도 요청이 살아남는다.
+      앱 종료·백그라운드 전환·문서 전환 때 불러 "마지막 2초"가 유실되지 않게 한다 */
+  const flushPending = useCallback(() => {
+    const p = pendingRef.current;
+    if (!p) return;
+    pendingRef.current = null;
+    window.clearTimeout(debounceRef.current);
+    void fetch(`/api/v1/me/files/${p.fileId}/state`, {
+      method: 'PUT',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        readingPosition: { offset: p.offset, ...(p.ratio != null ? { ratio: p.ratio } : {}) },
+      }),
+    }).catch(() => {});
+  }, []);
+
   // 읽던 위치 저장 — 바깥 div 스크롤(md 등)과 iframe 내부 스크롤 보고(html)가 공유한다
   const saveOffset = useCallback(
-    (offset: number) => {
+    (offset: number, ratio: number | null) => {
       // 코드 보기는 검사용 임시 모드 — 렌더링 보기의 읽던 위치를 덮어쓰지 않는다 (IA — 코드로 보기)
       if (codeViewRef.current) return;
+      pendingRef.current = { fileId: file.id, offset, ratio };
       window.clearTimeout(debounceRef.current);
-      debounceRef.current = window.setTimeout(() => {
-        void api(`/me/files/${file.id}/state`, {
-          method: 'PUT',
-          body: JSON.stringify({ readingPosition: { offset } }),
-        }).catch(() => {});
-      }, 2000);
+      debounceRef.current = window.setTimeout(flushPending, 2000);
     },
-    [file.id],
+    [file.id, flushPending],
   );
+
+  // 앱을 닫거나(pagehide) 홈으로 나가면(visibility hidden) 디바운스를 기다리지 않고 바로 보낸다
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushPending();
+    };
+    window.addEventListener('pagehide', flushPending);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('pagehide', flushPending);
+      document.removeEventListener('visibilitychange', onHide);
+      flushPending(); // 뷰어 자체가 사라질 때(탭 정리 등)도 유실 없이
+    };
+  }, [flushPending]);
 
   /** 스크롤 위치 하나에서 세 가지를 뽑는다: 읽던 위치 저장 + 크롬 숨김 힌트 + 진행률 */
   const reportScroll = useCallback(
-    (y: number, denom: number | null) => {
+    (y: number, denom: number | null, ratioOverride?: number) => {
       if (onChromeHint) {
         const last = lastScrollYRef.current;
         if (y < CHROME_SHOW_NEAR_TOP) onChromeHint(false);
@@ -229,7 +289,10 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         const next = denom > 300 ? Math.min(100, Math.round((y / denom) * 100)) : null;
         setProgress((prev) => (prev === next ? prev : next));
       }
-      saveOffset(y);
+      // 비율은 html이면 심이 재서 주고(ratioOverride), 아니면 여기서 계산한다
+      const ratio =
+        ratioOverride ?? (denom !== null && denom > 0 ? Math.min(1, Math.max(0, y / denom)) : null);
+      saveOffset(y, ratio);
     },
     [onChromeHint, saveOffset],
   );
@@ -277,7 +340,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   );
 
   if (error) return <p className="p-6 text-sm text-red-400">{error}</p>;
-  if (!data) return <p className="p-6 text-sm text-slate-500">불러오는 중…</p>;
+  // 최신 상태(freshState)까지 기다린다 — html은 iframe에 심는 복원 위치가 마운트 시점에 고정되기 때문
+  if (!data || !freshState) return <p className="p-6 text-sm text-slate-500">불러오는 중…</p>;
 
   if (mode === 'edit') {
     return (
@@ -374,7 +438,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       {/* 몰입 모드: 헤더·레일·패널을 숨기고 본문만 — 떠 있는 종료 버튼만 남긴다 */}
       {immersive && (
         <button
@@ -387,21 +451,22 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       )}
       {!immersive && (
       // 터치에서는 스크롤 방향에 따라 헤더가 접힌다 (IA — 크롬 자동 숨김).
-      // 접힘용 overflow-hidden·max-h는 터치에만 건다 — PC에 걸면 헤더 아래로 펼쳐지는
-      // ⋯ 팝오버 메뉴가 이 상자에 잘려서 안 보인다
+      // 본문 위에 겹쳐(absolute) transform으로만 미끄러지게 한다 — 예전처럼 max-h로 접으면
+      // 나타날 때마다 본문 레이아웃이 통째로 밀려 스크롤이 뚝뚝 끊겼다. transform은 레이아웃을
+      // 건드리지 않아 스크롤 관성이 살아 있다 (편집 모드는 위의 early return이라 여기 안 온다)
       <div
         className={
           isPc
             ? ''
-            : `overflow-hidden transition-all duration-200 ${
-                chromeHidden && mode === 'view' ? 'max-h-0 opacity-0' : 'max-h-14'
+            : `absolute inset-x-0 top-0 z-20 transition-transform duration-200 ${
+                chromeHidden ? '-translate-y-full' : ''
               }`
         }
       >
       <div
         // touch-none: 헤더에서 시작한 터치를 브라우저 제스처(스크롤·내비게이션)가 가로채지 않게 —
         // 가로채면 touchend 대신 touchcancel이 와서 스와이프가 끊긴다
-        className="touch-none flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:pl-14"
+        className="touch-none flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:bg-slate-950/90 touch:pl-14 touch:backdrop-blur"
         // 헤더 좌우 스와이프 = 이전/다음 문서 (본문 스와이프는 스크롤과 싸우므로 헤더 한정)
         onTouchStart={(e) => {
           const t = e.touches[0];
@@ -504,12 +569,15 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             // iframe(브라우저 내장 뷰어) 대신 직접 그린다 — iOS는 iframe 속 PDF의 1페이지만 그림처럼 보여줬다.
             // key=파일 id: 파일을 바꾸면 문서·페이지 상태를 통째로 새로 만든다
             <Suspense fallback={<p className="p-6 text-sm text-slate-500">PDF 뷰어 준비 중…</p>}>
-              <PdfRenderer
-                key={file.id}
-                fileId={file.id}
-                scale={effectiveScale}
-                onReady={() => setPdfReady(true)}
-              />
+              {/* 터치의 상하 여백: 오버레이 바가 문서 첫·끝 페이지를 가리지 않게 하는 상수 공간 */}
+              <div className="touch:pt-10 touch:pb-20">
+                <PdfRenderer
+                  key={file.id}
+                  fileId={file.id}
+                  scale={effectiveScale}
+                  onReady={() => setPdfReady(true)}
+                />
+              </div>
             </Suspense>
           ) : file.fileType === 'image' ? (
             <div className="flex min-h-full items-center justify-center p-6">
@@ -555,8 +623,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               key={file.id}
               content={data.content}
               theme={settings.viewerTheme}
-              initialOffset={file.state.readingPosition?.offset ?? 0}
-              onScrollOffset={(o) => reportScroll(o, null)}
+              initialOffset={freshState.readingPosition?.offset ?? 0}
+              initialRatio={freshState.readingPosition?.ratio}
+              onScrollOffset={(o, r) => reportScroll(o, null, r)}
               onToc={setHeadings}
               onInteract={closeMenu}
               fit={fit}
@@ -564,7 +633,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             />
           ) : (
             <div
-              className={`mx-auto p-6 ${WIDTH[settings.contentWidth]}`}
+              // 터치의 pt·pb: 오버레이 바가 본문 첫·끝 줄을 가리지 않게 하는 상수 공간 (크롬 자동 숨김)
+              className={`mx-auto p-6 touch:pt-14 touch:pb-24 ${WIDTH[settings.contentWidth]}`}
               // 설정의 글자 크기(px)를 100% 기준으로 두고 파일별 배율을 곱한다 —
               // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
               style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
@@ -604,12 +674,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       {/* 터치 기기의 아래쪽 도구막대 — 엄지가 닿는 자리에 조작을 모은다 (몰입 모드에서는 숨긴다).
           목차는 w-full로 남는 폭을 채우고 더보기는 오른쪽 끝에 — 목차가 없는 형식에서도 자리가 유지된다 */}
       {!isPc && !immersive && (
+        // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
         <div
-          className={`overflow-hidden transition-all duration-200 ${
-            chromeHidden && mode === 'view' ? 'max-h-0 opacity-0' : 'max-h-16'
+          className={`absolute inset-x-0 bottom-0 z-20 transition-transform duration-200 ${
+            chromeHidden ? 'translate-y-full' : ''
           }`}
         >
-          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur">
             {actions}
           </div>
         </div>

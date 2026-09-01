@@ -132,8 +132,9 @@ export default function PdfRenderer({ fileId, scale, onReady }: Props) {
       {/* 페이지 번호 — 높이 0의 sticky라 본문을 밀지 않고 위에 떠서 따라온다.
           가로 스크롤 상자(overflow) "밖"에 둬야 한다 — overflow 조상이 생기면 sticky의 기준이
           세로로 스크롤되지 않는 그 상자로 바뀌어, 스크롤하자마자 본문과 같이 밀려 사라진다 */}
+      {/* 터치는 오버레이 헤더 아래(top-12)에 — top-2면 헤더에 가려진다 (크롬 자동 숨김 오버레이) */}
       {doc.numPages > 1 && (
-        <div className="sticky top-2 z-10 h-0">
+        <div className="sticky top-2 z-10 h-0 touch:top-12">
           <div className="flex justify-end pr-3">
             <span className="rounded-full bg-slate-900/75 px-2.5 py-1 text-xs text-slate-200 backdrop-blur">
               {currentPage} / {doc.numPages}

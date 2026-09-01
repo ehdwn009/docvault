@@ -44,7 +44,8 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
   }
 
   return (
-    <div className="space-y-6 px-4 py-2">
+    // min-h-0 + overflow: 내용(테마·단축키 등)이 화면보다 길어졌다 — 다른 패널들과 같은 스크롤 상자
+    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-2 pb-8">
       <section>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">앱 테마</h3>
         <p className="mt-1 text-xs text-slate-500">앱 전체(메뉴·패널·탭)의 색. 이 기기에만 적용됩니다.</p>

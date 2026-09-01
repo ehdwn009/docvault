@@ -63,6 +63,7 @@
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
 | API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비) | 로그인 |
 | API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장 | 로그인 |
+| API-074 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5) | 로그인 |
 
@@ -285,10 +286,23 @@
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | isFavorite | boolean | 즐겨찾기 여부 |
-| readingPosition | object | { anchor: "헤딩 slug", offset: number } |
+| readingPosition | object | { anchor: "헤딩 slug", offset: number, ratio: number } — ratio(0~1)는 전체 스크롤 대비 비율. px 오프셋은 기기마다 문서 높이가 달라, 기기 간 이어 읽기는 ratio를 우선한다 |
 | touch | boolean | true면 last_opened_at을 현재 시각으로 (열람 기록) |
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
 | fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 10~300). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
 
 ### Response
 **200 OK** — 갱신된 state 객체
+
+---
+
+## API-074: 파일 상태 조회
+
+| 항목 | 내용 |
+|---|---|
+| 메서드 / 경로 | GET /me/files/{id}/state |
+| 설명 | 이 파일에 대한 내 최신 열람 상태(읽던 위치·배율·맞춤·즐겨찾기) 조회. 뷰어가 문서를 열 때마다 호출 — 트리(API-021)의 state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의 복원 기준은 이 조회다 |
+| 인증 필요 | 예 (열람 가능한 파일만) |
+
+### Response
+**200 OK** — state 객체 (행이 없으면 기본값)

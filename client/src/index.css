@@ -95,3 +95,14 @@ body {
   /* 더블탭 확대 비활성화(팬·핀치줌은 유지) — 버튼 탭 반응도 빨라진다 */
   touch-action: manipulation;
 }
+
+/* iOS는 글자 16px 미만인 입력칸에 포커스가 가면 화면 전체를 확대하고, 포커스가 풀려도
+   되돌리지 않는다 — 앱이 확대된 채 남는 원인. 터치 기기에서만 입력칸 글자를 16px로 올려 차단한다.
+   (viewport에 maximum-scale=1을 거는 방법은 의도적 확대(접근성)까지 막아서 쓰지 않는다) */
+@media not ((hover: hover) and (pointer: fine)) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}

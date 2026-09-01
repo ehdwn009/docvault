@@ -17,8 +17,10 @@ export type RendererProps = {
   highlightLines?: { start: number; end: number };
   /** 열람 시작 시 복원할 스크롤 위치 — iframe 내부에서 스크롤되는 html 렌더러용 */
   initialOffset?: number;
-  /** 렌더러 내부 스크롤 보고 — 부모가 읽던 위치 저장에 사용 (html 렌더러용) */
-  onScrollOffset?: (offset: number) => void;
+  /** 복원할 비율(0~1) — px은 기기 간에 안 맞아, 있으면 이것을 우선한다 (html 렌더러용) */
+  initialRatio?: number;
+  /** 렌더러 내부 스크롤 보고(px, 비율) — 부모가 읽던 위치 저장에 사용 (html 렌더러용) */
+  onScrollOffset?: (offset: number, ratio?: number) => void;
   /** 렌더러가 수집한 헤딩 목록 보고 — 부모의 목차(SCR-151)에 사용 (html 렌더러용) */
   onToc?: (items: RendererTocItem[]) => void;
   /** 문서 안을 눌렀다는 신호 — 격리된 iframe의 클릭은 부모에 닿지 않아 따로 알려야 한다 (html 렌더러용) */

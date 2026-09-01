@@ -1088,10 +1088,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   return (
     <div className="flex h-dvh bg-slate-950 text-slate-100">
-      {/* 터치 기기: 드로어 토글 (입력 방식 기준 — 가로모드에서도 드로어 유지) */}
+      {/* 터치 기기: 드로어 토글 (입력 방식 기준 — 가로모드에서도 드로어 유지).
+          z-30: 뷰어의 오버레이 헤더(z-20)보다 위 — 같은 z면 DOM 뒤쪽인 헤더가 클릭을 가로챈다 */}
       <button
         onClick={() => setDrawerOpen(true)}
-        className={`fixed left-3 top-2 z-20 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${immersive ? 'hidden' : ''}`}
+        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${immersive ? 'hidden' : ''}`}
       >
         ☰
       </button>

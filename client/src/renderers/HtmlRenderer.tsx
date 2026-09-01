@@ -24,8 +24,10 @@ function collapseTheme(theme: ViewerTheme): 'light' | 'dark' | 'sepia' {
   return theme === 'sepia' || theme === 'green' || theme === 'gray' ? 'sepia' : 'light';
 }
 
-function navShim(restoreOffset: number, theme: ViewerTheme): string {
+function navShim(restoreOffset: number, restoreRatio: number | undefined, theme: ViewerTheme): string {
   const offset = Math.max(0, Math.floor(restoreOffset));
+  // 비율(0~1)이 있으면 우선 — px은 화면 폭이 다른 기기에서는 다른 문단에 떨어진다 (기기 간 이어 읽기)
+  const ratio = restoreRatio != null && restoreRatio > 0 && restoreRatio <= 1 ? restoreRatio : null;
   // 문서가 원하면 CSS에서 [data-theme="dark"]로 뷰어 테마를 따를 수 있게 표식만 남긴다 (강제하지 않음)
   const safeTheme = collapseTheme(theme);
   return `<script>(function(){
@@ -41,7 +43,9 @@ else if(!id)window.scrollTo({top:0,behavior:'smooth'});
 },true);
 // 문서를 누른 것은 부모에게 보이지 않는다(iframe 경계) — 열려 있는 팝오버를 닫으라고 알린다
 addEventListener('pointerdown',function(){parent.postMessage({type:'docvault:interact'},'*')},{passive:true,capture:true});
-var t;addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(function(){parent.postMessage({type:'docvault:scroll',offset:se().scrollTop},'*')},400)},{passive:true});
+var t;addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(function(){
+var s=se(),d=s.scrollHeight-s.clientHeight;
+parent.postMessage({type:'docvault:scroll',offset:s.scrollTop,ratio:d>0?Math.min(1,s.scrollTop/d):0},'*')},400)},{passive:true});
 var HD=[];
 var sendToc=function(){HD=[].slice.call(document.querySelectorAll('h1,h2,h3')).slice(0,300);
 parent.postMessage({type:'docvault:toc',items:HD.map(function(h){return{text:(h.textContent||'').trim().slice(0,120),level:+h.tagName[1]||1}})},'*')};
@@ -49,7 +53,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 addEventListener('message',function(ev){var d=ev.data||{};
 if(d.type==='docvault:goto'&&HD[d.index])HD[d.index].scrollIntoView({behavior:'smooth',block:'start'});
 else if(d.type==='docvault:theme')document.documentElement.dataset.theme=String(d.theme)});
-${offset > 0 ? `var ap=function(){se().scrollTop=${offset}};if(document.readyState==='complete')ap();else addEventListener('load',function(){requestAnimationFrame(ap)});` : ''}
+${ratio !== null || offset > 0 ? `var ap=function(){var s=se(),d=s.scrollHeight-s.clientHeight;s.scrollTop=${ratio !== null ? `d>0?Math.round(d*${ratio}):${offset}` : `${offset}`}};if(document.readyState==='complete')ap();else addEventListener('load',function(){requestAnimationFrame(ap)});` : ''}
 })()</${'script'}>`;
 }
 
@@ -198,13 +202,15 @@ else if(d.type==='docvault:scale')setTimeout(function(){undo();if(on)run()},0)})
 function injectShims(
   html: string,
   restoreOffset: number,
+  restoreRatio: number | undefined,
   theme: ViewerTheme,
   fit: boolean,
   scale: number,
 ): string {
   // 순서가 곧 실행 순서다(리스너는 등록된 차례로 불린다) — 글자 크기를 정한 뒤 그 결과로 맞춤을 재고,
   // 마지막에 읽던 위치를 복원해야 앞 단계가 바꿔 놓은 레이아웃 위에서 제자리를 찾는다
-  const shims = STORAGE_SHIM + scaleShim(scale) + fitShim(fit) + navShim(restoreOffset, theme);
+  const shims =
+    STORAGE_SHIM + scaleShim(scale) + fitShim(fit) + navShim(restoreOffset, restoreRatio, theme);
   const head = html.match(/<head[^>]*>/i);
   if (head) {
     const at = head.index! + head[0].length;
@@ -223,8 +229,10 @@ type Props = {
   theme?: ViewerTheme;
   /** 열람 시작 시 복원할 스크롤 위치 (읽던 위치 이어 읽기) */
   initialOffset?: number;
-  /** iframe 내부 스크롤 보고 수신 — 부모(Viewer)가 읽던 위치 저장에 사용 */
-  onScrollOffset?: (offset: number) => void;
+  /** 복원할 비율(0~1) — 있으면 px보다 우선한다 (기기 간 이어 읽기) */
+  initialRatio?: number;
+  /** iframe 내부 스크롤 보고 수신(px, 비율) — 부모(Viewer)가 읽던 위치 저장에 사용 */
+  onScrollOffset?: (offset: number, ratio?: number) => void;
   /** 문서 헤딩 목록 보고 수신 — 부모(Viewer)가 목차(SCR-151)에 사용 */
   onToc?: (items: RendererTocItem[]) => void;
   /** 문서 안을 눌렀다는 신호 — 부모가 열어 둔 팝오버를 닫는 데 쓴다 */
@@ -235,29 +243,30 @@ type Props = {
   fontScale?: number;
 };
 
-export default function HtmlRenderer({ content, theme, initialOffset = 0, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100 }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100 }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마·맞춤·배율은 마운트 시점 값으로 고정해
   // 부모 리렌더(트리 갱신·설정 변경 등)가 읽는 중인 문서를 초기화하지 않게 한다
   const [restoreOffset] = useState(initialOffset);
+  const [restoreRatio] = useState(initialRatio);
   const [initialTheme] = useState<ViewerTheme>(theme ?? 'light');
   const [initialFit] = useState(fit);
   const [initialScale] = useState(fontScale);
   const doc = useMemo(
-    () => injectShims(content, restoreOffset, initialTheme, initialFit, initialScale),
-    [content, restoreOffset, initialTheme, initialFit, initialScale],
+    () => injectShims(content, restoreOffset, restoreRatio, initialTheme, initialFit, initialScale),
+    [content, restoreOffset, restoreRatio, initialTheme, initialFit, initialScale],
   );
 
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       // 반드시 이 iframe에서 온 메시지만 신뢰한다 (아키텍처 — HTML 렌더러 호환 심)
       if (e.source !== frameRef.current?.contentWindow) return;
-      const d = e.data as { type?: unknown; offset?: unknown; items?: unknown } | null;
+      const d = e.data as { type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown } | null;
       if (!d || typeof d !== 'object') return;
       if (d.type === 'docvault:interact') {
         onInteract?.();
       } else if (d.type === 'docvault:scroll' && typeof d.offset === 'number') {
-        onScrollOffset?.(d.offset);
+        onScrollOffset?.(d.offset, typeof d.ratio === 'number' ? d.ratio : undefined);
       } else if (d.type === 'docvault:toc' && Array.isArray(d.items)) {
         const items = (d.items as { text?: unknown; level?: unknown }[]).map((it, index) => ({
           text: String(it.text ?? ''),

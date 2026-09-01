@@ -29,7 +29,12 @@ const stateSchema = z
   .object({
     isFavorite: z.boolean().optional(),
     readingPosition: z
-      .object({ anchor: z.string().nullable().optional(), offset: z.number().optional() })
+      .object({
+        anchor: z.string().nullable().optional(),
+        offset: z.number().optional(),
+        // 전체 스크롤 대비 비율(0~1) — px은 기기마다 문서 높이가 달라 못 옮긴다 (기기 간 이어 읽기)
+        ratio: z.number().min(0).max(1).optional(),
+      })
       .nullable()
       .optional(),
     touch: z.boolean().optional(),
@@ -82,6 +87,35 @@ export const meRoutes = new Hono<AppEnv>()
       .returning()
       .get();
     return c.json({ settings: pickSettings(row) });
+  })
+
+  // API-074: 파일 상태 조회 — 문서를 열 때 서버의 최신 상태(읽던 위치·배율)를 받아온다.
+  // 트리 캐시는 앱 시작 시점에 멈춰 있어, 이 조회가 없으면 기기 간·재방문 이어 읽기가 어긋난다
+  .get('/files/:id/state', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+    if (!canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+
+    const row = db
+      .select()
+      .from(userFileState)
+      .where(and(eq(userFileState.userId, user.id), eq(userFileState.fileId, id)))
+      .get();
+    return c.json({
+      state: row
+        ? {
+            isFavorite: row.isFavorite,
+            readingPosition: row.readingPosition ? JSON.parse(row.readingPosition) : null,
+            lastOpenedAt: row.lastOpenedAt,
+            viewerFit: row.viewerFit,
+            fontScale: row.fontScale,
+          }
+        : { isFavorite: 0, readingPosition: null, lastOpenedAt: null, viewerFit: 1, fontScale: null },
+    });
   })
 
   // API-073: 파일 상태 저장 — 즐겨찾기·읽던 위치·열람 기록 부분 갱신(upsert)

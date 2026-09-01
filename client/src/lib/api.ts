@@ -52,7 +52,8 @@ export type TreeFile = {
   state: {
     isFavorite: number;
     lastOpenedAt: number | null;
-    readingPosition: { anchor?: string | null; offset?: number } | null;
+    /** ratio: 전체 스크롤 대비 비율(0~1) — 기기마다 문서 높이가 달라 px 대신 이것으로 이어 읽는다 */
+    readingPosition: { anchor?: string | null; offset?: number; ratio?: number } | null;
     /** HTML 화면 맞춤 보정 사용 여부 (1=켬) */
     viewerFit: number;
     /** 이 파일만의 글자 크기 배율(%). null이면 전역 기본값을 따른다 */
