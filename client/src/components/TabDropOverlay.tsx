@@ -15,7 +15,7 @@ type Props = {
 };
 
 // 탭 드래그 중에만 본문 위에 깔리는 드롭 존 (IA — 탭 드래그 배치).
-// iframe(HTML·PDF)이 드래그 이벤트를 삼키므로, 비율 드래그의 투명막과 같은 수법으로
+// iframe(HTML 문서)이 드래그 이벤트를 삼키므로, 비율 드래그의 투명막과 같은 수법으로
 // 전체를 덮는 층에서 dragover/drop을 받는다
 export default function TabDropOverlay({ panes, isWide, ratio, canAdd, onDropPane, onDropNew }: Props) {
   // 지금 포개져 있는 존 — 칸 인덱스 또는 'new'

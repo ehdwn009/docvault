@@ -34,7 +34,8 @@ const app = new Hono();
 app.use(logger());
 
 // 보안 헤더. 비용이 거의 0이라 규모와 무관하게 켜 둔다.
-// CSP는 앱 자체용 — 업로드된 문서는 별도로 iframe sandbox와 CSP: sandbox로 격리한다(files.ts).
+// 여기 헤더는 앱 자체에 건다. 앱에는 CSP를 걸지 않는다 — 업로드된 남의 문서 쪽에만
+// iframe sandbox와 CSP: sandbox를 따로 씌워 격리한다 (files.ts의 /raw).
 app.use('*', async (c, next) => {
   await next();
   c.header('X-Content-Type-Options', 'nosniff'); // 타입 추측으로 스크립트가 실행되는 것 방지

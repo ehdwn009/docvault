@@ -48,7 +48,7 @@ export const FONT_SIZE_MAX = 24;
 export const FONT_SIZE_DEFAULT = 16;
 
 /** 로그인 시도 제한. IP+아이디 조합당 창 안에서 이만큼만 허용한다.
-    사람이 오타로 5번을 넘기는 일은 드물고, 사전 공격에는 충분히 가혹한 값 */
+    사람이 오타로 10번을 넘기는 일은 드물고, 사전 공격에는 충분히 가혹한 값 */
 export const LOGIN_RATE_LIMIT = {
   WINDOW_MS: 10 * 60 * 1000,
   MAX_ATTEMPTS: 10,
@@ -66,7 +66,8 @@ export const DUMMY_PASSWORD_HASH =
 export const DEFAULT_FILE_STATE = {
   isFavorite: 0,
   lastOpenedAt: null as number | null,
-  readingPosition: null as { anchor?: string | null; offset?: number } | null,
+  // ratio: 기기마다 문서 높이가 달라 px만으로는 못 옮긴다 — 클라이언트 TreeFile·me.ts의 zod와 같은 모양이어야 한다
+  readingPosition: null as { anchor?: string | null; offset?: number; ratio?: number } | null,
   viewerFit: 1,
   fontScale: null as number | null,
 };
