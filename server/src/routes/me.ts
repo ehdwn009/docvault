@@ -89,7 +89,7 @@ export const meRoutes = new Hono<AppEnv>()
     return c.json({ settings: pickSettings(row) });
   })
 
-  // API-074: 파일 상태 조회 — 문서를 열 때 서버의 최신 상태(읽던 위치·배율)를 받아온다.
+  // API-075: 파일 상태 조회 — 문서를 열 때 서버의 최신 상태(읽던 위치·배율)를 받아온다.
   // 트리 캐시는 앱 시작 시점에 멈춰 있어, 이 조회가 없으면 기기 간·재방문 이어 읽기가 어긋난다
   .get('/files/:id/state', (c) => {
     const user = c.get('user');
