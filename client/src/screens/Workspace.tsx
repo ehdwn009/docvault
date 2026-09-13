@@ -1092,7 +1092,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           z-30: 뷰어의 오버레이 헤더(z-20)보다 위 — 같은 z면 DOM 뒤쪽인 헤더가 클릭을 가로챈다 */}
       <button
         onClick={() => setDrawerOpen(true)}
-        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${immersive ? 'hidden' : ''}`}
+        aria-hidden={chromeHidden}
+        // 크롬이 접히면 이 버튼도 같이 비킨다 — 크롬이 숨으면 문서가 화면 맨 위까지 올라오는데,
+        // 우리 버튼만 남아 있으면 문서 자신의 좌상단 고정 버튼(정독본의 목차 ☰ 등)을 정확히 덮는다
+        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 transition-transform duration-200 pc:hidden ${
+          immersive ? 'hidden' : ''
+        } ${chromeHidden ? 'pointer-events-none -translate-y-16' : ''}`}
       >
         ☰
       </button>

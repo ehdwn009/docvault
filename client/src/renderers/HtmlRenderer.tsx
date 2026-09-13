@@ -43,9 +43,11 @@ else if(!id)window.scrollTo({top:0,behavior:'smooth'});
 },true);
 // 문서를 누른 것은 부모에게 보이지 않는다(iframe 경계) — 열려 있는 팝오버를 닫으라고 알린다
 addEventListener('pointerdown',function(){parent.postMessage({type:'docvault:interact'},'*')},{passive:true,capture:true});
-var t;addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(function(){
+// 프레임당 한 번만 보고한다 — 부모의 크롬 자동 숨김이 손가락을 바로 따라가야 하기 때문.
+// 디바운스(멈춘 뒤 한 번)로는 손을 뗀 뒤에야 헤더가 튀어나온다. 서버 저장은 부모가 따로 묶는다
+var rq=0;addEventListener('scroll',function(){if(rq)return;rq=1;requestAnimationFrame(function(){rq=0;
 var s=se(),d=s.scrollHeight-s.clientHeight;
-parent.postMessage({type:'docvault:scroll',offset:s.scrollTop,ratio:d>0?Math.min(1,s.scrollTop/d):0},'*')},400)},{passive:true});
+parent.postMessage({type:'docvault:scroll',offset:s.scrollTop,ratio:d>0?Math.min(1,s.scrollTop/d):0},'*')})},{passive:true});
 var HD=[];
 var sendToc=function(){HD=[].slice.call(document.querySelectorAll('h1,h2,h3')).slice(0,300);
 parent.postMessage({type:'docvault:toc',items:HD.map(function(h){return{text:(h.textContent||'').trim().slice(0,120),level:+h.tagName[1]||1}})},'*')};

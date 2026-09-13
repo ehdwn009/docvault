@@ -37,7 +37,13 @@ type Props = {
 
 /** 크롬 자동 숨김 판정값 — 문서 상단 근처면 무조건 보이고, 이만큼 움직여야 방향으로 친다 */
 const CHROME_SHOW_NEAR_TOP = 48;
-const CHROME_SCROLL_DELTA = 8;
+/** 스크롤 보고가 프레임 단위라 한 번의 델타는 몇 px뿐이다. 같은 방향으로 쌓아서 판정해야
+    느린 스크롤도 잡힌다. 복귀를 더 헐겁게 둔 것은 의도 — 헤더를 다시 부르려고 한참 긁지 않게 */
+const CHROME_HIDE_ACCUM = 48;
+const CHROME_SHOW_ACCUM = 24;
+/** 오버레이 헤더가 iframe 문서의 상단 UI(자체 목차 버튼·sticky 메뉴)를 덮지 않게 밀어 두는 거리.
+    우리가 그리는 본문의 touch:pt-14와 같은 값 — 같은 것을 막는 같은 크기여야 한다 */
+const CHROME_FRAME_INSET = 56;
 /** 헤더 스와이프 판정 — 가로로 이만큼, 세로 이탈은 이 이하 */
 const SWIPE_MIN_X = 60;
 const SWIPE_MAX_Y = 40;
@@ -78,7 +84,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const scrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | undefined>(undefined);
   const scaleSaveRef = useRef<number | undefined>(undefined);
-  const lastScrollYRef = useRef(0); // 크롬 자동 숨김의 방향 판정 기준
+  const lastScrollYRef = useRef(0);
+  const chromeAccumRef = useRef(0); // 같은 방향으로 쌓인 스크롤량 — 방향이 바뀌면 버린다 // 크롬 자동 숨김의 방향 판정 기준
   // 스와이프 추적 — 브라우저가 제스처를 가로채면 touchend 대신 touchcancel이 와서 last를 대신 쓴다
   const swipeRef = useRef<{ x: number; y: number; lastX: number; lastY: number } | null>(null);
   // 읽기 진행률(%) — 터치에서 크롬이 숨어도 위치 감을 주는 2px 줄. null이면 표시 안 함
@@ -278,11 +285,21 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const reportScroll = useCallback(
     (y: number, denom: number | null, ratioOverride?: number) => {
       if (onChromeHint) {
-        const last = lastScrollYRef.current;
-        if (y < CHROME_SHOW_NEAR_TOP) onChromeHint(false);
-        else if (y - last > CHROME_SCROLL_DELTA) onChromeHint(true);
-        else if (last - y > CHROME_SCROLL_DELTA) onChromeHint(false);
+        const delta = y - lastScrollYRef.current;
         lastScrollYRef.current = y;
+        // 방향이 바뀌면 누적을 버린다 — 직전까지 반대로 간 거리가 판정을 늦추지 않게
+        const accum = chromeAccumRef.current * delta < 0 ? delta : chromeAccumRef.current + delta;
+        chromeAccumRef.current = accum;
+        if (y < CHROME_SHOW_NEAR_TOP) {
+          chromeAccumRef.current = 0;
+          onChromeHint(false);
+        } else if (accum > CHROME_HIDE_ACCUM) {
+          chromeAccumRef.current = 0;
+          onChromeHint(true);
+        } else if (accum < -CHROME_SHOW_ACCUM) {
+          chromeAccumRef.current = 0;
+          onChromeHint(false);
+        }
       }
       if (denom !== null) {
         // 짧은 문서는 줄이 의미 없다 — 화면 반 이상 스크롤될 때만 표시
@@ -371,6 +388,10 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 터치 기기에서는 조작을 화면 아래(엄지가 닿는 자리)로 내린다 — CSS의 pc/touch 변형과 같은 판정이고,
   // 기기 특성이라 실행 중에 바뀌지 않으므로 한 번만 재도 된다
   const isPc = isPcDevice();
+  // HTML은 남의 문서를 iframe에 담는 유일한 경로다 — 우리가 그리는 본문처럼 상단 여백(touch:pt-14)을
+  // 안에 넣어 줄 수가 없다. 그래서 크롬이 떠 있는 동안에는 iframe 자체를 그만큼 내려 둔다.
+  // 안 그러면 문서가 가진 목차 버튼·sticky 메뉴가 우리 헤더 밑에 깔린다 (IA — 모바일 크롬)
+  const isHtmlFrame = !isPc && file.fileType === 'html' && !!Renderer && !showAsCode;
   const actionButton = (active: boolean) =>
     // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
     `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'w-full px-4 py-2'} ${
@@ -563,7 +584,16 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ref={scrollRef}
           onScroll={handleScroll}
           // 본문은 세로로만 스크롤: 가로 오버플로 차단 + 터치는 세로 팬만 + 스크롤 관성이 밖으로 새지 않게
-          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain ${THEME_BG[settings.viewerTheme]}`}
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain ${THEME_BG[settings.viewerTheme]} ${
+            isHtmlFrame ? 'transition-transform duration-200' : ''
+          }`}
+          // 위치만 옮긴다 — 크기를 바꾸면 iframe 안의 문서가 통째로 다시 그려져 스크롤이 끊긴다.
+          // html은 이 상자로 스크롤하지 않고(문서가 자기 안에서 스크롤) 있어 부작용도 없다
+          style={
+            isHtmlFrame
+              ? { transform: `translateY(${chromeHidden ? 0 : CHROME_FRAME_INSET}px)` }
+              : undefined
+          }
         >
           {file.fileType === 'pdf' ? (
             // iframe(브라우저 내장 뷰어) 대신 직접 그린다 — iOS는 iframe 속 PDF의 1페이지만 그림처럼 보여줬다.
