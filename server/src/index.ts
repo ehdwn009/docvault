@@ -39,8 +39,11 @@ app.use(logger());
 app.use('*', async (c, next) => {
   await next();
   c.header('X-Content-Type-Options', 'nosniff'); // 타입 추측으로 스크립트가 실행되는 것 방지
-  // 클릭재킹 방어는 유지하되, PDF 뷰어가 /raw를 iframe으로 열므로 같은 오리진의 프레임은 허용해야 한다
-  // (DENY는 자기 자신의 iframe까지 막아 배포 환경에서 PDF가 ERR_BLOCKED_BY_RESPONSE로 차단됐다)
+  // 클릭재킹의 실체는 "남의 사이트가 우리를 투명한 액자에 넣는 것"이고, SAMEORIGIN이 그걸 전부 막는다.
+  // DENY가 더 막는 것은 우리 자신의 프레임뿐인데 그걸로 지켜지는 게 없다 — 우리 오리진에
+  // 페이지를 올릴 수 있는 공격자라면 이미 그보다 큰 걸 가진 뒤다.
+  // (v0.19.1에 DENY가 우리 PDF 뷰어의 iframe까지 막아 배포에서 차단된 적이 있다. v0.20.0에
+  //  PDF가 canvas로 바뀌어 그 사정은 사라졌지만, 위 이유로 SAMEORIGIN을 그대로 둔다)
   c.header('X-Frame-Options', 'SAMEORIGIN');
   c.header('Referrer-Policy', 'same-origin'); // 외부로 나갈 때 문서 주소(딥링크)를 흘리지 않게
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
