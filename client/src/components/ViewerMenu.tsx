@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSheetDrag } from '../lib/sheetDrag';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SCALE_STEP } from '../lib/constants';
 
 /** 메뉴 한 줄 — 링크(다운로드)와 동작 둘 다 담는다 */
@@ -53,6 +54,8 @@ export default function ViewerMenu({
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  // 손잡이를 끌어 내리면 닫힌다 (IA — 바텀 시트). PC 팝오버에는 손잡이가 없어 쓰이지 않는다
+  const { handleProps, sheetStyle } = useSheetDrag(onClose);
   const sizeRef = useRef<HTMLDivElement>(null);
   // 입력 중인 글자(“1”만 친 순간 10으로 튀지 않게) — null이면 실제 배율을 그대로 보여준다
   const [draft, setDraft] = useState<string | null>(null);
@@ -128,8 +131,14 @@ export default function ViewerMenu({
                   placement === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
                 }`
           }
+          style={IS_TOUCH ? sheetStyle : undefined}
         >
-          {IS_TOUCH && <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-600" />}
+          {IS_TOUCH && (
+            // 알약 자체는 얇아서 손가락으로 못 잡는다 — 잡히는 영역을 위아래로 넓혀 둔다
+            <div {...handleProps} className={`${handleProps.className} -mx-4 -mt-4 mb-1 px-4 pb-2 pt-4`}>
+              <div className="mx-auto h-1 w-9 rounded-full bg-slate-600" />
+            </div>
+          )}
           {display && (
             <>
               <div className="flex items-center justify-between">

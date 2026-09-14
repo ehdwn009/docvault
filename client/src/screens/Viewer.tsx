@@ -3,6 +3,7 @@ import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { FONT_SCALE_DEFAULT } from '../lib/constants';
+import { useSheetDrag } from '../lib/sheetDrag';
 import { CodeRenderer, PdfRenderer, renderers } from '../renderers';
 import Editor from './Editor';
 
@@ -90,6 +91,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const swipeRef = useRef<{ x: number; y: number; lastX: number; lastY: number } | null>(null);
   // 읽기 진행률(%) — 터치에서 크롬이 숨어도 위치 감을 주는 2px 줄. null이면 표시 안 함
   const [progress, setProgress] = useState<number | null>(null);
+  // 목차도 터치에서는 바텀 시트다 — 다른 시트와 같은 손잡이·같은 제스처를 준다 (IA)
+  const toc = useSheetDrag(() => setShowToc(false));
   // PDF는 페이지 자리가 잡힌 뒤에야 스크롤 길이가 생긴다 — 그 전에 읽던 위치를 복원하면 0으로 뭉개진다
   const [pdfReady, setPdfReady] = useState(false);
   // 서버의 최신 열람 상태 — 트리의 file.state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의
@@ -559,7 +562,16 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         {showToc && (
           <>
             <div className="fixed inset-0 z-20 bg-black/50 pc:hidden" onClick={() => setShowToc(false)} />
-            <nav className="w-56 shrink-0 overflow-auto overscroll-contain border-r border-slate-800 py-3 touch:fixed touch:inset-x-0 touch:bottom-0 touch:top-auto touch:z-30 touch:max-h-[70vh] touch:w-auto touch:rounded-t-2xl touch:border-r-0 touch:border-t touch:border-slate-700 touch:bg-slate-900 touch:pb-[calc(env(safe-area-inset-bottom)+12px)]">
+            <nav
+              className="w-56 shrink-0 overflow-auto overscroll-contain border-r border-slate-800 py-3 touch:fixed touch:inset-x-0 touch:bottom-0 touch:top-auto touch:z-30 touch:max-h-[70vh] touch:w-auto touch:rounded-t-2xl touch:border-r-0 touch:border-t touch:border-slate-700 touch:bg-slate-900 touch:pb-[calc(env(safe-area-inset-bottom)+12px)]"
+              style={isPc ? undefined : toc.sheetStyle}
+            >
+              {/* 손잡이는 시트일 때만 — PC에서는 인라인 사이드 패널이라 끌 것이 없다 */}
+              {!isPc && (
+                <div {...toc.handleProps} className={`${toc.handleProps.className} -mt-3 px-4 pb-1 pt-3`}>
+                  <div className="mx-auto h-1 w-9 rounded-full bg-slate-600" />
+                </div>
+              )}
               {headings.length === 0 ? (
                 <p className="px-3 text-xs text-slate-600">표시할 헤딩이 없습니다</p>
               ) : (

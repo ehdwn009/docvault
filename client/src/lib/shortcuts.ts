@@ -42,5 +42,6 @@ export const SHORTCUTS: Shortcut[] = [
   { context: '분할 구분선', input: '짧게 탭/클릭', effect: '분할 컨트롤러 (비율·자리 바꾸기·해제)' },
   { context: '분할 구분선', input: '끌기', effect: '분할 비율 조절' },
   { context: '뷰어 헤더 (터치)', input: '좌우 스와이프', effect: '이전/다음 문서로 전환' },
+  { context: '바텀 시트 (터치)', input: '손잡이 끌어내리기', effect: '시트 닫기 (목차·⋯ 메뉴·문서 스위처 공통)' },
   { context: '⋯ 메뉴 글자 배율', input: 'Shift+누르며 조절', effect: '한 번에 10씩 조절' },
 ];

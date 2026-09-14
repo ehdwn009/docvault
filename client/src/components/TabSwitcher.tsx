@@ -1,4 +1,5 @@
 import type { TreeFile } from '../lib/api';
+import { useSheetDrag } from '../lib/sheetDrag';
 
 type Props = {
   tabs: TreeFile[];
@@ -14,12 +15,18 @@ type Props = {
 // SCR-153(터치 변형): 문서 스위처 — 폰에서 탭은 가로줄이 아니라 세로 목록 시트다 (IA — 모바일 재편).
 // 가로 탭 바는 폰 폭에서 이름이 다 잘리고, 시트는 이름·활성·분할·닫기를 한 줄에 담는다
 export default function TabSwitcher({ tabs, activeId, paneIds, onPick, onSplit, onCloseTab, onClose }: Props) {
+  const { handleProps, sheetStyle } = useSheetDrag(onClose);
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-h-[70vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-slate-700 bg-slate-900 pb-[calc(env(safe-area-inset-bottom)+12px)]">
-        {/* 알약 손잡이 — 시트 관례: 아래서 왔고 아래로 보낼 수 있다는 표식 */}
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-slate-600" />
+      <div
+        className="absolute inset-x-0 bottom-0 max-h-[70vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-slate-700 bg-slate-900 pb-[calc(env(safe-area-inset-bottom)+12px)]"
+        style={sheetStyle}
+      >
+        {/* 알약 손잡이 — 시트 관례: 아래서 왔고 아래로 보낼 수 있다는 표식. 끌어 내리면 닫힌다 */}
+        <div {...handleProps} className={`${handleProps.className} px-4 pb-1 pt-3`}>
+          <div className="mx-auto h-1 w-9 rounded-full bg-slate-600" />
+        </div>
         <p className="px-4 pb-1 pt-2 text-xs font-medium text-slate-500">열린 문서 {tabs.length}개</p>
         {tabs.map((f) => {
           const active = f.id === activeId;
