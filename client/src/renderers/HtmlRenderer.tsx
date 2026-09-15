@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isDarkViewerTheme, type ViewerTheme } from '../lib/api';
+import { HTML_SCROLLER_LIMIT } from '../lib/constants';
 import type { RendererTocItem } from './index';
 
 // HTML은 iframe sandbox로 격리 렌더링한다 (아키텍처 — 보안 경계).
@@ -200,6 +201,38 @@ else if(d.type==='docvault:scale')setTimeout(function(){undo();if(on)run()},0)})
 })()</${'script'}>`;
 }
 
+// 스크롤 상자 메모리 가드 (아키텍처 — 스크롤 상자 메모리 가드).
+// iOS는 가로로 넘치는 스크롤 상자마다 합성 레이어를 따로 두는데, 레티나에서는 한 장이 수 MB다.
+// 터미널 블록이 백 개 넘는 문서는 탭 메모리 한도를 넘겨 "문제가 반복적으로 발생" 강제 종료가 되고,
+// 앱은 다시 켜면 마지막 문서를 여므로 빠져나올 수도 없다 — 그래서 화면 맞춤 토글과 무관하게 항상 켠다.
+// 상자가 한도를 넘을 때만, 줄바꿈이 가능한 코드형 상자만 바꾼다. 표는 줄바꿈하면 칸이 무너져 스크롤로 남긴다
+function memoryGuardShim(): string {
+  return `<script>(function(){
+if(matchMedia('(hover: hover) and (pointer: fine)').matches)return; // PC는 메모리가 넉넉하다 — 문서를 만든 그대로 둔다
+var LIMIT=${HTML_SCROLLER_LIMIT};
+var run=function(){
+if(!document.body)return;
+var all=document.body.getElementsByTagName('*'),hit=[],i,el,cs;
+// 읽기를 전부 끝낸 뒤에 쓴다 — 섞으면 요소마다 문서 전체 레이아웃을 새로 계산한다
+for(i=0;i<all.length;i++){el=all[i];if(el.__dvWrap)continue;cs=getComputedStyle(el);
+if((cs.overflowX==='auto'||cs.overflowX==='scroll')&&el.scrollWidth>el.clientWidth+2)hit.push([el,cs.whiteSpace])}
+if(hit.length<=LIMIT)return;
+// 한 번 줄바꿈한 상자는 되돌리지 않는다 — 되돌리는 순간 다시 레이어가 되어 한도를 넘는다
+for(i=0;i<hit.length;i++){el=hit[i][0];
+if(hit[i][1]==='normal'||el.querySelector('table'))continue;
+el.__dvWrap=1;
+el.style.setProperty('white-space','pre-wrap','important');
+el.style.setProperty('overflow-wrap','anywhere','important');
+el.style.setProperty('overflow-x','visible','important')}};
+var safe=function(){try{run()}catch(e){}};
+// 레이어는 그릴 때 생긴다 — 첫 그림 전에 한 번, 글꼴·이미지·배율로 폭이 바뀐 뒤에 다시
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safe);else safe();
+addEventListener('load',function(){safe();setTimeout(safe,1000)});
+// 배율이 커지면 새로 넘치는 상자가 생긴다 — 같은 쪽지를 받는 맞춤 심보다 먼저 끝나도록 등록 순서를 앞에 둔다
+addEventListener('message',function(ev){var d=ev.data||{};if(d.type==='docvault:scale')setTimeout(safe,0)});
+})()</${'script'}>`;
+}
+
 /** 문서 구조(doctype·head)를 깨뜨리지 않는 위치에 심을 주입한다 */
 function injectShims(
   html: string,
@@ -209,10 +242,15 @@ function injectShims(
   fit: boolean,
   scale: number,
 ): string {
-  // 순서가 곧 실행 순서다(리스너는 등록된 차례로 불린다) — 글자 크기를 정한 뒤 그 결과로 맞춤을 재고,
-  // 마지막에 읽던 위치를 복원해야 앞 단계가 바꿔 놓은 레이아웃 위에서 제자리를 찾는다
+  // 순서가 곧 실행 순서다(리스너는 등록된 차례로 불린다) — 글자 크기를 정한 뒤 그 결과로 넘치는 코드 상자를
+  // 줄바꿈하고(메모리 가드), 남은 넘침으로 맞춤을 재고, 마지막에 읽던 위치를 복원해야
+  // 앞 단계가 바꿔 놓은 레이아웃 위에서 제자리를 찾는다
   const shims =
-    STORAGE_SHIM + scaleShim(scale) + fitShim(fit) + navShim(restoreOffset, restoreRatio, theme);
+    STORAGE_SHIM +
+    scaleShim(scale) +
+    memoryGuardShim() +
+    fitShim(fit) +
+    navShim(restoreOffset, restoreRatio, theme);
   const head = html.match(/<head[^>]*>/i);
   if (head) {
     const at = head.index! + head[0].length;

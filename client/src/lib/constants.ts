@@ -14,6 +14,11 @@ export const FONT_SIZE_MIN = 12;
 export const FONT_SIZE_MAX = 24;
 export const FONT_SIZE_DEFAULT = 16;
 
+/** HTML 뷰어 메모리 가드 — 가로로 넘치는 스크롤 상자가 이보다 많으면 터치 기기에서 코드형 상자를 줄바꿈으로 바꾼다.
+    화면 전용 값(서버에는 없다). 기준은 실측: 넘치는 상자 158개 문서는 아이폰 탭이 반복 강제 종료됐고,
+    17개(표) 문서는 멀쩡했다 — 그 사이에서 넉넉히 낮춰 잡았다 (아키텍처 — 스크롤 상자 메모리 가드) */
+export const HTML_SCROLLER_LIMIT = 30;
+
 /** 뷰어 설정을 아직 못 받았을 때 쓰는 초기값 — 서버의 DEFAULT_USER_SETTINGS와 같아야 한다 (API-071) */
 export const DEFAULT_USER_SETTINGS = {
   viewerTheme: 'light' as const,
