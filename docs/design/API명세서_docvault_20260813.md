@@ -18,6 +18,8 @@
 | NOT_FOUND | 404 | 대상 없음, **또는 열람 권한이 없는 자원** (403은 존재를 알려 주므로 통일 — 정보 노출 방지) |
 | CONFLICT | 409 | 중복 (username, 같은 폴더 내 동일 이름 등) |
 | PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과 |
+| GOOGLE_NOT_CONNECTED | 409 | 구글 계정 미연결 (클라이언트는 연결 화면으로 유도) |
+| GOOGLE_ERROR | 502 | 구글 API 호출 실패 — 토큰 만료·사용자가 권한 회수·드라이브 장애. message에 사람이 읽을 사유 |
 
 ## API 목록
 
@@ -33,6 +35,9 @@
 | API-014 | PUT | /admin/users/{id} | 사용자 수정 (이름·역할·활성화·비밀번호 초기화) | 관리자 |
 | API-015 | DELETE | /admin/users/{id} | 사용자 삭제 (소유 데이터 CASCADE) | 관리자 |
 | API-016 | GET | /admin/tree | 전체 사용자 파일·폴더 트리 | 관리자 |
+| API-017 | GET | /admin/backup | 자동 백업 설정·최근 실행 결과 조회 | 관리자 |
+| API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
+| API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드) | 로그인 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -66,6 +71,15 @@
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-075 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
 | API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5) | 로그인 |
+| API-091 | GET | /google/status | 내 구글 계정 연결 상태 (이메일·연결 시각) | 로그인 |
+| API-092 | POST | /google/connect | 구글 동의 화면 URL 발급 (state 발급) | 로그인 |
+| API-093 | GET | /google/callback | 구글 리디렉트 수신 → 토큰 교환·저장 | 로그인 |
+| API-094 | DELETE | /google/connect | 연결 해제 (구글 쪽 권한도 회수) | 로그인 |
+| API-095 | GET | /google/picker | 구글 피커 구동에 필요한 값 (clientId·appId·단기 토큰) | 로그인 |
+| API-096 | GET | /google/recent | 최근 연 드라이브 문서 목록 (바로가기) | 로그인 |
+| API-097 | DELETE | /google/recent/{driveFileId} | 바로가기 목록에서 제거 | 로그인 |
+| API-098 | GET | /google/files/{driveFileId}/content | 드라이브 문서 메타+텍스트 본문 (구글 문서는 md로 변환) | 로그인 |
+| API-099 | GET | /google/files/{driveFileId}/raw | 드라이브 원본 스트리밍 (PDF·이미지 등) | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
 
@@ -306,3 +320,124 @@
 
 ### Response
 **200 OK** — state 객체 (행이 없으면 기본값)
+
+---
+
+## API-092 / API-093: 구글 계정 연결
+
+연결은 **두 번의 왕복**입니다. ① 앱이 동의 화면 주소를 만들어 주고(092), 사용자가 구글에서 허락하면 ② 구글이 우리 서버로 돌려보냅니다(093).
+
+### API-092 Request
+
+```
+POST /api/v1/google/connect
+```
+
+### API-092 Response
+
+```json
+{ "authUrl": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&state=..." }
+```
+
+- `state`는 서버가 만든 일회용 난수이며 **로그인한 사용자 ID와 묶어** 서버에 보관합니다(10분). 093에서 돌려받은 state가 그 사용자의 것이 아니면 거부합니다 — 남이 자기 구글 계정을 내 docvault 계정에 붙이는 **로그인 CSRF** 방어입니다.
+- 요청 파라미터에 `access_type=offline`(refresh token 발급)과 `prompt=consent`를 포함합니다. 재연결 시에도 refresh token을 확실히 받기 위함입니다 — 구글은 이미 동의한 앱에는 refresh token을 다시 주지 않습니다.
+- 권한 범위는 `drive.file` + `openid email` 뿐입니다. 이유는 ERD의 "구글 드라이브 연동" 항목 참조.
+
+### API-093 Request
+
+```
+GET /api/v1/google/callback?code=...&state=...
+```
+
+구글이 브라우저를 이 주소로 되돌려 보냅니다. 서버는 code를 토큰으로 교환하고 GOOGLE_ACCOUNTS에 저장한 뒤, **작은 HTML 한 장**을 응답해 창을 닫습니다(팝업으로 열었으므로). JSON을 응답하지 않는 유일한 API입니다.
+
+### 에러
+
+| 상황 | 처리 |
+|---|---|
+| state 불일치·만료 | 400 VALIDATION_ERROR, 창에 "다시 시도해 주세요" |
+| 사용자가 동의 거부 | 창만 닫고 연결 상태 변화 없음 |
+| refresh token 미발급 | 502 GOOGLE_ERROR — 구글 계정 설정에서 기존 권한을 지우고 재시도하도록 안내 |
+
+---
+
+## API-095: 피커 구동 정보
+
+```
+GET /api/v1/google/picker
+```
+
+### Response
+
+```json
+{
+  "clientId": "...apps.googleusercontent.com",
+  "appId": "123456789012",
+  "accessToken": "ya29....",
+  "expiresAt": 1789000000000
+}
+```
+
+- `accessToken`은 **브라우저로 내려가는 유일한 구글 토큰**입니다. 피커가 구글에 직접 말을 걸어야 하므로 불가피하며, 수명이 짧고(1시간) `drive.file` 범위뿐입니다. **refresh token은 어떤 경우에도 내려보내지 않습니다.**
+- 만료되었으면 서버가 refresh로 갱신한 뒤 새 토큰을 담아 줍니다.
+
+---
+
+## API-098: 드라이브 문서 본문 조회
+
+```
+GET /api/v1/google/files/{driveFileId}/content
+```
+
+### Response
+
+```json
+{
+  "driveFileId": "1AbC...",
+  "name": "설계 메모",
+  "fileType": "md",
+  "mimeType": "text/markdown",
+  "sizeBytes": 20480,
+  "modifiedAt": 1789000000000,
+  "content": "# 설계 메모
+..."
+}
+```
+
+- 서버가 대신 읽어 옵니다(프록시). 브라우저가 구글에 직접 요청하지 않는 이유는 ① 토큰을 오래 들고 있지 않게 하고 ② 구글 문서 형식 변환을 서버에서 처리하며 ③ 뷰어가 이미 `/api/v1` 한 통로로만 본문을 읽는 구조이기 때문입니다.
+- **형식 변환**: 구글 문서(`application/vnd.google-apps.document`)는 export로 마크다운을 받아 `md`로, 스프레드시트는 CSV를 받아 `code`로 다룹니다. 그 밖의 구글 전용 형식(프레젠테이션 등)은 PDF로 export해 API-099로 넘깁니다. 일반 파일은 원본을 그대로 읽어 기존 `filetypes.ts` 분류를 그대로 태웁니다 — **드라이브라고 해서 형식 판정을 새로 만들지 않습니다.**
+- 텍스트 크기 한도는 기존 텍스트 파일과 같은 상수(10MB)를 씁니다. 넘으면 413 PAYLOAD_TOO_LARGE.
+- 호출 성공 시 DRIVE_RECENTS에 이름·형식과 함께 열람 시각을 기록합니다(본문은 저장하지 않습니다).
+- 미연결이면 409 GOOGLE_NOT_CONNECTED, 구글이 404/403을 주면 그대로 404 NOT_FOUND로 접습니다(공유 파일 정책과 같은 이유 — 존재 여부를 알려주지 않습니다).
+
+---
+
+## API-017 / API-018 / API-019: 자동 백업
+
+### API-017 Response
+
+```json
+{
+  "enabled": true,
+  "hour": 4,
+  "keepCount": 7,
+  "connectedEmail": "me@gmail.com",
+  "lastRunAt": 1789000000000,
+  "lastStatus": "ok",
+  "lastMessage": "docvault-20260916-0400.tar.gz (12.4MB) 업로드 완료"
+}
+```
+
+### API-018 Request
+
+```json
+{ "enabled": true, "hour": 4, "keepCount": 7 }
+```
+
+- `enabled`를 켜려면 **호출한 관리자에게 연결된 구글 계정이 있어야** 합니다. 없으면 409 GOOGLE_NOT_CONNECTED — 토큰 없이 켜 두면 매일 조용히 실패하기 때문입니다.
+- 켜는 순간 BACKUP_SETTINGS.run_by에 그 관리자의 id가 기록됩니다.
+
+### API-019
+
+즉시 1회 실행하고 결과(API-017과 같은 형태)를 돌려줍니다. 설정 화면에서 **"진짜 되는지" 확인하는 용도**입니다 — 매일 새벽에만 도는 기능은 처음 한 번을 눈으로 못 보면 켠 줄 알고 안 켜져 있게 됩니다.
+

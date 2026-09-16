@@ -18,6 +18,9 @@ erDiagram
     FILES ||--o{ FILE_TAGS : "부착된다"
     TAGS ||--o{ FILE_TAGS : "부착한다"
     FILES ||--o{ USER_FILE_STATE : "상태 대상"
+    USERS ||--o| GOOGLE_ACCOUNTS : "연결한다"
+    USERS ||--o{ DRIVE_RECENTS : "연다"
+    GOOGLE_ACCOUNTS ||--o| BACKUP_SETTINGS : "업로드에 쓰인다"
 
     USERS {
         integer id PK
@@ -96,6 +99,36 @@ erDiagram
         text last_seen_version "마지막으로 확인한 앱 버전, 패치노트 모달용 (2026-08-14)"
         integer updated_at
     }
+    GOOGLE_ACCOUNTS {
+        integer user_id PK, FK
+        text google_sub UK "구글 계정의 불변 식별자 (이메일은 바뀔 수 있다)"
+        text email "표시용"
+        text refresh_token_enc "암호화 저장 (AES-256-GCM, 키는 JWT_SECRET 파생)"
+        text access_token_enc "단기 토큰 캐시, 만료되면 refresh로 재발급"
+        integer access_expires_at
+        text scope "부여받은 권한 (drive.file 등)"
+        integer connected_at
+        integer updated_at
+    }
+    DRIVE_RECENTS {
+        integer id PK
+        integer user_id FK
+        text drive_file_id "구글 드라이브의 파일 ID"
+        text name "표시용 사본 (본문은 저장하지 않는다)"
+        text mime_type
+        integer last_opened_at
+    }
+    BACKUP_SETTINGS {
+        integer id PK "항상 1 — 단일 행"
+        integer enabled "0|1 관리자가 토글"
+        integer hour "실행 시각 0~23 (서버 시간)"
+        integer keep_count "드라이브에 남길 백업 개수"
+        integer run_by FK "업로드에 쓸 구글 계정의 users.id (관리자)"
+        text drive_folder_id "앱이 만든 백업 폴더, 없으면 첫 실행 때 생성"
+        integer last_run_at
+        text last_status "never|ok|error"
+        text last_message "실패 사유 (관리자 화면 표시용)"
+    }
 ```
 
 ## 엔티티 설명
@@ -110,6 +143,9 @@ erDiagram
 | FILE_TAGS | 파일-태그 다대다 연결 (복합 PK) |
 | USER_FILE_STATE | 사용자×파일별 상태: 즐겨찾기, 읽던 위치, 최근 열람, 화면 맞춤 여부. 기기 간 동기화의 핵심 |
 | USER_SETTINGS | 뷰어 설정(테마·폰트 등). 서버 저장으로 폰/PC 동일 설정 유지 |
+| GOOGLE_ACCOUNTS | 사용자×구글 계정 연결 (1:0..1). 드라이브 문서 열람과 백업 업로드가 이 토큰을 쓴다. **refresh token은 사실상 비밀번호와 같은 힘**을 가지므로 암호화해서 넣는다 — data/ 폴더가 곧 백업 단위라 DB 파일이 밖으로 나갈 수 있다 |
+| DRIVE_RECENTS | 드라이브에서 열어 본 문서의 **바로가기 기록**. 이름·형식만 두고 본문은 저장하지 않는다 — 원본은 드라이브에 있고 우리는 볼 때마다 새로 읽는다 |
+| BACKUP_SETTINGS | 자동 백업 설정 단일 행. 앱이 스스로 `data/`를 묶어 연결된 구글 드라이브에 올린다. 꺼져 있으면 아무 일도 하지 않는다(기본값 꺼짐) |
 
 ## 관계 설명
 
@@ -121,6 +157,11 @@ erDiagram
 - **글자 크기 2층 구조 (2026-08-18)**: HTML 글자 크기는 USER_SETTINGS.html_font_scale(전역 기본 배율)과 USER_FILE_STATE.font_scale(이 파일만의 배율)로 나뉩니다. font_scale이 **NULL이면 전역을 따르고**, 값이 있으면 그것으로 **대체**합니다(곱하지 않습니다). NULL을 "없음"으로 쓰기 때문에 대부분의 파일은 전역 설정을 바꾸면 같이 따라오고, 유별난 문서만 자기 값을 갖습니다 — 그래서 UI에는 반드시 "기본값 따르기"(= NULL로 되돌리기)가 있어야 합니다. font_scale은 형식을 가리지 않습니다 — HTML은 문서 자신의 크기를 100%로, md·텍스트는 USER_SETTINGS.font_size를 100%로 삼을 뿐 규칙은 같습니다(전역 기본 배율 html_font_scale은 HTML에만 있습니다).
 - 즐겨찾기·읽던 위치는 파일 속성이 아니라 USER_FILE_STATE(사용자×파일)에 둡니다. 공유 파일을 열람하는 다른 사용자도 자신만의 즐겨찾기·읽던 위치를 가질 수 있게 하기 위한 구조입니다 (기존 Manus 버전에서 파일에 붙어 있던 isFavorite의 개선).
 - 공유는 v1에서는 파일/폴더의 is_shared 플래그(전체 사용자 대상 열람 공개, 관리자만 토글)로 구현하고, 추후 특정 사용자 대상 공유가 필요해지면 SHARES(file_id, grantee_id, permission) 테이블로 확장합니다.
+- **구글 드라이브 연동 (2026-09-16)**: 연동은 **선택 기능**입니다 — 연결하지 않으면 세 테이블 모두 빈 채로 앱은 완전히 동작합니다(외부 의존 제로 원칙의 유지 방식).
+  - GOOGLE_ACCOUNTS는 사용자당 최대 하나(user_id가 PK). 계정 삭제 시 CASCADE로 함께 지워지고, 지울 때 구글 쪽 권한도 회수(revoke)합니다 — 우리 DB에서만 지우면 구글에는 "docvault 접근 허용"이 남습니다.
+  - 권한 범위는 `drive.file` 하나입니다. 이 권한은 **사용자가 구글 피커에서 직접 고른 파일**과 **앱이 만든 파일**에만 유효하므로, 드라이브 전체를 훑을 수 없습니다. 대신 구글의 앱 심사·보안 감사 대상이 아닙니다(`drive.readonly`는 restricted scope라 개인 프로젝트로는 통과가 사실상 불가).
+  - DRIVE_RECENTS는 FILES와 **섞지 않습니다.** 드라이브 문서는 우리 소유가 아니고 버전·태그·검색·휴지통 어느 것도 걸리지 않아, FILES에 넣으면 그 모든 기능이 "되는 척"하게 됩니다. 별도 테이블은 그 구분을 구조로 못박는 장치입니다. 한 번 고른 파일의 접근 권한은 계속 유효하므로 이 목록에서 다시 열 수 있고, 원본이 드라이브에서 지워지면 열 때 404로 드러납니다(목록이 먼저 알지 못합니다).
+  - BACKUP_SETTINGS의 run_by는 업로드에 쓸 구글 계정입니다. 관리자 계정이어야 하고, 그 관리자가 연결을 해제하면 백업은 자동으로 꺼집니다(토큰 없이 켜져 있으면 매일 조용히 실패합니다).
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.
 
 ## 비고
