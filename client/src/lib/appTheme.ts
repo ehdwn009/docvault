@@ -27,3 +27,10 @@ export function applyAppTheme(id: AppThemeId) {
   if (id === 'midnight') delete document.documentElement.dataset.appTheme;
   else document.documentElement.dataset.appTheme = id;
 }
+
+/** 앱 껍데기 위에 마크다운(prose)을 그릴 때 쓸 명암 — 문서 뷰어 테마가 아니라 앱 테마를 따른다.
+ *  라이트 테마에서 다크용(prose-invert)으로 그리면 밝은 배경에 밝은 글자가 되어 안 읽힌다. */
+export function getAppProseTheme(): 'light' | 'dark' {
+  const id = getAppTheme();
+  return id === 'paper' || id === 'ivory' ? 'light' : 'dark';
+}

@@ -1,5 +1,6 @@
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { api, ApiError, type FileContent } from '../lib/api';
+import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { MarkdownRenderer } from '../renderers';
@@ -136,7 +137,7 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
         >
           {file.fileType === 'md' ? (
             <Suspense fallback={<p className="text-sm text-slate-500">미리보기 준비 중…</p>}>
-              <MarkdownRenderer content={draft} />
+              <MarkdownRenderer content={draft} theme={getAppProseTheme()} />
             </Suspense>
           ) : (
             <p className="text-sm text-slate-500">md 파일만 실시간 미리보기를 지원합니다</p>
