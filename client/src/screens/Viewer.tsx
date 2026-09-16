@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
+import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
 import { FONT_SCALE_DEFAULT } from '../lib/constants';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { CodeRenderer, PdfRenderer, renderers } from '../renderers';
@@ -31,20 +32,11 @@ type Props = {
   onOpenSwitcher?: () => void;
   /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
   onSwipeTab?: (dir: 1 | -1) => void;
-  /** 크롬 자동 숨김 상태 — 스크롤 방향은 이 뷰어가 보고하고(onChromeHint), 판정은 부모가 든다 */
-  chromeHidden?: boolean;
-  onChromeHint?: (hide: boolean) => void;
 };
 
-/** 크롬 자동 숨김 판정값 — 문서 상단 근처면 무조건 보이고, 이만큼 움직여야 방향으로 친다 */
-const CHROME_SHOW_NEAR_TOP = 48;
-/** 스크롤 보고가 프레임 단위라 한 번의 델타는 몇 px뿐이다. 같은 방향으로 쌓아서 판정해야
-    느린 스크롤도 잡힌다. 복귀를 더 헐겁게 둔 것은 의도 — 헤더를 다시 부르려고 한참 긁지 않게 */
-const CHROME_HIDE_ACCUM = 48;
-const CHROME_SHOW_ACCUM = 24;
 /** 오버레이 헤더가 iframe 문서의 상단 UI(자체 목차 버튼·sticky 메뉴)를 덮지 않게 밀어 두는 거리.
-    우리가 그리는 본문의 touch:pt-14와 같은 값 — 같은 것을 막는 같은 크기여야 한다 */
-const CHROME_FRAME_INSET = 56;
+    헤더 높이 그 자체 — 같은 것을 막는 같은 크기여야 한다 */
+const CHROME_FRAME_INSET = CHROME_HEIGHT;
 /** 헤더 스와이프 판정 — 가로로 이만큼, 세로 이탈은 이 이하 */
 const SWIPE_MIN_X = 60;
 const SWIPE_MAX_Y = 40;
@@ -71,7 +63,7 @@ type Heading = { text: string; level: number; jump: () => void };
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, chromeHidden, onChromeHint }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -86,7 +78,6 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const debounceRef = useRef<number | undefined>(undefined);
   const scaleSaveRef = useRef<number | undefined>(undefined);
   const lastScrollYRef = useRef(0);
-  const chromeAccumRef = useRef(0); // 같은 방향으로 쌓인 스크롤량 — 방향이 바뀌면 버린다 // 크롬 자동 숨김의 방향 판정 기준
   // 스와이프 추적 — 브라우저가 제스처를 가로채면 touchend 대신 touchcancel이 와서 last를 대신 쓴다
   const swipeRef = useRef<{ x: number; y: number; lastX: number; lastY: number } | null>(null);
   // 읽기 진행률(%) — 터치에서 크롬이 숨어도 위치 감을 주는 2px 줄. null이면 표시 안 함
@@ -156,7 +147,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     // 문서를 바꾸면 크롬은 일단 보이고 진행률은 새로 잰다
     setProgress(null);
     lastScrollYRef.current = 0;
-    onChromeHint?.(false);
+    showChrome();
   }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 서버 최신 상태가 오면 보기 설정도 그쪽을 따른다 — 다른 기기에서 바꾼 배율·맞춤 반영
@@ -168,7 +159,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   // 편집기로 들어가면 크롬을 되살린다 — 도구가 숨은 채 편집을 시작하면 당황스럽다
   useEffect(() => {
-    if (mode === 'edit') onChromeHint?.(false);
+    if (mode === 'edit') showChrome();
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // E = 편집 — ⋯ 메뉴의 "편집 (E)" 표기 이행. 활성 칸에서만, 입력 중·수식키 조합은 무시
@@ -287,23 +278,10 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   /** 스크롤 위치 하나에서 세 가지를 뽑는다: 읽던 위치 저장 + 크롬 숨김 힌트 + 진행률 */
   const reportScroll = useCallback(
     (y: number, denom: number | null, ratioOverride?: number) => {
-      if (onChromeHint) {
-        const delta = y - lastScrollYRef.current;
-        lastScrollYRef.current = y;
-        // 방향이 바뀌면 누적을 버린다 — 직전까지 반대로 간 거리가 판정을 늦추지 않게
-        const accum = chromeAccumRef.current * delta < 0 ? delta : chromeAccumRef.current + delta;
-        chromeAccumRef.current = accum;
-        if (y < CHROME_SHOW_NEAR_TOP) {
-          chromeAccumRef.current = 0;
-          onChromeHint(false);
-        } else if (accum > CHROME_HIDE_ACCUM) {
-          chromeAccumRef.current = 0;
-          onChromeHint(true);
-        } else if (accum < -CHROME_SHOW_ACCUM) {
-          chromeAccumRef.current = 0;
-          onChromeHint(false);
-        }
-      }
+      // 터치의 크롬은 이 델타만큼 손가락을 따라 접힌다 — 판정·그리기는 lib/chromeCollapse가 든다
+      const delta = y - lastScrollYRef.current;
+      lastScrollYRef.current = y;
+      if (!isPcDevice()) reportChromeScroll(y, delta);
       if (denom !== null) {
         // 짧은 문서는 줄이 의미 없다 — 화면 반 이상 스크롤될 때만 표시
         const next = denom > 300 ? Math.min(100, Math.round((y / denom) * 100)) : null;
@@ -314,7 +292,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         ratioOverride ?? (denom !== null && denom > 0 ? Math.min(1, Math.max(0, y / denom)) : null);
       saveOffset(y, ratio);
     },
-    [onChromeHint, saveOffset],
+    [saveOffset],
   );
 
   function handleScroll() {
@@ -359,6 +337,28 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     [],
   );
 
+  // 크롬 접힘에 태울 요소들 — 진행도는 lib/chromeCollapse가 들고 transform을 DOM에 직접 쓴다 (터치 전용).
+  // 훅이라 early return보다 위에 있어야 한다
+  const touch = !isPcDevice();
+  const headerRef = useChromeTarget(touch ? { dir: 'up' } : null);
+  const toolbarRef = useChromeTarget(touch ? { dir: 'down' } : null);
+  // HTML은 남의 문서를 iframe에 담는 유일한 경로다 — 우리가 그리는 본문처럼 상단 여백(touch:pt-14)을
+  // 안에 넣어 줄 수가 없다. 그래서 크롬이 떠 있는 만큼 iframe 상자 자체를 내려 둔다.
+  // 안 그러면 문서가 가진 목차 버튼·sticky 메뉴가 우리 헤더 밑에 깔린다 (IA — 모바일 크롬)
+  const frameInset = touch && file.fileType === 'html' && !(codeView && canCodeView);
+  const frameRef = useChromeTarget(
+    frameInset ? { dir: 'up', distance: CHROME_FRAME_INSET, base: CHROME_FRAME_INSET } : null,
+  );
+  // 스크롤 상자는 scrollTop을 읽는 ref와 접힘 ref를 같이 쓴다 — 인라인 화살표로 합치면 렌더마다
+  // 등록이 풀렸다 붙어 진행 중인 전환이 끊기므로 identity를 고정한다
+  const setScrollEl = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el;
+      frameRef(el);
+    },
+    [frameRef],
+  );
+
   if (error) return <p className="p-6 text-sm text-red-400">{error}</p>;
   // 최신 상태(freshState)까지 기다린다 — html은 iframe에 심는 복원 위치가 마운트 시점에 고정되기 때문
   if (!data || !freshState) return <p className="p-6 text-sm text-slate-500">불러오는 중…</p>;
@@ -391,10 +391,6 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 터치 기기에서는 조작을 화면 아래(엄지가 닿는 자리)로 내린다 — CSS의 pc/touch 변형과 같은 판정이고,
   // 기기 특성이라 실행 중에 바뀌지 않으므로 한 번만 재도 된다
   const isPc = isPcDevice();
-  // HTML은 남의 문서를 iframe에 담는 유일한 경로다 — 우리가 그리는 본문처럼 상단 여백(touch:pt-14)을
-  // 안에 넣어 줄 수가 없다. 그래서 크롬이 떠 있는 동안에는 iframe 자체를 그만큼 내려 둔다.
-  // 안 그러면 문서가 가진 목차 버튼·sticky 메뉴가 우리 헤더 밑에 깔린다 (IA — 모바일 크롬)
-  const isHtmlFrame = !isPc && file.fileType === 'html' && !!Renderer && !showAsCode;
   const actionButton = (active: boolean) =>
     // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
     `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'w-full px-4 py-2'} ${
@@ -474,19 +470,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         </button>
       )}
       {!immersive && (
-      // 터치에서는 스크롤 방향에 따라 헤더가 접힌다 (IA — 크롬 자동 숨김).
+      // 터치에서는 스크롤을 따라 헤더가 접힌다 (IA — 크롬 추종). transform은 headerRef가 DOM에 직접 쓴다.
       // 본문 위에 겹쳐(absolute) transform으로만 미끄러지게 한다 — 예전처럼 max-h로 접으면
       // 나타날 때마다 본문 레이아웃이 통째로 밀려 스크롤이 뚝뚝 끊겼다. transform은 레이아웃을
       // 건드리지 않아 스크롤 관성이 살아 있다 (편집 모드는 위의 early return이라 여기 안 온다)
-      <div
-        className={
-          isPc
-            ? ''
-            : `absolute inset-x-0 top-0 z-20 transition-transform duration-200 ${
-                chromeHidden ? '-translate-y-full' : ''
-              }`
-        }
-      >
+      <div ref={headerRef} className={isPc ? '' : 'absolute inset-x-0 top-0 z-20'}>
       <div
         // touch-none: 헤더에서 시작한 터치를 브라우저 제스처(스크롤·내비게이션)가 가로채지 않게 —
         // 가로채면 touchend 대신 touchcancel이 와서 스와이프가 끊긴다
@@ -593,19 +581,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           </>
         )}
         <div
-          ref={scrollRef}
+          ref={setScrollEl}
           onScroll={handleScroll}
-          // 본문은 세로로만 스크롤: 가로 오버플로 차단 + 터치는 세로 팬만 + 스크롤 관성이 밖으로 새지 않게
-          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain ${THEME_BG[settings.viewerTheme]} ${
-            isHtmlFrame ? 'transition-transform duration-200' : ''
-          }`}
-          // 위치만 옮긴다 — 크기를 바꾸면 iframe 안의 문서가 통째로 다시 그려져 스크롤이 끊긴다.
-          // html은 이 상자로 스크롤하지 않고(문서가 자기 안에서 스크롤) 있어 부작용도 없다
-          style={
-            isHtmlFrame
-              ? { transform: `translateY(${chromeHidden ? 0 : CHROME_FRAME_INSET}px)` }
-              : undefined
-          }
+          // 본문은 세로로만 스크롤: 가로 오버플로 차단 + 터치는 세로 팬만 + 스크롤 관성이 밖으로 새지 않게.
+          // HTML일 때는 frameRef가 이 상자의 transform도 쓴다 — 위치만 옮긴다. 크기를 바꾸면 iframe 안의
+          // 문서가 통째로 다시 그려져 스크롤이 끊긴다 (html은 이 상자로 스크롤하지 않아 부작용도 없다)
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain ${THEME_BG[settings.viewerTheme]}`}
         >
           {file.fileType === 'pdf' ? (
             // iframe(브라우저 내장 뷰어) 대신 직접 그린다 — iOS는 iframe 속 PDF의 1페이지만 그림처럼 보여줬다.
@@ -717,11 +698,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           목차는 w-full로 남는 폭을 채우고 더보기는 오른쪽 끝에 — 목차가 없는 형식에서도 자리가 유지된다 */}
       {!isPc && !immersive && (
         // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
-        <div
-          className={`absolute inset-x-0 bottom-0 z-20 transition-transform duration-200 ${
-            chromeHidden ? 'translate-y-full' : ''
-          }`}
-        >
+        <div ref={toolbarRef} className="absolute inset-x-0 bottom-0 z-20">
           <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur">
             {actions}
           </div>

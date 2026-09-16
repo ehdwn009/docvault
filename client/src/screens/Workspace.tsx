@@ -26,6 +26,7 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
+import { CHROME_HEIGHT, useChromeHidden, useChromeTarget } from '../lib/chromeCollapse';
 import { DEFAULT_USER_SETTINGS } from '../lib/constants';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
@@ -108,7 +109,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 줄 번호 앵커(#L16-L26)로 연 파일의 하이라이트 범위 — 링크가 "파일 속 한 지점"을 가리킬 때
   const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
   // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대)을 접는다 (IA — 크롬 자동 숨김)
-  const [chromeHidden, setChromeHidden] = useState(false);
+  // 크롬 안착 상태(aria·pointer-events용) — 접히는 동안의 움직임은 drawerBtnRef가 DOM에 직접 쓴다
+  const chromeHidden = useChromeHidden();
+  // 헤더와 같은 거리를 같이 움직인다 — 헤더에 얹혀 있는 버튼이라 따로 놀면 어색하다
+  const drawerBtnRef = useChromeTarget(IS_TOUCH ? { dir: 'up', distance: CHROME_HEIGHT } : null);
   const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
   // 드래그 중인 탭 — 있으면 본문 위에 드롭 존 오버레이를 깐다 (IA — 탭 드래그 배치)
   const [dragTab, setDragTab] = useState<TreeFile | null>(null);
@@ -1091,13 +1095,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {/* 터치 기기: 드로어 토글 (입력 방식 기준 — 가로모드에서도 드로어 유지).
           z-30: 뷰어의 오버레이 헤더(z-20)보다 위 — 같은 z면 DOM 뒤쪽인 헤더가 클릭을 가로챈다 */}
       <button
+        ref={drawerBtnRef}
         onClick={() => setDrawerOpen(true)}
         aria-hidden={chromeHidden}
         // 크롬이 접히면 이 버튼도 같이 비킨다 — 크롬이 숨으면 문서가 화면 맨 위까지 올라오는데,
         // 우리 버튼만 남아 있으면 문서 자신의 좌상단 고정 버튼(정독본의 목차 ☰ 등)을 정확히 덮는다
-        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 transition-transform duration-200 pc:hidden ${
+        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${
           immersive ? 'hidden' : ''
-        } ${chromeHidden ? 'pointer-events-none -translate-y-16' : ''}`}
+        } ${chromeHidden ? 'pointer-events-none' : ''}`}
       >
         ☰
       </button>
@@ -1407,8 +1412,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onSplitView={splitCandidates.length > 0 ? () => void splitView() : undefined}
                 onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
-                chromeHidden={chromeHidden}
-                onChromeHint={IS_TOUCH ? setChromeHidden : undefined}
               />
             )}
           />
