@@ -1,4 +1,5 @@
 import type { TreeFile, TreeFolder } from '../lib/api';
+import FileName from './FileName';
 
 const TYPE_ICON: Record<string, string> = {
   md: '📝',
@@ -55,7 +56,9 @@ export default function FileGrid({
               <span className="text-3xl">{TYPE_ICON[file.fileType] ?? '📄'}</span>
             )}
           </div>
-          <p className="mt-1 truncate text-xs text-slate-300">{file.name}</p>
+          <p className="mt-1 text-xs text-slate-300">
+            <FileName name={file.name} expanded={file.id === selectedId} />
+          </p>
           {file.folderId !== null && (
             <p className="truncate text-[10px] text-slate-600">📁 {folderName.get(file.folderId)}</p>
           )}

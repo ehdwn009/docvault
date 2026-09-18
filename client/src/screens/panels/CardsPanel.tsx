@@ -1,5 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from 'react';
 import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
+import FileName from '../../components/FileName';
+import SwipeRow from '../../components/SwipeRow';
 import { api, ApiError, cardToTreeFile, type CardSummary, type TreeFile } from '../../lib/api';
 import { promptDialog } from '../../lib/dialog';
 import { runGuarded } from '../../lib/guard';
@@ -153,31 +155,40 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
                 {sec.label} · {sec.items.length}
               </div>
               {sec.items.map((c) => (
-                <div
+                <SwipeRow
                   key={c.id}
-                  onClick={() => onSelect(cardToTreeFile(c))}
-                  onContextMenu={(e) => openMenu(e, cardMenu(c))}
-                  className={`group block w-full cursor-pointer rounded px-2 py-1.5 text-left transition ${
-                    c.id === selectedId ? 'bg-slate-800' : 'hover:bg-slate-900'
-                  }`}
+                  right={[{ label: '삭제', danger: true, onAction: () => deleteCard(c) }]}
+                  fullSwipe={{ label: '삭제', danger: true, onAction: () => deleteCard(c) }}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-sm text-slate-200">{c.title}</span>
-                    <span className="shrink-0 rounded border border-slate-700 px-1 text-[10px] text-slate-500">{c.kind}</span>
-                    {/* 모바일은 우클릭이 없어 ⋯가 유일한 진입점이다 (파일 트리와 같은 규칙) */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openMenu(e, cardMenu(c));
-                      }}
-                      title="메뉴"
-                      className="ml-auto shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
-                    >
-                      ⋯
-                    </button>
+                  <div
+                    onClick={() => onSelect(cardToTreeFile(c))}
+                    onContextMenu={(e) => openMenu(e, cardMenu(c))}
+                    className={`group block w-full cursor-pointer rounded px-2 py-1.5 text-left transition ${
+                      c.id === selectedId ? 'bg-slate-800' : 'hover:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <FileName
+                        name={c.title}
+                        expanded={c.id === selectedId}
+                        className="text-sm text-slate-200"
+                      />
+                      <span className="shrink-0 rounded border border-slate-700 px-1 text-[10px] text-slate-500">{c.kind}</span>
+                      {/* 모바일은 우클릭이 없어 ⋯가 유일한 진입점이다 (파일 트리와 같은 규칙) */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openMenu(e, cardMenu(c));
+                        }}
+                        title="메뉴"
+                        className="ml-auto shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
+                      >
+                        ⋯
+                      </button>
+                    </div>
+                    <div className="truncate text-xs text-slate-500">{c.oneLine}</div>
                   </div>
-                  <div className="truncate text-xs text-slate-500">{c.oneLine}</div>
-                </div>
+                </SwipeRow>
               ))}
             </div>
           ))}
