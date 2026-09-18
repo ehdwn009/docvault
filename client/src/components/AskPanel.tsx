@@ -9,6 +9,7 @@ import {
   type TreeFile,
 } from '../lib/api';
 import { getAppProseTheme } from '../lib/appTheme';
+import { confirmDialog } from '../lib/dialog';
 import { ASK_QUESTION_MAX_CHARS } from '../lib/constants';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
@@ -198,6 +199,20 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     }
   }
 
+  /** 대화 삭제 (API-106). 지금 보는 대화면 빈 대화로 돌아간다 */
+  async function deleteThread(id: number) {
+    const ok = await confirmDialog('이 대화를 지울까요? 되돌릴 수 없어요.');
+    if (!ok) return;
+    try {
+      await api(`/ask/threads/${id}`, { method: 'DELETE' });
+      setHistory((h) => h.filter((t) => t.id !== id));
+      if (thread?.id === id) newThread();
+      toast('대화를 지웠습니다');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '지우지 못했습니다', 'error');
+    }
+  }
+
   function newThread() {
     abortRef.current?.abort();
     setThread(null);
@@ -235,6 +250,11 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
           <button onClick={() => void openHistory()} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
             지난 대화
           </button>
+          {thread && !showHistory && (
+            <button onClick={() => void deleteThread(thread.id)} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-red-300">
+              삭제
+            </button>
+          )}
           <button onClick={newThread} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
             새 대화
           </button>
@@ -254,16 +274,21 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             <p className="px-2 py-4 text-xs text-slate-600">지난 대화가 없습니다</p>
           ) : (
             history.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => void loadThread(t.id)}
-                className="block w-full rounded-md px-2 py-2 text-left hover:bg-slate-900"
-              >
-                <div className="truncate text-sm text-slate-200">{t.title}</div>
-                <div className="truncate text-xs text-slate-500">
-                  {t.fileName ?? '문서 없음'} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
-                </div>
-              </button>
+              <div key={t.id} className="flex items-center rounded-md hover:bg-slate-900">
+                <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
+                  <div className="truncate text-sm text-slate-200">{t.title}</div>
+                  <div className="truncate text-xs text-slate-500">
+                    {t.fileName ?? '문서 없음'} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
+                  </div>
+                </button>
+                <button
+                  onClick={() => void deleteThread(t.id)}
+                  title="이 대화 지우기"
+                  className="h-11 w-11 shrink-0 text-slate-600 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </div>
             ))
           )}
         </div>
