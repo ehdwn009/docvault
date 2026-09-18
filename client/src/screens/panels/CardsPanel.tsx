@@ -1,17 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from 'react';
+import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
 import { api, ApiError, cardToTreeFile, type CardSummary, type TreeFile } from '../../lib/api';
 import { promptDialog } from '../../lib/dialog';
+import { runGuarded } from '../../lib/guard';
 import { toast } from '../../lib/toast';
 
-type Props = { selectedId: number | null; onSelect: (file: TreeFile) => void };
+type Props = {
+  selectedId: number | null;
+  onSelect: (file: TreeFile) => void;
+  /** 지운 카드가 열려 있으면 탭·칸에서도 빼야 한다 — 탭을 아는 건 Workspace뿐이라 위로 올린다 */
+  onDeleted: (id: number) => void;
+};
 
 type Group = 'topic' | 'recent';
+type Menu = { x: number; y: number; items: MenuItem[] };
 
 // SCR-181: 배움 카드 서랍 — 카드는 파일 트리에 안 나오고 여기서만 보인다 (설계 — 문서와 섞이지 않게)
-export default function CardsPanel({ selectedId, onSelect }: Props) {
+export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
   const [cards, setCards] = useState<CardSummary[] | null>(null);
   const [q, setQ] = useState('');
   const [group, setGroup] = useState<Group>('topic');
+  const [menu, setMenu] = useState<Menu | null>(null);
 
   const reload = () => {
     void api<{ cards: CardSummary[] }>('/cards')
@@ -62,6 +71,36 @@ export default function CardsPanel({ selectedId, onSelect }: Props) {
       toast(e instanceof ApiError ? e.message : '카드를 만들지 못했습니다', 'error');
     }
   }
+
+  function openMenu(e: ReactMouseEvent, items: MenuItem[]) {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  }
+
+  // 카드도 files의 한 행(kind='card')이라 파일 삭제 API를 그대로 쓴다 —
+  // 휴지통·복원·30일 자동 정리가 문서와 같은 규칙으로 따라온다
+  function deleteCard(c: CardSummary) {
+    onDeleted(c.id);
+    void runGuarded(
+      () => api(`/files/${c.id}`, { method: 'DELETE' }),
+      () => {
+        reload();
+        // 확인 대화상자 없이 휴지통으로 — 실행 취소가 안전망이다 (파일 삭제와 같은 흐름)
+        toast('휴지통으로 이동했습니다', 'success', {
+          action: {
+            label: '실행 취소',
+            onAction: () =>
+              void runGuarded(() => api(`/files/${c.id}/restore`, { method: 'POST' }), reload),
+          },
+        });
+      },
+    );
+  }
+
+  const cardMenu = (c: CardSummary): MenuItem[] => [
+    { label: '삭제', danger: true, action: () => deleteCard(c) },
+  ];
 
   if (cards === null) return <p className="px-4 py-4 text-sm text-slate-600">불러오는 중…</p>;
 
@@ -114,24 +153,38 @@ export default function CardsPanel({ selectedId, onSelect }: Props) {
                 {sec.label} · {sec.items.length}
               </div>
               {sec.items.map((c) => (
-                <button
+                <div
                   key={c.id}
                   onClick={() => onSelect(cardToTreeFile(c))}
-                  className={`block w-full rounded px-2 py-1.5 text-left transition ${
+                  onContextMenu={(e) => openMenu(e, cardMenu(c))}
+                  className={`group block w-full cursor-pointer rounded px-2 py-1.5 text-left transition ${
                     c.id === selectedId ? 'bg-slate-800' : 'hover:bg-slate-900'
                   }`}
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm text-slate-200">{c.title}</span>
                     <span className="shrink-0 rounded border border-slate-700 px-1 text-[10px] text-slate-500">{c.kind}</span>
+                    {/* 모바일은 우클릭이 없어 ⋯가 유일한 진입점이다 (파일 트리와 같은 규칙) */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openMenu(e, cardMenu(c));
+                      }}
+                      title="메뉴"
+                      className="ml-auto shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
+                    >
+                      ⋯
+                    </button>
                   </div>
                   <div className="truncate text-xs text-slate-500">{c.oneLine}</div>
-                </button>
+                </div>
               ))}
             </div>
           ))}
         </div>
       )}
+
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }
