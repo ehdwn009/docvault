@@ -1359,7 +1359,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         )}
 
         {panel === 'cards' && (
-          <CardsPanel selectedId={selected?.id ?? null} onSelect={(f) => void selectFile(f)} />
+          <CardsPanel
+            selectedId={selected?.id ?? null}
+            onSelect={(f) => void selectFile(f)}
+            onDeleted={(id) => {
+              if (tabs.some((t) => t.id === id)) detachFiles([id]);
+            }}
+          />
         )}
 
         {panel === 'shared' && (
