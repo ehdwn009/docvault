@@ -237,30 +237,34 @@ addEventListener('message',function(ev){var d=ev.data||{};if(d.type==='docvault:
 // 심이 선택 문장, 그 문장이 든 블록과 앞뒤 블록(=LLM에 보낼 문맥), 화면 좌표를 대신 보고한다.
 // 문맥을 블록 단위로 자르는 이유: 문서 전체를 보내지 않는다는 설계 원칙의 구현 지점이 여기다
 function selectionShim(): string {
+  // 이 안은 TS 템플릿 리터럴이다 — 정규식·개행은 반드시 \\s, \\n처럼 두 번 이스케이프한다.
+  // 한 번만 쓰면 TS가 먼저 풀어 버려(\s→s, \n→진짜 개행) 심 전체가 문법 오류로 죽는다 (v0.23.1에서 실제로 겪음)
   return `<script>(function(){
 var QMAX=${ASK_QUOTE_MAX_CHARS},CMAX=${ASK_CONTEXT_MAX_CHARS};
 var isBlock=function(e){var d=getComputedStyle(e).display;return d!=='inline'&&d!=='contents'};
 var blockOf=function(n){var e=n&&n.nodeType===1?n:n&&n.parentElement;
 while(e&&e!==document.body){if(isBlock(e))return e;e=e.parentElement}return null};
-var txt=function(e){return e?String(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():''};
+var txt=function(e){return e?String(e.innerText||e.textContent||'').replace(/\\s+/g,' ').trim():''};
 var ctx=function(el){if(!el)return '';var out=[];
 var p=el.previousElementSibling;if(p)out.push(txt(p));
 out.push(txt(el));
 var n=el.nextElementSibling;if(n)out.push(txt(n));
-return out.filter(Boolean).join('\n\n').slice(0,CMAX)};
-var last='',timer;
-var report=function(){var s=document.getSelection();
-var q=s&&!s.isCollapsed?String(s).replace(/\s+/g,' ').trim():'';
+return out.filter(Boolean).join('\\n\\n').slice(0,CMAX)};
+var last='',timer,rq=0;
+// force: 문장은 같아도 좌표가 바뀐 경우(스크롤)에 다시 보고
+var report=function(force){var s=document.getSelection();
+var q=s&&!s.isCollapsed?String(s).replace(/\\s+/g,' ').trim():'';
 if(!q){if(last){last='';parent.postMessage({type:'docvault:selection',quote:''},'*')}return}
-if(q===last)return;last=q;
+if(q===last&&!force)return;last=q;
 var r=s.getRangeAt(0).getBoundingClientRect();
 parent.postMessage({type:'docvault:selection',quote:q.slice(0,QMAX),context:ctx(blockOf(s.anchorNode)),x:r.left,y:r.top,w:r.width,h:r.height},'*')};
 // 손을 뗀 순간 보고하고, 터치 손잡이 조절처럼 pointerup이 안 오는 경우는 selectionchange를 잠시 모아 보고한다
 addEventListener('pointerup',function(){setTimeout(report,0)},{passive:true});
+addEventListener('touchend',function(){setTimeout(report,0)},{passive:true});
 addEventListener('keyup',function(){setTimeout(report,0)},{passive:true});
 document.addEventListener('selectionchange',function(){clearTimeout(timer);timer=setTimeout(report,300)});
-// 스크롤하면 보고한 좌표가 낡는다 — 부모가 바를 치우게 거둔다 (선택 자체는 문서에 남아 다시 손을 떼면 재보고)
-addEventListener('scroll',function(){if(last){last='';parent.postMessage({type:'docvault:selection',quote:''},'*')}},{passive:true});
+// 스크롤하면 좌표가 낡는다 — 선택은 그대로니 새 좌표로 다시 보고해 바가 글을 따라가게 한다 (프레임당 한 번)
+addEventListener('scroll',function(){if(!last||rq)return;rq=1;requestAnimationFrame(function(){rq=0;report(true)})},{passive:true});
 })()</${'script'}>`;
 }
 

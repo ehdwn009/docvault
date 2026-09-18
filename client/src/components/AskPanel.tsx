@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { ASK_QUESTION_MAX_CHARS } from '../lib/constants';
 import { useSheetDrag } from '../lib/sheetDrag';
+import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
 
@@ -49,6 +50,8 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   // 이 패널이 지금 들고 있는 seed로 대화를 만들었는지 — 같은 seed로 두 번 만들지 않게
   const seedUsedRef = useRef(false);
   const sheet = useSheetDrag(onClose);
+  // 터치: 키보드가 올라오면 보이는 영역이 줄어든다 — 시트를 그 안에 맞춰야 머리와 입력창이 함께 보인다
+  const vv = useVisualViewport(!isPc);
 
   useEffect(() => {
     void api<AskStatus>('/ask/status').then(setStatus).catch(() => setStatus(null));
@@ -253,7 +256,11 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
           )}
           {messages.length === 0 && !notConfigured && (
             <p className="px-1 text-xs text-slate-600">
-              {seed ? '아래 문장에 대해 물어보세요.' : '문서에서 문장을 드래그하면 그 부분이 문맥으로 붙어요. 그냥 물어봐도 됩니다.'}
+              {seed
+                ? '아래 문장에 대해 물어보세요.'
+                : isPc
+                  ? '문서에서 문장을 드래그하면 그 부분이 문맥으로 붙어요. 그냥 물어봐도 됩니다.'
+                  : '시트를 내리고 문장을 길게 눌러 고른 뒤 [질문]을 누르면 그 문장이 붙어요. 그냥 물어봐도 됩니다.'}
             </p>
           )}
           {messages.map((m) =>
@@ -320,8 +327,9 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             value={input}
             onChange={(e) => setInput(e.target.value.slice(0, ASK_QUESTION_MAX_CHARS))}
             onKeyDown={(e) => {
-              // Enter 보내기 · Shift+Enter 줄바꿈. 한글 조합 중 Enter는 무시(조합 확정용)
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              // PC: Enter 보내기 · Shift+Enter 줄바꿈. 터치: 키보드의 Enter는 줄바꿈, 보내기는 버튼으로
+              // (폰에는 Shift+Enter가 없다). 한글 조합 중 Enter는 무시(조합 확정용)
+              if (isPc && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 if (canSend) void send(input);
               }
@@ -329,7 +337,11 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             rows={2}
             disabled={limitReached || notConfigured}
             placeholder={
-              limitReached ? '오늘 질문을 다 썼어요 — 읽기는 계속 됩니다' : '꼬리질문… (Enter 보내기 · Shift+Enter 줄바꿈)'
+              limitReached
+                ? '오늘 질문을 다 썼어요 — 읽기는 계속 됩니다'
+                : isPc
+                  ? '꼬리질문… (Enter 보내기 · Shift+Enter 줄바꿈)'
+                  : '질문을 입력하세요'
             }
             className="min-h-[44px] flex-1 resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-600 focus:outline-none disabled:opacity-50"
           />
@@ -365,8 +377,9 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     <>
       <div className="fixed inset-0 z-20 bg-black/50" onClick={onClose} />
       <div
-        className="fixed inset-x-0 bottom-0 z-30 flex h-[78vh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-950"
-        style={sheet.sheetStyle}
+        className="fixed inset-x-0 z-30 flex flex-col rounded-t-2xl border-t border-slate-700 bg-slate-950"
+        // 시트 높이는 "보이는 영역"의 78% — 키보드가 올라오면 그만큼 줄고, 아래 끝은 키보드 위에 붙는다
+        style={{ ...sheet.sheetStyle, top: vv.offsetTop + vv.height - Math.round(vv.height * 0.78), height: Math.round(vv.height * 0.78) }}
       >
         <div {...sheet.handleProps} className={`${sheet.handleProps.className} px-4 pb-1 pt-3`}>
           <div className="mx-auto h-1 w-9 rounded-full bg-slate-600" />

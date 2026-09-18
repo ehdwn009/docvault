@@ -397,8 +397,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     const el = scrollRef.current;
     if (!el) return;
     reportScroll(el.scrollTop, el.scrollHeight - el.clientHeight);
-    // 선택 바의 좌표는 선택 순간의 것 — 스크롤하면 낡으므로 치운다 (다시 드래그하면 다시 뜬다)
-    setSelection((s) => (s ? null : s));
+    // 선택 바의 좌표는 선택 순간의 것 — 스크롤하면 새 좌표로 다시 잰다 (선택은 그대로라 바가 글을 따라간다)
+    if (selection) readOwnSelection();
   }
 
   // 격리된 문서 안의 클릭은 부모에 닿지 않는다 — 렌더러가 알려 주면 팝오버를 닫는다

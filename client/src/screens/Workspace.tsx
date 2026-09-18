@@ -1069,7 +1069,20 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     [tree.folders],
   );
 
-  const railButton = (target: Panel, icon: string, label: string) => (
+  // 레일 아이콘 — 이모지는 OS마다 모양·굵기가 달라 한 줄에 놓으면 들쭉날쭉하다. 같은 선 굵기(1.8)의 SVG로 통일
+  const railIcon = (paths: string) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths.split('|').map((d, i) => <path key={i} d={d} />)}
+    </svg>
+  );
+  const RAIL_ICONS: Record<Panel, string> = {
+    files: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z|M14 3v6h6|M9 13h6|M9 17h6',
+    favorites: 'M12 3l2.8 6 6.2.7-4.6 4.3 1.3 6.3L12 17l-5.7 3.3 1.3-6.3L3 9.7 9.2 9z',
+    shared: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M8 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M2 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1|M16 16h1a4 4 0 0 1 4 4v1',
+    settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+    admin: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
+  };
+  const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
         // VS Code 방식: 활성 패널의 버튼을 다시 누르면 패널을 접는다
@@ -1080,13 +1093,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         }
       }}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
+      className={`flex h-10 w-10 items-center justify-center rounded-lg transition ${
         panel === target && !panelCollapsed
           ? 'bg-slate-800 text-slate-100'
           : 'text-slate-500 hover:text-slate-200'
       }`}
     >
-      {icon}
+      {railIcon(RAIL_ICONS[target])}
     </button>
   );
 
@@ -1117,17 +1130,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
-        {railButton('files', '📄', '내 파일')}
-        {railButton('favorites', '★', '즐겨찾기')}
-        {railButton('shared', '🔗', '공유 파일')}
-        {railButton('settings', '⚙', '설정')}
-        {user.role === 'admin' && railButton('admin', '🛠', '관리자')}
+        {railButton('files', '내 파일')}
+        {railButton('favorites', '즐겨찾기')}
+        {railButton('shared', '공유 파일')}
+        {railButton('settings', '설정')}
+        {user.role === 'admin' && railButton('admin', '관리자')}
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
-          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-lg text-slate-600 transition hover:text-slate-300"
+          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
         >
-          ⏻
+          {railIcon('M18.4 6.6a9 9 0 1 1-12.8 0|M12 2v10')}
         </button>
       </div>
 
