@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isDarkViewerTheme, type ViewerTheme } from '../lib/api';
-import { HTML_SCROLLER_LIMIT } from '../lib/constants';
-import type { RendererTocItem } from './index';
+import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, HTML_SCROLLER_LIMIT } from '../lib/constants';
+import type { RendererSelection, RendererTocItem } from './index';
 
 // HTML은 iframe sandbox로 격리 렌더링한다 (아키텍처 — 보안 경계).
 // allow-same-origin은 절대 추가하지 않는다 — 없어야 iframe이 별도 오리진이 되어
@@ -233,6 +233,37 @@ addEventListener('message',function(ev){var d=ev.data||{};if(d.type==='docvault:
 })()</${'script'}>`;
 }
 
+// 문장 선택 보고 (SCR-180 질문 패널). 격리 오리진이라 부모가 getSelection()을 못 읽는다 —
+// 심이 선택 문장, 그 문장이 든 블록과 앞뒤 블록(=LLM에 보낼 문맥), 화면 좌표를 대신 보고한다.
+// 문맥을 블록 단위로 자르는 이유: 문서 전체를 보내지 않는다는 설계 원칙의 구현 지점이 여기다
+function selectionShim(): string {
+  return `<script>(function(){
+var QMAX=${ASK_QUOTE_MAX_CHARS},CMAX=${ASK_CONTEXT_MAX_CHARS};
+var isBlock=function(e){var d=getComputedStyle(e).display;return d!=='inline'&&d!=='contents'};
+var blockOf=function(n){var e=n&&n.nodeType===1?n:n&&n.parentElement;
+while(e&&e!==document.body){if(isBlock(e))return e;e=e.parentElement}return null};
+var txt=function(e){return e?String(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim():''};
+var ctx=function(el){if(!el)return '';var out=[];
+var p=el.previousElementSibling;if(p)out.push(txt(p));
+out.push(txt(el));
+var n=el.nextElementSibling;if(n)out.push(txt(n));
+return out.filter(Boolean).join('\n\n').slice(0,CMAX)};
+var last='',timer;
+var report=function(){var s=document.getSelection();
+var q=s&&!s.isCollapsed?String(s).replace(/\s+/g,' ').trim():'';
+if(!q){if(last){last='';parent.postMessage({type:'docvault:selection',quote:''},'*')}return}
+if(q===last)return;last=q;
+var r=s.getRangeAt(0).getBoundingClientRect();
+parent.postMessage({type:'docvault:selection',quote:q.slice(0,QMAX),context:ctx(blockOf(s.anchorNode)),x:r.left,y:r.top,w:r.width,h:r.height},'*')};
+// 손을 뗀 순간 보고하고, 터치 손잡이 조절처럼 pointerup이 안 오는 경우는 selectionchange를 잠시 모아 보고한다
+addEventListener('pointerup',function(){setTimeout(report,0)},{passive:true});
+addEventListener('keyup',function(){setTimeout(report,0)},{passive:true});
+document.addEventListener('selectionchange',function(){clearTimeout(timer);timer=setTimeout(report,300)});
+// 스크롤하면 보고한 좌표가 낡는다 — 부모가 바를 치우게 거둔다 (선택 자체는 문서에 남아 다시 손을 떼면 재보고)
+addEventListener('scroll',function(){if(last){last='';parent.postMessage({type:'docvault:selection',quote:''},'*')}},{passive:true});
+})()</${'script'}>`;
+}
+
 /** 문서 구조(doctype·head)를 깨뜨리지 않는 위치에 심을 주입한다 */
 function injectShims(
   html: string,
@@ -250,6 +281,7 @@ function injectShims(
     scaleShim(scale) +
     memoryGuardShim() +
     fitShim(fit) +
+    selectionShim() +
     navShim(restoreOffset, restoreRatio, theme);
   const head = html.match(/<head[^>]*>/i);
   if (head) {
@@ -281,9 +313,11 @@ type Props = {
   fit?: boolean;
   /** 글자 크기 배율(%) — 100이면 문서가 정한 크기 그대로 */
   fontScale?: number;
+  /** 문장 선택 보고 — 좌표는 뷰포트 기준으로 바꿔서 준다. null = 선택 풀림 */
+  onSelection?: (sel: RendererSelection | null) => void;
 };
 
-export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100 }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100, onSelection }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마·맞춤·배율은 마운트 시점 값으로 고정해
   // 부모 리렌더(트리 갱신·설정 변경 등)가 읽는 중인 문서를 초기화하지 않게 한다
@@ -301,10 +335,31 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, initia
     function onMessage(e: MessageEvent) {
       // 반드시 이 iframe에서 온 메시지만 신뢰한다 (아키텍처 — HTML 렌더러 호환 심)
       if (e.source !== frameRef.current?.contentWindow) return;
-      const d = e.data as { type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown } | null;
+      const d = e.data as {
+        type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown;
+        quote?: unknown; context?: unknown; x?: unknown; y?: unknown; w?: unknown; h?: unknown;
+      } | null;
       if (!d || typeof d !== 'object') return;
       if (d.type === 'docvault:interact') {
         onInteract?.();
+      } else if (d.type === 'docvault:selection') {
+        const quote = typeof d.quote === 'string' ? d.quote : '';
+        if (!quote) {
+          onSelection?.(null);
+          return;
+        }
+        // iframe 안 좌표 → 뷰포트 좌표: iframe 상자의 위치를 더한다
+        const fr = frameRef.current?.getBoundingClientRect();
+        onSelection?.({
+          quote,
+          context: typeof d.context === 'string' ? d.context : '',
+          rect: {
+            x: (fr?.left ?? 0) + Number(d.x ?? 0),
+            y: (fr?.top ?? 0) + Number(d.y ?? 0),
+            w: Number(d.w ?? 0),
+            h: Number(d.h ?? 0),
+          },
+        });
       } else if (d.type === 'docvault:scroll' && typeof d.offset === 'number') {
         onScrollOffset?.(d.offset, typeof d.ratio === 'number' ? d.ratio : undefined);
       } else if (d.type === 'docvault:toc' && Array.isArray(d.items)) {
@@ -319,7 +374,7 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, initia
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onScrollOffset, onToc, onInteract]);
+  }, [onScrollOffset, onToc, onInteract, onSelection]);
 
   // 열람 중 테마·맞춤 변경은 리로드 없이 쪽지로 전파한다 (마운트 시점 값은 이미 심에 박혀 있다).
   // 실제로 보낸 값을 기억해 두는 이유: 처음 값으로 되돌아가는 변경(밝게→어둡게→밝게)도 전해야 한다

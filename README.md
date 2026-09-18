@@ -16,7 +16,7 @@
 ## 실행
 
 ```bash
-cp .env.example .env    # JWT_SECRET 채우기
+cp .env.example .env    # JWT_SECRET 채우기 (ANTHROPIC_API_KEY는 선택 — 넣으면 문서를 읽다 드래그해 AI에게 묻는 질문 기능이 켜진다)
 docker compose up -d --build
 # → http://localhost:3000 (초기 계정 admin / admin1234 — 바로 변경할 것)
 ```

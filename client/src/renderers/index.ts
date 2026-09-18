@@ -6,6 +6,13 @@ import TextRenderer from './TextRenderer';
 /** 렌더러가 부모에 보고하는 목차 한 줄 — jump()를 부르면 그 헤딩으로 이동한다 */
 export type RendererTocItem = { text: string; level: number; jump: () => void };
 
+/** 렌더러 안의 문장 선택 보고 — 좌표는 뷰포트 기준. null이면 선택이 풀렸다는 뜻 (SCR-180 질문 패널) */
+export type RendererSelection = {
+  quote: string;
+  context: string;
+  rect: { x: number; y: number; w: number; h: number };
+};
+
 export type RendererProps = {
   content: string;
   theme?: ViewerTheme;
@@ -25,6 +32,8 @@ export type RendererProps = {
   onToc?: (items: RendererTocItem[]) => void;
   /** 문서 안을 눌렀다는 신호 — 격리된 iframe의 클릭은 부모에 닿지 않아 따로 알려야 한다 (html 렌더러용) */
   onInteract?: () => void;
+  /** 문장 선택 보고 — 격리된 iframe의 선택은 부모가 못 읽어 심이 대신 알린다 (html 렌더러용) */
+  onSelection?: (sel: RendererSelection | null) => void;
   /** 좁은 화면 맞춤 보정 사용 여부 — 끄면 문서를 만든 그대로 보여준다 (html 렌더러용) */
   fit?: boolean;
   /** 글자 크기 배율(%) — 문서마다 기준 크기가 달라 절대 px가 아니라 배율로 준다 (html 렌더러용) */

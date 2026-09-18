@@ -140,3 +140,32 @@ export const userSettings = sqliteTable('user_settings', {
   lastSeenVersion: text('last_seen_version'),
   updatedAt: integer('updated_at').notNull(),
 });
+
+/** 문서를 읽다 LLM에게 물어본 대화 하나 (배움 카드 1판). 2판의 카드가 "원 대화"·"출처"로 쓴다 */
+export const askThreads = sqliteTable('ask_threads', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ownerId: integer('owner_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  // SET NULL: 문서를 지워도 대화는 남는다 — 카드는 문서보다 오래 산다 (설계 흐름 D)
+  fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
+  /** 시작 때 드래그한 문장 — 출처 인용. 드래그 없이 시작하면 null */
+  quote: text('quote'),
+  /** 선택 문장 앞뒤 문단 — LLM에 보낸 문맥 전부. 문서 전체는 절대 여기 들어오지 않는다 */
+  context: text('context'),
+  /** 첫 질문 앞 60자 — 지난 대화 목록용 */
+  title: text('title').notNull(),
+  createdAt: integer('created_at').notNull(),
+  /** 마지막 메시지 시각 — 30일 정리의 기준 */
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const askMessages = sqliteTable('ask_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  threadId: integer('thread_id')
+    .notNull()
+    .references(() => askThreads.id, { onDelete: 'cascade' }),
+  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+  content: text('content').notNull(),
+  createdAt: integer('created_at').notNull(),
+});

@@ -83,3 +83,23 @@ export const DEFAULT_USER_SETTINGS = {
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
 };
+
+/** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
+export const ASK = {
+  MODEL: 'claude-opus-5',
+  /** 사용자별 하루 질문 한도 (UTC 날짜). 되돌릴 수 있는 값이라 낮게 잡지 않았다 */
+  DAILY_LIMIT: 30,
+  /** 저장 안 한 대화 보관 기간 — 휴지통과 같은 감각 */
+  THREAD_RETENTION_MS: 30 * 24 * 60 * 60 * 1000,
+  /** 드래그한 문장 최대 길이 */
+  QUOTE_MAX_CHARS: 500,
+  /** 앞뒤 문단 문맥 최대 길이 — "문서 전체를 안 보내는" 선 */
+  CONTEXT_MAX_CHARS: 1500,
+  QUESTION_MAX_CHARS: 2000,
+  /** 답 최대 길이(토큰). 설명 하나 분량 — 더 길면 "더 자세히"로 이어 묻는다. 비용 상한이기도 하다 */
+  MAX_OUTPUT_TOKENS: 4096,
+  /** 지난 대화 목록의 한 번 개수 */
+  LIST_LIMIT: 20,
+  /** 대화 이력 중 LLM에 실어 보내는 최근 메시지 수 — 길어진 대화의 비용 상한 */
+  HISTORY_LIMIT: 20,
+} as const;

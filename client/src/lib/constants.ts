@@ -29,3 +29,8 @@ export const DEFAULT_USER_SETTINGS = {
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
 };
+
+/** 질문(배움 카드) 입력 한도 — 서버 ASK 상수와 같아야 한다. 초과분은 클라이언트가 먼저 자른다 */
+export const ASK_QUOTE_MAX_CHARS = 500;
+export const ASK_CONTEXT_MAX_CHARS = 1500;
+export const ASK_QUESTION_MAX_CHARS = 2000;

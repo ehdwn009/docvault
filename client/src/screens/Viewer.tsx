@@ -1,11 +1,12 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import AskPanel, { type AskSeed } from '../components/AskPanel';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
-import { FONT_SCALE_DEFAULT } from '../lib/constants';
+import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
 import { useSheetDrag } from '../lib/sheetDrag';
-import { CodeRenderer, PdfRenderer, renderers } from '../renderers';
+import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
 
 type Props = {
@@ -59,6 +60,23 @@ const WIDTH: Record<UserSettings['contentWidth'], string> = {
 // 목차 한 줄 — md는 바깥 DOM의 헤딩에서, html은 iframe 심의 보고에서 만들어진다
 type Heading = { text: string; level: number; jump: () => void };
 
+/** 선택이 든 블록과 앞뒤 블록의 글 — LLM에 보낼 문맥. "문서 전체를 보내지 않는다"는 설계 원칙의 구현 지점
+    (HTML iframe 심의 selectionShim과 같은 규칙이어야 한다 — 형식에 따라 문맥 크기가 달라지면 안 된다) */
+function blockContext(node: Node, root: HTMLElement): string {
+  let el: HTMLElement | null = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+  while (el && el !== root && getComputedStyle(el).display === 'inline') el = el.parentElement;
+  if (!el || el === root) return '';
+  const txt = (e: Element | null) => (e ? (e.textContent ?? '').replace(/\s+/g, ' ').trim() : '');
+  return [txt(el.previousElementSibling), txt(el), txt(el.nextElementSibling)]
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, ASK_CONTEXT_MAX_CHARS);
+}
+
+/** 선택 바(물어보기)의 크기·간격 — 선택과 겹치지 않게 띄우는 거리 */
+const ASK_BAR_WIDTH = 120;
+const ASK_BAR_GAP = 40;
+
 /** CSS의 pc 변형과 같은 판정 — 터치 기기에서만 다른 동작이 필요할 때 사용 */
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
@@ -91,6 +109,16 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [freshState, setFreshState] = useState<TreeFile['state'] | null>(null);
   // 아직 서버로 안 보낸 마지막 스크롤 위치 — 앱을 닫거나 문서를 바꿀 때 유실 없이 flush한다
   const pendingRef = useRef<{ fileId: number; offset: number; ratio: number | null } | null>(null);
+  // SCR-180 질문 패널. 한 번 시작되면 닫아도 마운트를 유지한다 — 닫았다 열어도 대화가 이어지게 (IA — SCR-180)
+  const [askOpen, setAskOpen] = useState(false);
+  const [askStarted, setAskStarted] = useState(false);
+  const [askSeed, setAskSeed] = useState<AskSeed | null>(null);
+  // 대화 중 문서에서 다시 드래그한 문장 — 다음 질문에 인용으로 붙는다
+  const [pendingQuote, setPendingQuote] = useState<string | null>(null);
+  // 지금 드래그돼 있는 문장 — [물어보기] 바를 띄우는 근거. 좌표는 뷰포트 기준 (html은 iframe 심이 보고)
+  const [selection, setSelection] = useState<RendererSelection | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectionTimerRef = useRef<number | undefined>(undefined);
 
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
@@ -177,6 +205,76 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isActive, mode, data]);
+
+  /** 우리가 그리는 본문(md·텍스트·코드)의 선택을 읽는다 — HTML은 iframe 심이 같은 모양으로 보고한다 */
+  const readOwnSelection = useCallback(() => {
+    const container = scrollRef.current;
+    const sel = window.getSelection();
+    if (!container || !sel || sel.isCollapsed || sel.rangeCount === 0) {
+      setSelection(null);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) return; // 패널 등 본문 밖의 선택은 무관
+    const quote = sel.toString().replace(/\s+/g, ' ').trim().slice(0, ASK_QUOTE_MAX_CHARS);
+    if (!quote) {
+      setSelection(null);
+      return;
+    }
+    const r = range.getBoundingClientRect();
+    setSelection({
+      quote,
+      context: blockContext(range.startContainer, container),
+      rect: { x: r.left, y: r.top, w: r.width, h: r.height },
+    });
+  }, []);
+
+  // 선택이 풀리면 바를 치우고, 터치 손잡이 조절처럼 mouseup이 안 오는 변경은 잠시 모아 읽는다.
+  // HTML은 선택이 iframe 안에 있어 부모의 selectionchange가 오지 않는다 — 심이 따로 보고한다
+  useEffect(() => {
+    if (file.fileType === 'html' && !(codeView && canCodeView)) return;
+    const onChange = () => {
+      window.clearTimeout(selectionTimerRef.current);
+      const s = window.getSelection();
+      if (!s || s.isCollapsed) setSelection(null);
+      else selectionTimerRef.current = window.setTimeout(readOwnSelection, 300);
+    };
+    document.addEventListener('selectionchange', onChange);
+    return () => {
+      document.removeEventListener('selectionchange', onChange);
+      window.clearTimeout(selectionTimerRef.current);
+    };
+  }, [file.fileType, codeView, canCodeView, readOwnSelection]);
+
+  /** 질문 패널 열기. 선택이 있으면 그 문장이 문맥(첫 대화) 또는 인용(대화 중)으로 붙는다 */
+  const openAsk = useCallback(
+    (withSelection: boolean) => {
+      const sel = withSelection ? selection : null;
+      if (sel) {
+        if (askStarted) setPendingQuote(sel.quote);
+        else setAskSeed({ quote: sel.quote, context: sel.context });
+      }
+      setAskStarted(true);
+      setAskOpen(true);
+      setSelection(null);
+      window.getSelection()?.removeAllRanges();
+      showChrome();
+    },
+    [selection, askStarted],
+  );
+
+  // Ctrl+Shift+A = 질문 (선택이 있으면 그 문장이 붙음) — 활성 칸에서만 (IA — SCR-180)
+  useEffect(() => {
+    if (!isActive || mode !== 'view') return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        openAsk(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isActive, mode, openAsk]);
 
   // 본문이 준비되면 읽던 위치로 복원한다 — 기기 간 이어 읽기의 핵심
   // (html은 스크롤이 iframe 안에서 일어나므로 렌더러의 심이 직접 복원한다)
@@ -299,6 +397,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     const el = scrollRef.current;
     if (!el) return;
     reportScroll(el.scrollTop, el.scrollHeight - el.clientHeight);
+    // 선택 바의 좌표는 선택 순간의 것 — 스크롤하면 낡으므로 치운다 (다시 드래그하면 다시 뜬다)
+    setSelection((s) => (s ? null : s));
   }
 
   // 격리된 문서 안의 클릭은 부모에 닿지 않는다 — 렌더러가 알려 주면 팝오버를 닫는다
@@ -423,6 +523,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ✕
         </button>
       )}
+      {!isBinary && (
+        <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="LLM에게 물어보기 (Ctrl+Shift+A)">
+          질문
+        </button>
+      )}
       {(data.fileType === 'md' || data.fileType === 'html') && !codeView && (
         <button onClick={() => setShowToc((v) => !v)} className={actionButton(showToc)}>
           목차
@@ -457,8 +562,35 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     </>
   );
 
+  // [물어보기] 바의 자리 — 뷰포트 좌표를 이 뷰어 상자 기준으로. PC는 선택 위, 터치는 선택 아래
+  // (iOS·안드로이드가 선택 위에 자기 메뉴를 띄우므로 겹치지 않게 — IA SCR-180)
+  const rootRect = selection ? rootRef.current?.getBoundingClientRect() : undefined;
+  const askBar =
+    selection && rootRect && mode === 'view'
+      ? {
+          left: Math.max(8, Math.min(rootRect.width - ASK_BAR_WIDTH - 8, selection.rect.x - rootRect.left)),
+          top: isPc
+            ? Math.max(4, selection.rect.y - rootRect.top - ASK_BAR_GAP)
+            : selection.rect.y + selection.rect.h - rootRect.top + 8,
+        }
+      : null;
+
   return (
-    <div className="relative flex h-full flex-col">
+    <div ref={rootRef} className="relative flex h-full flex-col">
+      {askBar && (
+        <div className="absolute z-30" style={askBar}>
+          <button
+            // pointerdown에서 처리한다 — 기본 동작(mousedown)이 먼저 선택을 풀어 버리면 클릭이 도착할 때 문장이 없다
+            onPointerDown={(e) => {
+              e.preventDefault();
+              openAsk(true);
+            }}
+            className="flex h-10 items-center gap-1.5 rounded-lg bg-sky-600 px-3 text-sm font-medium text-white shadow-lg shadow-black/30 hover:bg-sky-500"
+          >
+            💬 물어보기
+          </button>
+        </div>
+      )}
       {/* 몰입 모드: 헤더·레일·패널을 숨기고 본문만 — 떠 있는 종료 버튼만 남긴다 */}
       {immersive && (
         <button
@@ -583,6 +715,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         <div
           ref={setScrollEl}
           onScroll={handleScroll}
+          onMouseUp={readOwnSelection}
+          onTouchEnd={readOwnSelection}
           // 본문은 세로로만 스크롤: 가로 오버플로 차단 + 터치는 세로 팬만 + 스크롤 관성이 밖으로 새지 않게.
           // HTML일 때는 frameRef가 이 상자의 transform도 쓴다 — 위치만 옮긴다. 크기를 바꾸면 iframe 안의
           // 문서가 통째로 다시 그려져 스크롤이 끊긴다 (html은 이 상자로 스크롤하지 않아 부작용도 없다)
@@ -651,6 +785,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               onScrollOffset={(o, r) => reportScroll(o, null, r)}
               onToc={setHeadings}
               onInteract={closeMenu}
+              onSelection={setSelection}
               fit={fit}
               fontScale={effectiveScale}
             />
@@ -678,6 +813,19 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             </div>
           )}
         </div>
+        {askStarted && (
+          // 닫아도 언마운트하지 않는다 — 대화 상태를 살려 두고 display만 끈다 (터치의 fixed 시트도 함께 숨는다)
+          <div className={askOpen ? 'contents' : 'hidden'}>
+            <AskPanel
+              file={file}
+              seed={askSeed}
+              pendingQuote={pendingQuote}
+              onConsumePendingQuote={() => setPendingQuote(null)}
+              isPc={isPc}
+              onClose={() => setAskOpen(false)}
+            />
+          </div>
+        )}
         {showVersions && (
           <VersionPanel
             fileId={file.id}

@@ -23,6 +23,8 @@ export const config = {
   /** 최초 기동 시 생성되는 admin 계정의 초기 비밀번호 */
   adminInitialPassword: process.env.ADMIN_INITIAL_PASSWORD ?? 'admin1234',
   isProduction: process.env.NODE_ENV === 'production',
+  /** 질문 기능(배움 카드)의 LLM 키. 없으면 그 기능만 꺼진다 — 나머지 앱은 정상 (외부 의존 제로 원칙) */
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
 } as const;
 
 // 기본 비밀키로 운영에 뜨면 누구나 admin 통행증을 위조할 수 있다 — 경고는 아무도 안 보므로 기동을 막는다.

@@ -11,6 +11,7 @@ import { seedAdmin } from './db/seed.js';
 import { purgeExpiredTrash } from './lib/trash.js';
 import { authGuard } from './middleware/auth.js';
 import { adminRoutes } from './routes/admin.js';
+import { askRoutes, purgeExpiredThreads } from './routes/ask.js';
 import { shareTargetRoutes } from './routes/share-target.js';
 import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
@@ -28,6 +29,9 @@ seedAdmin();
 // 휴지통 자동 비움 — 기동 시 1회 + 하루 주기 (IA — 휴지통 30일 보관)
 purgeExpiredTrash();
 setInterval(purgeExpiredTrash, TRASH_PURGE_INTERVAL_MS);
+// 저장 안 한 질문 대화도 같은 주기로 정리한다 (배움 카드 설계 — 30일 보관)
+purgeExpiredThreads();
+setInterval(purgeExpiredThreads, TRASH_PURGE_INTERVAL_MS);
 
 const app = new Hono();
 
@@ -67,6 +71,7 @@ api.get('/changelog', (c) => {
   return c.json({ version: APP_VERSION, content });
 });
 api.route('/admin', adminRoutes);
+api.route('/ask', askRoutes);
 api.route('/auth', authRoutes);
 api.route('/tree', treeRoutes);
 api.route('/files', fileRoutes);

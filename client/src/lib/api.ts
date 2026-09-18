@@ -186,3 +186,84 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   return res.json() as Promise<T>;
 }
+
+// ---- 질문 (배움 카드 1판, API-101~106) ----
+
+export type AskStatus = { configured: boolean; limit: number; used: number; remaining: number };
+
+export type AskThread = {
+  id: number;
+  fileId: number | null;
+  fileName: string | null;
+  quote: string | null;
+  title: string;
+  messageCount?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AskMessage = { id: number; role: 'user' | 'assistant'; content: string; createdAt: number };
+
+export type AskStreamHandlers = {
+  onMeta?: (meta: { userMessageId: number; remaining: number }) => void;
+  onDelta: (text: string) => void;
+  onDone: (done: { assistantMessageId: number; content: string }) => void;
+  onError: (err: { code: string; message: string }) => void;
+};
+
+/** API-103: 질문을 보내고 답을 SSE로 받는다. 스트림이 열리기 전의 실패(한도·검증)는 ApiError로 던진다 */
+export async function askStream(
+  threadId: number,
+  body: { question: string; quote?: string },
+  handlers: AskStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`/api/v1/ask/threads/${threadId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    let code = 'UNKNOWN';
+    let message = `HTTP ${res.status}`;
+    try {
+      const b = (await res.json()) as { code?: string; message?: string };
+      code = b.code ?? code;
+      message = b.message ?? message;
+    } catch {
+      // JSON이 아니면 상태 코드만
+    }
+    throw new ApiError(res.status, code, message);
+  }
+
+  // SSE 프레임은 빈 줄로 나뉜다. 조각이 프레임 중간에서 끊길 수 있어 버퍼에 모아 완성된 것만 처리한다
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const handleFrame = (frame: string) => {
+    let event = 'message';
+    const data: string[] = [];
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+    }
+    if (data.length === 0) return;
+    const payload = JSON.parse(data.join('\n')) as Record<string, unknown>;
+    if (event === 'delta') handlers.onDelta(String(payload.text ?? ''));
+    else if (event === 'done') handlers.onDone(payload as { assistantMessageId: number; content: string });
+    else if (event === 'error') handlers.onError(payload as { code: string; message: string });
+    else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number });
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let at: number;
+    while ((at = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, at);
+      buffer = buffer.slice(at + 2);
+      if (frame.trim()) handleFrame(frame);
+    }
+  }
+}

@@ -22,6 +22,8 @@ export const SHORTCUTS: Shortcut[] = [
   { context: '뷰어', input: 'E', effect: '활성 문서 편집', pcOnly: true },
   { context: '뷰어', input: 'Z', effect: '몰입 모드 켜기/끄기', pcOnly: true },
   { context: '뷰어', input: 'Alt+1~4', effect: '분할 칸 활성화 (왼쪽부터 번호순)', pcOnly: true },
+  { context: '뷰어', input: 'Ctrl+Shift+A', effect: '질문 패널 열기 (문장을 드래그해 두면 그 문장이 붙음)', pcOnly: true },
+  { context: '뷰어', input: '문장 드래그', effect: '선택 근처에 [물어보기] — 그 문장과 앞뒤 문단을 문맥으로 LLM에 묻기' },
   { context: '편집기', input: 'Ctrl+S', effect: '저장' },
   { context: '파일 트리', input: 'Alt+클릭', effect: '분할로 열기', pcOnly: true },
   { context: '파일 트리', input: 'Ctrl+클릭', effect: '다중 선택 켜기/추가', pcOnly: true },
