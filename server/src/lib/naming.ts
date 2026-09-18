@@ -19,3 +19,15 @@ export function uniqueFileName(
     if (!isTaken(candidate)) return candidate;
   }
 }
+
+/**
+ * 업로드·공유로 들어온 이름을 파일 이름 규칙에 맞게 고친다 — 거절이 아니라 정리.
+ * 이름 바꾸기(nameField)는 사용자가 친 것이라 거절하지만, 업로드 이름은 기계(브라우저·다른 앱)가
+ * 붙여 온 것이라 경로째 오기도 한다(`C:\Github\...\문서.html`). 마지막 조각만 남기고 받는다.
+ * (CLAUDE.md 보안 — 사용자 입력이 이름이 되는 곳은 반드시 정규화. 디스크 경로는 uuid라 탈출 위험은 없고, 표시·이름 변경이 깨지는 문제)
+ */
+export function sanitizeUploadName(raw: string): string {
+  const last = raw.split(/[\\/]/).pop() ?? '';
+  const trimmed = last.trim().slice(0, 255);
+  return trimmed === '' || trimmed === '.' || trimmed === '..' ? '이름없음' : trimmed;
+}

@@ -112,6 +112,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // SCR-180 질문 패널. 한 번 시작되면 닫아도 마운트를 유지한다 — 닫았다 열어도 대화가 이어지게 (IA — SCR-180)
   const [askOpen, setAskOpen] = useState(false);
   const [askStarted, setAskStarted] = useState(false);
+  // 질문을 한 번이라도 보냈나 — 안 보냈으면 새 선택이 문맥을 갈아타고, 보냈으면 인용으로 붙는다 (v0.23.2)
+  const [askConversing, setAskConversing] = useState(false);
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null);
   // 대화 중 문서에서 다시 드래그한 문장 — 다음 질문에 인용으로 붙는다
   const [pendingQuote, setPendingQuote] = useState<string | null>(null);
@@ -119,6 +121,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [selection, setSelection] = useState<RendererSelection | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const selectionTimerRef = useRef<number | undefined>(undefined);
+  // 스크롤 보고(콜백)에서 읽을 선택 상태의 거울 — 문장을 골라 둔 동안은 크롬을 접지 않는다
+  const selectionRef = useRef<RendererSelection | null>(null);
+  selectionRef.current = selection;
 
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
@@ -251,8 +256,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     (withSelection: boolean) => {
       const sel = withSelection ? selection : null;
       if (sel) {
-        if (askStarted) setPendingQuote(sel.quote);
-        else setAskSeed({ quote: sel.quote, context: sel.context });
+        if (askConversing) setPendingQuote(sel.quote);
+        else {
+          setAskSeed({ quote: sel.quote, context: sel.context });
+          setPendingQuote(null);
+        }
       }
       setAskStarted(true);
       setAskOpen(true);
@@ -260,8 +268,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       window.getSelection()?.removeAllRanges();
       showChrome();
     },
-    [selection, askStarted],
+    [selection, askConversing],
   );
+
+  // 터치: 문장을 고르면 크롬을 펼친다 — 도구막대의 [물어보기]가 그 자리에 있어야 하니까 (떠 있는 바는 iOS 메뉴와 겹쳐 안 쓴다)
+  useEffect(() => {
+    if (selection && !isPcDevice()) showChrome();
+  }, [selection]);
 
   // Ctrl+Shift+A = 질문 (선택이 있으면 그 문장이 붙음) — 활성 칸에서만 (IA — SCR-180)
   useEffect(() => {
@@ -379,7 +392,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       // 터치의 크롬은 이 델타만큼 손가락을 따라 접힌다 — 판정·그리기는 lib/chromeCollapse가 든다
       const delta = y - lastScrollYRef.current;
       lastScrollYRef.current = y;
-      if (!isPcDevice()) reportChromeScroll(y, delta);
+      if (!isPcDevice() && !selectionRef.current) reportChromeScroll(y, delta);
       if (denom !== null) {
         // 짧은 문서는 줄이 의미 없다 — 화면 반 이상 스크롤될 때만 표시
         const next = denom > 300 ? Math.min(100, Math.round((y / denom) * 100)) : null;
@@ -523,11 +536,20 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ✕
         </button>
       )}
-      {!isBinary && (
-        <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="LLM에게 물어보기 (Ctrl+Shift+A)">
-          질문
-        </button>
-      )}
+      {!isBinary &&
+        (!isPc && selection ? (
+          // 터치: 떠 있는 바 대신 도구막대의 이 버튼이 "고른 문장으로 묻기"가 된다 — 엄지 자리라 iOS 메뉴와 안 겹친다
+          <button
+            onClick={() => openAsk(true)}
+            className="min-w-0 flex-1 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+          >
+            💬 「{selection.quote.length > 12 ? `${selection.quote.slice(0, 12)}…` : selection.quote}」 물어보기
+          </button>
+        ) : (
+          <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="LLM에게 물어보기 (Ctrl+Shift+A)">
+            질문
+          </button>
+        ))}
       {(data.fileType === 'md' || data.fileType === 'html') && !codeView && (
         <button onClick={() => setShowToc((v) => !v)} className={actionButton(showToc)}>
           목차
@@ -562,16 +584,15 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     </>
   );
 
-  // [물어보기] 바의 자리 — 뷰포트 좌표를 이 뷰어 상자 기준으로. PC는 선택 위, 터치는 선택 아래
-  // (iOS·안드로이드가 선택 위에 자기 메뉴를 띄우므로 겹치지 않게 — IA SCR-180)
+  // [물어보기] 바의 자리 — 뷰포트 좌표를 이 뷰어 상자 기준으로, 선택 위에 (PC 전용)
   const rootRect = selection ? rootRef.current?.getBoundingClientRect() : undefined;
+  // 터치에서는 그리지 않는다 — iOS·안드로이드의 선택 메뉴가 위·아래 어디든 뜨는 데다 우리 바를 덮는다.
+  // 폰은 도구막대의 [물어보기] 버튼이 그 역할을 한다 (v0.23.2)
   const askBar =
-    selection && rootRect && mode === 'view'
+    selection && rootRect && mode === 'view' && isPc
       ? {
           left: Math.max(8, Math.min(rootRect.width - ASK_BAR_WIDTH - 8, selection.rect.x - rootRect.left)),
-          top: isPc
-            ? Math.max(4, selection.rect.y - rootRect.top - ASK_BAR_GAP)
-            : selection.rect.y + selection.rect.h - rootRect.top + 8,
+          top: Math.max(4, selection.rect.y - rootRect.top - ASK_BAR_GAP),
         }
       : null;
 
@@ -821,6 +842,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               seed={askSeed}
               pendingQuote={pendingQuote}
               onConsumePendingQuote={() => setPendingQuote(null)}
+              onConversingChange={setAskConversing}
               isPc={isPc}
               onClose={() => setAskOpen(false)}
             />

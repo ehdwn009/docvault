@@ -32,7 +32,7 @@ import {
   UNKNOWN_TEXT,
   type TypeMeta,
 } from '../lib/filetypes.js';
-import { uniqueFileName } from '../lib/naming.js';
+import { sanitizeUploadName, uniqueFileName } from '../lib/naming.js';
 import { binaryAbsPath, copyBinary, deleteBinary, saveBinary } from '../lib/storage.js';
 import { jsonBody, nameField, parseId, parseIdList } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
@@ -120,16 +120,19 @@ export const fileRoutes = new Hono<AppEnv>()
     // 확장자는 거절하지 않는다 — 아는 형식은 맵, 모르는 형식은 내용 검사로 분류 (전량 수용 정책)
     const seen = new Set<string>();
     const classified: TypeMeta[] = [];
-    for (const file of uploads) {
+    // 브라우저·다른 앱이 경로째 붙여 온 이름은 마지막 조각만 받는다 (이름 바꾸기와 같은 규칙으로 맞춤)
+    const names = uploads.map((f) => sanitizeUploadName(f.name));
+    for (const [i, file] of uploads.entries()) {
+      const name = names[i]!;
       const meta = await classifyUpload(file);
       const limit = isTextType(meta.fileType) ? MAX_TEXT_FILE_BYTES : MAX_BINARY_FILE_BYTES;
       if (file.size > limit) {
-        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${file.name}: ${Math.round(limit / 1024 / 1024)}MB까지 가능합니다`);
+        return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${name}: ${Math.round(limit / 1024 / 1024)}MB까지 가능합니다`);
       }
-      if (seen.has(file.name) || duplicateFileName(user.id, folderId, file.name)) {
-        return fail(c, 409, 'CONFLICT', `${file.name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
+      if (seen.has(name) || duplicateFileName(user.id, folderId, name)) {
+        return fail(c, 409, 'CONFLICT', `${name}: 같은 폴더에 동일한 이름의 파일이 있습니다`);
       }
-      seen.add(file.name);
+      seen.add(name);
       classified.push(meta);
     }
 
@@ -148,7 +151,7 @@ export const fileRoutes = new Hono<AppEnv>()
         .values({
           ownerId: user.id,
           folderId,
-          name: file.name,
+          name: names[i]!,
           fileType,
           mimeType,
           sizeBytes: file.size,

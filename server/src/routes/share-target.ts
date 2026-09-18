@@ -4,7 +4,7 @@ import { MAX_BINARY_FILE_BYTES, MAX_TEXT_FILE_BYTES } from '../constants.js';
 import { db } from '../db/index.js';
 import { files } from '../db/schema.js';
 import { classifyUpload, isTextType } from '../lib/filetypes.js';
-import { uniqueFileName } from '../lib/naming.js';
+import { sanitizeUploadName, uniqueFileName } from '../lib/naming.js';
 import { saveBinary } from '../lib/storage.js';
 import { resolveSessionUser } from '../middleware/auth.js';
 
@@ -47,7 +47,7 @@ export const shareTargetRoutes = new Hono().post('/', async (c) => {
       .values({
         ownerId: user.id,
         folderId: null,
-        name: uniqueName(file.name),
+        name: uniqueName(sanitizeUploadName(file.name)),
         fileType: meta.fileType,
         mimeType: meta.mimeType,
         sizeBytes: file.size,
