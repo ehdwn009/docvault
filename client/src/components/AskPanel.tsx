@@ -52,6 +52,8 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   // 마지막에 실패한 질문 — [다시 시도]가 이것을 다시 보낸다 (질문 글은 서버에 이미 남아 있다)
   const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  // 모델이 웹 검색 중 — 답이 늦는 이유를 보여 준다 (글자가 오기 시작하면 끈다)
+  const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<AskThread[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -130,10 +132,13 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
         t.id,
         { question: q, ...(quote ? { quote } : {}) },
         {
-          onDelta: (text) =>
+          onSearching: () => setSearching(true),
+          onDelta: (text) => {
+            setSearching(false);
             setMessages((m) =>
               m.map((b) => (b.id === 'streaming' ? { ...b, content: b.content + text } : b)),
-            ),
+            );
+          },
           onDone: ({ assistantMessageId, content }) =>
             setMessages((m) =>
               m.map((b) =>
@@ -163,6 +168,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     } finally {
       abortRef.current = null;
       setBusy(false);
+      setSearching(false);
       refreshStatus();
     }
   }
@@ -286,7 +292,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             ) : (
               <div key={m.id} className="mr-2 rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900 px-3 py-2 text-slate-200">
                 {m.content === '' ? (
-                  <span className="text-slate-500">생각 중…</span>
+                  <span className="text-slate-500">{searching ? '🌐 웹에서 찾는 중…' : '생각 중…'}</span>
                 ) : MdRenderer ? (
                   <Suspense fallback={<span className="whitespace-pre-wrap">{m.content}</span>}>
                     <div className="ask-md">

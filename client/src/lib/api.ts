@@ -207,6 +207,8 @@ export type AskMessage = { id: number; role: 'user' | 'assistant'; content: stri
 
 export type AskStreamHandlers = {
   onMeta?: (meta: { userMessageId: number; remaining: number | null }) => void;
+  /** 모델이 웹 검색을 시작했다 — 답이 늦어지는 이유를 화면이 보여 줄 수 있게 */
+  onSearching?: () => void;
   onDelta: (text: string) => void;
   onDone: (done: { assistantMessageId: number; content: string }) => void;
   onError: (err: { code: string; message: string }) => void;
@@ -255,6 +257,7 @@ export async function askStream(
     else if (event === 'done') handlers.onDone(payload as { assistantMessageId: number; content: string });
     else if (event === 'error') handlers.onError(payload as { code: string; message: string });
     else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number | null });
+    else if (event === 'searching') handlers.onSearching?.();
   };
   for (;;) {
     const { value, done } = await reader.read();

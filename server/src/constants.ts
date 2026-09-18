@@ -102,4 +102,10 @@ export const ASK = {
   LIST_LIMIT: 20,
   /** 대화 이력 중 LLM에 실어 보내는 최근 메시지 수 — 길어진 대화의 비용 상한 */
   HISTORY_LIMIT: 20,
+  /** 답 하나에 모델이 스스로 할 수 있는 웹 검색 횟수 상한 — "모델이 판단" 방식의 비용 상한 (설계 — 웹 검색) */
+  WEB_SEARCH_MAX_USES: 3,
+  /** 서버 도구 루프가 pause_turn으로 멈췄을 때 이어 붙이는 최대 횟수 */
+  PAUSE_CONTINUATIONS: 2,
+  /** 답 아래에 붙이는 출처 링크 최대 개수 */
+  MAX_SOURCES: 5,
 } as const;

@@ -479,7 +479,8 @@ GET /api/v1/google/files/{driveFileId}/content
 |---|---|---|
 | meta | `{ "userMessageId", "remaining" }` | 첫 이벤트 |
 | delta | `{ "text" }` | 토큰 조각마다 |
-| done | `{ "assistantMessageId", "content" }` | 답이 끝나 저장된 뒤 |
+| searching | `{ "tool": "web_search" }` | 모델이 웹 검색을 시작했을 때 (답당 최대 3회). 화면은 "찾는 중"을 보여 준다 |
+| done | `{ "assistantMessageId", "content" }` | 답이 끝나 저장된 뒤. 검색했으면 content 끝에 `🌐 참고한 곳: [제목](url) · …`가 md로 붙어 있다 (별도 칸 없음 — 저장·표시·복사가 본문 하나로) |
 | error | `{ "code", "message" }` | LLM 실패. assistant 메시지는 저장하지 않는다(질문만 남음) |
 
 첫 메시지일 때만 문맥(문서 이름·quote·context)을 user 메시지 앞에 인용으로 붙여 보낸다. 이후는 대화 이력 + 새 질문. 문맥은 system이 아니라 user 턴 안의 인용이다(문서가 LLM에게 지시하는 글을 담고 있어도 역할을 못 바꾸게).

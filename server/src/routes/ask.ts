@@ -7,12 +7,15 @@ import { db } from '../db/index.js';
 import { askMessages, askThreads, files } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
 import {
+  collectSources,
   countQuestionsToday,
   createAnswerStream,
   describeUpstreamError,
+  formatSources,
   isAskConfigured,
   purgeExpiredThreads,
   toApiMessages,
+  type AskSource,
 } from '../lib/ask.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
@@ -188,19 +191,34 @@ export const askRoutes = new Hono<AppEnv>()
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({ event: 'meta', data: JSON.stringify({ userMessageId: userMsg.id, remaining: limit === null ? null : limit - used - 1 }) });
       let text = '';
+      const sources: AskSource[] = [];
       try {
-        const answer = createAnswerStream(apiMessages);
-        stream.onAbort(() => answer.abort());
-        for await (const ev of answer) {
-          if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
-            text += ev.delta.text;
-            await stream.writeSSE({ event: 'delta', data: JSON.stringify({ text: ev.delta.text }) });
+        // 웹 검색은 Anthropic 쪽 루프에서 돈다. 그 루프가 한도에 걸리면 pause_turn으로 멈추는데,
+        // 지금까지의 assistant 내용을 그대로 돌려보내면 이어서 돈다 (사용자 메시지를 덧붙이지 않는다)
+        let turnMessages = apiMessages;
+        let final: Awaited<ReturnType<ReturnType<typeof createAnswerStream>['finalMessage']>>;
+        for (let round = 0; ; round++) {
+          const answer = createAnswerStream(turnMessages);
+          stream.onAbort(() => answer.abort());
+          for await (const ev of answer) {
+            if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
+              text += ev.delta.text;
+              await stream.writeSSE({ event: 'delta', data: JSON.stringify({ text: ev.delta.text }) });
+            } else if (ev.type === 'content_block_start' && ev.content_block.type === 'server_tool_use') {
+              // 모델이 검색을 시작했다 — 화면이 "찾는 중"을 보여 줄 수 있게
+              await stream.writeSSE({ event: 'searching', data: JSON.stringify({ tool: ev.content_block.name }) });
+            }
           }
+          final = await answer.finalMessage();
+          collectSources(final.content, sources);
+          if (final.stop_reason !== 'pause_turn' || round >= ASK.PAUSE_CONTINUATIONS) break;
+          turnMessages = [...turnMessages, { role: 'assistant', content: final.content }];
         }
-        const final = await answer.finalMessage();
         // 길이 초과로 잘린 답은 그대로 두되 사용자가 알게 한다 — 이어 물으면 된다
         if (final.stop_reason === 'max_tokens') text += '\n\n…(답이 길어 여기서 끊었어요. "이어서 설명해 줘"라고 물어보세요)';
         if (final.stop_reason === 'refusal') text = text || '이 질문에는 답할 수 없어요.';
+        // 출처는 본문 끝에 md로 — 화면은 done의 content로 갈아끼우므로 스트리밍 중 안 보이던 링크가 마지막에 붙는다
+        text += formatSources(sources);
         const saved = db
           .insert(askMessages)
           .values({ threadId: id, role: 'assistant', content: text, createdAt: Date.now() })
