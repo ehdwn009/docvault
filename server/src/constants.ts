@@ -87,7 +87,7 @@ export const DEFAULT_USER_SETTINGS = {
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
 export const ASK = {
   MODEL: 'claude-opus-5',
-  /** 사용자별 하루 질문 한도 (UTC 날짜). 되돌릴 수 있는 값이라 낮게 잡지 않았다 */
+  /** 사용자별 하루 질문 한도 (UTC 날짜). 되돌릴 수 있는 값이라 낮게 잡지 않았다. 관리자에게는 걸지 않는다 */
   DAILY_LIMIT: 30,
   /** 저장 안 한 대화 보관 기간 — 휴지통과 같은 감각 */
   THREAD_RETENTION_MS: 30 * 24 * 60 * 60 * 1000,

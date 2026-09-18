@@ -189,7 +189,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ---- 질문 (배움 카드 1판, API-101~106) ----
 
-export type AskStatus = { configured: boolean; limit: number; used: number; remaining: number };
+/** limit·remaining이 null이면 한도 없음 (관리자) */
+export type AskStatus = { configured: boolean; limit: number | null; used: number; remaining: number | null };
 
 export type AskThread = {
   id: number;
@@ -205,7 +206,7 @@ export type AskThread = {
 export type AskMessage = { id: number; role: 'user' | 'assistant'; content: string; createdAt: number };
 
 export type AskStreamHandlers = {
-  onMeta?: (meta: { userMessageId: number; remaining: number }) => void;
+  onMeta?: (meta: { userMessageId: number; remaining: number | null }) => void;
   onDelta: (text: string) => void;
   onDone: (done: { assistantMessageId: number; content: string }) => void;
   onError: (err: { code: string; message: string }) => void;
@@ -253,7 +254,7 @@ export async function askStream(
     if (event === 'delta') handlers.onDelta(String(payload.text ?? ''));
     else if (event === 'done') handlers.onDone(payload as { assistantMessageId: number; content: string });
     else if (event === 'error') handlers.onError(payload as { code: string; message: string });
-    else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number });
+    else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number | null });
   };
   for (;;) {
     const { value, done } = await reader.read();

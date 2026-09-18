@@ -204,7 +204,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     inputRef.current?.focus();
   }
 
-  const limitReached = status !== null && status.remaining <= 0;
+  const limitReached = status !== null && status.remaining !== null && status.remaining <= 0;
   const notConfigured = status !== null && !status.configured;
   const canSend = !busy && !limitReached && !notConfigured && input.trim().length > 0;
 
@@ -222,7 +222,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
         <h3 className="text-sm font-medium text-slate-200">질문</h3>
         {status && status.configured && (
           <span className={`text-xs ${limitReached ? 'text-amber-400' : 'text-slate-600'}`}>
-            오늘 {status.used}/{status.limit}
+            오늘 {status.used}{status.limit !== null ? `/${status.limit}` : '번'}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">

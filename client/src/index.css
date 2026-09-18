@@ -112,3 +112,5 @@ body {
 .ask-md .prose :where(p, ul, ol, pre, blockquote) { margin-block: 0.45em; }
 .ask-md .prose :where(p:first-child) { margin-top: 0; }
 .ask-md .prose :where(p:last-child) { margin-bottom: 0; }
+.ask-md .prose :where(code)::before, .ask-md .prose :where(code)::after { content: none; }
+.ask-md .prose :where(code):not(pre code) { padding: 0.1em 0.35em; border-radius: 0.3em; background: rgb(100 116 139 / 0.18); }

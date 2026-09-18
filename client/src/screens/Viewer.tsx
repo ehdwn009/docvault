@@ -541,7 +541,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           // 터치: 떠 있는 바 대신 도구막대의 이 버튼이 "고른 문장으로 묻기"가 된다 — 엄지 자리라 iOS 메뉴와 안 겹친다
           <button
             onClick={() => openAsk(true)}
-            className="min-w-0 flex-1 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+            className="w-full min-w-0 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
           >
             💬 「{selection.quote.length > 12 ? `${selection.quote.slice(0, 12)}…` : selection.quote}」 물어보기
           </button>

@@ -34,6 +34,11 @@ const messageSchema = z.object({
 
 type ThreadRow = typeof askThreads.$inferSelect;
 
+/** 하루 질문 한도 — 관리자는 없음(null). 키를 넣고 요금을 내는 사람이 자기를 막을 이유가 없다 */
+function dailyLimitFor(user: { role: 'user' | 'admin' }): number | null {
+  return user.role === 'admin' ? null : ASK.DAILY_LIMIT;
+}
+
 function serializeThread(t: ThreadRow, fileName: string | null, messageCount?: number) {
   return {
     id: t.id,
@@ -61,12 +66,14 @@ export const askRoutes = new Hono<AppEnv>()
 
   // API-101: 상태 — 키 여부와 오늘 남은 횟수. 패널이 열릴 때 부른다
   .get('/status', (c) => {
-    const used = countQuestionsToday(c.get('user').id);
+    const user = c.get('user');
+    const used = countQuestionsToday(user.id);
+    const limit = dailyLimitFor(user);
     return c.json({
       configured: isAskConfigured(),
-      limit: ASK.DAILY_LIMIT,
+      limit,
       used,
-      remaining: Math.max(0, ASK.DAILY_LIMIT - used),
+      remaining: limit === null ? null : Math.max(0, limit - used),
     });
   })
 
@@ -154,8 +161,9 @@ export const askRoutes = new Hono<AppEnv>()
     if (!found) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
 
     const used = countQuestionsToday(user.id);
-    if (used >= ASK.DAILY_LIMIT) {
-      return fail(c, 429, 'ASK_LIMIT_EXCEEDED', `오늘 질문 한도(${ASK.DAILY_LIMIT}번)를 다 썼습니다. 내일 다시 물어보세요`);
+    const limit = dailyLimitFor(user);
+    if (limit !== null && used >= limit) {
+      return fail(c, 429, 'ASK_LIMIT_EXCEEDED', `오늘 질문 한도(${limit}번)를 다 썼습니다. 내일 다시 물어보세요`);
     }
 
     const { question, quote } = c.req.valid('json');
@@ -178,7 +186,7 @@ export const askRoutes = new Hono<AppEnv>()
     const apiMessages = toApiMessages(found.thread, history, found.fileName);
 
     return streamSSE(c, async (stream) => {
-      await stream.writeSSE({ event: 'meta', data: JSON.stringify({ userMessageId: userMsg.id, remaining: ASK.DAILY_LIMIT - used - 1 }) });
+      await stream.writeSSE({ event: 'meta', data: JSON.stringify({ userMessageId: userMsg.id, remaining: limit === null ? null : limit - used - 1 }) });
       let text = '';
       try {
         const answer = createAnswerStream(apiMessages);

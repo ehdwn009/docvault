@@ -459,7 +459,7 @@ GET /api/v1/google/files/{driveFileId}/content
 ```json
 { "configured": true, "limit": 30, "used": 7, "remaining": 23 }
 ```
-`configured=false`면 키가 없는 것. 나머지 API는 503 ASK_NOT_CONFIGURED.
+`configured=false`면 키가 없는 것. 나머지 API는 503 ASK_NOT_CONFIGURED. **관리자는 한도가 없다** — `limit`·`remaining`이 `null`로 온다 (키를 넣고 요금을 내는 사람이 자기를 막을 이유가 없다).
 
 ### API-102 Request — POST /ask/threads
 | 필드 | 타입 | 필수 | 설명 |
