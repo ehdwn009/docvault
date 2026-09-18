@@ -41,6 +41,7 @@
 | API-017 | GET | /admin/backup | 자동 백업 설정·최근 실행 결과 조회 | 관리자 |
 | API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
+| API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
 | API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드) | 로그인 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |

@@ -167,5 +167,9 @@ export const askMessages = sqliteTable('ask_messages', {
     .references(() => askThreads.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
+  /** 답(assistant) 행에만: LLM 사용량. 관리자 "AI 사용량" 탭의 비용 추정 근거 (v0.25). user 행은 null */
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  webSearches: integer('web_searches'),
   createdAt: integer('created_at').notNull(),
 });

@@ -30,16 +30,29 @@ type AdminTreeUser = {
   }[];
 };
 
-type Tab = 'stats' | 'users' | 'tree';
+type Tab = 'stats' | 'users' | 'tree' | 'ai';
+
+type UsageRow = {
+  id: number; username: string; displayName: string | null;
+  today: number; week: number; month: number;
+  inputTokens: number; outputTokens: number; webSearches: number; costUsd: number;
+};
+type AskUsage = {
+  users: UsageRow[];
+  totals: Omit<UsageRow, 'id' | 'username' | 'displayName'>;
+  topFiles: { fileName: string | null; count: number }[];
+  pricing: { INPUT_PER_MTOK: number; OUTPUT_PER_MTOK: number; SEARCH_PER_1000: number; krwPerUsd: number };
+};
 
 type Props = { meId: number; onSelectFile: (file: TreeFile) => void };
 
-// SCR-300: 관리자 — 대시보드(301)·사용자 관리(302)·전체 파일(303)
+// SCR-300: 관리자 — 대시보드(301)·사용자 관리(302)·전체 파일(303)·AI 사용량(305)
 export default function AdminPanel({ meId, onSelectFile }: Props) {
   const [tab, setTab] = useState<Tab>('users');
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [treeUsers, setTreeUsers] = useState<AdminTreeUser[]>([]);
+  const [usage, setUsage] = useState<AskUsage | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -50,6 +63,8 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
       void api<{ users: AdminUser[] }>('/admin/users').then((r) => setUsers(r.users)).catch(() => {});
     if (tab === 'tree')
       void api<{ users: AdminTreeUser[] }>('/admin/tree').then((r) => setTreeUsers(r.users)).catch(() => {});
+    if (tab === 'ai')
+      void api<AskUsage>('/admin/ask-usage').then(setUsage).catch(() => {});
   }, [tab]);
 
   useEffect(reload, [reload]);
@@ -68,6 +83,7 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
             ['stats', '통계'],
             ['users', '사용자'],
             ['tree', '전체 파일'],
+            ['ai', 'AI 사용량'],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
@@ -103,6 +119,8 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
             ))}
           </dl>
         )}
+
+        {tab === 'ai' && usage && <UsageTab usage={usage} />}
 
         {tab === 'users' && (
           <UsersTab users={users} meId={meId} run={run} />
@@ -257,6 +275,64 @@ function UsersTab({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// SCR-305: AI 사용량 — 청구서가 오기 전에 "누가 얼마나 쓰나"를 본다. 비용은 단가 상수로 추정한 대략값
+function UsageTab({ usage }: { usage: AskUsage }) {
+  const won = (usd: number) => `${Math.round(usd * usage.pricing.krwPerUsd).toLocaleString()}원`;
+  const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  const t = usage.totals;
+  return (
+    <div className="space-y-4 text-sm">
+      <dl className="grid grid-cols-2 gap-2">
+        {(
+          [
+            ['오늘 질문', t.today],
+            ['30일 질문', t.month],
+            ['30일 웹 검색', t.webSearches],
+            ['30일 추정 비용', `$${t.costUsd.toFixed(2)} ≈ ${won(t.costUsd)}`],
+          ] as [string, string | number][]
+        ).map(([label, value]) => (
+          <div key={label} className="rounded bg-slate-900 px-3 py-2">
+            <dt className="text-xs text-slate-500">{label}</dt>
+            <dd className="font-medium text-slate-100">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div>
+        <p className="mb-1 text-xs text-slate-500">사용자별 (질문 오늘 / 7일 / 30일 · 30일 토큰 입력+출력 · 검색 · 추정 비용)</p>
+        <div className="space-y-1">
+          {usage.users.map((u) => (
+            <div key={u.id} className="rounded bg-slate-900 px-3 py-2">
+              <div className="flex items-baseline justify-between">
+                <span className="font-medium text-slate-100">{u.displayName ?? u.username}</span>
+                <span className="text-xs text-slate-300">{u.today} / {u.week} / {u.month}</span>
+              </div>
+              <div className="mt-0.5 text-xs text-slate-500">
+                토큰 {k(u.inputTokens)}+{k(u.outputTokens)} · 검색 {u.webSearches} · ${u.costUsd.toFixed(2)} ≈ {won(u.costUsd)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {usage.topFiles.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs text-slate-500">30일 동안 많이 물어본 문서</p>
+          <ul className="space-y-1">
+            {usage.topFiles.map((f, i) => (
+              <li key={i} className="flex justify-between rounded bg-slate-900 px-3 py-1.5">
+                <span className="truncate text-slate-300">{f.fileName ?? '문서 없음'}</span>
+                <span className="shrink-0 pl-2 text-xs text-slate-500">{f.count}번</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className="text-xs text-slate-600">
+        단가: 입력 ${usage.pricing.INPUT_PER_MTOK}/백만 토큰 · 출력 ${usage.pricing.OUTPUT_PER_MTOK}/백만 토큰 · 검색 ${usage.pricing.SEARCH_PER_1000}/1000회 · 1달러 {usage.pricing.krwPerUsd}원 기준의 대략값. 정확한 금액은 console.anthropic.com
+      </p>
     </div>
   );
 }

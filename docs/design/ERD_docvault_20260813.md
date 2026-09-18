@@ -147,6 +147,9 @@ erDiagram
         integer thread_id FK
         text role "user | assistant"
         text content "md 텍스트"
+        integer input_tokens "assistant 행만 — 사용량 (v0.25)"
+        integer output_tokens
+        integer web_searches
         integer created_at
     }
 ```
@@ -167,7 +170,7 @@ erDiagram
 | DRIVE_RECENTS | 드라이브에서 열어 본 문서의 **바로가기 기록**. 이름·형식만 두고 본문은 저장하지 않는다 — 원본은 드라이브에 있고 우리는 볼 때마다 새로 읽는다 |
 | BACKUP_SETTINGS | 자동 백업 설정 단일 행. 앱이 스스로 `data/`를 묶어 연결된 구글 드라이브에 올린다. 꺼져 있으면 아무 일도 하지 않는다(기본값 꺼짐) |
 | ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나. 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다 |
-| ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다 |
+| ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수를 적어 두어 관리자 사용량 통계(API-020)의 근거가 된다 |
 
 ## 관계 설명
 

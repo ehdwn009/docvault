@@ -3,7 +3,7 @@ import { desc, eq, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
-import { BCRYPT_ROUNDS, PASSWORD_MIN_LENGTH } from '../constants.js';
+import { ASK, BCRYPT_ROUNDS, PASSWORD_MIN_LENGTH } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, folders, users } from '../db/schema.js';
 import { fail } from '../lib/errors.js';
@@ -53,6 +53,63 @@ export const adminRoutes = new Hono<AppEnv>()
     const totalBytes = one(db.all<{ n: number | null }>(sql`SELECT sum(size_bytes) AS n FROM files`)).n ?? 0;
     const sharedCount = one(db.all<{ n: number }>(sql`SELECT count(*) AS n FROM files WHERE is_shared = 1 AND deleted_at IS NULL`)).n;
     return c.json({ stats: { userCount, fileCount, folderCount, versionCount, totalBytes, sharedCount } });
+  })
+
+  // API-020: AI 사용량 — 사용자별 질문 수·토큰·검색·추정 비용. 청구서가 오기 전에 감을 잡는 화면 (SCR-305)
+  .get('/ask-usage', (c) => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    const todayStart = now - (now % day); // 하루 한도와 같은 UTC 날짜 기준
+    const weekStart = now - 7 * day;
+    const monthStart = now - 30 * day;
+    type Row = {
+      id: number; username: string; display_name: string | null;
+      today: number; week: number; month: number;
+      input_tokens: number; output_tokens: number; web_searches: number;
+    };
+    // 질문 수는 user 행, 토큰·검색은 assistant 행에만 있다 — 한 조인으로 둘 다 센다
+    const rows = db.all<Row>(sql`
+      SELECT u.id, u.username, u.display_name,
+        sum(CASE WHEN m.role = 'user' AND m.created_at >= ${todayStart} THEN 1 ELSE 0 END) AS today,
+        sum(CASE WHEN m.role = 'user' AND m.created_at >= ${weekStart} THEN 1 ELSE 0 END) AS week,
+        sum(CASE WHEN m.role = 'user' AND m.created_at >= ${monthStart} THEN 1 ELSE 0 END) AS month,
+        coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.input_tokens END), 0) AS input_tokens,
+        coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.output_tokens END), 0) AS output_tokens,
+        coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.web_searches END), 0) AS web_searches
+      FROM users u
+      LEFT JOIN ask_threads t ON t.owner_id = u.id
+      LEFT JOIN ask_messages m ON m.thread_id = t.id
+      GROUP BY u.id ORDER BY month DESC, u.id`);
+    const p = ASK.PRICE_USD;
+    const cost = (r: Pick<Row, 'input_tokens' | 'output_tokens' | 'web_searches'>) =>
+      (r.input_tokens / 1e6) * p.INPUT_PER_MTOK + (r.output_tokens / 1e6) * p.OUTPUT_PER_MTOK + (r.web_searches / 1000) * p.SEARCH_PER_1000;
+    const usersOut = rows.map((r) => ({
+      id: r.id, username: r.username, displayName: r.display_name,
+      today: r.today, week: r.week, month: r.month,
+      inputTokens: r.input_tokens, outputTokens: r.output_tokens, webSearches: r.web_searches,
+      costUsd: cost(r),
+    }));
+    const totals = usersOut.reduce(
+      (a, u) => ({
+        today: a.today + u.today, week: a.week + u.week, month: a.month + u.month,
+        inputTokens: a.inputTokens + u.inputTokens, outputTokens: a.outputTokens + u.outputTokens,
+        webSearches: a.webSearches + u.webSearches, costUsd: a.costUsd + u.costUsd,
+      }),
+      { today: 0, week: 0, month: 0, inputTokens: 0, outputTokens: 0, webSearches: 0, costUsd: 0 },
+    );
+    // 어떤 문서를 읽다 많이 물었나 — 30일, 상위 5개
+    const topFiles = db.all<{ file_name: string | null; n: number }>(sql`
+      SELECT f.name AS file_name, count(*) AS n
+      FROM ask_threads t JOIN ask_messages m ON m.thread_id = t.id AND m.role = 'user'
+      LEFT JOIN files f ON f.id = t.file_id
+      WHERE m.created_at >= ${monthStart}
+      GROUP BY t.file_id ORDER BY n DESC LIMIT 5`);
+    return c.json({
+      users: usersOut,
+      totals,
+      topFiles: topFiles.map((r) => ({ fileName: r.file_name, count: r.n })),
+      pricing: { ...p, krwPerUsd: ASK.KRW_PER_USD },
+    });
   })
 
   // API-012: 사용자 목록

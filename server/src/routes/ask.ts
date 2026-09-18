@@ -192,6 +192,8 @@ export const askRoutes = new Hono<AppEnv>()
       await stream.writeSSE({ event: 'meta', data: JSON.stringify({ userMessageId: userMsg.id, remaining: limit === null ? null : limit - used - 1 }) });
       let text = '';
       const sources: AskSource[] = [];
+      // 사용량은 pause_turn으로 여러 번 돌면 합산한다 — 검색 횟수는 usage.server_tool_use에 실려 온다
+      const usage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
       try {
         // 웹 검색은 Anthropic 쪽 루프에서 돈다. 그 루프가 한도에 걸리면 pause_turn으로 멈추는데,
         // 지금까지의 assistant 내용을 그대로 돌려보내면 이어서 돈다 (사용자 메시지를 덧붙이지 않는다)
@@ -211,6 +213,9 @@ export const askRoutes = new Hono<AppEnv>()
           }
           final = await answer.finalMessage();
           collectSources(final.content, sources);
+          usage.inputTokens += final.usage.input_tokens;
+          usage.outputTokens += final.usage.output_tokens;
+          usage.webSearches += final.usage.server_tool_use?.web_search_requests ?? 0;
           if (final.stop_reason !== 'pause_turn' || round >= ASK.PAUSE_CONTINUATIONS) break;
           turnMessages = [...turnMessages, { role: 'assistant', content: final.content }];
         }
@@ -221,7 +226,7 @@ export const askRoutes = new Hono<AppEnv>()
         text += formatSources(sources);
         const saved = db
           .insert(askMessages)
-          .values({ threadId: id, role: 'assistant', content: text, createdAt: Date.now() })
+          .values({ threadId: id, role: 'assistant', content: text, ...usage, createdAt: Date.now() })
           .returning()
           .get();
         db.update(askThreads).set({ updatedAt: saved.createdAt }).where(eq(askThreads.id, id)).run();

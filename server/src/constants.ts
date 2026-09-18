@@ -108,4 +108,8 @@ export const ASK = {
   PAUSE_CONTINUATIONS: 2,
   /** 답 아래에 붙이는 출처 링크 최대 개수 */
   MAX_SOURCES: 5,
+  /** 비용 추정 단가 (USD) — 관리자 "AI 사용량" 탭용. 청구서가 아니라 감 잡기용이라 대략값. 단가가 바뀌면 여기만 */
+  PRICE_USD: { INPUT_PER_MTOK: 5, OUTPUT_PER_MTOK: 25, SEARCH_PER_1000: 10 },
+  /** 원화 환산 (대략). 통계 화면의 "≈ n원"에만 쓰인다 */
+  KRW_PER_USD: 1400,
 } as const;
