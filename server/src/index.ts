@@ -12,6 +12,7 @@ import { purgeExpiredTrash } from './lib/trash.js';
 import { authGuard } from './middleware/auth.js';
 import { adminRoutes } from './routes/admin.js';
 import { askRoutes, purgeExpiredThreads } from './routes/ask.js';
+import { cardRoutes } from './routes/cards.js';
 import { shareTargetRoutes } from './routes/share-target.js';
 import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
@@ -72,6 +73,7 @@ api.get('/changelog', (c) => {
 });
 api.route('/admin', adminRoutes);
 api.route('/ask', askRoutes);
+api.route('/cards', cardRoutes);
 api.route('/auth', authRoutes);
 api.route('/tree', treeRoutes);
 api.route('/files', fileRoutes);

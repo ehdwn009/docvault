@@ -8,6 +8,7 @@ import {
   type AskThread,
   type TreeFile,
 } from '../lib/api';
+import CardSaveDialog from './CardSaveDialog';
 import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { ASK_QUESTION_MAX_CHARS } from '../lib/constants';
@@ -28,6 +29,8 @@ type Props = {
   onConsumePendingQuote: () => void;
   /** 대화가 실제로 시작됐는지(질문을 한 번이라도 보냈는지) — 부모가 새 선택을 "문맥 교체"로 볼지 "인용 추가"로 볼지 정한다 */
   onConversingChange?: (conversing: boolean) => void;
+  /** 카드를 저장하면 그 카드 파일을 연다 (SCR-182) */
+  onOpenFile?: (file: TreeFile) => void;
   isPc: boolean;
   onClose: () => void;
 };
@@ -43,7 +46,7 @@ const SHEET_RATIO = 0.78;
 const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판)
-export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuote, onConversingChange, isPc, onClose }: Props) {
+export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuote, onConversingChange, onOpenFile, isPc, onClose }: Props) {
   const [status, setStatus] = useState<AskStatus | null>(null);
   const [thread, setThread] = useState<AskThread | null>(null);
   const [messages, setMessages] = useState<Bubble[]>([]);
@@ -53,6 +56,8 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   // 마지막에 실패한 질문 — [다시 시도]가 이것을 다시 보낸다 (질문 글은 서버에 이미 남아 있다)
   const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  // 카드로 저장 중인 답의 메시지 id — 있으면 저장 창이 떠 있다 (SCR-182)
+  const [saveFor, setSaveFor] = useState<number | null>(null);
   // 모델이 웹 검색 중 — 답이 늦는 이유를 보여 준다 (글자가 오기 시작하면 끈다)
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<AskThread[]>([]);
@@ -329,6 +334,14 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                 )}
                 {m.id !== 'streaming' && (
                   <div className="mt-1.5 flex gap-1 text-xs">
+                    {thread && typeof m.id === 'number' && m.id > 0 && (
+                      <button
+                        onClick={() => setSaveFor(m.id as number)}
+                        className="rounded border border-teal-700 bg-teal-950/50 px-2 py-0.5 font-medium text-teal-200 hover:bg-teal-900"
+                      >
+                        📚 카드로 저장
+                      </button>
+                    )}
                     <button
                       onClick={() => void navigator.clipboard.writeText(m.content).then(() => toast('복사했습니다'))}
                       className="rounded border border-slate-700 px-2 py-0.5 text-slate-400 hover:bg-slate-800"
@@ -427,6 +440,18 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
         </div>
         <p className="mt-1 text-[11px] text-slate-600">문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 LLM에 보냅니다</p>
       </div>
+      {saveFor !== null && thread && (
+        <CardSaveDialog
+          threadId={thread.id}
+          messageId={saveFor}
+          isPc={isPc}
+          onClose={() => setSaveFor(null)}
+          onSaved={(f) => {
+            setSaveFor(null);
+            onOpenFile?.(f);
+          }}
+        />
+      )}
     </>
   );
 

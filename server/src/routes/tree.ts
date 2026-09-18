@@ -34,7 +34,8 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
       updatedAt: files.updatedAt,
     })
     .from(files)
-    .where(and(eq(files.ownerId, user.id), isNull(files.deletedAt))) // 휴지통 파일 제외
+    // 휴지통 파일 제외. 카드(kind='card')도 제외 — 서랍(SCR-181)에서만 보인다 (설계 — 문서와 섞이지 않게)
+    .where(and(eq(files.ownerId, user.id), isNull(files.deletedAt), eq(files.kind, 'doc')))
     .all();
 
   const states = db

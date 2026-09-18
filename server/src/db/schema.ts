@@ -57,6 +57,8 @@ export const files = sqliteTable('files', {
   storagePath: text('storage_path'),
   isShared: integer('is_shared').notNull().default(0),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** doc=보통 문서, card=배움 카드(2판). 카드는 md 파일이지만 파일 트리에는 안 나오고 서랍(SCR-181)에서만 보인다 */
+  kind: text('kind', { enum: ['doc', 'card'] }).notNull().default('doc'),
   /** 휴지통 이동 시각. null이면 정상 파일. 보관 기한이 지나면 서버가 자동 영구 삭제한다 */
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
@@ -173,3 +175,19 @@ export const askMessages = sqliteTable('ask_messages', {
   webSearches: integer('web_searches'),
   createdAt: integer('created_at').notNull(),
 });
+
+/** 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때).
+    카드가 참조하는 대화는 30일 정리에서 빠진다 — 카드의 "원 대화"로 계속 산다 (설계 원칙) */
+export const cardThreads = sqliteTable(
+  'card_threads',
+  {
+    cardFileId: integer('card_file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    threadId: integer('thread_id')
+      .notNull()
+      .references(() => askThreads.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.cardFileId, t.threadId] })],
+);

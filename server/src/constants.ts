@@ -113,3 +113,15 @@ export const ASK = {
   /** 원화 환산 (대략). 통계 화면의 "≈ n원"에만 쓰인다 */
   KRW_PER_USD: 1400,
 } as const;
+
+/** 배움 카드 (2판) — 설계 "카드의 모양" */
+export const CARD = {
+  /** 초안·재구성 답 길이 상한 (토큰). 카드 한 장 분량 */
+  MAX_OUTPUT_TOKENS: 4096,
+  /** 비슷한 카드 판단 때 LLM에 보여 주는 기존 카드 수 상한 — 그 이상은 제목·별칭 정확 일치만 */
+  SIMILAR_CANDIDATES: 200,
+  ONE_LINE_MAX_CHARS: 120,
+  BODY_MAX_CHARS: 20000,
+  /** 별칭·태그·연결 한 칸의 항목 수 상한 */
+  MAX_LIST_ITEMS: 12,
+} as const;

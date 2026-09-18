@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, notInArray, sql } from 'drizzle-orm';
 import { config } from '../config.js';
 import { ASK } from '../constants.js';
 import { db } from '../db/index.js';
-import { askMessages, askThreads } from '../db/schema.js';
+import { askMessages, askThreads, cardThreads } from '../db/schema.js';
 
 // 질문(배움 카드 1판)의 비즈니스 로직 — 라우트는 파싱·응답만 하고 LLM·한도·문맥 조립은 여기서 한다.
 // 설계: docs/design/배움카드_docvault_20260918.md
@@ -131,8 +131,9 @@ export function describeUpstreamError(e: unknown): string {
   return 'LLM 호출에 실패했습니다';
 }
 
-/** 30일 지난 대화 정리 — 기동 시 + 하루 1회 (휴지통 비움과 같은 주기). 2판부터 카드가 참조하는 대화는 제외 */
+/** 30일 지난 대화 정리 — 기동 시 + 하루 1회 (휴지통 비움과 같은 주기). 카드가 참조하는 대화는 남긴다 — 카드의 "원 대화" */
 export function purgeExpiredThreads(): void {
   const cutoff = Date.now() - ASK.THREAD_RETENTION_MS;
-  db.delete(askThreads).where(lt(askThreads.updatedAt, cutoff)).run();
+  const kept = db.select({ id: cardThreads.threadId }).from(cardThreads);
+  db.delete(askThreads).where(and(lt(askThreads.updatedAt, cutoff), notInArray(askThreads.id, kept))).run();
 }

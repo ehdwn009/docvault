@@ -33,18 +33,20 @@ import { runGuarded } from '../lib/guard';
 import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
 import AdminPanel from './panels/AdminPanel';
+import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
 import SharedPanel from './panels/SharedPanel';
 import Viewer from './Viewer';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'settings' | 'admin';
+type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
   files: '내 파일',
   favorites: '즐겨찾기',
   shared: '공유 파일',
+  cards: '배움 카드',
   settings: '설정',
   admin: '관리자',
 };
@@ -1079,6 +1081,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     files: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z|M14 3v6h6|M9 13h6|M9 17h6',
     favorites: 'M12 3l2.8 6 6.2.7-4.6 4.3 1.3 6.3L12 17l-5.7 3.3 1.3-6.3L3 9.7 9.2 9z',
     shared: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M8 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M2 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1|M16 16h1a4 4 0 0 1 4 4v1',
+    cards: 'M6 3h12v18l-6-4-6 4z',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
     admin: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
   };
@@ -1133,6 +1136,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
         {railButton('shared', '공유 파일')}
+        {railButton('cards', '배움 카드')}
         {railButton('settings', '설정')}
         {user.role === 'admin' && railButton('admin', '관리자')}
         <button
@@ -1354,6 +1358,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         )}
 
+        {panel === 'cards' && (
+          <CardsPanel selectedId={selected?.id ?? null} onSelect={(f) => void selectFile(f)} />
+        )}
+
         {panel === 'shared' && (
           <SharedPanel
             selectedId={selected?.id ?? null}
@@ -1424,6 +1432,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 jumpLines={lineJump?.fileId === f.id ? lineJump : undefined}
                 onSplitView={splitCandidates.length > 0 ? () => void splitView() : undefined}
                 onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
+                onOpenFile={(target) => void selectFile(target)}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
               />
             )}

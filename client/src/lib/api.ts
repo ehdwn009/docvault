@@ -44,6 +44,8 @@ export type TreeFile = {
   folderId: number | null;
   name: string;
   fileType: FileType;
+  /** card = 배움 카드 (서랍에서만 보임, 뷰어는 머리말을 표로 그린다). 없으면 doc */
+  kind?: 'doc' | 'card';
   sizeBytes: number;
   isShared: number;
   sortOrder: number;
@@ -270,4 +272,55 @@ export async function askStream(
       if (frame.trim()) handleFrame(frame);
     }
   }
+}
+
+// ---- 배움 카드 (2판, API-111~115) ----
+
+export type CardKind = '개념' | '절차' | '비교' | '문제 해결';
+
+export type CardSummary = {
+  id: number;
+  title: string;
+  updatedAt: number;
+  oneLine: string;
+  aliases: string[];
+  kind: CardKind;
+  topic: string;
+  tags: string[];
+  links: string[];
+  sources: string[];
+};
+
+export type CardDraft = {
+  title: string;
+  oneLine: string;
+  aliases: string[];
+  kind: CardKind;
+  topic: string;
+  tags: string[];
+  links: string[];
+  body: string;
+  similar: {
+    cardId: number;
+    relation: 'same' | 'aspect' | 'related' | 'different';
+    reason: string;
+    recommendation: 'merge' | 'link' | 'new';
+  } | null;
+};
+
+export type CardMerge = {
+  oneLine: string;
+  aliases: string[];
+  kind: CardKind;
+  tags: string[];
+  links: string[];
+  body: string;
+  changes: string[];
+};
+
+export type CardFront = { oneLine: string; aliases: string[]; kind: CardKind; topic: string; tags: string[]; links: string[] };
+
+/** 카드 요약을 뷰어가 받는 TreeFile로 — 카드는 트리에 없어서 이렇게 만들어 연다 */
+export function cardToTreeFile(c: CardSummary): TreeFile {
+  return toTreeFile({ id: c.id, name: `${c.title}.md`, fileType: 'md', updatedAt: c.updatedAt, kind: 'card' });
 }

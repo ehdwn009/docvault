@@ -22,6 +22,7 @@ import {
   type ArchiveEntry,
   type ArchiveScope,
 } from '../lib/archive.js';
+import { saveTextContent } from '../lib/content.js';
 import { fail } from '../lib/errors.js';
 import {
   ALL_EXTENSIONS,
@@ -344,40 +345,8 @@ export const fileRoutes = new Hono<AppEnv>()
       return fail(c, 409, 'EDIT_CONFLICT', '다른 곳에서 먼저 수정되었습니다. 최신 내용을 확인하세요');
     }
 
-    const now = Date.now();
-    const result = db.transaction((tx) => {
-      // 저장 전 현재 본문을 스냅샷 — 복원 지점이 된다
-      const version = tx
-        .insert(fileVersions)
-        .values({
-          fileId: file.id,
-          savedBy: user.id,
-          contentText: file.contentText!,
-          sizeBytes: file.sizeBytes,
-          createdAt: now,
-        })
-        .returning({ id: fileVersions.id })
-        .get();
-
-      tx.update(files)
-        .set({ contentText: content, sizeBytes: Buffer.byteLength(content, 'utf8'), updatedAt: now })
-        .where(eq(files.id, file.id))
-        .run();
-
-      // 파일당 최근 N개만 유지, 초과분은 오래된 것부터 삭제 (ERD)
-      tx.run(sql`
-        DELETE FROM file_versions
-        WHERE file_id = ${file.id}
-          AND id NOT IN (
-            SELECT id FROM file_versions
-            WHERE file_id = ${file.id}
-            ORDER BY id DESC
-            LIMIT ${MAX_VERSIONS_PER_FILE}
-          )
-      `);
-
-      return { updatedAt: now, versionId: version.id };
-    });
+    // 스냅샷·N개 유지 규칙은 카드 저장과 공유한다 (lib/content.ts)
+    const result = saveTextContent({ id: file.id, contentText: file.contentText, sizeBytes: file.sizeBytes }, content, user.id);
 
     return c.json(result);
   })

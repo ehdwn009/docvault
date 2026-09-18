@@ -1,10 +1,12 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import AskPanel, { type AskSeed } from '../components/AskPanel';
+import CardView from '../components/CardView';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
+import { cardTitle } from '../lib/frontmatter';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
@@ -31,6 +33,8 @@ type Props = {
   onSplitView?: () => void;
   /** 터치 전용: 파일명 탭 → 문서 스위처 시트 (IA — 모바일 재편) */
   onOpenSwitcher?: () => void;
+  /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
+  onOpenFile?: (file: TreeFile) => void;
   /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
   onSwipeTab?: (dir: 1 | -1) => void;
 };
@@ -81,7 +85,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -818,7 +822,19 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
               style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
             >
-              {BodyRenderer ? (
+              {BodyRenderer && file.kind === 'card' && !showAsCode ? (
+                // 카드: 머리말은 표로, 본문은 md 렌더러로 (설계 — 카드 한 장 = 머리말 + 자유 본문)
+                <CardView
+                  title={cardTitle(file.name)}
+                  content={data.content}
+                  onAsk={() => openAsk(false)}
+                  renderBody={(body) => (
+                    <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
+                      <BodyRenderer content={body} theme={settings.viewerTheme} fileName={file.name} onFileLink={onOpenLink} />
+                    </Suspense>
+                  )}
+                />
+              ) : BodyRenderer ? (
                 <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
                   <BodyRenderer
                     content={data.content}
@@ -843,6 +859,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               pendingQuote={pendingQuote}
               onConsumePendingQuote={() => setPendingQuote(null)}
               onConversingChange={setAskConversing}
+              onOpenFile={onOpenFile}
               isPc={isPc}
               onClose={() => setAskOpen(false)}
             />

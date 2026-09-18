@@ -24,6 +24,8 @@ erDiagram
     USERS ||--o{ ASK_THREADS : "묻는다"
     FILES ||--o{ ASK_THREADS : "읽다가 시작"
     ASK_THREADS ||--o{ ASK_MESSAGES : "주고받음"
+    FILES ||--o{ CARD_THREADS : "카드가 태어난 대화"
+    ASK_THREADS ||--o{ CARD_THREADS : "카드를 낳음"
 
     USERS {
         integer id PK
@@ -59,6 +61,7 @@ erDiagram
         text storage_path "바이너리만, 텍스트는 null"
         integer is_shared "0|1"
         integer sort_order
+        text kind "doc|card — card는 배움 카드, 트리에 안 나오고 서랍에서만 (v0.26)"
         integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15)"
         integer created_at
         integer updated_at
@@ -152,6 +155,11 @@ erDiagram
         integer web_searches
         integer created_at
     }
+    CARD_THREADS {
+        integer card_file_id PK, FK "files.id (kind=card)"
+        integer thread_id PK, FK
+        integer created_at
+    }
 ```
 
 ## 엔티티 설명
@@ -170,6 +178,7 @@ erDiagram
 | DRIVE_RECENTS | 드라이브에서 열어 본 문서의 **바로가기 기록**. 이름·형식만 두고 본문은 저장하지 않는다 — 원본은 드라이브에 있고 우리는 볼 때마다 새로 읽는다 |
 | BACKUP_SETTINGS | 자동 백업 설정 단일 행. 앱이 스스로 `data/`를 묶어 연결된 구글 드라이브에 올린다. 꺼져 있으면 아무 일도 하지 않는다(기본값 꺼짐) |
 | ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나. 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다 |
+| CARD_THREADS | 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때). 카드가 참조하는 대화는 30일 정리에서 빠진다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수를 적어 두어 관리자 사용량 통계(API-020)의 근거가 된다 |
 
 ## 관계 설명
@@ -188,6 +197,7 @@ erDiagram
   - DRIVE_RECENTS는 FILES와 **섞지 않습니다.** 드라이브 문서는 우리 소유가 아니고 버전·태그·검색·휴지통 어느 것도 걸리지 않아, FILES에 넣으면 그 모든 기능이 "되는 척"하게 됩니다. 별도 테이블은 그 구분을 구조로 못박는 장치입니다. 한 번 고른 파일의 접근 권한은 계속 유효하므로 이 목록에서 다시 열 수 있고, 원본이 드라이브에서 지워지면 열 때 404로 드러납니다(목록이 먼저 알지 못합니다).
   - BACKUP_SETTINGS의 run_by는 업로드에 쓸 구글 계정입니다. 관리자 계정이어야 하고, 그 관리자가 연결을 해제하면 백업은 자동으로 꺼집니다(토큰 없이 켜져 있으면 매일 조용히 실패합니다).
 - **질문 대화 (2026-09-18, 배움 카드 1판)**: ASK_THREADS.file_id는 **SET NULL**이다 — 문서를 지워도 대화는 남는다(설계 흐름 D: 카드는 문서보다 오래 산다). 대화는 저장 버튼 없이 자동 보관되고, updated_at이 30일 지나면 서버가 정리한다(휴지통과 같은 주기). 2판부터 카드가 참조하는 대화는 정리 대상에서 뺀다. context 컬럼은 "LLM에 무엇을 보냈나"의 기록이기도 하다 — 문서 전체가 아니라 이 컬럼의 내용만 나간다. 소유자 삭제 시 CASCADE.
+- **배움 카드 (2026-09-18, v0.26)**: 카드는 FILES의 md 행이다(`kind='card'`). 별도 테이블을 만들지 않은 이유 — 편집·버전·태그·검색·공유·백업이 전부 FILES에 걸려 있어, 카드를 따로 두면 그 모든 기능을 다시 만들어야 한다. 대신 `kind`로 **파일 트리에서만 뺀다**(문서와 섞이면 구분이 안 된다). 카드의 머리말(한 줄·별칭·종류·주제·태그·연결·출처)은 컬럼이 아니라 **본문 맨 위의 frontmatter**에 있다 — 사람이 편집기에서 고칠 수 있어야 하고, 목록은 수백 장까지 매번 파싱해도 싸다. 제목은 파일 이름이다(두 군데 두지 않는다). CARD_THREADS는 카드가 어느 대화에서 왔는지 — 대화 정리 예외와 "원 대화 보기"의 근거.
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.
 
 ## 비고
