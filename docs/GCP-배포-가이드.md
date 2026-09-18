@@ -16,6 +16,7 @@
 - [ ] **cron**으로 반복 작업(백업·DNS 갱신) 자동화
 - [ ] 서버 간 **데이터 이사** (scp)
 - [ ] 과금 사고를 막는 **예산 알림** 설정
+- [ ] 외부 서비스의 **API 키**를 서버에 넣는 법 — 비밀은 왜 git 밖(`.env`)에 사는가 (9-4)
 
 ---
 
@@ -811,6 +812,80 @@ free -h && df -h                           # 메모리·디스크 잔량
 scp 계정명@GCP외부IP:~/docvault/backups/docvault-*.tar.gz C:\백업\
 ```
 
+## 9-4. 외부 서비스 API 키 등록 — 질문(AI) 기능 켜기
+
+> 배우는 것: `.env`가 뭐고 왜 git 밖에 사는지, 환경변수가 컨테이너까지 가는 길, 키가 샜을 때 하는 일
+
+v0.23부터 문서를 읽다 문장을 드래그하면 AI에게 물어볼 수 있습니다. 이 기능은 서버가 Anthropic(Claude)에 요청을 보내야 하고, 그러려면 **"이 계정으로 요금을 청구해도 된다"는 통행증 = API 키**가 서버에 있어야 합니다. 키가 없으면 앱은 정상으로 뜨되 질문 창에 "관리자가 아직 연결하지 않았어요"만 나옵니다.
+
+### ① 키 발급 (내 PC 브라우저에서)
+
+1. https://console.anthropic.com 가입 → 결제 수단 등록 (질문 한 번에 수 원~수십 원, 하루 한도 30번이 앱에 걸려 있음)
+2. **API Keys → Create Key**. 이름은 `docvault-server`처럼 **어디에 쓰는 키인지** 적어 둡니다.
+3. `sk-ant-…`로 시작하는 긴 문자열이 **딱 한 번** 보입니다. 지금 복사하세요 — 창을 닫으면 다시 못 봅니다(못 봤으면 지우고 새로 만들면 됨).
+
+### ② 서버의 `.env`에 한 줄 추가
+
+SSH로 들어가서:
+
+```bash
+cd ~/docvault
+echo 'ANTHROPIC_API_KEY=sk-ant-여기에붙여넣기' >> .env
+cat .env                      # 3줄(JWT_SECRET · ADMIN_INITIAL_PASSWORD · ANTHROPIC_API_KEY)이면 정상
+```
+
+- **작은따옴표**로 감싼 이유: 키에 `$`나 `!` 같은 문자가 섞여 있어도 셸이 건드리지 못하게 (6장의 `!` 히스토리 확장 사고와 같은 이유)
+- **`>>`(추가)** 이지 `>`(덮어쓰기)가 아닙니다. `>`를 쓰면 JWT_SECRET이 날아가 **모든 사용자가 로그아웃**됩니다. 실수했다면 `openssl rand -hex 32`로 JWT_SECRET을 새로 만들어 넣으면 됩니다(다들 다시 로그인하면 끝).
+- 키를 잘못 붙여 넣었다면 `sed -i '/^ANTHROPIC_API_KEY/d' .env`로 그 줄만 지우고 다시 추가.
+
+### ③ 컨테이너 재기동
+
+`.env`는 **컨테이너가 시작될 때** 읽힙니다. 파일만 고쳐서는 이미 도는 컨테이너에 전달되지 않습니다.
+
+```bash
+git pull && docker compose --profile edge pull && docker compose --profile edge up -d
+```
+
+(9-1과 같은 명령. `git pull`은 `ANTHROPIC_API_KEY`를 컨테이너로 넘기는 compose 설정 변경을 받아 오고, `up -d`가 새 `.env`로 컨테이너를 교체합니다.) 확인은 앱에서: 문서를 열고 문장을 드래그 → [💬 물어보기] → 질문 창 위에 **"오늘 0/30"** 이 보이면 연결된 것입니다.
+
+### 📚 학습 노트: 비밀은 왜 git 밖에 사는가 — `.env`와 `.env.example`
+
+우리 저장소는 **public**입니다. 그런데 키를 넣은 `.env`는 안전합니다. 왜냐하면:
+
+- `.gitignore`에 `.env`가 적혀 있어 git이 이 파일을 **아예 보지 않습니다.** `git status`에 안 잡히는 게 정상이고, 저장소 이력 어디에도 `.env`는 없습니다. (내 PC에서 `git check-ignore -v .env`를 치면 어느 줄이 막고 있는지 보여 줍니다)
+- 대신 **`.env.example`**을 커밋합니다. 값은 비어 있고 "무슨 항목이 필요한지"만 적힌 견본입니다. 새 PC나 새 서버에서는 `cp .env.example .env` 하고 값을 채웁니다.
+
+그래서 이 구조가 됩니다:
+
+```
+git으로 가는 것          git 밖에 남는 것
+─────────────────       ─────────────────
+코드                     .env      (비밀 값)
+docker-compose.yml       data/     (내 문서·DB)
+.env.example (항목만)
+```
+
+**"코드는 공유하고, 비밀과 데이터는 각 컴퓨터가 들고 있는다."** PC를 바꾸면 `.env`를 다시 만들어야 하는 건 불편이 아니라 이 설계의 결과입니다. 비밀이 새는 가장 흔한 경로는 git이 아니라 **복붙**(채팅·이슈·스크린샷)이라는 것도 기억해 두세요.
+
+### 📚 학습 노트: 환경변수가 컨테이너까지 가는 길
+
+```
+.env 파일  →  docker compose가 읽음  →  docker-compose.yml의 environment: 블록  →  컨테이너 안의 환경변수  →  server/src/config.ts의 process.env.ANTHROPIC_API_KEY
+```
+
+중간의 `environment:` 블록이 **통과시킬 이름을 하나하나 명시**합니다 — `.env`에 적었다고 자동으로 다 들어가는 게 아닙니다. 이번 릴리스가 `docker-compose.yml`에 `ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}` 한 줄을 추가한 이유이고, 그래서 ③에서 `git pull`이 필요한 것입니다. `:-`는 "없으면 빈 값"이라는 뜻이라 키를 안 넣은 서버도 깨지지 않습니다.
+
+컨테이너 안에 잘 들어갔는지 직접 보려면: `docker compose exec app sh -c 'echo ${ANTHROPIC_API_KEY:0:12}…'` (앞 12글자만 — 전체를 화면에 찍지 않는 습관).
+
+### 📚 학습 노트: 키를 여러 개 만드는 이유, 그리고 샜을 때
+
+콘솔에서는 한 계정에 키를 **여러 개** 만들 수 있고, 요금은 전부 같은 계정에 합산됩니다. 하나로 써도 됩니다. 나누면 좋은 점 두 가지:
+
+- **샜을 때 피해 범위**: 키를 폐기(revoke)하면 그 키를 쓰던 곳만 멈춥니다. PC용·서버용을 따로 두면 PC에서 샌 키를 지워도 서버는 계속 돕니다.
+- **사용량 구분**: 콘솔이 키별 사용량을 보여 주므로 "서버가 이번 달 얼마 썼나"를 따로 봅니다.
+
+**키가 샜다고 의심되면** (어딘가 붙여 넣었다, 스크린샷에 찍혔다): 콘솔 → API Keys → 그 키 **Delete** → 새 키 발급 → ②③ 반복. 고민할 시간에 폐기하는 게 낫습니다 — 새 키는 1분이면 나옵니다.
+
 ---
 
 # 10. 문제 해결
@@ -825,6 +900,8 @@ scp 계정명@GCP외부IP:~/docvault/backups/docvault-*.tar.gz C:\백업\
 | `permission denied` (docker) | `sudo usermod -aG docker $USER` 후 재접속했는지 |
 | 요금이 청구됨 | 결제 → 보고서에서 항목 확인. 대부분 ① 리전 실수 ② 디스크가 SSD ③ 외부 IP 요금. VM 사양은 수정(중지 후 머신유형 변경)으로 바로잡을 수 있음 |
 | VM을 갈아엎고 싶음 | backups/ 만 내려받고 VM 삭제 → 새로 만들어 이 가이드 5장부터 재실행 → 백업 복원 |
+| 질문 창에 "관리자가 아직 연결하지 않았어요" | ① `cat .env`에 `ANTHROPIC_API_KEY=` 줄이 있는지 ② `.env`를 고친 뒤 `docker compose --profile edge up -d`로 재기동했는지 ③ `git pull`을 해서 compose에 그 항목이 있는지 (`grep ANTHROPIC docker-compose.yml`) — 9-4 |
+| 질문하면 "LLM API 키가 올바르지 않습니다" | 키를 잘못 붙여 넣은 것. `sed -i '/^ANTHROPIC_API_KEY/d' .env` 후 다시 추가 → 재기동. 콘솔에서 키가 삭제된 경우도 같은 증상 |
 
 ---
 
