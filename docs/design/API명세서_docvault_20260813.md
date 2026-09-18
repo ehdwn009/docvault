@@ -20,6 +20,9 @@
 | PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과 |
 | GOOGLE_NOT_CONNECTED | 409 | 구글 계정 미연결 (클라이언트는 연결 화면으로 유도) |
 | GOOGLE_ERROR | 502 | 구글 API 호출 실패 — 토큰 만료·사용자가 권한 회수·드라이브 장애. message에 사람이 읽을 사유 |
+| ASK_NOT_CONFIGURED | 503 | 서버에 LLM API 키(`ANTHROPIC_API_KEY`)가 없음. 질문 기능만 막히고 나머지는 정상 |
+| ASK_LIMIT_EXCEEDED | 429 | 오늘 질문 한도(30) 초과. 읽기·지난 대화는 됨 |
+| ASK_UPSTREAM_ERROR | 502 | LLM 호출 실패 (인증·과부하·시간 초과). 스트리밍 중이면 `error` 이벤트로 옴. 사용자 질문은 저장돼 있어 다시 시도 가능 |
 
 ## API 목록
 
@@ -80,6 +83,12 @@
 | API-097 | DELETE | /google/recent/{driveFileId} | 바로가기 목록에서 제거 | 로그인 |
 | API-098 | GET | /google/files/{driveFileId}/content | 드라이브 문서 메타+텍스트 본문 (구글 문서는 md로 변환) | 로그인 |
 | API-099 | GET | /google/files/{driveFileId}/raw | 드라이브 원본 스트리밍 (PDF·이미지 등) | 로그인 |
+| API-101 | GET | /ask/status | 질문 기능 상태 (키 설정 여부·오늘 남은 횟수·한도) | 로그인 |
+| API-102 | POST | /ask/threads | 대화 시작 (문서·선택 문장·문맥을 붙여 빈 대화 생성) | 로그인 |
+| API-103 | POST | /ask/threads/{id}/messages | 질문 보내기 → 답변 SSE 스트리밍 | 소유자 |
+| API-104 | GET | /ask/threads | 지난 대화 목록 (최근순, 본문 제외) | 로그인 |
+| API-105 | GET | /ask/threads/{id} | 대화 하나 + 메시지 전부 | 소유자 |
+| API-106 | DELETE | /ask/threads/{id} | 대화 삭제 | 소유자 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
 
@@ -441,3 +450,42 @@ GET /api/v1/google/files/{driveFileId}/content
 
 즉시 1회 실행하고 결과(API-017과 같은 형태)를 돌려줍니다. 설정 화면에서 **"진짜 되는지" 확인하는 용도**입니다 — 매일 새벽에만 도는 기능은 처음 한 번을 눈으로 못 보면 켠 줄 알고 안 켜져 있게 됩니다.
 
+
+## API-101 ~ API-106: 질문 (배움 카드 1판)
+
+설계 전문은 [배움카드_docvault_20260918.md](배움카드_docvault_20260918.md). LLM 호출은 서버만 한다 — 키는 env `ANTHROPIC_API_KEY`, 클라이언트는 이 API만 부른다.
+
+### API-101 Response — GET /ask/status
+```json
+{ "configured": true, "limit": 30, "used": 7, "remaining": 23 }
+```
+`configured=false`면 키가 없는 것. 나머지 API는 503 ASK_NOT_CONFIGURED.
+
+### API-102 Request — POST /ask/threads
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| fileId | number | N | 읽던 문서. 열람 권한이 있어야 한다(없으면 404). 없으면 문맥 없는 대화(G) |
+| quote | string | N | 드래그한 문장 (≤500자). 출처 인용이 된다 |
+| context | string | N | 선택 문장 앞뒤 문단 (≤1500자). **문서 전체가 아니라 이것만 LLM에 간다** |
+
+**201** — `{ "thread": { id, fileId, fileName, quote, title, createdAt, updatedAt } }`. title은 첫 질문이 오면 그 앞 60자로 채워진다(그 전엔 quote 또는 "새 대화").
+
+### API-103 — POST /ask/threads/{id}/messages
+**Body** `{ "question": string(1~2000), "quote"?: string(≤500) }` — quote는 대화 중 문서에서 다시 드래그한 문장. 저장되는 user 메시지는 `「quote」\n\n question` 꼴.
+
+한도 검사는 스트림을 열기 **전**에 한다(429는 보통 JSON 응답). 통과하면 user 메시지를 먼저 저장하고 `text/event-stream`으로 답한다:
+
+| event | data | 언제 |
+|---|---|---|
+| meta | `{ "userMessageId", "remaining" }` | 첫 이벤트 |
+| delta | `{ "text" }` | 토큰 조각마다 |
+| done | `{ "assistantMessageId", "content" }` | 답이 끝나 저장된 뒤 |
+| error | `{ "code", "message" }` | LLM 실패. assistant 메시지는 저장하지 않는다(질문만 남음) |
+
+첫 메시지일 때만 문맥(문서 이름·quote·context)을 user 메시지 앞에 인용으로 붙여 보낸다. 이후는 대화 이력 + 새 질문. 문맥은 system이 아니라 user 턴 안의 인용이다(문서가 LLM에게 지시하는 글을 담고 있어도 역할을 못 바꾸게).
+
+### API-104 Response — GET /ask/threads?limit=20
+`{ "threads": [ { id, fileId, fileName, quote, title, messageCount, updatedAt } ] }` — 최근 갱신순. 30일 지난 대화는 서버가 정리해 여기 없다.
+
+### API-105 Response — GET /ask/threads/{id}
+`{ "thread": {...}, "messages": [ { id, role: "user"|"assistant", content, createdAt } ] }`
