@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CommandPalette from '../components/CommandPalette';
 import FileGrid from '../components/FileGrid';
 import FileTree, { type TreeActions } from '../components/FileTree';
+import type { SwipeConfig } from '../components/SwipeRow';
 import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
 import ShortcutsHelp from '../components/ShortcutsHelp';
@@ -982,6 +983,33 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       ),
   };
 
+  /**
+   * 목록 행을 옆으로 밀었을 때 나올 버튼들 — 트리·최근·즐겨찾기가 같은 손가락 동작을 갖도록
+   * 한곳에서 만들어 내려보낸다. 파괴적인 삭제는 오른쪽 트레이 끝에 두고(카톡·메일 관례),
+   * 끝까지 밀면 바로 삭제된다 — 휴지통 + [실행 취소]가 안전망이라 되돌릴 수 있다.
+   */
+  function fileSwipe(file: TreeFile): SwipeConfig {
+    const del = { label: '삭제', danger: true, onAction: () => actions.deleteFile(file.id) };
+    return {
+      right: [{ label: '태그', onAction: () => actions.editTags(file) }, del],
+      left: [
+        {
+          label: file.state.isFavorite === 1 ? '즐겨찾기 해제' : '즐겨찾기',
+          onAction: () => toggleFavorite(file),
+        },
+        ...(user.role === 'admin'
+          ? [
+              {
+                label: file.isShared === 1 ? '공유 해제' : '공유',
+                onAction: () => actions.shareFile(file),
+              },
+            ]
+          : []),
+      ],
+      fullSwipe: del,
+    };
+  }
+
   /** 여러 파일 이동 — 이전 위치를 기억해 실행 취소 제공 (IA — 다중 선택) */
   const moveMany = useCallback(
     (ids: number[], folderId: number | null) => {
@@ -1317,7 +1345,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               </div>
             )}
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
-              <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} />
+              <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} swipe={fileSwipe} />
               {viewMode === 'grid' ? (
                 <FileGrid
                   files={visibleFiles}
@@ -1338,6 +1366,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   actions={actions}
                   checked={checked}
                   onCheckChange={setChecked}
+                  swipe={fileSwipe}
                 />
               )}
             </nav>
@@ -1355,6 +1384,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             files={tree.files}
             selectedId={selected?.id ?? null}
             onSelect={(f) => void selectFile(f)}
+            swipe={fileSwipe}
           />
         )}
 

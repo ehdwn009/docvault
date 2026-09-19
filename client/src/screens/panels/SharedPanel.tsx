@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import FileName from '../../components/FileName';
 import { api, type SharedFile, type SharedFolder } from '../../lib/api';
 
 type Props = { selectedId: number | null; onSelect: (file: SharedFile) => void };
@@ -64,7 +65,7 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
             >
               <span className="text-[10px]">{expanded.has(folder.id) ? '▾' : '▸'}</span>
               <span>📁</span>
-              <span className="truncate">{folder.name}</span>
+              <FileName name={folder.name} />
               <span className="ml-auto shrink-0 text-[10px] text-slate-600">{folder.ownerName}</span>
             </button>
             {expanded.has(folder.id) && renderLevel(folder.id, depth + 1)}
@@ -81,7 +82,7 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
             }`}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
           >
-            <span className="truncate">{file.name}</span>
+            <FileName name={file.name} expanded={file.id === selectedId} />
             <span className="ml-auto shrink-0 text-[10px] text-slate-600">{file.ownerName}</span>
           </button>
         ))}

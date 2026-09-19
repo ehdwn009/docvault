@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
+import FileName from './FileName';
+import SwipeRow, { type SwipeConfig } from './SwipeRow';
 
 const TYPE_BADGE: Record<string, string> = {
   md: 'text-sky-400',
@@ -54,6 +56,8 @@ type Props = {
   /** 선택된 폴더 — 패널의 업로드·새 폴더가 이 폴더를 대상으로 동작한다 (IA — 폴더 선택) */
   selectedFolderId: number | null;
   onSelectFolder: (id: number | null) => void;
+  /** 행을 옆으로 밀었을 때 나올 버튼들 (터치 전용 지름길) */
+  swipe: (file: TreeFile) => SwipeConfig;
 };
 
 type Renaming = { kind: 'file' | 'folder'; id: number; value: string };
@@ -75,7 +79,7 @@ function setDragGhost(e: DragEvent, label: string) {
 }
 
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
-export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange, selectedFolderId, onSelectFolder }: Props) {
+export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange, selectedFolderId, onSelectFolder, swipe }: Props) {
   const tagColor = new Map(tags.map((t) => [t.id, t.color]));
   // "접힌 목록"이 아니라 "펼친 목록"으로 들고 있는다 — 빈 집합이 곧 전부 접힘(기본값)이다
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -402,7 +406,11 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
               >
                 <span className="text-[10px]">{expanded.has(folder.id) ? '▾' : '▸'}</span>
                 <span>📁</span>
-                {isRenaming ? renameInput(renaming) : <span className="truncate">{folder.name}</span>}
+                {isRenaming ? (
+                  renameInput(renaming)
+                ) : (
+                  <FileName name={folder.name} expanded={folder.id === selectedFolderId} />
+                )}
                 <span className="ml-auto flex shrink-0 items-center gap-1">
                   {folder.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
                   {moreButton(() => folderMenu(folder))}
@@ -416,62 +424,68 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
           const isRenaming = renaming?.kind === 'file' && renaming.id === file.id;
           const isChecked = checked.has(file.id);
           return (
-            <div
-              key={file.id}
-              data-row={`f${file.id}`}
-              draggable={!isRenaming}
-              onDragStart={(e) => {
-                // 선택된 파일을 끌면 선택 전체가 같이 움직인다
-                if (isChecked && checked.size > 1) {
-                  startDrag(e, { kind: 'files', ids: [...checked] }, `📄 ${checked.size}개 파일`);
-                } else {
-                  startDrag(e, { kind: 'file', id: file.id }, `📄 ${file.name}`);
-                }
-              }}
-              onClick={(e) => {
-                setFocus({ kind: 'file', id: file.id }); // 키보드 탐색이 여기서 이어진다
-                // Ctrl/⌘ 클릭 = 선택 토글, Alt = 분할로 열기, Shift = 범위, 선택 모드 중엔 클릭도 토글
-                if (e.ctrlKey || e.metaKey) toggleCheck(file.id);
-                else if (e.altKey) actions.openSplit(file);
-                else if (e.shiftKey && selectionMode) rangeCheck(file.id);
-                else if (selectionMode) toggleCheck(file.id);
-                else onSelect(file);
-              }}
-              onContextMenu={(e) => openMenu(e, fileMenu(file))}
-              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
-                isChecked
-                  ? 'bg-sky-950/60 text-slate-100 outline outline-1 outline-sky-800'
-                  : file.id === selectedId
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-300 hover:bg-slate-900'
-              } ${
-                focus?.kind === 'file' && focus.id === file.id && !isChecked
-                  ? 'outline outline-1 outline-slate-500'
-                  : ''
-              }`}
-              style={{ paddingLeft: `${8 + depth * 14}px` }}
-            >
-              {selectionMode && (
-                <span className={`text-xs ${isChecked ? 'text-sky-400' : 'text-slate-600'}`}>
-                  {isChecked ? '☑' : '☐'}
+            // 스와이프 껍데기가 바깥, 행이 안쪽 — 키보드 탐색이 찾는 data-row는 행에 그대로 남는다
+            <SwipeRow key={file.id} {...swipe(file)}>
+              <div
+                data-row={`f${file.id}`}
+                draggable={!isRenaming}
+                onDragStart={(e) => {
+                  // 선택된 파일을 끌면 선택 전체가 같이 움직인다
+                  if (isChecked && checked.size > 1) {
+                    startDrag(e, { kind: 'files', ids: [...checked] }, `📄 ${checked.size}개 파일`);
+                  } else {
+                    startDrag(e, { kind: 'file', id: file.id }, `📄 ${file.name}`);
+                  }
+                }}
+                onClick={(e) => {
+                  setFocus({ kind: 'file', id: file.id }); // 키보드 탐색이 여기서 이어진다
+                  // Ctrl/⌘ 클릭 = 선택 토글, Alt = 분할로 열기, Shift = 범위, 선택 모드 중엔 클릭도 토글
+                  if (e.ctrlKey || e.metaKey) toggleCheck(file.id);
+                  else if (e.altKey) actions.openSplit(file);
+                  else if (e.shiftKey && selectionMode) rangeCheck(file.id);
+                  else if (selectionMode) toggleCheck(file.id);
+                  else onSelect(file);
+                }}
+                onContextMenu={(e) => openMenu(e, fileMenu(file))}
+                className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
+                  isChecked
+                    ? 'bg-sky-950/60 text-slate-100 outline outline-1 outline-sky-800'
+                    : file.id === selectedId
+                      ? 'bg-slate-800 text-slate-100'
+                      : 'text-slate-300 hover:bg-slate-900'
+                } ${
+                  focus?.kind === 'file' && focus.id === file.id && !isChecked
+                    ? 'outline outline-1 outline-slate-500'
+                    : ''
+                }`}
+                style={{ paddingLeft: `${8 + depth * 14}px` }}
+              >
+                {selectionMode && (
+                  <span className={`text-xs ${isChecked ? 'text-sky-400' : 'text-slate-600'}`}>
+                    {isChecked ? '☑' : '☐'}
+                  </span>
+                )}
+                <span className={`font-mono text-[10px] uppercase ${TYPE_BADGE[file.fileType] ?? ''}`}>
+                  {BADGE_LABEL[file.fileType] ?? file.fileType}
                 </span>
-              )}
-              <span className={`font-mono text-[10px] uppercase ${TYPE_BADGE[file.fileType] ?? ''}`}>
-                {BADGE_LABEL[file.fileType] ?? file.fileType}
-              </span>
-              {isRenaming ? renameInput(renaming) : <span className="truncate">{file.name}</span>}
-              <span className="ml-auto flex shrink-0 items-center gap-1">
-                {file.tags.map((tagId) => (
-                  <span
-                    key={tagId}
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: tagColor.get(tagId) ?? '#71717a' }}
-                  />
-                ))}
-                {file.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
-                {moreButton(() => fileMenu(file))}
-              </span>
-            </div>
+                {isRenaming ? (
+                  renameInput(renaming)
+                ) : (
+                  <FileName name={file.name} expanded={file.id === selectedId} />
+                )}
+                <span className="ml-auto flex shrink-0 items-center gap-1">
+                  {file.tags.map((tagId) => (
+                    <span
+                      key={tagId}
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: tagColor.get(tagId) ?? '#71717a' }}
+                    />
+                  ))}
+                  {file.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
+                  {moreButton(() => fileMenu(file))}
+                </span>
+              </div>
+            </SwipeRow>
           );
         })}
       </>

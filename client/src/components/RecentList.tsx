@@ -1,9 +1,16 @@
 import type { TreeFile } from '../lib/api';
+import FileName from './FileName';
+import SwipeRow, { type SwipeConfig } from './SwipeRow';
 
-type Props = { files: TreeFile[]; onSelect: (file: TreeFile) => void };
+type Props = {
+  files: TreeFile[];
+  onSelect: (file: TreeFile) => void;
+  /** 행을 옆으로 밀었을 때 나올 버튼들 — 트리와 같은 구성을 받는다 */
+  swipe: (file: TreeFile) => SwipeConfig;
+};
 
 // SCR-112: 최근 열람 섹션 — 파일 패널 상단에 최근 5개
-export default function RecentList({ files, onSelect }: Props) {
+export default function RecentList({ files, onSelect, swipe }: Props) {
   const recent = files
     .filter((f) => f.state.lastOpenedAt !== null)
     .sort((a, b) => (b.state.lastOpenedAt ?? 0) - (a.state.lastOpenedAt ?? 0))
@@ -16,13 +23,14 @@ export default function RecentList({ files, onSelect }: Props) {
         최근 열람
       </h3>
       {recent.map((file) => (
-        <button
-          key={file.id}
-          onClick={() => onSelect(file)}
-          className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
-        >
-          <span className="truncate">{file.name}</span>
-        </button>
+        <SwipeRow key={file.id} {...swipe(file)}>
+          <button
+            onClick={() => onSelect(file)}
+            className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
+          >
+            <FileName name={file.name} />
+          </button>
+        </SwipeRow>
       ))}
       <div className="mx-2 mt-2 border-b border-slate-800/70" />
     </div>
