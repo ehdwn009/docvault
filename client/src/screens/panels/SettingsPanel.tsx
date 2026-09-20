@@ -1,3 +1,4 @@
+import { readBoot } from '../../lib/bootTiming';
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
 import { APP_THEMES, applyAppTheme, getAppTheme, type AppThemeId } from '../../lib/appTheme';
@@ -23,6 +24,7 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
   const [withManifest, setWithManifest] = useState(true);
   // 앱 테마는 기기별 취향이라 서버 설정이 아니라 localStorage (IA — 앱 테마 프리셋)
   const [appTheme, setAppTheme] = useState<AppThemeId>(getAppTheme);
+  const [boot] = useState(readBoot);
 
   async function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -251,6 +253,30 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
         >
           업데이트 기록 보기
         </button>
+        {boot && (
+          // 첫 로딩이 왜 긴지 — 단계별 시간. 어느 칸이 크냐에 따라 처방이 다르다 (lib/bootTiming.ts)
+          <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs">
+            <div className="flex items-baseline justify-between text-slate-400">
+              <span>이번 시작 시간</span>
+              <span className="font-medium text-slate-200">{(boot.total / 1000).toFixed(1)}초</span>
+            </div>
+            <table className="mt-1.5 w-full text-[11px] text-slate-500">
+              <tbody>
+                {boot.steps.map((st) => (
+                  <tr key={st.name}>
+                    <td className="py-0.5 pr-2">{st.name}</td>
+                    <td className="py-0.5 text-right tabular-nums text-slate-300">{st.ms.toLocaleString()}ms</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="py-0.5 pr-2">앱 파일 (JS {boot.jsFiles}개)</td>
+                  <td className="py-0.5 text-right tabular-nums text-slate-300">{boot.jsKB.toLocaleString()}KB</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-1.5 text-[10px] text-slate-600">새로고침하면 다시 잽니다. 서버 첫 응답이 크면 서버가 잠에서 깨는 시간, 다운로드가 크면 앱 파일 크기, 나머지가 크면 요청 왕복입니다</p>
+          </div>
+        )}
       </section>
     </div>
   );

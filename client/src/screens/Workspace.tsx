@@ -3,6 +3,7 @@ import CommandPalette from '../components/CommandPalette';
 import FileGrid from '../components/FileGrid';
 import FileTree, { type TreeActions } from '../components/FileTree';
 import type { SwipeConfig } from '../components/SwipeRow';
+import { finishBoot, timed } from '../lib/bootTiming';
 import FolderPicker from '../components/FolderPicker';
 import RecentList from '../components/RecentList';
 import ShortcutsHelp from '../components/ShortcutsHelp';
@@ -533,18 +534,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 초기 로드 + 딥링크(/f/{id}) 복원
   useEffect(() => {
     void (async () => {
-      await Promise.all([loadTree(), loadTags()]);
+      // 시작 시간 측정 — 각 단계가 얼마나 걸리는지 설정 → 정보에서 본다 (lib/bootTiming.ts)
+      await timed('파일 목록·태그 (/tree, /tags)', () => Promise.all([loadTree(), loadTags()]));
       const id = fileIdFromPath(location.pathname);
       if (id !== null) {
-        const f = await resolveFile(id);
+        const f = await timed('열 문서 찾기', () => resolveFile(id));
         if (f) {
           setTabs([f]);
           setPanes([f]);
           setActiveIdx(0);
+          return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
         }
       }
+      finishBoot();
     })();
-    void api<{ settings: UserSettings }>('/me/settings')
+    void timed('설정 (/me/settings)', () => api<{ settings: UserSettings }>('/me/settings'))
       .then(({ settings }) => {
         setSettings(settings);
         // 새 버전 이후 첫 로그인이면 패치노트를 한 번 보여준다 (확인 시 기록 → 기기 간 공유)
