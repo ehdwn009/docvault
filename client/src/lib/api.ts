@@ -333,6 +333,10 @@ export type CardOutline = {
   topic: { title: string; oneLine: string; body: string };
   source: string;
 };
+/** 복습(API-119) 한 장 — 요약 + 본문(뒷면) + 지금 간격 */
+export type ReviewCard = CardSummary & { body: string; intervalDays: number; dueAt: number };
+export type ReviewList = { due: ReviewCard[]; tomorrow: number; total: number };
+
 /** 묶음 저장(API-117) 결과 — 되돌리기의 재료 (새 카드는 휴지통으로, 이어쓴 카드는 저장 전 버전으로) */
 export type CardBatchResult = {
   created: CardSummary[];

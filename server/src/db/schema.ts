@@ -119,6 +119,10 @@ export const userFileState = sqliteTable(
     viewerFit: integer('viewer_fit').notNull().default(1),
     /** 이 파일만의 글자 크기 배율(%). NULL이면 전역 기본값(user_settings.html_font_scale)을 따른다 */
     fontScale: integer('font_scale'),
+    /** 복습 예정 시각 (카드 전용, 배움 카드 활용 ③). NULL이면 아직 복습 안 함 — 만든 날 + 1일에 첫 복습 */
+    nextReviewAt: integer('next_review_at'),
+    /** 마지막 채점으로 정해진 간격(일). 알았다 → 두 배, 몰랐다 → 1 */
+    reviewIntervalDays: integer('review_interval_days').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.userId, t.fileId] })],
 );

@@ -18,13 +18,14 @@ import {
   type CardSummary,
 } from '../lib/cards.js';
 import { buildAnkiCsv, buildGlossaryMd } from '../lib/cardExport.js';
+import { gradeCard, listDueCards } from '../lib/cardReview.js';
 import { saveTextContent } from '../lib/content.js';
 import { fail } from '../lib/errors.js';
 import { CARD_KINDS, cleanListItem, joinCard, splitCard, type CardFrontmatter } from '../lib/frontmatter.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-// API-111~118: 배움 카드 (2판). 카드 = files의 md(kind='card'). 소유자만 다룬다 — 공유는 파일 공유 토글 그대로
+// API-111~120: 배움 카드 (2판). 카드 = files의 md(kind='card'). 소유자만 다룬다 — 공유는 파일 공유 토글 그대로
 
 const listField = z.array(z.string().trim().min(1).max(60)).max(CARD.MAX_LIST_ITEMS);
 const frontSchema = z.object({
@@ -61,6 +62,7 @@ const exportQuerySchema = z.object({
   topics: z.string().max(2000).optional(),
 });
 const exportBodySchema = z.object({ topics: z.array(z.string().trim().max(40)).max(50).optional() });
+const reviewSchema = z.object({ result: z.enum(['ok', 'again']) });
 
 /** 범위 필터 — topics가 없으면 전부, 있으면 그 주제(들)만. '-'는 주제 없음 */
 function pickByTopics(cards: CardSummary[], topics: string[] | undefined): CardSummary[] {
@@ -182,6 +184,9 @@ export const cardRoutes = new Hono<AppEnv>()
     return c.json({ file: { id: row.id, name: row.name, fileType: 'md', updatedAt: row.updatedAt }, updated: false, count: cards.length }, 201);
   })
 
+  // API-119: 오늘 복습할 카드 — 예정 시각이 지난 것, 오래된 순, 하루 상한. /:id보다 먼저 (review가 id로 안 잡히게)
+  .get('/review', (c) => c.json(listDueCards(c.get('user').id)))
+
   // API-112: 초안 + 비슷한 카드 판단 (LLM). 제목·별칭이 정확히 같은 카드는 LLM 없이도 잡는다
   .post('/draft', jsonBody(draftSchema), async (c) => {
     if (!isAskConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', '관리자가 아직 LLM을 연결하지 않았습니다');
@@ -259,6 +264,15 @@ export const cardRoutes = new Hono<AppEnv>()
     const result = saveTextContent({ id: card.id, contentText: card.contentText, sizeBytes: card.sizeBytes }, content, user.id);
     if (body.threadId !== undefined) linkThread(card.id, body.threadId);
     return c.json({ card: { id: card.id, title: titleOf(card.name), name: card.name, updatedAt: result.updatedAt, ...front } });
+  })
+
+  // API-120: 채점 — 몰랐다(내일) / 알았다(간격 두 배). 열람 상태 표의 복습 칸만 갱신
+  .post('/:id/review', jsonBody(reviewSchema), (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    if (!findOwnCard(user.id, id)) return fail(c, 404, 'NOT_FOUND', '카드가 없습니다');
+    return c.json(gradeCard(user.id, id, c.req.valid('json').result));
   })
 
   // API-116: 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 이어쓰기로 표시하고,

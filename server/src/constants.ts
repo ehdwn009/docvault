@@ -135,4 +135,10 @@ export const CARD = {
   GLOSSARY_FILE_NAME: '용어집.md',
   /** 범위(topics) 목록에서 "주제 없음"을 뜻하는 표식 — 빈 문자열은 쉼표 목록에 못 싣는다 */
   NO_TOPIC_MARK: '-',
+  /** 복습(활용 ③) — 하루 상한, 새 카드가 첫 복습에 들어오기까지, 몰랐을 때·처음 알았을 때·최대 간격(일) */
+  REVIEW_DAILY_MAX: 20,
+  REVIEW_NEW_CARD_DELAY_DAYS: 1,
+  REVIEW_AGAIN_DAYS: 1,
+  REVIEW_FIRST_OK_DAYS: 2,
+  REVIEW_MAX_INTERVAL_DAYS: 60,
 } as const;

@@ -71,6 +71,13 @@
       "when": 1789882410790,
       "tag": "0009_clever_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1789882965947,
+      "tag": "0010_spooky_mantis",
+      "breakpoints": true
     }
   ]
 }

@@ -97,6 +97,8 @@
 | API-115 | PUT | /cards/{id} | 카드 머리말·본문 갱신 (재구성 저장). 버전 스냅샷, 출처는 더하기만 | 소유자 |
 | API-116 | POST | /cards/outline | 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 재구성까지 미리 (LLM) | 소유자 |
 | API-117 | POST | /cards/batch | 묶음 저장 — 개념 카드 N장(새로/이어쓰기) + 주제 카드 1장을 한 트랜잭션으로. LLM 없음. 되돌리기 재료 반환 | 소유자 |
+| API-119 | GET | /cards/review | 오늘 복습할 카드 (예정 시각이 지난 것, 오래된 순, 하루 20장) + 내일 장수 | 로그인 |
+| API-120 | POST | /cards/{id}/review | 채점 — again(내일) / ok(간격 두 배, 60일 상한). USER_FILE_STATE의 복습 칸만 갱신 | 소유자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -500,7 +502,7 @@ GET /api/v1/google/files/{driveFileId}/content
 ### API-105 Response — GET /ask/threads/{id}
 `{ "thread": {...}, "messages": [ { id, role: "user"|"assistant", content, createdAt } ] }`
 
-## API-111 ~ API-118: 배움 카드 (2판)
+## API-111 ~ API-120: 배움 카드 (2판)
 
 설계: [배움카드_docvault_20260918.md](배움카드_docvault_20260918.md) "카드의 모양". 카드는 files의 md(kind='card')라 본문 조회·편집·버전·태그·공유는 파일 API를 그대로 쓴다. 여기는 **머리말을 아는** API만.
 
@@ -532,3 +534,9 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-118 — POST /cards/export
 `{ "topics"?: string[] }` → **201/200** `{ "file": { id, name, fileType, updatedAt }, "updated": boolean, "count" }`. 최상위의 `용어집.md`(kind=doc)가 있으면 편집기 저장 규칙(API-034 스냅샷)으로 새로 쓰고(200), 없으면 만든다(201). 파일 하나를 계속 갱신하는 이유: 내보낼 때마다 새 파일이면 트리에 용어집이 쌓인다.
+
+### API-119 — GET /cards/review
+**200** `{ "due": [ 카드 요약 + { body, intervalDays, dueAt } ], "tomorrow": number, "total": number }`. 예정 시각 = USER_FILE_STATE.next_review_at, 없으면 카드 만든 날 + 1일. 주제 카드는 뺀다. `due`는 지난 것만 오래된 순으로 최대 20장, `tomorrow`는 지금부터 24시간 안에 예정된 장수.
+
+### API-120 — POST /cards/{id}/review
+`{ "result": "ok" | "again" }` → **200** `{ "nextReviewAt", "intervalDays" }`. again → 1일, ok → max(2, 이전×2), 상한 60일. 즐겨찾기·읽던 위치는 건드리지 않는다.

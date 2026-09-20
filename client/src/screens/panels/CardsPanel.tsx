@@ -1,9 +1,10 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from 'react';
 import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
 import ExportCardsDialog from '../../components/ExportCardsDialog';
+import ReviewDialog from '../../components/ReviewDialog';
 import FileName from '../../components/FileName';
 import SwipeRow from '../../components/SwipeRow';
-import { api, ApiError, cardToTreeFile, type CardSummary, type TreeFile } from '../../lib/api';
+import { api, ApiError, cardToTreeFile, type CardSummary, type ReviewList, type TreeFile } from '../../lib/api';
 import { promptDialog } from '../../lib/dialog';
 import { runGuarded } from '../../lib/guard';
 import { toast } from '../../lib/toast';
@@ -25,11 +26,16 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
   const [group, setGroup] = useState<Group>('topic');
   const [menu, setMenu] = useState<Menu | null>(null);
   const [exportOpen, setExportOpen] = useState(false); // SCR-185 내보내기
+  // 오늘 복습 — 카드가 바뀔 때마다(reload) 같이 다시 센다 (SCR-186)
+  const [review, setReview] = useState<ReviewList | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const loadReview = () => void api<ReviewList>('/cards/review').then(setReview).catch(() => setReview(null));
 
   const reload = () => {
     void api<{ cards: CardSummary[] }>('/cards')
       .then((r) => setCards(r.cards))
       .catch(() => setCards([]));
+    loadReview();
   };
   useEffect(reload, []);
   // 카드가 저장되면 (질문 패널에서) 목록을 다시 받는다 — 화면끼리 직접 연결하지 않고 창 이벤트로
@@ -154,6 +160,20 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
         </div>
       </div>
 
+      {review && (review.due.length > 0 || review.tomorrow > 0) && (
+        <div className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-teal-900 bg-teal-950/40 px-2.5 py-1.5 text-xs">
+          {review.due.length > 0 ? (
+            <span className="text-slate-200">오늘 복습 <b className="text-teal-300">{review.due.length}장</b>{review.tomorrow > 0 ? ` · 내일 ${review.tomorrow}장` : ''}</span>
+          ) : (
+            <span className="text-slate-400">오늘 복습할 카드 없음 · 내일 {review.tomorrow}장</span>
+          )}
+          {review.due.length > 0 && (
+            <button onClick={() => setReviewOpen(true)} className="ml-auto rounded bg-teal-600 px-2.5 py-1 font-medium text-white hover:bg-teal-500">
+              시작
+            </button>
+          )}
+        </div>
+      )}
       {cards.length === 0 ? (
         <p className="px-4 py-4 text-sm text-slate-600">
           아직 카드가 없어요. 문서를 읽다 질문하고, 답 아래 [카드로 저장]을 누르면 여기 쌓입니다.
@@ -207,6 +227,19 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
       )}
 
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {reviewOpen && review && (
+        <ReviewDialog
+          due={review.due}
+          tomorrow={review.tomorrow}
+          isPc={window.matchMedia('(hover: hover) and (pointer: fine)').matches}
+          onClose={() => setReviewOpen(false)}
+          onGraded={loadReview}
+          onOpenCard={(f) => {
+            setReviewOpen(false);
+            onSelect(f);
+          }}
+        />
+      )}
       {exportOpen && (
         <ExportCardsDialog
           cards={cards}
