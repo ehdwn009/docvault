@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { api, ApiError, cardToTreeFile, type ReviewCard, type TreeFile } from '../lib/api';
 import { getAppProseTheme } from '../lib/appTheme';
 import { REVIEW_AGAIN_DAYS, REVIEW_FIRST_OK_DAYS, REVIEW_MAX_INTERVAL_DAYS } from '../lib/constants';
@@ -25,23 +25,27 @@ function nextDays(prev: number, result: 'ok' | 'again'): number {
 
 // SCR-186: 복습 — 제목만 보고 한 줄 정의를 떠올린 뒤 뒤집어 확인, [몰랐다]/[알았다]로 다음 간격을 정한다.
 // 점수·연속 일수는 없다 — 끝나면 "오늘 N장 끝 · 내일 M장"만 (설계 — 활용 ③)
-export default function ReviewDialog({ due, tomorrow, isPc, onClose, onGraded, onOpenCard }: Props) {
+export default function ReviewDialog({ due: dueProp, tomorrow, isPc, onClose, onGraded, onOpenCard }: Props) {
+  // 열릴 때의 목록을 그대로 쓴다 — 채점하면 부모의 목록이 줄어드는데, 그걸 따라가면 남은 카드가 사라진다
+  const [due] = useState(dueProp);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [graded, setGraded] = useState(0);
   const [againCount, setAgainCount] = useState(0);
   const card = due[idx];
   const doneAll = idx >= due.length;
-
-  useEffect(() => () => { if (graded > 0) onGraded(); }, [graded, onGraded]);
+  // 닫힐 때 한 번만 알린다 — 채점마다 알리면 부모가 목록을 다시 받아 이 창이 흔들린다
+  const gradedRef = useRef(0);
+  const onGradedRef = useRef(onGraded);
+  onGradedRef.current = onGraded;
+  useEffect(() => () => { if (gradedRef.current > 0) onGradedRef.current(); }, []);
 
   async function grade(result: 'ok' | 'again') {
     if (!card || busy) return;
     setBusy(true);
     try {
       await api(`/cards/${card.id}/review`, { method: 'POST', body: JSON.stringify({ result }) });
-      setGraded((n) => n + 1);
+      gradedRef.current += 1;
       if (result === 'again') setAgainCount((n) => n + 1);
       setIdx((i) => i + 1);
       setFlipped(false);
