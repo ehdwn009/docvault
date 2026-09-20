@@ -5,7 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { logger } from 'hono/logger';
 import { APP_VERSION, config } from './config.js';
-import { HEALTH_PATH, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
+import { HEALTH_PATH, SLOW_REQUEST_MS, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
 import { purgeExpiredTrash } from './lib/trash.js';
@@ -45,7 +45,10 @@ app.use(async (c, next) => (c.req.path === HEALTH_PATH ? next() : requestLogger(
 app.use('/api/*', async (c, next) => {
   const t0 = performance.now();
   await next();
-  c.header('Server-Timing', `app;dur=${(performance.now() - t0).toFixed(1)}`);
+  const ms = performance.now() - t0;
+  // 라우트가 부분별 시간을 먼저 붙였을 수 있다(tree.ts) — 덮어쓰지 않고 뒤에 단다
+  c.header('Server-Timing', `app;dur=${ms.toFixed(1)}`, { append: true });
+  if (ms >= SLOW_REQUEST_MS) console.log(`[slow] ${c.req.method} ${c.req.path} ${c.res.headers.get('Server-Timing')}`);
 });
 
 // 보안 헤더. 비용이 거의 0이라 규모와 무관하게 켜 둔다.

@@ -1,0 +1,1 @@
+CREATE INDEX `files_owner_kind_idx` ON `files` (`owner_id`,`kind`,`deleted_at`,`folder_id`,`name`,`file_type`,`size_bytes`,`is_shared`,`sort_order`,`updated_at`);

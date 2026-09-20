@@ -62,7 +62,7 @@ erDiagram
         integer is_shared "0|1"
         integer sort_order
         text kind "doc|card — card는 배움 카드, 트리에 안 나오고 서랍에서만 (v0.26)"
-        integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15)"
+        integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15). 목록용 커버링 인덱스 files_owner_kind_idx — 비고 참조"
         integer created_at
         integer updated_at
     }
@@ -214,4 +214,5 @@ erDiagram
 
 - 타임스탬프는 전부 unix epoch 밀리초 정수(UTC)로 저장하고 표시 시점에 로컬 변환합니다.
 - 전문 검색용 FTS5 가상 테이블 `files_fts(name, content_text)`는 ERD에는 표시하지 않는 파생 인덱스이며, FILES 변경 시 트리거로 동기화합니다.
+- **FILES 커버링 인덱스 `files_owner_kind_idx`** (2026-09-20, v0.38.0): `(owner_id, kind, deleted_at, folder_id, name, file_type, size_bytes, is_shared, sort_order, updated_at)`. 본문(content_text)이 같은 행에 있어서, 인덱스 없이는 트리(API-021)·카드 목록이 행마다 본문을 지나가며 DB 전체를 읽었다(e2-micro에서 `/tree` 2.85초). 목록에 필요한 칸을 전부 담아 두어 목록 질의가 본문 행을 아예 안 건드린다. 본문을 따로 표로 떼는 대신 인덱스로 푼 이유: 마이그레이션 한 줄이고, 본문 저장·검색(FTS 트리거) 경로를 건드리지 않는다.
 - 컬럼별 상세 제약·기본값은 구현 시 테이블 정의서(데이터 사전)로 별도 문서화할 수 있습니다.

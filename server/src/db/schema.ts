@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   primaryKey,
   sqliteTable,
@@ -63,7 +64,11 @@ export const files = sqliteTable('files', {
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
-});
+},
+  // 트리(API-021)·카드 목록이 쓰는 칸만 모은 커버링 인덱스 — 본문(content_text)이 같은 행에 있어서, 인덱스 없이는
+  // 목록 한 번이 DB 전체 읽기가 된다 (e2-micro에서 /tree 2.85초). 이 인덱스로는 본문을 아예 안 건드린다
+  (t) => [index('files_owner_kind_idx').on(t.ownerId, t.kind, t.deletedAt, t.folderId, t.name, t.fileType, t.sizeBytes, t.isShared, t.sortOrder, t.updatedAt)],
+);
 
 export const fileVersions = sqliteTable('file_versions', {
   id: integer('id').primaryKey({ autoIncrement: true }),

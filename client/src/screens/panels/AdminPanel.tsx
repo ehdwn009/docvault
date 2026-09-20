@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import BootTimingTable from '../../components/BootTimingTable';
 import { api, toTreeFile, type TreeFile, type User } from '../../lib/api';
 import { confirmDialog, promptDialog } from '../../lib/dialog';
 import { runGuarded } from '../../lib/guard';
@@ -30,7 +31,7 @@ type AdminTreeUser = {
   }[];
 };
 
-type Tab = 'stats' | 'users' | 'tree' | 'ai';
+type Tab = 'stats' | 'users' | 'tree' | 'ai' | 'perf';
 
 type UsageRow = {
   id: number; username: string; displayName: string | null;
@@ -46,7 +47,7 @@ type AskUsage = {
 
 type Props = { meId: number; onSelectFile: (file: TreeFile) => void };
 
-// SCR-300: 관리자 — 대시보드(301)·사용자 관리(302)·전체 파일(303)·AI 사용량(305)
+// SCR-300: 관리자 — 대시보드(301)·사용자 관리(302)·전체 파일(303)·AI 사용량(305)·성능(306)
 export default function AdminPanel({ meId, onSelectFile }: Props) {
   const [tab, setTab] = useState<Tab>('users');
   const [stats, setStats] = useState<Stats | null>(null);
@@ -77,19 +78,20 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex gap-1 px-3 pb-2">
+      <div className="flex gap-1 overflow-x-auto px-3 pb-2">
         {(
           [
             ['stats', '통계'],
             ['users', '사용자'],
             ['tree', '전체 파일'],
             ['ai', 'AI 사용량'],
+            ['perf', '성능'],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded px-2 py-1 text-xs transition ${
+            className={`shrink-0 whitespace-nowrap rounded px-2 py-1 text-xs transition ${
               tab === t ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
@@ -121,6 +123,7 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
         )}
 
         {tab === 'ai' && usage && <UsageTab usage={usage} />}
+        {tab === 'perf' && <BootTimingTable />}
 
         {tab === 'users' && (
           <UsersTab users={users} meId={meId} run={run} />
