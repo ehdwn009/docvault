@@ -203,6 +203,18 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
             <span className="block text-slate-600">누르면 한 줄 정의가 뜨고 카드로 갈 수 있습니다. 읽기에 방해되면 끄세요</span>
           </span>
         </label>
+        <label className="mt-2 flex items-start gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={settings.askWithCards === 1}
+            onChange={(e) => onChange({ askWithCards: e.target.checked ? 1 : 0 })}
+            className="mt-0.5 accent-slate-400"
+          />
+          <span>
+            질문할 때 관련 카드 함께 보내기
+            <span className="block text-slate-600">질문에 내 카드의 이름이 나오면 그 카드(최대 3장)를 AI가 먼저 읽고 이어서 답합니다. 무엇을 보내는지 입력창 위에 보입니다</span>
+          </span>
+        </label>
       </section>
 
       <section>

@@ -29,6 +29,7 @@ export const DEFAULT_USER_SETTINGS = {
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
   termHighlight: 1,
+  askWithCards: 1,
 };
 
 /** 질문(배움 카드) 입력 한도 — 서버 ASK 상수와 같아야 한다. 초과분은 클라이언트가 먼저 자른다 */
@@ -43,3 +44,6 @@ export const NO_TOPIC_MARK = '-';
 export const REVIEW_AGAIN_DAYS = 1;
 export const REVIEW_FIRST_OK_DAYS = 2;
 export const REVIEW_MAX_INTERVAL_DAYS = 60;
+
+/** 질문 때 함께 보내는 카드 수 상한 — 서버 CARD.ASK_CONTEXT_MAX_CARDS와 같아야 한다 */
+export const ASK_CONTEXT_MAX_CARDS = 3;

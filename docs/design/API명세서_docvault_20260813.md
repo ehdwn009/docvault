@@ -70,7 +70,7 @@
 | API-054 | PUT | /files/{id}/tags | 파일의 태그 목록 교체 | 로그인 |
 | API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용) | 로그인 |
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
-| API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비·용어 밑줄 termHighlight 0/1) | 로그인 |
+| API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비·용어 밑줄 termHighlight·질문 때 카드 askWithCards, 0/1) | 로그인 |
 | API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장 | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-075 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
@@ -86,7 +86,7 @@
 | API-099 | GET | /google/files/{driveFileId}/raw | 드라이브 원본 스트리밍 (PDF·이미지 등) | 로그인 |
 | API-101 | GET | /ask/status | 질문 기능 상태 (키 설정 여부·오늘 남은 횟수·한도) | 로그인 |
 | API-102 | POST | /ask/threads | 대화 시작 (문서·선택 문장·문맥을 붙여 빈 대화 생성) | 로그인 |
-| API-103 | POST | /ask/threads/{id}/messages | 질문 보내기 → 답변 SSE 스트리밍 | 소유자 |
+| API-103 | POST | /ask/threads/{id}/messages | 질문 보내기 → 답변 SSE 스트리밍. 요청 excludeCardIds[], meta 이벤트에 cards[] (활용 ④) | 소유자 |
 | API-104 | GET | /ask/threads | 지난 대화 목록 (최근순, 본문 제외) | 로그인 |
 | API-105 | GET | /ask/threads/{id} | 대화 하나 + 메시지 전부 | 소유자 |
 | API-106 | DELETE | /ask/threads/{id} | 대화 삭제 | 소유자 |

@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` ADD `ask_with_cards` integer DEFAULT 1 NOT NULL;

@@ -83,6 +83,7 @@ export const DEFAULT_USER_SETTINGS = {
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
   termHighlight: 1,
+  askWithCards: 1,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -141,4 +142,7 @@ export const CARD = {
   REVIEW_AGAIN_DAYS: 1,
   REVIEW_FIRST_OK_DAYS: 2,
   REVIEW_MAX_INTERVAL_DAYS: 60,
+  /** 질문 때 함께 보내는 카드 수 상한과 카드당 본문 길이 — 토큰이 카드 수에 비례해 는다 (활용 ④) */
+  ASK_CONTEXT_MAX_CARDS: 3,
+  ASK_CONTEXT_BODY_CHARS: 400,
 } as const;

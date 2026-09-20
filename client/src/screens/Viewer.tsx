@@ -960,6 +960,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               onConsumePendingQuote={() => setPendingQuote(null)}
               onConversingChange={setAskConversing}
               onOpenFile={onOpenFile}
+              withCards={settings.askWithCards === 1}
               isPc={isPc}
               onClose={() => setAskOpen(false)}
             />

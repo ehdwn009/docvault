@@ -146,6 +146,8 @@ export const userSettings = sqliteTable('user_settings', {
   lastSeenVersion: text('last_seen_version'),
   /** 문서 속 내 카드 용어에 점선 밑줄 (배움 카드 활용 ②). 읽기 취향이라 기기가 아니라 사람에 붙는다. 1=켬 */
   termHighlight: integer('term_highlight').notNull().default(1),
+  /** 질문할 때 관련 배움 카드를 문맥으로 함께 보낼지 (활용 ④). 1=켬 */
+  askWithCards: integer('ask_with_cards').notNull().default(1),
   updatedAt: integer('updated_at').notNull(),
 });
 
