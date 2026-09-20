@@ -2,6 +2,7 @@ import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from
 import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
 import ExportCardsDialog from '../../components/ExportCardsDialog';
 import ReviewDialog from '../../components/ReviewDialog';
+import CardMap from '../../components/CardMap';
 import FileName from '../../components/FileName';
 import SwipeRow from '../../components/SwipeRow';
 import { api, ApiError, cardToTreeFile, type CardSummary, type ReviewList, type TreeFile } from '../../lib/api';
@@ -16,7 +17,7 @@ type Props = {
   onDeleted: (id: number) => void;
 };
 
-type Group = 'topic' | 'recent';
+type Group = 'topic' | 'recent' | 'map';
 type Menu = { x: number; y: number; items: MenuItem[] };
 
 // SCR-181: 배움 카드 서랍 — 카드는 파일 트리에 안 나오고 여기서만 보인다 (설계 — 문서와 섞이지 않게)
@@ -146,6 +147,7 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
             [
               ['topic', '주제별'],
               ['recent', '최근'],
+              ['map', '지도'],
             ] as [Group, string][]
           ).map(([g, label]) => (
             <button
@@ -178,6 +180,9 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
         <p className="px-4 py-4 text-sm text-slate-600">
           아직 카드가 없어요. 문서를 읽다 질문하고, 답 아래 [카드로 저장]을 누르면 여기 쌓입니다.
         </p>
+      ) : group === 'map' ? (
+        // SCR-184 지도 — 검색어는 지도에도 적용된다 (걸린 카드만 그린다)
+        <CardMap cards={filtered} onOpen={onSelect} onCardsChanged={reload} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {sections.map((sec) => (
