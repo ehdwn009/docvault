@@ -330,11 +330,16 @@ export type CardOutlineItem = {
   concept: CardFront & { title: string; body: string; existingCardId: number | null };
   existing: CardSummary | null;
   merged: CardMerge | null;
+  /** 2단계(본문·재구성)가 끝났나 — 아니면 "초안 쓰는 중" */
+  ready: boolean;
 };
 export type CardOutline = {
   items: CardOutlineItem[];
   topic: { title: string; oneLine: string; body: string };
   source: string;
+  /** 이 정리를 만든 시각. stale = 그 뒤에 대화에 답이 더 붙었다 */
+  outlineAt: number;
+  stale: boolean;
 };
 /** 복습(API-119) 한 장 — 요약 + 본문(뒷면) + 지금 간격 */
 export type ReviewCard = CardSummary & { body: string; intervalDays: number; dueAt: number };

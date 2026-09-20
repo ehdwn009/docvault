@@ -118,6 +118,8 @@ export const ASK = {
 
 /** 배움 카드 (2판) — 설계 "카드의 모양" */
 export const CARD = {
+  /** 카드 초안·정리·재구성용 모델 — 답변(ASK.MODEL)과 다르다. 대화를 구조화하는 일이라 깊은 추론보다 속도 */
+  MODEL: 'claude-sonnet-5',
   /** 초안·재구성 답 길이 상한 (토큰). 카드 한 장 분량 */
   MAX_OUTPUT_TOKENS: 4096,
   /** 비슷한 카드 판단 때 LLM에 보여 주는 기존 카드 수 상한 — 그 이상은 제목·별칭 정확 일치만 */
@@ -128,8 +130,10 @@ export const CARD = {
   MAX_LIST_ITEMS: 12,
   /** 대화 정리(API-116)가 한 대화에서 뽑는 개념 수 상한 — 그 이상이면 대화를 나눠 정리하는 게 맞다 */
   OUTLINE_MAX_CONCEPTS: 8,
-  /** 대화 정리 답 길이 상한 — 카드 여러 장 + 주제 카드 분량 */
-  OUTLINE_MAX_OUTPUT_TOKENS: 12000,
+  /** 대화 정리 1단계(개념 목록만, 본문 없음) 답 길이 상한 — 짧아야 체크리스트가 빨리 뜬다 */
+  OUTLINE_MAX_OUTPUT_TOKENS: 3000,
+  /** 2단계 항목 하나의 본문 상한 */
+  OUTLINE_ITEM_MAX_OUTPUT_TOKENS: 2000,
   /** 답 골라 담기(API-112 messageIds)에서 한 번에 고를 수 있는 답 수 */
   MAX_PICKED_MESSAGES: 30,
   /** 용어집 내보내기(API-118)가 내 파일 최상위에 만드는·갱신하는 파일 이름 */

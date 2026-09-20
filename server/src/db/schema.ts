@@ -168,6 +168,10 @@ export const askThreads = sqliteTable('ask_threads', {
   createdAt: integer('created_at').notNull(),
   /** 마지막 메시지 시각 — 30일 정리의 기준 */
   updatedAt: integer('updated_at').notNull(),
+  /** 대화 정리(API-116) 결과 JSON — 창을 닫았다 열어도 다시 만들지 않게. 카드로 저장하면 지운다 */
+  outlineJson: text('outline_json'),
+  /** 정리 결과를 만든 시각 — updated_at보다 오래됐으면 "그 뒤에 답이 붙었다" */
+  outlineAt: integer('outline_at'),
 });
 
 export const askMessages = sqliteTable('ask_messages', {

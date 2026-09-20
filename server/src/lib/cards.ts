@@ -191,7 +191,7 @@ export async function draftCard(t: ThreadForCard, existing: CardSummary[], scope
       ? '아래 대화에서 카드 한 장을 만들어 줘. 대화에 개념이 여럿이면 답이 주로 설명한 하나만.'
       : '아래 대화 전체를 아우르는 카드 한 장을 만들어 줘. 개념이 여럿이면 하나로 묶는 제목을 짓고, 종류는 비교(표)나 절차처럼 여럿을 담기 좋은 모양으로. 각 개념은 소제목이나 표의 행으로.';
   const res = await getClient().messages.parse({
-    model: ASK.MODEL,
+    model: CARD.MODEL,
     max_tokens: CARD.MAX_OUTPUT_TOKENS,
     system: CARD_SYSTEM,
     output_config: { effort: 'medium', format: zodOutputFormat(DraftSchema) },
@@ -219,7 +219,7 @@ export async function mergeCard(
   instruction: string | undefined,
 ): Promise<CardMerge> {
   const res = await getClient().messages.parse({
-    model: ASK.MODEL,
+    model: CARD.MODEL,
     max_tokens: CARD.MAX_OUTPUT_TOKENS,
     system: CARD_SYSTEM,
     output_config: { effort: 'medium', format: zodOutputFormat(MergeSchema) },
@@ -244,7 +244,6 @@ const OutlineConceptSchema = z.object({
   topic: z.string().describe('주제 폴더. 이미 있는 주제에 맞는 게 있으면 그것을'),
   tags: z.array(z.string()),
   links: z.array(z.string()).describe('이 대화의 다른 개념이나 기존 카드 중 이 카드가 가리킬 것. 3개 이하'),
-  body: z.string().describe('본문 md. 이 개념에 대해 대화에서 나온 내용만. 제목(#)은 쓰지 않는다'),
   existingCardId: z
     .number()
     .int()
@@ -261,36 +260,59 @@ const OutlineSchema = z.object({
     })
     .describe('개념 카드들을 엮는 요약 한 장'),
 });
-export type CardOutlineConcept = z.infer<typeof OutlineConceptSchema>;
-export type CardOutline = z.infer<typeof OutlineSchema>;
+export type CardOutlineConcept = z.infer<typeof OutlineConceptSchema> & { body: string };
+export type CardOutline = { concepts: CardOutlineConcept[]; topic: z.infer<typeof OutlineSchema>['topic'] };
 
 /**
- * 대화 정리 — 대화 하나에서 개념 N개를 체크리스트로 뽑는다 (설계 흐름 M).
+ * 대화 정리 1단계 — 개념 목록만 (제목·한 줄·종류·기존 카드 매칭). 본문은 2단계(outlineConceptBody)에서 항목별로.
+ * 두 단계로 나눈 이유: 본문까지 한 번에 쓰면 30초 넘게 걸려 체크리스트가 늦게 뜬다. 목록은 몇백 토큰이라 몇 초면 된다.
  * 기존 카드와 같은 개념은 LLM 판단(existingCardId)과 제목·별칭 정확 일치 둘 다로 잡는다 — LLM이 놓쳐도 이름이 같으면 이어쓰기다.
  */
 export async function outlineThread(t: ThreadForCard, existing: CardSummary[]): Promise<CardOutline> {
   const { list, topics } = existingList(existing);
   const res = await getClient().messages.parse({
-    model: ASK.MODEL,
+    model: CARD.MODEL,
     max_tokens: CARD.OUTLINE_MAX_OUTPUT_TOKENS,
     system: CARD_SYSTEM,
-    output_config: { effort: 'medium', format: zodOutputFormat(OutlineSchema) },
+    output_config: { effort: 'low', format: zodOutputFormat(OutlineSchema) },
     messages: [
       {
         role: 'user',
-        content: `아래 대화를 개념 단위로 정리해 줘. 개념마다 카드 초안 하나씩, 그리고 그것들을 엮는 주제 카드 하나.\n\n<대화>\n${transcript(t)}\n</대화>\n\n이미 있는 카드 (같은 개념이면 existingCardId에 id를 적어 줘):\n${list || '(없음)'}\n\n이미 있는 주제 폴더: ${topics || '(없음)'}`,
+        content: `아래 대화를 개념 단위로 정리해 줘. 개념마다 제목·한 줄·종류·별칭·태그·연결만 (본문은 나중에 따로 쓴다), 그리고 그것들을 엮는 주제 카드 하나.\n\n<대화>\n${transcript(t)}\n</대화>\n\n이미 있는 카드 (같은 개념이면 existingCardId에 id를 적어 줘):\n${list || '(없음)'}\n\n이미 있는 주제 폴더: ${topics || '(없음)'}`,
       },
     ],
   });
   if (!res.parsed_output) throw new Error('대화 정리 결과를 읽지 못했습니다');
-  const outline = OutlineSchema.parse(res.parsed_output);
-  outline.concepts = outline.concepts.slice(0, CARD.OUTLINE_MAX_CONCEPTS).map((c) => {
+  const parsed = OutlineSchema.parse(res.parsed_output);
+  const concepts = parsed.concepts.slice(0, CARD.OUTLINE_MAX_CONCEPTS).map((c) => {
     // 목록에 없는 id는 버리고, 이름이 정확히 같은 카드가 있으면 LLM이 뭐라 했든 이어쓰기로
     const byLlm = c.existingCardId !== null && existing.some((x) => x.id === c.existingCardId) ? c.existingCardId : null;
     const exact = findExactCard(existing, c.title, c.aliases);
-    return { ...c, existingCardId: exact?.id ?? byLlm };
+    return { ...c, existingCardId: exact?.id ?? byLlm, body: '' };
   });
-  return outline;
+  return { concepts, topic: parsed.topic };
+}
+
+const ConceptBodySchema = z.object({
+  body: z.string().describe('본문 md. 이 개념에 대해 대화에서 나온 내용만, 종류에 맞는 모양으로. 제목(#)은 쓰지 않는다'),
+});
+
+/** 대화 정리 2단계 — 개념 하나의 본문. 목록이 뜬 뒤 항목별로 뒤에서 부른다 */
+export async function outlineConceptBody(t: ThreadForCard, concept: Pick<CardOutlineConcept, 'title' | 'oneLine' | 'kind'>): Promise<string> {
+  const res = await getClient().messages.parse({
+    model: CARD.MODEL,
+    max_tokens: CARD.OUTLINE_ITEM_MAX_OUTPUT_TOKENS,
+    system: CARD_SYSTEM,
+    output_config: { effort: 'low', format: zodOutputFormat(ConceptBodySchema) },
+    messages: [
+      {
+        role: 'user',
+        content: `아래 대화에서 "${concept.title}"(${concept.kind} — ${concept.oneLine}) 카드의 본문만 써 줘. 이 개념에 대해 대화에서 나온 내용만 담고, 다른 개념은 이름만 언급해.\n\n<대화>\n${transcript(t)}\n</대화>`,
+      },
+    ],
+  });
+  if (!res.parsed_output) throw new Error('본문을 읽지 못했습니다');
+  return ConceptBodySchema.parse(res.parsed_output).body;
 }
 
 // ---- 질문 때 카드 문맥 (활용 ④) ----

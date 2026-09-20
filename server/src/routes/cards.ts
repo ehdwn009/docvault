@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { CARD } from '../constants.js';
 import { db } from '../db/index.js';
-import { cardThreads, files } from '../db/schema.js';
+import { askThreads, cardThreads, files } from '../db/schema.js';
 import { isAskConfigured, describeUpstreamError } from '../lib/ask.js';
 import {
   createCardFile,
@@ -12,7 +12,10 @@ import {
   listCards,
   loadThreadForCard,
   mergeCard,
+  outlineConceptBody,
   outlineThread,
+  type CardMerge,
+  type CardOutlineConcept,
   sourceLine,
   titleOf,
   type CardSummary,
@@ -25,7 +28,7 @@ import { CARD_KINDS, cleanListItem, joinCard, splitCard, type CardFrontmatter } 
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-// API-111~120: 배움 카드 (2판). 카드 = files의 md(kind='card'). 소유자만 다룬다 — 공유는 파일 공유 토글 그대로
+// API-111~121: 배움 카드 (2판). 카드 = files의 md(kind='card'). 소유자만 다룬다 — 공유는 파일 공유 토글 그대로
 
 const listField = z.array(z.string().trim().min(1).max(60)).max(CARD.MAX_LIST_ITEMS);
 const frontSchema = z.object({
@@ -56,6 +59,31 @@ const draftSchema = z
   })
   .refine((v) => v.messageId === undefined || v.messageIds === undefined, { message: 'messageId와 messageIds는 함께 줄 수 없습니다' });
 const outlineSchema = z.object({ threadId: z.number().int().positive() });
+const outlineItemSchema = z.object({ threadId: z.number().int().positive(), title: z.string().trim().min(1).max(80) });
+
+/** 대화에 저장해 두는 정리 결과 — 창을 닫았다 열어도, 앱을 나갔다 와도 다시 만들지 않는다 (C1) */
+type StoredOutline = {
+  items: { concept: CardOutlineConcept; existing: CardSummary | null; merged: CardMerge | null; ready: boolean }[];
+  topic: { title: string; oneLine: string; body: string };
+  source: string;
+};
+function readOutline(threadId: number): { outline: StoredOutline; outlineAt: number } | null {
+  const row = db.select({ json: askThreads.outlineJson, at: askThreads.outlineAt }).from(askThreads).where(eq(askThreads.id, threadId)).get();
+  if (!row?.json || row.at === null) return null;
+  try {
+    return { outline: JSON.parse(row.json) as StoredOutline, outlineAt: row.at };
+  } catch {
+    return null;
+  }
+}
+function writeOutline(threadId: number, outline: StoredOutline | null, at: number | null) {
+  db.update(askThreads).set({ outlineJson: outline ? JSON.stringify(outline) : null, outlineAt: at }).where(eq(askThreads.id, threadId)).run();
+}
+/** 정리 뒤에 답이 더 붙었나 — 대화의 updatedAt은 마지막 메시지 시각 */
+function outlineResponse(threadId: number, stored: { outline: StoredOutline; outlineAt: number }) {
+  const t = db.select({ updatedAt: askThreads.updatedAt }).from(askThreads).where(eq(askThreads.id, threadId)).get();
+  return { ...stored.outline, outlineAt: stored.outlineAt, stale: (t?.updatedAt ?? 0) > stored.outlineAt };
+}
 const exportQuerySchema = z.object({
   format: z.enum(['md', 'csv']).default('md'),
   /** 쉼표로 이은 주제 목록. 없으면 전체. 주제 없음은 NO_TOPIC_MARK */
@@ -275,8 +303,18 @@ export const cardRoutes = new Hono<AppEnv>()
     return c.json(gradeCard(user.id, id, c.req.valid('json').result));
   })
 
-  // API-116: 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 이어쓰기로 표시하고,
-  // 그 항목은 재구성(API-113과 같은 LLM 호출)까지 미리 해 둔다 — 저장(API-117)은 LLM 없이 빠르고 원자적이게
+  // API-116: 저장된 정리 결과 — 있으면 그대로 (stale = 그 뒤에 답이 붙었다). 없으면 outline: null
+  .get('/outline', (c) => {
+    const user = c.get('user');
+    const threadId = parseId(c.req.query('threadId'));
+    if (threadId === null) return fail(c, 400, 'VALIDATION_ERROR', 'threadId: 올바르지 않은 값');
+    if (!loadThreadForCard(user.id, threadId)) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
+    const stored = readOutline(threadId);
+    return c.json({ outline: stored ? outlineResponse(threadId, stored) : null });
+  })
+
+  // API-116: 대화 정리 1단계 — 개념 목록 + 주제 카드 초안 (본문 없음, 빠른 모델). 결과는 대화에 저장하고 이전 결과는 덮는다.
+  // 본문·재구성은 2단계(API-121)에서 항목별로 — 그래야 체크리스트가 몇 초 안에 뜬다
   .post('/outline', jsonBody(outlineSchema), async (c) => {
     if (!isAskConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', '관리자가 아직 LLM을 연결하지 않았습니다');
     const user = c.get('user');
@@ -286,17 +324,52 @@ export const cardRoutes = new Hono<AppEnv>()
     const existing = listCards(user.id);
     try {
       const outline = await outlineThread(t, existing);
-      const items = await Promise.all(
-        outline.concepts.map(async (concept) => {
-          const card = concept.existingCardId !== null ? existing.find((x) => x.id === concept.existingCardId) ?? null : null;
-          if (!card) return { concept, existing: null, merged: null };
-          const row = findOwnCard(user.id, card.id);
-          const { front, body } = splitCard(row?.contentText ?? '');
-          const merged = await mergeCard(card.title, front, body, t, undefined);
-          return { concept, existing: card, merged };
-        }),
-      );
-      return c.json({ items, topic: outline.topic, source: sourceLine(t) });
+      const stored: StoredOutline = {
+        items: outline.concepts.map((concept) => ({
+          concept,
+          existing: concept.existingCardId !== null ? existing.find((x) => x.id === concept.existingCardId) ?? null : null,
+          merged: null,
+          ready: false,
+        })),
+        topic: outline.topic,
+        source: sourceLine(t),
+      };
+      const at = Date.now();
+      writeOutline(threadId, stored, at);
+      return c.json(outlineResponse(threadId, { outline: stored, outlineAt: at }));
+    } catch (e) {
+      return fail(c, 502, 'ASK_UPSTREAM_ERROR', describeUpstreamError(e));
+    }
+  })
+
+  // API-121: 대화 정리 2단계 — 항목 하나의 본문(새 카드) 또는 재구성(이어쓰기). 결과는 저장된 정리에 채워 넣는다
+  .post('/outline/item', jsonBody(outlineItemSchema), async (c) => {
+    if (!isAskConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', '관리자가 아직 LLM을 연결하지 않았습니다');
+    const user = c.get('user');
+    const { threadId, title } = c.req.valid('json');
+    const t = loadThreadForCard(user.id, threadId);
+    if (!t) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
+    const stored = readOutline(threadId);
+    const item = stored?.outline.items.find((it) => it.concept.title === title);
+    if (!stored || !item) return fail(c, 404, 'NOT_FOUND', '정리 결과에 없는 항목입니다 — 다시 정리해 주세요');
+    if (item.ready) return c.json({ item });
+    try {
+      if (item.existing) {
+        const row = findOwnCard(user.id, item.existing.id);
+        const { front, body } = splitCard(row?.contentText ?? '');
+        item.merged = await mergeCard(item.existing.title, front, body, t, undefined);
+      } else {
+        item.concept.body = await outlineConceptBody(t, item.concept);
+      }
+      item.ready = true;
+      // 같은 항목을 두 창이 동시에 채워도 마지막 저장이 이긴다 — 내용은 같으니 문제없다
+      const latest = readOutline(threadId);
+      if (latest && latest.outlineAt === stored.outlineAt) {
+        const target = latest.outline.items.find((it) => it.concept.title === title);
+        if (target) Object.assign(target, item);
+        writeOutline(threadId, latest.outline, latest.outlineAt);
+      }
+      return c.json({ item });
     } catch (e) {
       return fail(c, 502, 'ASK_UPSTREAM_ERROR', describeUpstreamError(e));
     }
@@ -365,5 +438,7 @@ export const cardRoutes = new Hono<AppEnv>()
       }
       return { created, merged, topic };
     });
+    // 카드가 된 대화는 정리 결과를 지운다 — 다시 정리할 일은 드물고, 남겨 두면 "지난 정리"가 낡은 채 뜬다
+    writeOutline(body.threadId, null, null);
     return c.json(result, 201);
   });

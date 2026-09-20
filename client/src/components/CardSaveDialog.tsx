@@ -133,7 +133,7 @@ export default function CardSaveDialog({ threadId, messageId, messageIds, isPc, 
       >
         <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
           <span className="text-teal-300">📚</span>
-          <h3 className="text-sm font-semibold">{title}</h3>
+          <h3 className="shrink-0 whitespace-nowrap text-sm font-semibold">{title}</h3>
           <span className="truncate text-xs text-slate-500">{subtitle}</span>
           <button onClick={onClose} disabled={busy} className="ml-auto px-1 text-slate-500 hover:text-slate-300">✕</button>
         </div>

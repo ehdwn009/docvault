@@ -9,6 +9,7 @@ import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '
 import { cardTitle } from '../lib/frontmatter';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { toast } from '../lib/toast';
+import { finishBoot, timed } from '../lib/bootTiming';
 import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
 
@@ -217,8 +218,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     if (isBinary) {
       setData({ id: file.id, fileType: file.fileType, content: '', updatedAt: file.updatedAt, readonly: true });
     } else {
-      api<FileContent>(`/files/${file.id}/content`)
-        .then(setData)
+      // 시작 측정: 첫 문서 본문까지가 "앱이 떴다"의 끝 (딥링크로 열었을 때). 이후 문서는 timed가 무시한다
+      timed('문서 본문 (/files/:id/content)', () => api<FileContent>(`/files/${file.id}/content`))
+        .then((d) => {
+          setData(d);
+          finishBoot();
+        })
         .catch((e: unknown) =>
           setError(e instanceof ApiError ? e.message : '본문을 불러오지 못했습니다'),
         );
