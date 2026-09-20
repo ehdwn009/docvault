@@ -1,4 +1,5 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { clearQuoteHighlight, highlightQuote } from '../lib/findQuote';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 // CommonMark 규칙상 닫는 **가 문장부호 뒤 + 한글 조사 앞이면(예: "(Caddy)**와") 볼드로
@@ -18,12 +19,30 @@ export default function MarkdownRenderer({
   content,
   theme = 'dark',
   onFileLink,
+  highlightQuote: quote,
+  onQuoteFound,
 }: {
   content: string;
   theme?: ViewerTheme;
   /** 상대 경로 링크 클릭 — (경로, 분할로 열지). 없으면 링크는 기본 동작 그대로 */
   onFileLink?: (path: string, split: boolean) => void;
+  /** 카드 출처로 열렸을 때 찾아 형광펜 칠할 문장 */
+  highlightQuote?: string;
+  onQuoteFound?: (found: boolean) => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 출처 문장 찾기 — 본문이 그려진 다음 프레임에. 문장이 없어지면 형광펜을 지운다
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (!quote) {
+      clearQuoteHighlight(el);
+      return;
+    }
+    const id = requestAnimationFrame(() => onQuoteFound?.(highlightQuote(el, quote)));
+    return () => cancelAnimationFrame(id);
+  }, [content, quote]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 커스텀 컴포넌트를 렌더마다 새 함수로 만들면 React가 매 렌더에 <a>들을 재마운트한다.
   // 분할에서 비활성 칸의 링크를 누르면 pointerdown의 칸 활성화 리렌더가 클릭 완성 전에
   // 요소를 갈아치워 click이 아예 발생하지 않는다 — 그래서 identity를 고정(useMemo)하고
@@ -79,7 +98,7 @@ export default function MarkdownRenderer({
   );
 
   return (
-    <div className={`prose ${isDarkViewerTheme(theme) ? 'prose-invert' : ''} max-w-none`}>
+    <div ref={rootRef} className={`prose ${isDarkViewerTheme(theme) ? 'prose-invert' : ''} max-w-none`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         rehypePlugins={[rehypeHighlight]}

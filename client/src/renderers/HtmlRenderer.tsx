@@ -31,7 +31,7 @@ function navShim(restoreOffset: number, restoreRatio: number | undefined, theme:
   const ratio = restoreRatio != null && restoreRatio > 0 && restoreRatio <= 1 ? restoreRatio : null;
   // 문서가 원하면 CSS에서 [data-theme="dark"]로 뷰어 테마를 따를 수 있게 표식만 남긴다 (강제하지 않음)
   const safeTheme = collapseTheme(theme);
-  return `<script>(function(){
+  return `<style>::highlight(dv-source),mark.dv-source{background:rgba(250,204,21,.5);color:inherit}</style><script>(function(){
 var se=function(){return document.scrollingElement||document.documentElement};
 document.documentElement.dataset.theme='${safeTheme}';
 document.addEventListener('click',function(ev){
@@ -53,8 +53,22 @@ var HD=[];
 var sendToc=function(){HD=[].slice.call(document.querySelectorAll('h1,h2,h3')).slice(0,300);
 parent.postMessage({type:'docvault:toc',items:HD.map(function(h){return{text:(h.textContent||'').trim().slice(0,120),level:+h.tagName[1]||1}})},'*')};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sendToc);else sendToc();
+// 카드 출처 문장 찾기 — lib/findQuote.ts와 같은 알고리즘의 ES5 복사본 (격리 iframe이라 import가 안 된다. 규칙을 고치면 양쪽 같이)
+var HLN='dv-source';
+var findQ=function(q){q=q.replace(/\\s+/g,' ').replace(/^\\s+|\\s+$/g,'');if(!q)return null;
+var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),map=[],flat='',ls=true,n;
+while((n=w.nextNode())){var p=n.parentNode&&n.parentNode.nodeName;if(p==='SCRIPT'||p==='STYLE')continue;var t=n.data;
+for(var i=0;i<t.length;i++){var ch=t.charAt(i);if(/\\s/.test(ch)){if(ls)continue;flat+=' ';map.push([n,i]);ls=true}else{flat+=ch;map.push([n,i]);ls=false}}}
+var at=flat.indexOf(q),len=q.length;if(at<0&&q.length>30){var h=q.slice(0,30).replace(/\\s+$/,'');at=flat.indexOf(h);len=h.length}
+if(at<0)return null;var r=document.createRange();r.setStart(map[at][0],map[at][1]);r.setEnd(map[at+len-1][0],map[at+len-1][1]+1);return r};
+var doFind=function(q){var old=document.querySelectorAll('mark.'+HLN);for(var i=0;i<old.length;i++){var m=old[i];while(m.firstChild)m.parentNode.insertBefore(m.firstChild,m);m.parentNode.removeChild(m)}
+if(window.CSS&&CSS.highlights)CSS.highlights['delete'](HLN);
+var r=findQ(q);if(!r){parent.postMessage({type:'docvault:found',ok:false},'*');return}
+if(window.CSS&&CSS.highlights&&window.Highlight)CSS.highlights.set(HLN,new Highlight(r));else if(r.startContainer===r.endContainer){var mk=document.createElement('mark');mk.className=HLN;r.surroundContents(mk)}
+var el=r.startContainer.parentNode;if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});parent.postMessage({type:'docvault:found',ok:true},'*')};
 addEventListener('message',function(ev){var d=ev.data||{};
 if(d.type==='docvault:goto'&&HD[d.index])HD[d.index].scrollIntoView({behavior:'smooth',block:'start'});
+else if(d.type==='docvault:find'&&typeof d.quote==='string')doFind(d.quote);
 else if(d.type==='docvault:theme')document.documentElement.dataset.theme=String(d.theme)});
 ${ratio !== null || offset > 0 ? `var ap=function(){var s=se(),d=s.scrollHeight-s.clientHeight;s.scrollTop=${ratio !== null ? `d>0?Math.round(d*${ratio}):${offset}` : `${offset}`}};if(document.readyState==='complete')ap();else addEventListener('load',function(){requestAnimationFrame(ap)});` : ''}
 })()</${'script'}>`;
@@ -319,10 +333,15 @@ type Props = {
   fontScale?: number;
   /** 문장 선택 보고 — 좌표는 뷰포트 기준으로 바꿔서 준다. null = 선택 풀림 */
   onSelection?: (sel: RendererSelection | null) => void;
+  /** 카드 출처로 열렸을 때 찾아 형광펜 칠할 문장 — 심에 쪽지로 보낸다 */
+  highlightQuote?: string;
+  onQuoteFound?: (found: boolean) => void;
 };
 
-export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100, onSelection }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100, onSelection, highlightQuote, onQuoteFound }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  // 문서가 다 올라온 뒤에야 찾기 쪽지를 보낼 수 있다 — 심이 'docvault:toc'를 보내면 준비된 것
+  const [ready, setReady] = useState(false);
   // srcDoc이 바뀌면 iframe이 통째로 리로드된다 — 복원 위치·초기 테마·맞춤·배율은 마운트 시점 값으로 고정해
   // 부모 리렌더(트리 갱신·설정 변경 등)가 읽는 중인 문서를 초기화하지 않게 한다
   const [restoreOffset] = useState(initialOffset);
@@ -340,12 +359,14 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, initia
       // 반드시 이 iframe에서 온 메시지만 신뢰한다 (아키텍처 — HTML 렌더러 호환 심)
       if (e.source !== frameRef.current?.contentWindow) return;
       const d = e.data as {
-        type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown;
+        type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown; ok?: unknown;
         quote?: unknown; context?: unknown; x?: unknown; y?: unknown; w?: unknown; h?: unknown;
       } | null;
       if (!d || typeof d !== 'object') return;
       if (d.type === 'docvault:interact') {
         onInteract?.();
+      } else if (d.type === 'docvault:found') {
+        onQuoteFound?.(d.ok === true);
       } else if (d.type === 'docvault:selection') {
         const quote = typeof d.quote === 'string' ? d.quote : '';
         if (!quote) {
@@ -374,11 +395,18 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, initia
           jump: () => frameRef.current?.contentWindow?.postMessage({ type: 'docvault:goto', index }, '*'),
         }));
         onToc?.(items);
+        setReady(true);
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onScrollOffset, onToc, onInteract, onSelection]);
+  }, [onScrollOffset, onToc, onInteract, onSelection, onQuoteFound]);
+
+  // 출처 문장 찾기 — 문서가 준비된 뒤, 그리고 문장이 바뀔 때마다
+  useEffect(() => {
+    if (!ready || !highlightQuote) return;
+    frameRef.current?.contentWindow?.postMessage({ type: 'docvault:find', quote: highlightQuote }, '*');
+  }, [ready, highlightQuote]);
 
   // 열람 중 테마·맞춤 변경은 리로드 없이 쪽지로 전파한다 (마운트 시점 값은 이미 심에 박혀 있다).
   // 실제로 보낸 값을 기억해 두는 이유: 처음 값으로 되돌아가는 변경(밝게→어둡게→밝게)도 전해야 한다

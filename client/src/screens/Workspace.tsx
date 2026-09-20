@@ -16,9 +16,12 @@ import UpdateNotes from '../components/UpdateNotes';
 import {
   api,
   ApiError,
+  cardToTreeFile,
   isTextFileType,
   toTreeFile,
   uploadFiles,
+  type AskThread,
+  type CardSummary,
   type Changelog,
   type SharedFile,
   type Tag,
@@ -111,6 +114,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [splitRatio, setSplitRatio] = useState(50); // 첫 칸의 크기 비율(%) — 구분선 드래그로 조절
   // 줄 번호 앵커(#L16-L26)로 연 파일의 하이라이트 범위 — 링크가 "파일 속 한 지점"을 가리킬 때
   const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
+  // 카드 출처로 연 파일에서 형광펜 칠할 문장 — 출처가 "파일 속 한 문장"을 가리킬 때 (배움 카드 — 출처 클릭)
+  const [quoteJump, setQuoteJump] = useState<{ fileId: number; quote: string } | null>(null);
   // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대)을 접는다 (IA — 크롬 자동 숨김)
   // 크롬 안착 상태(aria·pointer-events용) — 접히는 동안의 움직임은 drawerBtnRef가 DOM에 직접 쓴다
   const chromeHidden = useChromeHidden();
@@ -250,6 +255,45 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       if (location.pathname !== `/f/${file.id}`) history.pushState(null, '', `/f/${file.id}`);
     },
     [panes, maxPanes, confirmReplace, ensureTab],
+  );
+
+  /** 카드 출처 클릭 — 그 대화의 문서를 열고 드래그했던 문장을 찾아 형광펜 (배움 카드 — 출처 클릭).
+      출처 줄의 "(대화 #N)"만 열쇠로 쓰고 문서·문장은 대화에서 다시 읽는다 — 출처 글자가 낡아도 대화는 정확하다 */
+  const openSource = useCallback(
+    async (threadId: number) => {
+      try {
+        const { thread } = await api<{ thread: AskThread }>(`/ask/threads/${threadId}`);
+        if (thread.fileId === null) {
+          toast('출처 문서가 지워졌어요 — 대화만 남아 있습니다', 'info');
+          return;
+        }
+        const target = await resolveFile(thread.fileId);
+        if (!target) {
+          toast('출처 문서를 열 수 없습니다', 'error');
+          return;
+        }
+        setQuoteJump(thread.quote ? { fileId: target.id, quote: thread.quote } : null);
+        await selectFile(target);
+      } catch (e) {
+        toast(e instanceof ApiError ? e.message : '출처를 열지 못했습니다', 'error');
+      }
+    },
+    [resolveFile, selectFile],
+  );
+
+  /** 카드의 연결 칩 클릭 — 그 이름(제목·별칭)의 카드를 연다. 없는 카드는 아직 만들지 않는다 (빈 카드는 3판) */
+  const openCardByTitle = useCallback(
+    async (title: string) => {
+      const norm = (x: string) => x.replace(/\s+/g, '').toLowerCase();
+      const { cards } = await api<{ cards: CardSummary[] }>('/cards').catch(() => ({ cards: [] as CardSummary[] }));
+      const found = cards.find((c) => norm(c.title) === norm(title) || c.aliases.some((a) => norm(a) === norm(title)));
+      if (!found) {
+        toast(`"${title}" 카드는 아직 없어요`, 'info');
+        return;
+      }
+      await selectFile(cardToTreeFile(found));
+    },
+    [selectFile],
   );
 
   /** 문서 속 상대 경로 링크를 내 트리의 파일로 번역해 연다 (IA — 문서 내부 링크).
@@ -1469,6 +1513,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onSplitView={splitCandidates.length > 0 ? () => void splitView() : undefined}
                 onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
                 onOpenFile={(target) => void selectFile(target)}
+                jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
+                onOpenSource={(tid) => void openSource(tid)}
+                onOpenCard={(title) => void openCardByTitle(title)}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
               />
             )}

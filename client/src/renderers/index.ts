@@ -22,6 +22,10 @@ export type RendererProps = {
   onFileLink?: (path: string, split: boolean) => void;
   /** 줄 번호 앵커(#L16-L26)로 열렸을 때 하이라이트할 줄 범위 — 코드 렌더러용 */
   highlightLines?: { start: number; end: number };
+  /** 카드 출처로 열렸을 때 문서에서 찾아 형광펜 칠할 문장 (md·text·html) */
+  highlightQuote?: string;
+  /** 문장을 찾았는지 보고 — 못 찾으면 부모가 "문서가 바뀌었을 수 있다"고 알린다 */
+  onQuoteFound?: (found: boolean) => void;
   /** 열람 시작 시 복원할 스크롤 위치 — iframe 내부에서 스크롤되는 html 렌더러용 */
   initialOffset?: number;
   /** 복원할 비율(0~1) — px은 기기 간에 안 맞아, 있으면 이것을 우선한다 (html 렌더러용) */

@@ -91,10 +91,12 @@
 | API-105 | GET | /ask/threads/{id} | 대화 하나 + 메시지 전부 | 소유자 |
 | API-106 | DELETE | /ask/threads/{id} | 대화 삭제 | 소유자 |
 | API-111 | GET | /cards | 내 카드 목록 (머리말 요약: 제목·한 줄·별칭·종류·주제·태그·연결·출처) | 로그인 |
-| API-112 | POST | /cards/draft | 대화(또는 답 하나)에서 카드 초안 + 비슷한 카드 판단 (LLM, 구조화 출력) | 소유자 |
+| API-112 | POST | /cards/draft | 대화 전체·답 하나·고른 답들에서 카드 초안 + 비슷한 카드 판단 (LLM, 구조화 출력) | 소유자 |
 | API-113 | POST | /cards/merge-preview | 기존 카드 + 대화 → 재구성 결과 미리보기 (LLM). 저장 안 함 | 소유자 |
 | API-114 | POST | /cards | 카드 만들기 — md 파일 생성(kind=card), 이름=제목.md, 겹치면 (2) | 로그인 |
 | API-115 | PUT | /cards/{id} | 카드 머리말·본문 갱신 (재구성 저장). 버전 스냅샷, 출처는 더하기만 | 소유자 |
+| API-116 | POST | /cards/outline | 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 재구성까지 미리 (LLM) | 소유자 |
+| API-117 | POST | /cards/batch | 묶음 저장 — 개념 카드 N장(새로/이어쓰기) + 주제 카드 1장을 한 트랜잭션으로. LLM 없음. 되돌리기 재료 반환 | 소유자 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
 
@@ -497,12 +499,12 @@ GET /api/v1/google/files/{driveFileId}/content
 ### API-105 Response — GET /ask/threads/{id}
 `{ "thread": {...}, "messages": [ { id, role: "user"|"assistant", content, createdAt } ] }`
 
-## API-111 ~ API-115: 배움 카드 (2판)
+## API-111 ~ API-117: 배움 카드 (2판)
 
 설계: [배움카드_docvault_20260918.md](배움카드_docvault_20260918.md) "카드의 모양". 카드는 files의 md(kind='card')라 본문 조회·편집·버전·태그·공유는 파일 API를 그대로 쓴다. 여기는 **머리말을 아는** API만.
 
 ### API-112 Request — POST /cards/draft
-`{ "threadId": number, "messageId"?: number }` — messageId가 있으면 그 답 + 바로 앞 질문만, 없으면 대화 전체.
+`{ "threadId": number, "messageId"?: number, "messageIds"?: number[](≤30) }` — messageId면 그 답 + 바로 앞 질문만(개념 하나), messageIds면 고른 답들 + 각각의 앞 질문, 둘 다 없으면 대화 전체. 답 하나가 아니면 "여럿을 아우르는 한 장"으로 초안을 짠다. 둘을 같이 주면 400.
 
 **200** — `{ "draft": { title, oneLine, aliases[], kind, topic, tags[], links[], body, similar: { cardId, relation: "same"|"aspect"|"related"|"different", reason, recommendation: "merge"|"link"|"new" } | null }, "similarCard": 카드 요약 | null, "source": "문서 · 인용 (대화 #id)" }`
 제목·별칭이 정확히 같은 카드가 있으면 LLM 판단과 무관하게 `similar.relation = "same"`으로 채운다.
@@ -515,3 +517,11 @@ GET /api/v1/google/files/{driveFileId}/content
 
 ### API-115 Request — PUT /cards/{id}
 API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId의 출처를 더한다. 편집기 저장(API-034)과 같은 스냅샷 규칙.
+
+### API-116 Request — POST /cards/outline
+`{ "threadId" }` → **200** `{ "items": [ { "concept": { title, oneLine, aliases, kind, topic, tags, links, body, existingCardId: number|null }, "existing": 카드 요약 | null, "merged": API-113의 merged | null } ], "topic": { title, oneLine, body }, "source" }`
+개념은 최대 8개. `existingCardId`는 LLM 판단 + 제목·별칭 정확 일치 둘 다로 잡고, 잡힌 항목은 재구성(API-113과 같은 호출)까지 해서 `merged`에 담는다 — 저장(API-117)이 LLM 없이 끝나게. 503/502는 API-112와 같다.
+
+### API-117 Request — POST /cards/batch
+`{ "threadId", "items": [ API-114 필드 + "existingCardId"? ], "topic"?: { title, oneLine, body, topic?, tags? } }` — items가 비어도 topic이 있으면 된다.
+**201** `{ "created": 카드 요약[], "merged": [ { "card": 요약, "versionId" } ], "topic": 요약 | null }`. 한 트랜잭션: existingCardId가 있는 항목은 API-115 규칙(스냅샷 + 출처 더하기)으로 이어 쓰고, 나머지는 API-114 규칙으로 만든다. 주제 카드는 kind='주제', 연결 = 개념 카드 제목들이고, 개념 카드에도 주제 카드로 가는 연결을 더한다. 되돌리기는 클라이언트가 created·topic을 API-036(휴지통), merged를 API-043(versionId로 복원)으로 한다.

@@ -8,6 +8,7 @@ import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
 import { cardTitle } from '../lib/frontmatter';
 import { useSheetDrag } from '../lib/sheetDrag';
+import { toast } from '../lib/toast';
 import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
 
@@ -35,6 +36,12 @@ type Props = {
   onOpenSwitcher?: () => void;
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
+  /** 카드 출처로 열렸을 때 문서에서 찾아 형광펜 칠할 문장 (배움 카드 — 출처 클릭) */
+  jumpQuote?: string;
+  /** 카드 뷰의 출처 클릭 — 그 대화의 문서를 열고 문장으로 간다 */
+  onOpenSource?: (threadId: number) => void;
+  /** 카드 뷰의 연결 클릭 — 그 이름의 카드를 연다 */
+  onOpenCard?: (title: string) => void;
   /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
   onSwipeTab?: (dir: 1 | -1) => void;
 };
@@ -85,7 +92,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, jumpQuote, onOpenSource, onOpenCard }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -113,6 +120,10 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [freshState, setFreshState] = useState<TreeFile['state'] | null>(null);
   // 아직 서버로 안 보낸 마지막 스크롤 위치 — 앱을 닫거나 문서를 바꿀 때 유실 없이 flush한다
   const pendingRef = useRef<{ fileId: number; offset: number; ratio: number | null } | null>(null);
+  /** 출처 문장을 못 찾으면 알린다 — 문서가 고쳐졌을 수 있다 (설계 흐름 D: 카드는 멀쩡, 위치만 잃음) */
+  const onQuoteFound = useCallback((found: boolean) => {
+    if (!found) toast('출처 문장을 이 문서에서 찾지 못했습니다 — 문서가 바뀌었을 수 있어요', 'info');
+  }, []);
   // SCR-180 질문 패널. 한 번 시작되면 닫아도 마운트를 유지한다 — 닫았다 열어도 대화가 이어지게 (IA — SCR-180)
   const [askOpen, setAskOpen] = useState(false);
   const [askStarted, setAskStarted] = useState(false);
@@ -298,7 +309,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   useEffect(() => {
     if (!data || !freshState || mode !== 'view' || data.fileType === 'html') return;
     if (data.fileType === 'pdf' && !pdfReady) return; // 페이지 자리가 잡히면 pdfReady가 다시 불러 준다
-    if (jumpLines) return; // 줄 앵커로 열렸으면 렌더러가 그 줄로 데려간다 — 읽던 위치 복원과 겹치지 않게
+    if (jumpLines || jumpQuote) return; // 줄 앵커·출처 문장으로 열렸으면 렌더러가 그리로 데려간다 — 읽던 위치 복원과 겹치지 않게
     const pos = freshState.readingPosition;
     const el = scrollRef.current;
     if (!pos || !el) return;
@@ -813,6 +824,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               onSelection={setSelection}
               fit={fit}
               fontScale={effectiveScale}
+              highlightQuote={jumpQuote}
+              onQuoteFound={onQuoteFound}
             />
           ) : (
             <div
@@ -828,6 +841,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   title={cardTitle(file.name)}
                   content={data.content}
                   onAsk={() => openAsk(false)}
+                  onOpenSource={onOpenSource}
+                  onOpenLink={onOpenCard}
                   renderBody={(body) => (
                     <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
                       <BodyRenderer content={body} theme={settings.viewerTheme} fileName={file.name} onFileLink={onOpenLink} />
@@ -842,6 +857,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                     fileName={file.name}
                     onFileLink={onOpenLink}
                     highlightLines={jumpLines}
+                    highlightQuote={jumpQuote}
+                    onQuoteFound={onQuoteFound}
                   />
                 </Suspense>
               ) : (

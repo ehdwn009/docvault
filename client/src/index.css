@@ -114,3 +114,7 @@ body {
 .ask-md .prose :where(p:last-child) { margin-bottom: 0; }
 .ask-md .prose :where(code)::before, .ask-md .prose :where(code)::after { content: none; }
 .ask-md .prose :where(code):not(pre code) { padding: 0.1em 0.35em; border-radius: 0.3em; background: rgb(100 116 139 / 0.18); }
+
+/* 카드 출처 형광펜 — 뷰어 테마와 무관하게 노란색. CSS Highlight API가 없으면 <mark>로 대신한다 (lib/findQuote.ts) */
+::highlight(dv-source) { background: rgb(250 204 21 / 0.5); color: inherit; }
+mark.dv-source { background: rgb(250 204 21 / 0.5); color: inherit; }

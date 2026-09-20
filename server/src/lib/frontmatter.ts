@@ -13,7 +13,8 @@ export type CardFrontmatter = {
   sources: string[];
 };
 
-export const CARD_KINDS = ['개념', '절차', '비교', '문제 해결'] as const;
+/** 주제 = 개념 카드들을 엮는 요약 한 장 (대화 정리가 만든다). 나머지는 개념 카드의 모양 */
+export const CARD_KINDS = ['개념', '절차', '비교', '문제 해결', '주제'] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 /** 머리말 키 — 사용자가 편집기에서 읽는 이름이라 한국어 */

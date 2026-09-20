@@ -276,7 +276,7 @@ export async function askStream(
 
 // ---- 배움 카드 (2판, API-111~115) ----
 
-export type CardKind = '개념' | '절차' | '비교' | '문제 해결';
+export type CardKind = '개념' | '절차' | '비교' | '문제 해결' | '주제';
 
 export type CardSummary = {
   id: number;
@@ -319,6 +319,24 @@ export type CardMerge = {
 };
 
 export type CardFront = { oneLine: string; aliases: string[]; kind: CardKind; topic: string; tags: string[]; links: string[] };
+
+/** 대화 정리(API-116) 항목 하나 — 개념 초안 + (같은 개념의 카드가 있으면) 그 카드와 재구성 결과 */
+export type CardOutlineItem = {
+  concept: CardFront & { title: string; body: string; existingCardId: number | null };
+  existing: CardSummary | null;
+  merged: CardMerge | null;
+};
+export type CardOutline = {
+  items: CardOutlineItem[];
+  topic: { title: string; oneLine: string; body: string };
+  source: string;
+};
+/** 묶음 저장(API-117) 결과 — 되돌리기의 재료 (새 카드는 휴지통으로, 이어쓴 카드는 저장 전 버전으로) */
+export type CardBatchResult = {
+  created: CardSummary[];
+  merged: { card: CardSummary; versionId: number }[];
+  topic: CardSummary | null;
+};
 
 /** 카드 요약을 뷰어가 받는 TreeFile로 — 카드는 트리에 없어서 이렇게 만들어 연다 */
 export function cardToTreeFile(c: CardSummary): TreeFile {
