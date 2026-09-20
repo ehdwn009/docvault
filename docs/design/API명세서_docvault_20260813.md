@@ -95,7 +95,8 @@
 | API-113 | POST | /cards/merge-preview | 기존 카드 + 대화 → 재구성 결과 미리보기 (LLM). 저장 안 함 | 소유자 |
 | API-114 | POST | /cards | 카드 만들기 — md 파일 생성(kind=card), 이름=제목.md, 겹치면 (2) | 로그인 |
 | API-115 | PUT | /cards/{id} | 카드 머리말·본문 갱신 (재구성 저장). 버전 스냅샷, 출처는 더하기만 | 소유자 |
-| API-116 | POST | /cards/outline | 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 재구성까지 미리 (LLM) | 소유자 |
+| API-116 | GET/POST | /cards/outline | 대화 정리 1단계 — GET은 대화에 저장된 결과(없으면 null, stale 표시), POST는 개념 목록+주제 초안을 새로 만들어 저장 (본문 없음, 빠른 모델) | 소유자 |
+| API-121 | POST | /cards/outline/item | 대화 정리 2단계 — 항목 하나의 본문(새 카드) 또는 재구성(이어쓰기). 결과를 저장된 정리에 채운다 | 소유자 |
 | API-117 | POST | /cards/batch | 묶음 저장 — 개념 카드 N장(새로/이어쓰기) + 주제 카드 1장을 한 트랜잭션으로. LLM 없음. 되돌리기 재료 반환 | 소유자 |
 | API-119 | GET | /cards/review | 오늘 복습할 카드 (예정 시각이 지난 것, 오래된 순, 하루 20장) + 내일 장수 | 로그인 |
 | API-120 | POST | /cards/{id}/review | 채점 — again(내일) / ok(간격 두 배, 60일 상한). USER_FILE_STATE의 복습 칸만 갱신 | 소유자 |
@@ -502,7 +503,7 @@ GET /api/v1/google/files/{driveFileId}/content
 ### API-105 Response — GET /ask/threads/{id}
 `{ "thread": {...}, "messages": [ { id, role: "user"|"assistant", content, createdAt } ] }`
 
-## API-111 ~ API-120: 배움 카드 (2판)
+## API-111 ~ API-121: 배움 카드 (2판)
 
 설계: [배움카드_docvault_20260918.md](배움카드_docvault_20260918.md) "카드의 모양". 카드는 files의 md(kind='card')라 본문 조회·편집·버전·태그·공유는 파일 API를 그대로 쓴다. 여기는 **머리말을 아는** API만.
 
@@ -521,13 +522,18 @@ GET /api/v1/google/files/{driveFileId}/content
 ### API-115 Request — PUT /cards/{id}
 API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId의 출처를 더한다. 편집기 저장(API-034)과 같은 스냅샷 규칙.
 
-### API-116 Request — POST /cards/outline
-`{ "threadId" }` → **200** `{ "items": [ { "concept": { title, oneLine, aliases, kind, topic, tags, links, body, existingCardId: number|null }, "existing": 카드 요약 | null, "merged": API-113의 merged | null } ], "topic": { title, oneLine, body }, "source" }`
-개념은 최대 8개. `existingCardId`는 LLM 판단 + 제목·별칭 정확 일치 둘 다로 잡고, 잡힌 항목은 재구성(API-113과 같은 호출)까지 해서 `merged`에 담는다 — 저장(API-117)이 LLM 없이 끝나게. 503/502는 API-112와 같다.
+### API-116 — GET /cards/outline?threadId=
+**200** `{ "outline": null | { items[], topic, source, outlineAt, stale } }` — 대화에 저장된 정리 결과. `stale`은 정리 뒤에 대화에 답이 붙었다는 뜻(대화 updatedAt > outlineAt). 클라이언트는 창을 열 때 이것부터 보고, 있으면 LLM을 부르지 않는다.
+
+### API-116 — POST /cards/outline (1단계)
+`{ "threadId" }` → **200** 위와 같은 모양. 개념 목록(제목·한 줄·별칭·종류·주제·태그·연결·existingCardId)과 주제 카드 초안만 — **본문은 비어 있고 `ready: false`**. CARD.MODEL(빠른 모델)·effort low·출력 3000토큰이라 몇 초. 결과는 `ask_threads.outline_json`에 저장되고 이전 결과는 덮인다. 개념은 최대 8개, `existingCardId`는 LLM 판단 + 제목·별칭 정확 일치.
+
+### API-121 — POST /cards/outline/item (2단계)
+`{ "threadId", "title" }` → **200** `{ "item": { concept(body 채워짐), existing, merged, ready: true } }`. 저장된 정리에서 제목이 같은 항목을 찾아, 새 카드면 본문 초안을, 이어쓰기면 재구성(API-113과 같은 호출)을 만들어 저장된 정리에 써 넣는다. 이미 `ready`면 LLM 없이 그대로 돌려준다. 클라이언트는 목록이 뜬 뒤 항목별로 동시에 3개씩 부른다. 저장된 정리에 없는 제목이면 404 — 다시 정리해야 한다.
 
 ### API-117 Request — POST /cards/batch
 `{ "threadId", "items": [ API-114 필드 + "existingCardId"? ], "topic"?: { title, oneLine, body, topic?, tags? } }` — items가 비어도 topic이 있으면 된다.
-**201** `{ "created": 카드 요약[], "merged": [ { "card": 요약, "versionId" } ], "topic": 요약 | null }`. 한 트랜잭션: existingCardId가 있는 항목은 API-115 규칙(스냅샷 + 출처 더하기)으로 이어 쓰고, 나머지는 API-114 규칙으로 만든다. 주제 카드는 kind='주제', 연결 = 개념 카드 제목들이고, 개념 카드에도 주제 카드로 가는 연결을 더한다. 되돌리기는 클라이언트가 created·topic을 API-036(휴지통), merged를 API-043(versionId로 복원)으로 한다.
+**201** `{ "created": 카드 요약[], "merged": [ { "card": 요약, "versionId" } ], "topic": 요약 | null }`. 저장이 끝나면 그 대화의 정리 결과(outline_json)는 지운다. 한 트랜잭션: existingCardId가 있는 항목은 API-115 규칙(스냅샷 + 출처 더하기)으로 이어 쓰고, 나머지는 API-114 규칙으로 만든다. 주제 카드는 kind='주제', 연결 = 개념 카드 제목들이고, 개념 카드에도 주제 카드로 가는 연결을 더한다. 되돌리기는 클라이언트가 created·topic을 API-036(휴지통), merged를 API-043(versionId로 복원)으로 한다.
 
 ### API-118 — GET /cards/export?format=md|csv&topics=a,b
 텍스트로 응답한다 (`Content-Disposition: attachment`, 같은 경로가 미리보기와 다운로드에 쓰인다). `topics`는 쉼표 목록, 없으면 전체, 주제 없음은 `-`. md는 가나다 머리(ㄱ·ㄴ·…·A·B·#)별 목록 `- **제목** (별칭) — 한 줄 · 주제`, 주제 카드는 뒤에 따로. csv는 Anki 가져오기 머리 세 줄(`#separator:;` `#html:true` `#columns:…`) + `앞면;뒷면;태그` — 뒷면은 한 줄(굵게) + 본문 앞 600자(줄바꿈은 `<br>`), 태그는 주제+태그(공백은 `_`). LLM 없음.
