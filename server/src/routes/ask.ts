@@ -6,6 +6,8 @@ import { ASK } from '../constants.js';
 import { db } from '../db/index.js';
 import { askMessages, askThreads, files } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
+import { cardContextParagraph, listCards, matchCardsForAsk } from '../lib/cards.js';
+import { userSettings } from '../db/schema.js';
 import {
   collectSources,
   countQuestionsToday,
@@ -33,6 +35,8 @@ const messageSchema = z.object({
   question: z.string().trim().min(1).max(ASK.QUESTION_MAX_CHARS),
   /** 대화 중 문서에서 다시 드래그한 문장 — 이번 질문에 인용으로 붙는다 */
   quote: z.string().trim().max(ASK.QUOTE_MAX_CHARS).optional(),
+  /** 띠에서 ✕로 뺀 카드 — 이번 질문에 함께 보내지 않는다 (활용 ④) */
+  excludeCardIds: z.array(z.number().int().positive()).max(20).optional(),
 });
 
 type ThreadRow = typeof askThreads.$inferSelect;
@@ -169,8 +173,14 @@ export const askRoutes = new Hono<AppEnv>()
       return fail(c, 429, 'ASK_LIMIT_EXCEEDED', `오늘 질문 한도(${limit}번)를 다 썼습니다. 내일 다시 물어보세요`);
     }
 
-    const { question, quote } = c.req.valid('json');
+    const { question, quote, excludeCardIds } = c.req.valid('json');
     const content = quote ? `「${quote}」\n\n${question}` : question;
+    // 내 카드 문맥 — 설정이 켜져 있으면 질문·인용·대화의 드래그 문맥에서 카드 이름을 찾아 최대 3장을 시스템에 덧붙인다
+    const withCards = (db.select({ v: userSettings.askWithCards }).from(userSettings).where(eq(userSettings.userId, user.id)).get()?.v ?? 1) === 1;
+    const matched = withCards
+      ? matchCardsForAsk(listCards(user.id), [question, quote ?? '', found.thread.quote ?? '', found.thread.context ?? ''].join('\n'), excludeCardIds)
+      : [];
+    const cardContext = cardContextParagraph(user.id, matched);
     const now = Date.now();
     const isFirst =
       (db.select({ n: sql<number>`count(*)` }).from(askMessages).where(eq(askMessages.threadId, id)).get()?.n ?? 0) === 0;
@@ -189,7 +199,10 @@ export const askRoutes = new Hono<AppEnv>()
     const apiMessages = toApiMessages(found.thread, history, found.fileName);
 
     return streamSSE(c, async (stream) => {
-      await stream.writeSSE({ event: 'meta', data: JSON.stringify({ userMessageId: userMsg.id, remaining: limit === null ? null : limit - used - 1 }) });
+      await stream.writeSSE({
+        event: 'meta',
+        data: JSON.stringify({ userMessageId: userMsg.id, remaining: limit === null ? null : limit - used - 1, cards: matched.map((k) => ({ id: k.id, title: k.title })) }),
+      });
       let text = '';
       const sources: AskSource[] = [];
       // 사용량은 pause_turn으로 여러 번 돌면 합산한다 — 검색 횟수는 usage.server_tool_use에 실려 온다
@@ -200,7 +213,7 @@ export const askRoutes = new Hono<AppEnv>()
         let turnMessages = apiMessages;
         let final: Awaited<ReturnType<ReturnType<typeof createAnswerStream>['finalMessage']>>;
         for (let round = 0; ; round++) {
-          const answer = createAnswerStream(turnMessages);
+          const answer = createAnswerStream(turnMessages, cardContext);
           stream.onAbort(() => answer.abort());
           for await (const ev of answer) {
             if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {

@@ -119,6 +119,10 @@ export const userFileState = sqliteTable(
     viewerFit: integer('viewer_fit').notNull().default(1),
     /** 이 파일만의 글자 크기 배율(%). NULL이면 전역 기본값(user_settings.html_font_scale)을 따른다 */
     fontScale: integer('font_scale'),
+    /** 복습 예정 시각 (카드 전용, 배움 카드 활용 ③). NULL이면 아직 복습 안 함 — 만든 날 + 1일에 첫 복습 */
+    nextReviewAt: integer('next_review_at'),
+    /** 마지막 채점으로 정해진 간격(일). 알았다 → 두 배, 몰랐다 → 1 */
+    reviewIntervalDays: integer('review_interval_days').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.userId, t.fileId] })],
 );
@@ -140,6 +144,10 @@ export const userSettings = sqliteTable('user_settings', {
     .default('normal'),
   /** 패치노트 모달용 — 마지막으로 확인한 앱 버전. 기기 간 동기화되어 한 번 본 공지는 다시 안 뜬다 */
   lastSeenVersion: text('last_seen_version'),
+  /** 문서 속 내 카드 용어에 점선 밑줄 (배움 카드 활용 ②). 읽기 취향이라 기기가 아니라 사람에 붙는다. 1=켬 */
+  termHighlight: integer('term_highlight').notNull().default(1),
+  /** 질문할 때 관련 배움 카드를 문맥으로 함께 보낼지 (활용 ④). 1=켬 */
+  askWithCards: integer('ask_with_cards').notNull().default(1),
   updatedAt: integer('updated_at').notNull(),
 });
 

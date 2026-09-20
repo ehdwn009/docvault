@@ -118,3 +118,6 @@ body {
 /* 카드 출처 형광펜 — 뷰어 테마와 무관하게 노란색. CSS Highlight API가 없으면 <mark>로 대신한다 (lib/findQuote.ts) */
 ::highlight(dv-source) { background: rgb(250 204 21 / 0.5); color: inherit; }
 mark.dv-source { background: rgb(250 204 21 / 0.5); color: inherit; }
+
+/* 문서 속 내 카드 용어 — 점선 밑줄. 배경은 안 칠한다 (형광펜은 출처 전용) */
+::highlight(dv-term) { text-decoration: underline dotted rgb(20 184 166 / 0.9); }

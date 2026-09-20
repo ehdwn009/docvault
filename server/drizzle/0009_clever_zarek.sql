@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` ADD `term_highlight` integer DEFAULT 1 NOT NULL;

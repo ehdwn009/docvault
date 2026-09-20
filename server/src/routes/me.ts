@@ -23,6 +23,8 @@ const settingsSchema = z.object({
   lineHeight: z.string().max(20).nullable().optional(),
   contentWidth: z.enum(['narrow', 'normal', 'wide']).optional(),
   lastSeenVersion: z.string().max(20).optional(),
+  termHighlight: z.number().int().min(0).max(1).optional(),
+  askWithCards: z.number().int().min(0).max(1).optional(),
 });
 
 const stateSchema = z

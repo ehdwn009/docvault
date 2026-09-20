@@ -26,6 +26,12 @@ export type RendererProps = {
   highlightQuote?: string;
   /** 문장을 찾았는지 보고 — 못 찾으면 부모가 "문서가 바뀌었을 수 있다"고 알린다 */
   onQuoteFound?: (found: boolean) => void;
+  /** 밑줄 그을 내 카드 용어(제목·별칭). 없거나 비면 안 긋는다 (md·text·html) */
+  terms?: { title: string; aliases: string[] }[];
+  /** 문서에서 실제로 찾은 용어들(카드 제목, 중복 없이) 보고 — "이 문서에 내 카드 N장" */
+  onTermsFound?: (titles: string[]) => void;
+  /** 밑줄 친 용어를 눌렀다 — (카드 제목, 뷰포트 기준 자리) */
+  onTermClick?: (title: string, rect: { x: number; y: number; w: number; h: number }) => void;
   /** 열람 시작 시 복원할 스크롤 위치 — iframe 내부에서 스크롤되는 html 렌더러용 */
   initialOffset?: number;
   /** 복원할 비율(0~1) — px은 기기 간에 안 맞아, 있으면 이것을 우선한다 (html 렌더러용) */

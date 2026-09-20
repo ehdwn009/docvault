@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { clearQuoteHighlight, highlightQuote } from '../lib/findQuote';
+import { clearQuoteHighlight, clearTerms, highlightQuote, markTerms, termAtPoint, type Term, type TermRange } from '../lib/findQuote';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 // CommonMark 규칙상 닫는 **가 문장부호 뒤 + 한글 조사 앞이면(예: "(Caddy)**와") 볼드로
@@ -21,6 +21,9 @@ export default function MarkdownRenderer({
   onFileLink,
   highlightQuote: quote,
   onQuoteFound,
+  terms,
+  onTermsFound,
+  onTermClick,
 }: {
   content: string;
   theme?: ViewerTheme;
@@ -29,8 +32,38 @@ export default function MarkdownRenderer({
   /** 카드 출처로 열렸을 때 찾아 형광펜 칠할 문장 */
   highlightQuote?: string;
   onQuoteFound?: (found: boolean) => void;
+  /** 밑줄 그을 내 카드 용어 */
+  terms?: Term[];
+  onTermsFound?: (titles: string[]) => void;
+  onTermClick?: (title: string, rect: { x: number; y: number; w: number; h: number }) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  // 밑줄 친 자리들 — 클릭이 어느 용어 위인지 판정할 때 쓴다
+  const termRangesRef = useRef<TermRange[]>([]);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (!terms || terms.length === 0) {
+      clearTerms();
+      termRangesRef.current = [];
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      const found = markTerms(el, terms);
+      termRangesRef.current = found;
+      onTermsFound?.([...new Set(found.map((f) => f.title))]);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [content, terms]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onRootClick = (e: React.MouseEvent) => {
+    if (!onTermClick || termRangesRef.current.length === 0) return;
+    if (window.getSelection()?.isCollapsed === false) return; // 드래그 선택은 질문 흐름 — 용어 클릭이 아니다
+    const hit = termAtPoint(termRangesRef.current, e.clientX, e.clientY);
+    if (!hit) return;
+    e.preventDefault();
+    const r = hit.range.getClientRects()[0] ?? hit.range.getBoundingClientRect(); // 줄이 바뀌는 용어는 첫 줄 상자에 붙인다
+    onTermClick(hit.title, { x: r.left, y: r.top, w: r.width, h: r.height });
+  };
   // 출처 문장 찾기 — 본문이 그려진 다음 프레임에. 문장이 없어지면 형광펜을 지운다
   useEffect(() => {
     const el = rootRef.current;
@@ -98,7 +131,7 @@ export default function MarkdownRenderer({
   );
 
   return (
-    <div ref={rootRef} className={`prose ${isDarkViewerTheme(theme) ? 'prose-invert' : ''} max-w-none`}>
+    <div ref={rootRef} onClick={onRootClick} className={`prose ${isDarkViewerTheme(theme) ? 'prose-invert' : ''} max-w-none`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         rehypePlugins={[rehypeHighlight]}

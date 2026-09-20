@@ -292,3 +292,42 @@ export async function outlineThread(t: ThreadForCard, existing: CardSummary[]): 
   });
   return outline;
 }
+
+// ---- 질문 때 카드 문맥 (활용 ④) ----
+
+/** 글에 이름이 들어 있나 — 공백 무시, 대소문자 무시. 영문·숫자 이름은 단어 경계에서만 */
+function mentions(text: string, name: string): boolean {
+  const n = name.replace(/\s+/g, ' ').trim();
+  if (n.length < 2) return false;
+  if (/^[A-Za-z0-9._-]+$/.test(n)) return new RegExp(`(^|[^A-Za-z0-9])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^A-Za-z0-9])`, 'i').test(text);
+  return text.replace(/\s+/g, '').toLowerCase().includes(n.replace(/\s+/g, '').toLowerCase());
+}
+
+/**
+ * 질문·인용·문맥에 제목이나 별칭이 나오는 내 카드 — 긴 이름부터, 상한까지. 주제 카드는 뺀다.
+ * exclude는 사용자가 띠에서 ✕로 뺀 카드 — 무엇을 보내는지 모르게 하지 않는다는 원칙의 구현 지점
+ */
+export function matchCardsForAsk(cards: CardSummary[], text: string, exclude: number[] = []): CardSummary[] {
+  const skip = new Set(exclude);
+  return cards
+    .filter((c) => c.kind !== '주제' && !skip.has(c.id))
+    .filter((c) => [c.title, ...c.aliases].some((n) => mentions(text, n)))
+    .sort((a, b) => b.title.length - a.title.length)
+    .slice(0, CARD.ASK_CONTEXT_MAX_CARDS);
+}
+
+/** 시스템 프롬프트에 덧붙일 한 단락 — 카드가 없으면 빈 문자열 */
+export function cardContextParagraph(ownerId: number, matched: CardSummary[]): string {
+  if (matched.length === 0) return '';
+  const lines = matched.map((c) => {
+    const row = db.select({ contentText: files.contentText }).from(files).where(and(eq(files.id, c.id), eq(files.ownerId, ownerId))).get();
+    const body = splitCard(row?.contentText ?? '').body.trim().replace(/\s+/g, ' ').slice(0, CARD.ASK_CONTEXT_BODY_CHARS);
+    const alias = c.aliases.length ? ` (${c.aliases.join(', ')})` : '';
+    return `- ${c.title}${alias}: ${c.oneLine}${body ? `\n  ${body}` : ''}`;
+  });
+  return [
+    '',
+    '사용자가 이미 정리해 둔 배움 카드다. 같은 내용을 처음부터 다시 설명하지 말고 "전에 정리한 ○○ 카드"처럼 이어서 답해라. 카드 내용이 틀렸으면 그 자리에서 바로잡아라. 카드를 언급할 때는 제목을 그대로 써라.',
+    ...lines,
+  ].join('\n');
+}

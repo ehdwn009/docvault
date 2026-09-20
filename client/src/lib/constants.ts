@@ -28,9 +28,22 @@ export const DEFAULT_USER_SETTINGS = {
   lineHeight: null as string | null,
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
+  termHighlight: 1,
+  askWithCards: 1,
 };
 
 /** 질문(배움 카드) 입력 한도 — 서버 ASK 상수와 같아야 한다. 초과분은 클라이언트가 먼저 자른다 */
 export const ASK_QUOTE_MAX_CHARS = 500;
 export const ASK_CONTEXT_MAX_CHARS = 1500;
 export const ASK_QUESTION_MAX_CHARS = 2000;
+
+/** 카드 내보내기 범위에서 "주제 없음"을 뜻하는 표식 — 서버 CARD.NO_TOPIC_MARK와 같아야 한다 */
+export const NO_TOPIC_MARK = '-';
+
+/** 복습 간격 규칙 — 서버 CARD.REVIEW_*와 같아야 한다 (버튼에 "N일 뒤"를 미리 적기 위해 클라이언트도 안다) */
+export const REVIEW_AGAIN_DAYS = 1;
+export const REVIEW_FIRST_OK_DAYS = 2;
+export const REVIEW_MAX_INTERVAL_DAYS = 60;
+
+/** 질문 때 함께 보내는 카드 수 상한 — 서버 CARD.ASK_CONTEXT_MAX_CARDS와 같아야 한다 */
+export const ASK_CONTEXT_MAX_CARDS = 3;

@@ -3,16 +3,18 @@ import {
   api,
   ApiError,
   askStream,
+  toTreeFile,
   type AskMessage,
   type AskStatus,
   type AskThread,
+  type CardSummary,
   type TreeFile,
 } from '../lib/api';
 import CardSaveDialog from './CardSaveDialog';
 import ThreadCardsDialog from './ThreadCardsDialog';
 import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
-import { ASK_QUESTION_MAX_CHARS } from '../lib/constants';
+import { ASK_CONTEXT_MAX_CARDS, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
@@ -32,9 +34,21 @@ type Props = {
   onConversingChange?: (conversing: boolean) => void;
   /** 카드를 저장하면 그 카드 파일을 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
+  /** 질문할 때 관련 카드를 문맥으로 함께 보내기 (설정, 활용 ④) — 꺼져 있으면 띠도 없다 */
+  withCards?: boolean;
   isPc: boolean;
   onClose: () => void;
 };
+
+type UsedCard = { id: number; title: string };
+
+/** 글에 카드 이름이 나오나 — 서버 lib/cards.ts mentions와 같은 규칙 (띠를 보내기 전에 미리 보여 주기 위해 클라이언트도 안다) */
+function mentions(text: string, name: string): boolean {
+  const n = name.replace(/\s+/g, ' ').trim();
+  if (n.length < 2) return false;
+  if (/^[A-Za-z0-9._-]+$/.test(n)) return new RegExp(`(^|[^A-Za-z0-9])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^A-Za-z0-9])`, 'i').test(text);
+  return text.replace(/\s+/g, '').toLowerCase().includes(n.replace(/\s+/g, '').toLowerCase());
+}
 
 type Bubble = AskMessage | { id: 'streaming'; role: 'assistant'; content: string; createdAt: number };
 
@@ -47,7 +61,7 @@ const SHEET_RATIO = 0.78;
 const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판)
-export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuote, onConversingChange, onOpenFile, isPc, onClose }: Props) {
+export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
   const [status, setStatus] = useState<AskStatus | null>(null);
   const [thread, setThread] = useState<AskThread | null>(null);
   const [messages, setMessages] = useState<Bubble[]>([]);
@@ -64,6 +78,19 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   const [picked, setPicked] = useState<Set<number>>(new Set());
   // 대화 정리 창(SCR-183) — 헤더 [카드로]
   const [outlineOpen, setOutlineOpen] = useState(false);
+  // 질문 때 함께 보낼 내 카드 (활용 ④) — 입력·인용·문맥에 이름이 나오는 카드. ✕로 뺀 것은 이번 질문에서 제외
+  const [myCards, setMyCards] = useState<CardSummary[]>([]);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
+  // 답마다 함께 본 카드 — meta로 먼저 오고 done에서 답의 id에 붙인다
+  const [usedCards, setUsedCards] = useState<Record<number, UsedCard[]>>({});
+  const pendingCardsRef = useRef<UsedCard[]>([]);
+  useEffect(() => {
+    if (!withCards) return;
+    const load = () => void api<{ cards: CardSummary[] }>('/cards').then((r) => setMyCards(r.cards)).catch(() => {});
+    load();
+    window.addEventListener('dv:cards-changed', load);
+    return () => window.removeEventListener('dv:cards-changed', load);
+  }, [withCards]);
   // 모델이 웹 검색 중 — 답이 늦는 이유를 보여 준다 (글자가 오기 시작하면 끈다)
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<AskThread[]>([]);
@@ -72,6 +99,16 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   const abortRef = useRef<AbortController | null>(null);
   // 이 패널이 지금 들고 있는 seed로 대화를 만들었는지 — 같은 seed로 두 번 만들지 않게
   const seedUsedRef = useRef(false);
+  const matchedCards = (() => {
+    if (!withCards || myCards.length === 0) return [];
+    const text = [input, pendingQuote ?? '', thread?.quote ?? (seed && !seedUsedRef.current ? seed.quote : ''), seed && !seedUsedRef.current ? seed.context : ''].join('\n');
+    if (!text.trim()) return [];
+    return myCards
+      .filter((c) => c.kind !== '주제' && !excluded.has(c.id))
+      .filter((c) => [c.title, ...c.aliases].some((n) => mentions(text, n)))
+      .sort((a, b) => b.title.length - a.title.length)
+      .slice(0, ASK_CONTEXT_MAX_CARDS);
+  })();
   // 터치: 손잡이를 끌어올리면 화면 가득 펼쳐지고, 펼친 상태에서 끌어내리면 먼저 원래 크기로 돌아온다 (닫히는 건 그다음)
   const [expanded, setExpanded] = useState(false);
   const sheet = useSheetDrag(expanded ? () => setExpanded(false) : onClose, expanded ? undefined : () => setExpanded(true));
@@ -140,10 +177,16 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
       const t = await ensureThread();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
+      pendingCardsRef.current = [];
+      const excludeCardIds = [...excluded];
+      setExcluded(new Set()); // 뺀 것은 이번 질문에만 — 다음 질문에서 다시 걸리면 다시 보인다
       await askStream(
         t.id,
-        { question: q, ...(quote ? { quote } : {}) },
+        { question: q, ...(quote ? { quote } : {}), ...(excludeCardIds.length ? { excludeCardIds } : {}) },
         {
+          onMeta: (m) => {
+            pendingCardsRef.current = m.cards ?? [];
+          },
           onSearching: () => setSearching(true),
           onDelta: (text) => {
             setSearching(false);
@@ -151,12 +194,15 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
               m.map((b) => (b.id === 'streaming' ? { ...b, content: b.content + text } : b)),
             );
           },
-          onDone: ({ assistantMessageId, content }) =>
+          onDone: ({ assistantMessageId, content }) => {
+            const used = pendingCardsRef.current;
+            if (used.length) setUsedCards((prev) => ({ ...prev, [assistantMessageId]: used }));
             setMessages((m) =>
               m.map((b) =>
                 b.id === 'streaming' ? { id: assistantMessageId, role: 'assistant', content, createdAt: Date.now() } : b,
               ),
-            ),
+            );
+          },
           onError: ({ message }) => {
             setMessages((m) => m.filter((b) => b.id !== 'streaming'));
             setError(message);
@@ -371,6 +417,21 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                 ) : (
                   <span className="whitespace-pre-wrap">{m.content}</span>
                 )}
+                {typeof m.id === 'number' && usedCards[m.id] && (
+                  // 이 답이 어떤 카드를 읽고 답했는지 — 누르면 그 카드
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                    📚 함께 본 카드:
+                    {usedCards[m.id]!.map((k) => (
+                      <button
+                        key={k.id}
+                        onClick={() => onOpenFile?.(toTreeFile({ id: k.id, name: `${k.title}.md`, fileType: 'md', kind: 'card' }))}
+                        className="rounded border border-teal-800 bg-teal-950/40 px-1.5 py-0.5 text-teal-200 hover:bg-teal-900"
+                      >
+                        {k.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {m.id !== 'streaming' && (
                   <div className="mt-1.5 flex gap-1 text-xs">
                     {thread && typeof m.id === 'number' && m.id > 0 && (
@@ -423,6 +484,18 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             >
               한 장으로
             </button>
+          </div>
+        )}
+        {matchedCards.length > 0 && !busy && (
+          // 무엇을 보내는지 모르게 하지 않는다 — 함께 갈 카드를 보여 주고 ✕로 뺄 수 있다
+          <div className="mb-1.5 flex flex-wrap items-center gap-1 rounded-md border border-teal-900 border-l-2 border-l-teal-500 bg-teal-950/30 px-2 py-1 text-[11px] text-slate-300">
+            📚 내 카드 {matchedCards.length}장 함께 보냄
+            {matchedCards.map((k) => (
+              <span key={k.id} className="inline-flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-200">
+                {k.title}
+                <button onClick={() => setExcluded((p) => new Set(p).add(k.id))} title="이번 질문에서 빼기" className="px-0.5 text-slate-500 hover:text-red-300">✕</button>
+              </span>
+            ))}
           </div>
         )}
         {pendingQuote && (

@@ -86,11 +86,12 @@ export function toApiMessages(
 /** 답변 스트림. 라우트가 text_delta를 흘려보내고 finalMessage()로 마무리한다.
     웹 검색은 서버 도구 — 모델이 필요하다고 판단할 때만 Anthropic 쪽에서 실행되고 결과가 같은 응답에 실려 온다.
     학습 시점 이후에 바뀐 버전·화면 질문에 옛 답을 하지 않기 위한 장치 (설계 — 웹 검색은 모델 판단, 답당 최대 3회) */
-export function createAnswerStream(messages: Anthropic.MessageParam[]) {
+export function createAnswerStream(messages: Anthropic.MessageParam[], extraSystem = '') {
   return getClient().messages.stream({
     model: ASK.MODEL,
     max_tokens: ASK.MAX_OUTPUT_TOKENS,
-    system: SYSTEM_PROMPT,
+    // 내 카드 문맥(활용 ④)은 시스템 프롬프트 뒤에 붙는다 — 대화 이력이 아니라 "이 사람이 아는 것"이라서
+    system: SYSTEM_PROMPT + extraSystem,
     // 설명 대화라 깊은 추론은 낭비 — 비용·속도 쪽으로 기울인다
     output_config: { effort: 'medium' },
     tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: ASK.WEB_SEARCH_MAX_USES }],

@@ -82,6 +82,8 @@ export const DEFAULT_USER_SETTINGS = {
   lineHeight: null as string | null,
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
+  termHighlight: 1,
+  askWithCards: 1,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -130,4 +132,17 @@ export const CARD = {
   OUTLINE_MAX_OUTPUT_TOKENS: 12000,
   /** 답 골라 담기(API-112 messageIds)에서 한 번에 고를 수 있는 답 수 */
   MAX_PICKED_MESSAGES: 30,
+  /** 용어집 내보내기(API-118)가 내 파일 최상위에 만드는·갱신하는 파일 이름 */
+  GLOSSARY_FILE_NAME: '용어집.md',
+  /** 범위(topics) 목록에서 "주제 없음"을 뜻하는 표식 — 빈 문자열은 쉼표 목록에 못 싣는다 */
+  NO_TOPIC_MARK: '-',
+  /** 복습(활용 ③) — 하루 상한, 새 카드가 첫 복습에 들어오기까지, 몰랐을 때·처음 알았을 때·최대 간격(일) */
+  REVIEW_DAILY_MAX: 20,
+  REVIEW_NEW_CARD_DELAY_DAYS: 1,
+  REVIEW_AGAIN_DAYS: 1,
+  REVIEW_FIRST_OK_DAYS: 2,
+  REVIEW_MAX_INTERVAL_DAYS: 60,
+  /** 질문 때 함께 보내는 카드 수 상한과 카드당 본문 길이 — 토큰이 카드 수에 비례해 는다 (활용 ④) */
+  ASK_CONTEXT_MAX_CARDS: 3,
+  ASK_CONTEXT_BODY_CHARS: 400,
 } as const;

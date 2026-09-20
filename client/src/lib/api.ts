@@ -120,6 +120,10 @@ export type UserSettings = {
   lineHeight: string | null;
   contentWidth: 'narrow' | 'normal' | 'wide';
   lastSeenVersion: string | null;
+  /** 문서 속 내 카드 용어에 점선 밑줄 (1=켬) */
+  termHighlight: number;
+  /** 질문할 때 관련 카드를 문맥으로 함께 보내기 (1=켬) */
+  askWithCards: number;
 };
 
 export type Changelog = { version: string; content: string };
@@ -208,7 +212,8 @@ export type AskThread = {
 export type AskMessage = { id: number; role: 'user' | 'assistant'; content: string; createdAt: number };
 
 export type AskStreamHandlers = {
-  onMeta?: (meta: { userMessageId: number; remaining: number | null }) => void;
+  /** cards = 이번 답에 문맥으로 함께 간 내 카드 (활용 ④) */
+  onMeta?: (meta: { userMessageId: number; remaining: number | null; cards?: { id: number; title: string }[] }) => void;
   /** 모델이 웹 검색을 시작했다 — 답이 늦어지는 이유를 화면이 보여 줄 수 있게 */
   onSearching?: () => void;
   onDelta: (text: string) => void;
@@ -219,7 +224,7 @@ export type AskStreamHandlers = {
 /** API-103: 질문을 보내고 답을 SSE로 받는다. 스트림이 열리기 전의 실패(한도·검증)는 ApiError로 던진다 */
 export async function askStream(
   threadId: number,
-  body: { question: string; quote?: string },
+  body: { question: string; quote?: string; excludeCardIds?: number[] },
   handlers: AskStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -258,7 +263,7 @@ export async function askStream(
     if (event === 'delta') handlers.onDelta(String(payload.text ?? ''));
     else if (event === 'done') handlers.onDone(payload as { assistantMessageId: number; content: string });
     else if (event === 'error') handlers.onError(payload as { code: string; message: string });
-    else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number | null });
+    else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number | null; cards?: { id: number; title: string }[] });
     else if (event === 'searching') handlers.onSearching?.();
   };
   for (;;) {
@@ -331,6 +336,10 @@ export type CardOutline = {
   topic: { title: string; oneLine: string; body: string };
   source: string;
 };
+/** 복습(API-119) 한 장 — 요약 + 본문(뒷면) + 지금 간격 */
+export type ReviewCard = CardSummary & { body: string; intervalDays: number; dueAt: number };
+export type ReviewList = { due: ReviewCard[]; tomorrow: number; total: number };
+
 /** 묶음 저장(API-117) 결과 — 되돌리기의 재료 (새 카드는 휴지통으로, 이어쓴 카드는 저장 전 버전으로) */
 export type CardBatchResult = {
   created: CardSummary[];
