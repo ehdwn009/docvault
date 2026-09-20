@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { logger } from 'hono/logger';
 import { APP_VERSION, config } from './config.js';
-import { TRASH_PURGE_INTERVAL_MS } from './constants.js';
+import { HEALTH_PATH, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
 import { purgeExpiredTrash } from './lib/trash.js';
@@ -36,7 +36,17 @@ setInterval(purgeExpiredThreads, TRASH_PURGE_INTERVAL_MS);
 
 const app = new Hono();
 
-app.use(logger());
+// 요청 로그 — /health는 뺀다. 도커 헬스체크가 30초마다 두 줄씩 찍어 진짜 요청이 로그 밖으로 밀려난다
+const requestLogger = logger();
+app.use(async (c, next) => (c.req.path === HEALTH_PATH ? next() : requestLogger(c, next)));
+
+// 서버가 실제로 일한 시간을 응답 헤더로 — 폰의 시작 시간 표(설정 → 정보)가 "회선 vs 서버"를 가른다.
+// 서버 로그는 3ms인데 폰은 3.5초였던 날, 둘을 한 표에서 보려고 넣었다 (IA — 시작 시간 측정)
+app.use('/api/*', async (c, next) => {
+  const t0 = performance.now();
+  await next();
+  c.header('Server-Timing', `app;dur=${(performance.now() - t0).toFixed(1)}`);
+});
 
 // 보안 헤더. 비용이 거의 0이라 규모와 무관하게 켜 둔다.
 // 여기 헤더는 앱 자체에 건다. 앱에는 CSP를 걸지 않는다 — 업로드된 남의 문서 쪽에만
@@ -96,8 +106,14 @@ if (fs.existsSync(config.clientDist)) {
     await next();
     c.header('Access-Control-Allow-Origin', '*');
   });
-  app.use('*', serveStatic({ root }));
-  app.get('*', serveStatic({ root, path: 'index.html' }));
+  // 캐시: /assets/*는 파일명에 해시가 있어 내용이 바뀌면 이름도 바뀐다 → 1년 immutable(재방문은 다운로드 0).
+  // index.html은 그 해시 이름을 가리키는 입구라 매번 서버에 확인(no-cache) — 새 배포가 바로 보이게
+  const cacheHeaders = (filePath: string, c: Context) => {
+    if (filePath.includes('/assets/')) c.header('Cache-Control', `public, max-age=${STATIC_ASSET_MAX_AGE_S}, immutable`);
+    else if (filePath.endsWith('index.html')) c.header('Cache-Control', 'no-cache');
+  };
+  app.use('*', serveStatic({ root, onFound: cacheHeaders }));
+  app.get('*', serveStatic({ root, path: 'index.html', onFound: cacheHeaders }));
 } else {
   app.get('/', (c) =>
     c.text('docvault API server. Client build not found — run `npm run build -w client`.'),

@@ -27,6 +27,12 @@ export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 /** 휴지통 자동 비움 주기 — 기동 시 1회 실행 후 이 간격으로 반복 */
 export const TRASH_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+/** 해시 이름 정적 파일(/assets/*)의 브라우저 캐시 기간 — 1년. 이름에 해시가 있어 내용이 바뀌면 이름도 바뀐다 */
+export const STATIC_ASSET_MAX_AGE_S = 365 * 24 * 60 * 60;
+
+/** 헬스체크 경로 — 인증 예외이자 요청 로그에서도 뺀다 (도커가 30초마다 두드린다) */
+export const HEALTH_PATH = '/api/v1/health';
+
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 
