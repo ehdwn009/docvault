@@ -535,10 +535,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   useEffect(() => {
     void (async () => {
       // 시작 시간 측정 — 각 단계가 얼마나 걸리는지 설정 → 정보에서 본다 (lib/bootTiming.ts)
-      await timed('파일 목록·태그 (/tree, /tags)', () => Promise.all([loadTree(), loadTags()]));
+      await timed('파일 목록·태그 (/tree, /tags)', () => Promise.all([loadTree(), loadTags()]), ['/tree', '/tags']);
       const id = fileIdFromPath(location.pathname);
       if (id !== null) {
-        const f = await timed('열 문서 찾기', () => resolveFile(id));
+        const f = await timed('열 문서 찾기', () => resolveFile(id), [`/files/${id}`]);
         if (f) {
           setTabs([f]);
           setPanes([f]);
@@ -548,7 +548,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       }
       finishBoot();
     })();
-    void timed('설정 (/me/settings)', () => api<{ settings: UserSettings }>('/me/settings'))
+    void timed('설정 (/me/settings)', () => api<{ settings: UserSettings }>('/me/settings'), ['/me/settings'])
       .then(({ settings }) => {
         setSettings(settings);
         // 새 버전 이후 첫 로그인이면 패치노트를 한 번 보여준다 (확인 시 기록 → 기기 간 공유)

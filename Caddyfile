@@ -1,5 +1,7 @@
 # Caddy 리버스 프록시 — DOCVAULT_DOMAIN(.env)으로 오는 HTTPS 요청을 앱으로 전달
 # 인증서는 Let's Encrypt에서 자동 발급·갱신된다
 {$DOCVAULT_DOMAIN} {
+	# 응답 압축 — 앱 JS 412KB가 폰에서 1.3초 걸리던 것을 약 1/3로. 정적 파일·API JSON 모두 해당
+	encode zstd gzip
 	reverse_proxy app:3000
 }

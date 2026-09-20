@@ -13,7 +13,7 @@ export default function App() {
 
   // 새로고침해도 세션 쿠키가 살아 있으면 로그인 상태를 복원한다
   useEffect(() => {
-    timed('로그인 확인 (/auth/me)', () => api<{ user: User }>('/auth/me'))
+    timed('로그인 확인 (/auth/me)', () => api<{ user: User }>('/auth/me'), ['/auth/me'])
       .then(({ user }) => setAuth({ status: 'authed', user }))
       .catch(() => setAuth({ status: 'guest' }));
   }, []);

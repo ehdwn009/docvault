@@ -219,7 +219,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       setData({ id: file.id, fileType: file.fileType, content: '', updatedAt: file.updatedAt, readonly: true });
     } else {
       // 시작 측정: 첫 문서 본문까지가 "앱이 떴다"의 끝 (딥링크로 열었을 때). 이후 문서는 timed가 무시한다
-      timed('문서 본문 (/files/:id/content)', () => api<FileContent>(`/files/${file.id}/content`))
+      timed('문서 본문 (/files/:id/content)', () => api<FileContent>(`/files/${file.id}/content`), [`/files/${file.id}/content`])
         .then((d) => {
           setData(d);
           finishBoot();

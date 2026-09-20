@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { createMiddleware } from 'hono/factory';
-import { SESSION_COOKIE } from '../constants.js';
+import { HEALTH_PATH, SESSION_COOKIE } from '../constants.js';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { fail } from '../lib/errors.js';
@@ -11,7 +11,7 @@ import type { AppEnv } from '../types.js';
 
 // deny by default (CLAUDE.md 보안): /api/v1 전체에 인증을 강제하고 예외만 여기에 등록한다.
 // 라우트마다 인증을 "추가"하는 방식은 빼먹는 순간 구멍이 되므로 금지.
-const PUBLIC_PATHS = new Set(['/api/v1/health', '/api/v1/auth/login']);
+const PUBLIC_PATHS = new Set([HEALTH_PATH, '/api/v1/auth/login']);
 
 export type SessionResolution =
   | { ok: true; user: typeof users.$inferSelect }

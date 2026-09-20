@@ -270,11 +270,46 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
                 ))}
                 <tr>
                   <td className="py-0.5 pr-2">앱 파일 (JS {boot.jsFiles}개)</td>
-                  <td className="py-0.5 text-right tabular-nums text-slate-300">{boot.jsKB.toLocaleString()}KB</td>
+                  {/* 0KB = 브라우저 캐시에서 꺼냈다 — 압축·1년 캐시가 먹힌 증거라 그렇게 적는다 */}
+                  <td className="py-0.5 text-right tabular-nums text-slate-300">{boot.jsKB === 0 ? '캐시' : `${boot.jsKB.toLocaleString()}KB`}</td>
                 </tr>
               </tbody>
             </table>
-            <p className="mt-1.5 text-[10px] text-slate-600">새로고침하면 다시 잽니다. 서버 첫 응답이 크면 서버가 잠에서 깨는 시간, 다운로드가 크면 앱 파일 크기, 나머지가 크면 요청 왕복입니다</p>
+            {boot.requests.length > 0 && (
+              // 요청 하나를 넷으로 쪼갠 표 — "기다림"이 큰데 서버가 작으면 회선, "그 뒤"가 크면 폰이 바쁜 것
+              <>
+                <div className="mt-2 text-slate-400">요청별 (어디서 시간이 갔나)</div>
+                <table className="mt-1 w-full text-[11px] text-slate-500">
+                  <thead className="text-[10px] text-slate-600">
+                    <tr>
+                      <th className="pr-1 text-left font-normal">요청</th>
+                      <th className="px-1 text-right font-normal">대기</th>
+                      <th className="px-1 text-right font-normal">응답</th>
+                      <th className="px-1 text-right font-normal">받기</th>
+                      <th className="pl-1 text-right font-normal">그 뒤</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tabular-nums whitespace-nowrap">
+                    {boot.requests.map((r) => (
+                      <tr key={r.path}>
+                        <td className="max-w-[9rem] truncate py-0.5 pr-1 text-slate-400">{r.path}</td>
+                        <td className="px-1 py-0.5 text-right text-slate-300">{r.beforeMs.toLocaleString()}</td>
+                        <td className="px-1 py-0.5 text-right text-slate-300">
+                          {r.waitMs.toLocaleString()}
+                          {r.serverMs !== null && <span className="text-slate-600"> (서버 {r.serverMs})</span>}
+                        </td>
+                        <td className="px-1 py-0.5 text-right text-slate-300">{r.downloadMs.toLocaleString()}</td>
+                        <td className="py-0.5 pl-1 text-right text-slate-300">{r.afterMs === null ? '–' : r.afterMs.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            <p className="mt-1.5 text-[10px] text-slate-600">
+              새로고침하면 다시 잽니다. 서버 첫 응답이 크면 서버가 잠에서 깨는 시간, 다운로드가 크면 앱 파일 크기입니다. 요청별 표는 전부 ms — 대기=보내기 전, 응답=답을 기다린 시간(괄호는 그중 서버가 일한 시간), 받기=다운로드, 그 뒤=받고 나서 화면까지.
+              응답이 큰데 괄호의 서버가 작으면 폰과 서버 사이 회선이, "그 뒤"가 크면 폰이 바빠서 응답을 못 챙긴 시간입니다
+            </p>
           </div>
         )}
       </section>
