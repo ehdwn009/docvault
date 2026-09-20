@@ -8,7 +8,7 @@
 - **권한 등급**: 공개(로그인 불필요) 없음 — 로그인 화면 외 전 API가 인증 필수. `관리자` 표시 API는 role=admin만 호출 가능.
 - **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가).
 - **공통 에러 응답**: `{ "code": "ERROR_CODE", "message": "설명" }`
-- **처리 시간 헤더**: 모든 `/api/v1` 응답에 `Server-Timing: app;dur=<ms>` — 서버가 그 요청에 실제로 쓴 시간. 클라이언트의 시작 시간 표(SCR-144)가 회선과 서버를 가르는 데 쓴다. 정적 파일은 `/assets/*` 1년 immutable, `index.html` no-cache.
+- **처리 시간 헤더**: 모든 `/api/v1` 응답에 `Server-Timing: app;dur=<ms>` — 서버가 그 요청에 실제로 쓴 시간. 클라이언트의 시작 시간 표(SCR-306)가 회선과 서버를 가르는 데 쓴다. API-021 `/tree`는 앞에 `folders`·`files`·`state`·`tags` 부분 시간을 더 단다. 0.5초(`SLOW_REQUEST_MS`) 넘게 일한 요청은 서버 로그에 `[slow]`로 이 헤더 전체가 찍힌다. 정적 파일은 `/assets/*` 1년 immutable, `index.html` no-cache.
 
 | 코드 | HTTP | 의미 |
 |---|---|---|
