@@ -124,4 +124,10 @@ export const CARD = {
   BODY_MAX_CHARS: 20000,
   /** 별칭·태그·연결 한 칸의 항목 수 상한 */
   MAX_LIST_ITEMS: 12,
+  /** 대화 정리(API-116)가 한 대화에서 뽑는 개념 수 상한 — 그 이상이면 대화를 나눠 정리하는 게 맞다 */
+  OUTLINE_MAX_CONCEPTS: 8,
+  /** 대화 정리 답 길이 상한 — 카드 여러 장 + 주제 카드 분량 */
+  OUTLINE_MAX_OUTPUT_TOKENS: 12000,
+  /** 답 골라 담기(API-112 messageIds)에서 한 번에 고를 수 있는 답 수 */
+  MAX_PICKED_MESSAGES: 30,
 } as const;

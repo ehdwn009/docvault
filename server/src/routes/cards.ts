@@ -5,15 +5,25 @@ import { CARD } from '../constants.js';
 import { db } from '../db/index.js';
 import { cardThreads, files } from '../db/schema.js';
 import { isAskConfigured, describeUpstreamError } from '../lib/ask.js';
-import { draftCard, findExactCard, listCards, loadThreadForCard, mergeCard, sourceLine, titleOf } from '../lib/cards.js';
+import {
+  createCardFile,
+  draftCard,
+  findExactCard,
+  listCards,
+  loadThreadForCard,
+  mergeCard,
+  outlineThread,
+  sourceLine,
+  titleOf,
+  type CardSummary,
+} from '../lib/cards.js';
 import { saveTextContent } from '../lib/content.js';
 import { fail } from '../lib/errors.js';
 import { CARD_KINDS, cleanListItem, joinCard, splitCard, type CardFrontmatter } from '../lib/frontmatter.js';
-import { sanitizeUploadName, uniqueFileName } from '../lib/naming.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-// API-111~116: 배움 카드 (2판). 카드 = files의 md(kind='card'). 소유자만 다룬다 — 공유는 파일 공유 토글 그대로
+// API-111~117: 배움 카드 (2판). 카드 = files의 md(kind='card'). 소유자만 다룬다 — 공유는 파일 공유 토글 그대로
 
 const listField = z.array(z.string().trim().min(1).max(60)).max(CARD.MAX_LIST_ITEMS);
 const frontSchema = z.object({
@@ -34,11 +44,38 @@ const updateSchema = frontSchema.extend({
   body: z.string().max(CARD.BODY_MAX_CHARS).default(''),
   threadId: z.number().int().positive().optional(),
 });
-const draftSchema = z.object({
-  threadId: z.number().int().positive(),
-  /** 이 답 하나로 — 없으면 대화 전체 */
-  messageId: z.number().int().positive().optional(),
+const draftSchema = z
+  .object({
+    threadId: z.number().int().positive(),
+    /** 이 답 하나로 */
+    messageId: z.number().int().positive().optional(),
+    /** 고른 답들로 (답 골라 담기). 둘 다 없으면 대화 전체 */
+    messageIds: z.array(z.number().int().positive()).min(1).max(CARD.MAX_PICKED_MESSAGES).optional(),
+  })
+  .refine((v) => v.messageId === undefined || v.messageIds === undefined, { message: 'messageId와 messageIds는 함께 줄 수 없습니다' });
+const outlineSchema = z.object({ threadId: z.number().int().positive() });
+const batchItemSchema = frontSchema.extend({
+  title: z.string().trim().min(1).max(80),
+  body: z.string().max(CARD.BODY_MAX_CHARS).default(''),
+  /** 있으면 새 카드가 아니라 그 카드에 이어 쓴다 (본문은 재구성된 전체) */
+  existingCardId: z.number().int().positive().optional(),
 });
+const batchSchema = z
+  .object({
+    threadId: z.number().int().positive(),
+    items: z.array(batchItemSchema).max(CARD.OUTLINE_MAX_CONCEPTS),
+    /** 개념 카드들을 엮는 주제 카드 — 선택 */
+    topic: z
+      .object({
+        title: z.string().trim().min(1).max(80),
+        oneLine: z.string().trim().min(1).max(CARD.ONE_LINE_MAX_CHARS),
+        body: z.string().max(CARD.BODY_MAX_CHARS).default(''),
+        topic: z.string().trim().max(40).default(''),
+        tags: listField.default([]),
+      })
+      .optional(),
+  })
+  .refine((v) => v.items.length > 0 || v.topic !== undefined, { message: '저장할 카드가 없습니다' });
 const mergePreviewSchema = z.object({
   cardId: z.number().int().positive(),
   threadId: z.number().int().positive(),
@@ -78,12 +115,13 @@ export const cardRoutes = new Hono<AppEnv>()
   .post('/draft', jsonBody(draftSchema), async (c) => {
     if (!isAskConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', '관리자가 아직 LLM을 연결하지 않았습니다');
     const user = c.get('user');
-    const { threadId, messageId } = c.req.valid('json');
-    const t = loadThreadForCard(user.id, threadId, messageId);
+    const { threadId, messageId, messageIds } = c.req.valid('json');
+    const t = loadThreadForCard(user.id, threadId, { messageId, messageIds });
     if (!t) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
     const existing = listCards(user.id);
     try {
-      const draft = await draftCard(t, existing);
+      // 답 하나면 그 답의 개념 하나, 여럿(고른 답·대화 전체)이면 아우르는 한 장
+      const draft = await draftCard(t, existing, messageId !== undefined ? 'one' : 'all');
       const exact = findExactCard(existing, draft.title, draft.aliases);
       if (exact && (!draft.similar || draft.similar.cardId !== exact.id)) {
         draft.similar = { cardId: exact.id, relation: 'same', reason: `"${exact.title}" 카드가 이미 있어요 (제목 또는 별칭이 같음)`, recommendation: 'merge' };
@@ -118,35 +156,13 @@ export const cardRoutes = new Hono<AppEnv>()
     const user = c.get('user');
     const body = c.req.valid('json');
     const front = cleanFront(body);
-    let threadSource: string | null = null;
     if (body.threadId !== undefined) {
       const t = loadThreadForCard(user.id, body.threadId);
       if (!t) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
-      threadSource = sourceLine(t);
-      front.sources = [threadSource];
+      front.sources = [sourceLine(t)];
     }
-    const base = sanitizeUploadName(body.title.replace(/\.md$/i, '')) + '.md';
-    const mine = listCards(user.id).map((k) => `${k.title}.md`);
-    const name = uniqueFileName(base, (n) => mine.includes(n));
-    const content = joinCard(front, body.body);
-    const now = Date.now();
-    const row = db
-      .insert(files)
-      .values({
-        ownerId: user.id,
-        folderId: null,
-        name,
-        fileType: 'md',
-        mimeType: 'text/markdown',
-        sizeBytes: Buffer.byteLength(content, 'utf8'),
-        contentText: content,
-        storagePath: null,
-        kind: 'card',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get();
+    const taken = new Set(listCards(user.id).map((k) => `${k.title}.md`));
+    const row = createCardFile(db, user.id, body.title, front, body.body, taken);
     if (body.threadId !== undefined) linkThread(row.id, body.threadId);
     return c.json({ card: { id: row.id, title: titleOf(row.name), name: row.name, updatedAt: row.updatedAt, ...front } }, 201);
   })
@@ -172,4 +188,97 @@ export const cardRoutes = new Hono<AppEnv>()
     const result = saveTextContent({ id: card.id, contentText: card.contentText, sizeBytes: card.sizeBytes }, content, user.id);
     if (body.threadId !== undefined) linkThread(card.id, body.threadId);
     return c.json({ card: { id: card.id, title: titleOf(card.name), name: card.name, updatedAt: result.updatedAt, ...front } });
+  })
+
+  // API-116: 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 이어쓰기로 표시하고,
+  // 그 항목은 재구성(API-113과 같은 LLM 호출)까지 미리 해 둔다 — 저장(API-117)은 LLM 없이 빠르고 원자적이게
+  .post('/outline', jsonBody(outlineSchema), async (c) => {
+    if (!isAskConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', '관리자가 아직 LLM을 연결하지 않았습니다');
+    const user = c.get('user');
+    const { threadId } = c.req.valid('json');
+    const t = loadThreadForCard(user.id, threadId);
+    if (!t) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
+    const existing = listCards(user.id);
+    try {
+      const outline = await outlineThread(t, existing);
+      const items = await Promise.all(
+        outline.concepts.map(async (concept) => {
+          const card = concept.existingCardId !== null ? existing.find((x) => x.id === concept.existingCardId) ?? null : null;
+          if (!card) return { concept, existing: null, merged: null };
+          const row = findOwnCard(user.id, card.id);
+          const { front, body } = splitCard(row?.contentText ?? '');
+          const merged = await mergeCard(card.title, front, body, t, undefined);
+          return { concept, existing: card, merged };
+        }),
+      );
+      return c.json({ items, topic: outline.topic, source: sourceLine(t) });
+    } catch (e) {
+      return fail(c, 502, 'ASK_UPSTREAM_ERROR', describeUpstreamError(e));
+    }
+  })
+
+  // API-117: 묶음 저장 — 체크한 개념 카드들(새로/이어쓰기) + 주제 카드를 한 트랜잭션으로. LLM 없음.
+  // 되돌리기용으로 새로 만든 카드 id와 이어쓴 카드의 저장 전 버전 id를 돌려준다
+  .post('/batch', jsonBody(batchSchema), (c) => {
+    const user = c.get('user');
+    const body = c.req.valid('json');
+    const t = loadThreadForCard(user.id, body.threadId);
+    if (!t) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
+    const source = sourceLine(t);
+    const existingRows = new Map<number, NonNullable<ReturnType<typeof findOwnCard>>>();
+    for (const item of body.items) {
+      if (item.existingCardId === undefined) continue;
+      const row = findOwnCard(user.id, item.existingCardId);
+      if (!row || row.contentText === null) return fail(c, 404, 'NOT_FOUND', `이어 쓸 카드가 없습니다 (id ${item.existingCardId})`);
+      existingRows.set(item.existingCardId, row);
+    }
+    const taken = new Set(listCards(user.id).map((k) => `${k.title}.md`));
+    const topicTitle = body.topic?.title;
+    const conceptTitles = body.items.map((i) => i.title);
+
+    const result = db.transaction((tx) => {
+      const created: CardSummary[] = [];
+      const merged: { card: CardSummary; versionId: number }[] = [];
+      const summary = (row: { id: number; name: string; updatedAt: number }, front: CardFrontmatter): CardSummary => ({
+        id: row.id,
+        title: titleOf(row.name),
+        updatedAt: row.updatedAt,
+        ...front,
+      });
+      for (const item of body.items) {
+        const front = cleanFront(item);
+        // 주제 카드가 있으면 개념 카드마다 그쪽으로 가는 연결을 하나 더 — 양방향이어야 서랍에서 오갈 수 있다
+        if (topicTitle && !front.links.includes(topicTitle)) front.links.push(topicTitle);
+        const row = item.existingCardId !== undefined ? existingRows.get(item.existingCardId) : undefined;
+        if (row) {
+          const { front: prev } = splitCard(row.contentText ?? '');
+          front.sources = prev.sources.includes(source) ? [...prev.sources] : [...prev.sources, source];
+          const saved = saveTextContent({ id: row.id, contentText: row.contentText ?? '', sizeBytes: row.sizeBytes }, joinCard(front, item.body), user.id, tx);
+          tx.insert(cardThreads).values({ cardFileId: row.id, threadId: body.threadId, createdAt: Date.now() }).onConflictDoNothing().run();
+          merged.push({ card: summary({ id: row.id, name: row.name, updatedAt: saved.updatedAt }, front), versionId: saved.versionId });
+        } else {
+          front.sources = [source];
+          const made = createCardFile(tx, user.id, item.title, front, item.body, taken);
+          tx.insert(cardThreads).values({ cardFileId: made.id, threadId: body.threadId, createdAt: Date.now() }).onConflictDoNothing().run();
+          created.push(summary(made, front));
+        }
+      }
+      let topic: CardSummary | null = null;
+      if (body.topic) {
+        const front: CardFrontmatter = {
+          oneLine: body.topic.oneLine,
+          aliases: [],
+          kind: '주제',
+          topic: body.topic.topic,
+          tags: body.topic.tags.map(cleanListItem).filter(Boolean),
+          links: conceptTitles.map(cleanListItem).filter(Boolean).slice(0, CARD.MAX_LIST_ITEMS),
+          sources: [source],
+        };
+        const made = createCardFile(tx, user.id, body.topic.title, front, body.topic.body, taken);
+        tx.insert(cardThreads).values({ cardFileId: made.id, threadId: body.threadId, createdAt: Date.now() }).onConflictDoNothing().run();
+        topic = summary(made, front);
+      }
+      return { created, merged, topic };
+    });
+    return c.json(result, 201);
   });

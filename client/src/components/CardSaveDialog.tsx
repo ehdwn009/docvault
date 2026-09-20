@@ -17,8 +17,10 @@ import { renderers } from '../renderers';
 
 type Props = {
   threadId: number;
-  /** 이 답 하나로 카드를 만든다. 없으면 대화 전체 */
+  /** 이 답 하나로 카드를 만든다 */
   messageId?: number;
+  /** 고른 답들로 한 장 (답 골라 담기). messageId도 messageIds도 없으면 대화 전체로 한 장 */
+  messageIds?: number[];
   isPc: boolean;
   onClose: () => void;
   onSaved: (file: TreeFile) => void;
@@ -50,15 +52,17 @@ function textToList(s: string) {
 
 // SCR-182: 카드로 저장 — 초안(AI) → 비슷한 카드가 있으면 판단·선택 → 머리말+본문 확인 → 저장.
 // 합치기는 덧붙이기가 아니라 재구성이고, 저장 전에 지금→합친 뒤를 나란히 본다 (설계 — 구조가 잡힌 채로)
-export default function CardSaveDialog({ threadId, messageId, isPc, onClose, onSaved }: Props) {
+export default function CardSaveDialog({ threadId, messageId, messageIds, isPc, onClose, onSaved }: Props) {
   const [step, setStep] = useState<Step>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
+  /** 재료가 무엇인지 — 답 하나 / 고른 답 N개 / 대화 전체. 머리에 적어 두어야 "왜 이런 초안이 나왔나"가 읽힌다 */
+  const scopeLabel = messageId !== undefined ? '' : messageIds ? `재료: 고른 답 ${messageIds.length}개` : '재료: 이 대화 전체';
 
   useEffect(() => {
     let alive = true;
     void api<{ draft: CardDraft; similarCard: CardSummary | null }>('/cards/draft', {
       method: 'POST',
-      body: JSON.stringify({ threadId, ...(messageId !== undefined ? { messageId } : {}) }),
+      body: JSON.stringify({ threadId, ...(messageId !== undefined ? { messageId } : messageIds ? { messageIds } : {}) }),
     })
       .then(({ draft, similarCard }) => {
         if (!alive) return;
@@ -69,7 +73,7 @@ export default function CardSaveDialog({ threadId, messageId, isPc, onClose, onS
     return () => {
       alive = false;
     };
-  }, [threadId, messageId]);
+  }, [threadId, messageId, messageIds]);
 
   async function startMerge(card: CardSummary, instruction?: string) {
     setStep({ kind: 'merging', card });
@@ -145,7 +149,7 @@ export default function CardSaveDialog({ threadId, messageId, isPc, onClose, onS
   if (step.kind === 'loading' || step.kind === 'merging') {
     return shell(
       step.kind === 'loading' ? '카드로 저장' : '합치는 중',
-      '',
+      step.kind === 'loading' ? scopeLabel : '',
       <p className="py-10 text-center text-sm text-slate-400">
         {step.kind === 'loading' ? 'AI가 초안을 짜고 비슷한 카드가 있는지 보는 중…' : `AI가 "${step.card.title}" 카드를 다시 짜는 중…`}
       </p>,
@@ -221,7 +225,7 @@ export default function CardSaveDialog({ threadId, messageId, isPc, onClose, onS
     const label = 'text-[11px] font-medium text-slate-500';
     return shell(
       '카드로 저장',
-      'AI 초안 — 머리말과 본문 둘 다 고칠 수 있어요',
+      `${scopeLabel ? `${scopeLabel} · ` : ''}AI 초안 — 머리말과 본문 둘 다 고칠 수 있어요`,
       <div className="flex flex-col gap-4">
         <div className="rounded-lg border border-teal-800/60 bg-teal-950/20 p-3">
           <div className="mb-2 text-[11px] font-semibold text-teal-300">머리말 — 필수는 제목·한 줄뿐</div>

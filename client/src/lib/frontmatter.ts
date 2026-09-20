@@ -1,7 +1,8 @@
 // 카드 머리말 읽기 — 서버 lib/frontmatter.ts와 같은 규칙 (서버·클라이언트는 별개 프로그램이라 공유할 수 없어 둘 다 가진다.
 // 규칙을 고치면 양쪽을 같이 고친다). 클라이언트는 그리기만 하므로 읽기만 있다.
 
-export const CARD_KINDS = ['개념', '절차', '비교', '문제 해결'] as const;
+/** 주제 = 개념 카드들을 엮는 요약 한 장 (대화 정리가 만든다). 나머지는 개념 카드의 모양 */
+export const CARD_KINDS = ['개념', '절차', '비교', '문제 해결', '주제'] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 export type CardFrontmatter = {

@@ -9,6 +9,7 @@ import {
   type TreeFile,
 } from '../lib/api';
 import CardSaveDialog from './CardSaveDialog';
+import ThreadCardsDialog from './ThreadCardsDialog';
 import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { ASK_QUESTION_MAX_CHARS } from '../lib/constants';
@@ -56,8 +57,13 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   // 마지막에 실패한 질문 — [다시 시도]가 이것을 다시 보낸다 (질문 글은 서버에 이미 남아 있다)
   const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  // 카드로 저장 중인 답의 메시지 id — 있으면 저장 창이 떠 있다 (SCR-182)
-  const [saveFor, setSaveFor] = useState<number | null>(null);
+  // 카드로 저장 창(SCR-182)의 재료 — 답 하나 / 고른 답들 / 대화 전체. null이면 닫힘.
+  // 배열은 여기서 한 번 만들어 넘긴다 — 렌더마다 새 배열이면 저장 창이 초안을 다시 받는다
+  const [save, setSave] = useState<{ messageId?: number; messageIds?: number[] } | null>(null);
+  // 답 골라 담기(C) — 답 오른쪽 위 네모로 고른 답 id들. 하나라도 있으면 아래에 띠가 뜬다
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  // 대화 정리 창(SCR-183) — 헤더 [카드로]
+  const [outlineOpen, setOutlineOpen] = useState(false);
   // 모델이 웹 검색 중 — 답이 늦는 이유를 보여 준다 (글자가 오기 시작하면 끈다)
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<AskThread[]>([]);
@@ -194,6 +200,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
       const r = await api<{ thread: AskThread; messages: AskMessage[] }>(`/ask/threads/${id}`);
       setThread(r.thread);
       setMessages(r.messages);
+      setPicked(new Set());
       onConversingChange?.(true);
       seedUsedRef.current = true; // 옛 대화를 이었으니 지금 seed는 쓰지 않는다
       setShowHistory(false);
@@ -222,6 +229,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     abortRef.current?.abort();
     setThread(null);
     setMessages([]);
+    setPicked(new Set());
     setError(null);
     setFailedQuestion(null);
     setShowHistory(false);
@@ -233,6 +241,8 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   const limitReached = status !== null && status.remaining !== null && status.remaining <= 0;
   const notConfigured = status !== null && !status.configured;
   const canSend = !busy && !limitReached && !notConfigured && input.trim().length > 0;
+  const hasAnswer = messages.some((m) => m.role === 'assistant' && typeof m.id === 'number' && m.id > 0);
+  const picking = picked.size > 0;
 
   const contextChip =
     thread?.quote || (seed && !seedUsedRef.current) ? (
@@ -252,6 +262,15 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {thread && !showHistory && hasAnswer && (
+            <button
+              onClick={() => setOutlineOpen(true)}
+              title="이 대화 전체를 카드로 — 개념별로 나누거나 한 장으로"
+              className="rounded border border-teal-800 bg-teal-950/50 px-2 py-0.5 text-xs font-medium text-teal-200 hover:bg-teal-900"
+            >
+              카드로
+            </button>
+          )}
           <button onClick={() => void openHistory()} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
             지난 대화
           </button>
@@ -320,7 +339,27 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                 {m.content}
               </div>
             ) : (
-              <div key={m.id} className="mr-2 rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900 px-3 py-2 text-slate-200">
+              <div key={m.id} className="relative mr-2 rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900 px-3 py-2 pr-9 text-slate-200">
+                {thread && typeof m.id === 'number' && m.id > 0 && (
+                  // 답 골라 담기 — 평소엔 흐리게, 하나라도 고르면 전부 또렷하게 (파일 트리의 선택 모드와 같은 규칙)
+                  <button
+                    onClick={() => {
+                      const id = m.id as number;
+                      setPicked((p) => {
+                        const next = new Set(p);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      });
+                    }}
+                    title={picked.has(m.id) ? '고른 답에서 빼기' : '이 답 골라 담기 (여러 답을 한 카드로)'}
+                    className={`absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-md border text-[11px] transition ${
+                      picked.has(m.id) ? 'border-teal-500 bg-teal-600 text-white' : `border-slate-600 text-transparent hover:border-slate-400 ${picking ? '' : 'opacity-40'}`
+                    }`}
+                  >
+                    ✓
+                  </button>
+                )}
                 {m.content === '' ? (
                   <span className="text-slate-500">{searching ? '🌐 웹에서 찾는 중…' : '생각 중…'}</span>
                 ) : MdRenderer ? (
@@ -336,7 +375,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                   <div className="mt-1.5 flex gap-1 text-xs">
                     {thread && typeof m.id === 'number' && m.id > 0 && (
                       <button
-                        onClick={() => setSaveFor(m.id as number)}
+                        onClick={() => setSave({ messageId: m.id as number })}
                         className="rounded border border-teal-700 bg-teal-950/50 px-2 py-0.5 font-medium text-teal-200 hover:bg-teal-900"
                       >
                         📚 카드로 저장
@@ -374,6 +413,18 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
       )}
 
       <div className="border-t border-slate-800 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pc:pb-2">
+        {picking && thread && (
+          <div className="mb-1.5 flex items-center gap-2 rounded-md border border-teal-900 bg-teal-950/40 px-2.5 py-1.5 text-xs">
+            <span className="text-slate-200"><b className="text-teal-300">{picked.size}</b>개 답 골라짐</span>
+            <button onClick={() => setPicked(new Set())} className="ml-auto rounded border border-slate-700 px-2 py-1 text-slate-300 hover:bg-slate-800">해제</button>
+            <button
+              onClick={() => setSave({ messageIds: [...picked].sort((a, b) => a - b) })}
+              className="rounded bg-teal-600 px-2.5 py-1 font-medium text-white hover:bg-teal-500"
+            >
+              한 장으로
+            </button>
+          </div>
+        )}
         {pendingQuote && (
           <div className="mb-1.5 flex items-start gap-1 rounded-md border border-slate-800 border-l-2 border-l-amber-500 bg-slate-900 px-2 py-1 text-xs text-slate-400">
             <span className="line-clamp-2 flex-1">“{pendingQuote}”</span>
@@ -440,14 +491,31 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
         </div>
         <p className="mt-1 text-[11px] text-slate-600">문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 LLM에 보냅니다</p>
       </div>
-      {saveFor !== null && thread && (
+      {save && thread && (
         <CardSaveDialog
           threadId={thread.id}
-          messageId={saveFor}
+          messageId={save.messageId}
+          messageIds={save.messageIds}
           isPc={isPc}
-          onClose={() => setSaveFor(null)}
+          onClose={() => setSave(null)}
           onSaved={(f) => {
-            setSaveFor(null);
+            setSave(null);
+            setPicked(new Set());
+            onOpenFile?.(f);
+          }}
+        />
+      )}
+      {outlineOpen && thread && (
+        <ThreadCardsDialog
+          threadId={thread.id}
+          isPc={isPc}
+          onClose={() => setOutlineOpen(false)}
+          onWholeAsOne={() => {
+            setOutlineOpen(false);
+            setSave({});
+          }}
+          onSaved={(f) => {
+            setOutlineOpen(false);
             onOpenFile?.(f);
           }}
         />
