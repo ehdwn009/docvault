@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AskPanel, { type AskSeed } from '../components/AskPanel';
 import CardView from '../components/CardView';
 import VersionPanel from '../components/VersionPanel';
@@ -42,6 +42,8 @@ type Props = {
   onOpenSource?: (threadId: number) => void;
   /** 카드 뷰의 연결 클릭 — 그 이름의 카드를 연다 */
   onOpenCard?: (title: string) => void;
+  /** 문서 속에 점선 밑줄을 그을 내 카드 용어 (활용 ②). 설정이 꺼져 있으면 빈 배열 */
+  terms?: { id: number; title: string; aliases: string[]; oneLine: string; kind: string }[];
   /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
   onSwipeTab?: (dir: 1 | -1) => void;
 };
@@ -49,6 +51,8 @@ type Props = {
 /** 오버레이 헤더가 iframe 문서의 상단 UI(자체 목차 버튼·sticky 메뉴)를 덮지 않게 밀어 두는 거리.
     헤더 높이 그 자체 — 같은 것을 막는 같은 크기여야 한다 */
 const CHROME_FRAME_INSET = CHROME_HEIGHT;
+/** 용어 팝오버 너비(px) — 화면 밖으로 안 나가게 자리를 보정할 때 쓴다 */
+const TERM_POP_WIDTH = 260;
 /** 헤더 스와이프 판정 — 가로로 이만큼, 세로 이탈은 이 이하 */
 const SWIPE_MIN_X = 60;
 const SWIPE_MAX_Y = 40;
@@ -92,7 +96,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, jumpQuote, onOpenSource, onOpenCard }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, jumpQuote, onOpenSource, onOpenCard, terms }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -120,6 +124,49 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [freshState, setFreshState] = useState<TreeFile['state'] | null>(null);
   // 아직 서버로 안 보낸 마지막 스크롤 위치 — 앱을 닫거나 문서를 바꿀 때 유실 없이 flush한다
   const pendingRef = useRef<{ fileId: number; offset: number; ratio: number | null } | null>(null);
+  // 문서 속 용어 밑줄 — 카드 자신을 열었을 때 제 제목에 밑줄을 긋지 않는다
+  const ownTitle = file.kind === 'card' ? cardTitle(file.name) : null;
+  const docTerms = useMemo(
+    () => (terms ?? []).filter((t) => t.title !== ownTitle),
+    [terms, ownTitle],
+  );
+  const [foundTerms, setFoundTerms] = useState<string[]>([]);
+  // 밑줄 친 용어를 눌렀을 때 뜨는 작은 창 — 한 줄 정의 + 카드 열기 + 질문
+  const [termPop, setTermPop] = useState<{ title: string; rect: { x: number; y: number; w: number; h: number } } | null>(null);
+  const onTermsFound = useCallback((titles: string[]) => setFoundTerms(titles), []);
+  const onTermClick = useCallback((title: string, rect: { x: number; y: number; w: number; h: number }) => setTermPop({ title, rect }), []);
+  useEffect(() => {
+    setFoundTerms([]);
+    setTermPop(null);
+  }, [file.id]);
+  // 열린 채 다른 곳을 누르거나 스크롤하면 닫는다
+  useEffect(() => {
+    if (!termPop) return;
+    const onOutside = (e: Event) => {
+      if (e.target instanceof Node && termPopRef.current?.contains(e.target)) return;
+      setTermPop(null);
+    };
+    window.addEventListener('pointerdown', onOutside, true);
+    window.addEventListener('scroll', onOutside, true);
+    return () => {
+      window.removeEventListener('pointerdown', onOutside, true);
+      window.removeEventListener('scroll', onOutside, true);
+    };
+  }, [termPop]);
+  const termPopRef = useRef<HTMLDivElement>(null);
+  /** 용어로 질문 — 그 용어를 인용으로 붙여 질문 패널을 연다 (드래그 질문과 같은 자리로 들어간다) */
+  function askAboutTerm(title: string) {
+    if (askConversing) setPendingQuote(title);
+    else {
+      setAskSeed({ quote: title, context: '' });
+      setPendingQuote(null);
+    }
+    setAskStarted(true);
+    setAskOpen(true);
+    setTermPop(null);
+    showChrome();
+  }
+
   /** 출처 문장을 못 찾으면 알린다 — 문서가 고쳐졌을 수 있다 (설계 흐름 D: 카드는 멀쩡, 위치만 잃음) */
   const onQuoteFound = useCallback((found: boolean) => {
     if (!found) toast('출처 문장을 이 문서에서 찾지 못했습니다 — 문서가 바뀌었을 수 있어요', 'info');
@@ -611,8 +658,32 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         }
       : null;
 
+  const termCard = termPop ? docTerms.find((t) => t.title === termPop.title) ?? null : null;
+  const popRect = termPop && termCard ? rootRef.current?.getBoundingClientRect() : undefined;
+  const termPopStyle =
+    termPop && popRect
+      ? {
+          left: Math.max(8, Math.min(popRect.width - TERM_POP_WIDTH - 8, termPop.rect.x - popRect.left)),
+          top: Math.max(4, termPop.rect.y - popRect.top + termPop.rect.h + 6),
+        }
+      : null;
+
   return (
     <div ref={rootRef} className="relative flex h-full flex-col">
+      {termPopStyle && termCard && (
+        <div ref={termPopRef} className="absolute z-30 rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100 shadow-xl shadow-black/40" style={{ ...termPopStyle, width: TERM_POP_WIDTH }}>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold">{termCard.title}</span>
+            <span className="rounded border border-slate-700 px-1 text-[10px] text-slate-500">{termCard.kind}</span>
+            <button onClick={() => setTermPop(null)} className="ml-auto px-1 text-slate-500 hover:text-slate-300">✕</button>
+          </div>
+          <p className="mt-1 text-xs text-slate-300">{termCard.oneLine}</p>
+          <div className="mt-2 flex gap-1.5">
+            <button onClick={() => { setTermPop(null); onOpenCard?.(termCard.title); }} className="rounded-md bg-teal-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-teal-500">카드 열기</button>
+            <button onClick={() => askAboutTerm(termCard.title)} className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800">이 용어 질문</button>
+          </div>
+        </div>
+      )}
       {askBar && (
         <div className="absolute z-30" style={askBar}>
           <button
@@ -826,6 +897,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               fontScale={effectiveScale}
               highlightQuote={jumpQuote}
               onQuoteFound={onQuoteFound}
+              terms={docTerms}
+              onTermsFound={onTermsFound}
+              onTermClick={onTermClick}
             />
           ) : (
             <div
@@ -835,6 +909,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
               style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
             >
+              {foundTerms.length > 0 && file.kind !== 'card' && (
+                // 이 문서에 내 카드가 몇 장 걸리는지 — 밑줄이 왜 그어져 있는지 설명하는 한 줄
+                <p className="mb-4 rounded-md border border-teal-700/40 bg-teal-600/10 px-3 py-1.5 text-xs text-teal-700 dark:text-teal-300">
+                  📚 이 문서에 내 카드 {foundTerms.length}장 · {foundTerms.join(', ')}
+                </p>
+              )}
               {BodyRenderer && file.kind === 'card' && !showAsCode ? (
                 // 카드: 머리말은 표로, 본문은 md 렌더러로 (설계 — 카드 한 장 = 머리말 + 자유 본문)
                 <CardView
@@ -845,7 +925,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   onOpenLink={onOpenCard}
                   renderBody={(body) => (
                     <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
-                      <BodyRenderer content={body} theme={settings.viewerTheme} fileName={file.name} onFileLink={onOpenLink} />
+                      <BodyRenderer content={body} theme={settings.viewerTheme} fileName={file.name} onFileLink={onOpenLink} terms={docTerms} onTermsFound={onTermsFound} onTermClick={onTermClick} />
                     </Suspense>
                   )}
                 />
@@ -859,6 +939,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                     highlightLines={jumpLines}
                     highlightQuote={jumpQuote}
                     onQuoteFound={onQuoteFound}
+                    terms={docTerms}
+                    onTermsFound={onTermsFound}
+                    onTermClick={onTermClick}
                   />
                 </Suspense>
               ) : (

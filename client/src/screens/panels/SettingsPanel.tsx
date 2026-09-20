@@ -190,6 +190,22 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
       </section>
 
       <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">배움 카드</h3>
+        <label className="mt-2 flex items-start gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={settings.termHighlight === 1}
+            onChange={(e) => onChange({ termHighlight: e.target.checked ? 1 : 0 })}
+            className="mt-0.5 accent-slate-400"
+          />
+          <span>
+            문서 속 내 카드 용어에 점선 밑줄
+            <span className="block text-slate-600">누르면 한 줄 정의가 뜨고 카드로 갈 수 있습니다. 읽기에 방해되면 끄세요</span>
+          </span>
+        </label>
+      </section>
+
+      <section>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">내보내기</h3>
         <p className="mt-2 text-xs leading-relaxed text-slate-500">
           내 파일 전부를 폴더 구조 그대로 ZIP 하나로 받습니다. 파일이 많으면 시간이 걸릴 수 있습니다.

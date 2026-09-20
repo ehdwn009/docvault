@@ -103,6 +103,7 @@ erDiagram
         text line_height
         text content_width "narrow|normal|wide"
         text last_seen_version "마지막으로 확인한 앱 버전, 패치노트 모달용 (2026-08-14)"
+        integer term_highlight "0|1 문서 속 카드 용어 밑줄 (기본 1, 2026-09-20)"
         integer updated_at
     }
     GOOGLE_ACCOUNTS {
@@ -189,6 +190,7 @@ erDiagram
 - 파일 1개는 버전 스냅샷 여러 개를 가지며, 저장 시 20개 초과분은 오래된 것부터 삭제.
 - **화면 맞춤 (2026-08-18)**: viewer_fit은 뷰어가 HTML 문서를 좁은 화면에 맞게 보정할지 여부입니다(기본 1=켬). 문서가 아니라 "이 사람이 이 문서를 어떻게 볼지"의 선택이므로 FILES가 아니라 USER_FILE_STATE에 둡니다 — 같은 공유 문서를 A는 보정해서, B는 원본으로 볼 수 있습니다.
 - **글자 크기 2층 구조 (2026-08-18)**: HTML 글자 크기는 USER_SETTINGS.html_font_scale(전역 기본 배율)과 USER_FILE_STATE.font_scale(이 파일만의 배율)로 나뉩니다. font_scale이 **NULL이면 전역을 따르고**, 값이 있으면 그것으로 **대체**합니다(곱하지 않습니다). NULL을 "없음"으로 쓰기 때문에 대부분의 파일은 전역 설정을 바꾸면 같이 따라오고, 유별난 문서만 자기 값을 갖습니다 — 그래서 UI에는 반드시 "기본값 따르기"(= NULL로 되돌리기)가 있어야 합니다. font_scale은 형식을 가리지 않습니다 — HTML은 문서 자신의 크기를 100%로, md·텍스트는 USER_SETTINGS.font_size를 100%로 삼을 뿐 규칙은 같습니다(전역 기본 배율 html_font_scale은 HTML에만 있습니다).
+- **용어 밑줄 (2026-09-20)**: USER_SETTINGS.term_highlight는 문서를 읽을 때 내 배움 카드의 제목·별칭이 나오는 자리에 점선 밑줄을 그을지입니다(기본 1=켬). 읽기 취향이라 기기(localStorage)가 아니라 사람(USER_SETTINGS)에 붙습니다 — 폰에서 끄면 PC에서도 꺼집니다.
 - 즐겨찾기·읽던 위치는 파일 속성이 아니라 USER_FILE_STATE(사용자×파일)에 둡니다. 공유 파일을 열람하는 다른 사용자도 자신만의 즐겨찾기·읽던 위치를 가질 수 있게 하기 위한 구조입니다 (기존 Manus 버전에서 파일에 붙어 있던 isFavorite의 개선).
 - 공유는 v1에서는 파일/폴더의 is_shared 플래그(전체 사용자 대상 열람 공개, 관리자만 토글)로 구현하고, 추후 특정 사용자 대상 공유가 필요해지면 SHARES(file_id, grantee_id, permission) 테이블로 확장합니다.
 - **구글 드라이브 연동 (2026-09-16)**: 연동은 **선택 기능**입니다 — 연결하지 않으면 세 테이블 모두 빈 채로 앱은 완전히 동작합니다(외부 의존 제로 원칙의 유지 방식).

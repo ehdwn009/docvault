@@ -120,6 +120,8 @@ export type UserSettings = {
   lineHeight: string | null;
   contentWidth: 'narrow' | 'normal' | 'wide';
   lastSeenVersion: string | null;
+  /** 문서 속 내 카드 용어에 점선 밑줄 (1=켬) */
+  termHighlight: number;
 };
 
 export type Changelog = { version: string; content: string };

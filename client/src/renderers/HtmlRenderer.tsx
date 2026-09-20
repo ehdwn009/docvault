@@ -31,7 +31,7 @@ function navShim(restoreOffset: number, restoreRatio: number | undefined, theme:
   const ratio = restoreRatio != null && restoreRatio > 0 && restoreRatio <= 1 ? restoreRatio : null;
   // 문서가 원하면 CSS에서 [data-theme="dark"]로 뷰어 테마를 따를 수 있게 표식만 남긴다 (강제하지 않음)
   const safeTheme = collapseTheme(theme);
-  return `<style>::highlight(dv-source),mark.dv-source{background:rgba(250,204,21,.5);color:inherit}</style><script>(function(){
+  return `<style>::highlight(dv-source),mark.dv-source{background:rgba(250,204,21,.5);color:inherit}::highlight(dv-term){text-decoration:underline dotted rgba(20,184,166,.9)}</style><script>(function(){
 var se=function(){return document.scrollingElement||document.documentElement};
 document.documentElement.dataset.theme='${safeTheme}';
 document.addEventListener('click',function(ev){
@@ -66,9 +66,38 @@ if(window.CSS&&CSS.highlights)CSS.highlights['delete'](HLN);
 var r=findQ(q);if(!r){parent.postMessage({type:'docvault:found',ok:false},'*');return}
 if(window.CSS&&CSS.highlights&&window.Highlight)CSS.highlights.set(HLN,new Highlight(r));else if(r.startContainer===r.endContainer){var mk=document.createElement('mark');mk.className=HLN;r.surroundContents(mk)}
 var el=r.startContainer.parentNode;if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});parent.postMessage({type:'docvault:found',ok:true},'*')};
+// 내 카드 용어 밑줄 — lib/findQuote.ts markTerms의 ES5 복사본. 문단마다 첫 등장만, 링크·코드 안은 건너뛴다
+var TRM=[];var flatAll=function(){var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),map=[],flat='',ls=true,n;
+while((n=w.nextNode())){var p=n.parentNode&&n.parentNode.nodeName;if(p==='SCRIPT'||p==='STYLE')continue;var t=n.data;
+for(var i=0;i<t.length;i++){var ch=t.charAt(i);if(/\\s/.test(ch)){if(ls)continue;flat+=' ';map.push([n,i]);ls=true}else{flat+=ch;map.push([n,i]);ls=false}}}return{t:flat,m:map}};
+var isW=function(c){return !!c&&/[A-Za-z0-9]/.test(c)};
+var markTerms=function(terms){TRM=[];if(window.CSS&&CSS.highlights)CSS.highlights['delete']('dv-term');if(!terms.length)return;
+var f=flatAll(),low=f.t.toLowerCase(),names=[],i,j;
+for(i=0;i<terms.length;i++){var alls=[terms[i].title].concat(terms[i].aliases||[]);for(j=0;j<alls.length;j++){var nm=String(alls[j]).replace(/\\s+/g,' ').replace(/^\\s+|\\s+$/g,'');if(nm.length>=2)names.push([terms[i].title,nm])}}
+names.sort(function(a,b){return b[1].length-a[1].length});
+var taken=[],seen={},blocks=[],ranges=[];
+for(i=0;i<names.length;i++){var title=names[i][0],needle=names[i][1].toLowerCase(),ascii=/^[A-Za-z0-9._-]+$/.test(names[i][1]),from=0;
+while(TRM.length<300){var at=low.indexOf(needle,from);if(at<0)break;from=at+needle.length;
+if(ascii&&(isW(f.t.charAt(at-1))||isW(f.t.charAt(at+needle.length))))continue;
+var ov=false;for(j=0;j<taken.length;j++){if(at<taken[j][1]&&at+needle.length>taken[j][0]){ov=true;break}}if(ov)continue;
+var r=document.createRange();r.setStart(f.m[at][0],f.m[at][1]);r.setEnd(f.m[at+needle.length-1][0],f.m[at+needle.length-1][1]+1);
+var el=r.startContainer.parentElement;if(!el||el.closest('a, code, pre, kbd'))continue;
+var blk=el.closest('p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, div')||document.body;
+var bi=blocks.indexOf(blk);if(bi<0){blocks.push(blk);bi=blocks.length-1}
+var key=bi+'|'+title;if(seen[key])continue;seen[key]=1;
+taken.push([at,at+needle.length]);TRM.push([title,r]);ranges.push(r)}}
+if(ranges.length&&window.CSS&&CSS.highlights&&window.Highlight)CSS.highlights.set('dv-term',new (Function.prototype.bind.apply(Highlight,[null].concat(ranges)))());
+var titles=[];for(i=0;i<TRM.length;i++)if(titles.indexOf(TRM[i][0])<0)titles.push(TRM[i][0]);
+parent.postMessage({type:'docvault:terms-found',titles:titles},'*')};
+document.addEventListener('click',function(ev){if(!TRM.length)return;var s=document.getSelection();if(s&&!s.isCollapsed)return;
+var node=null,off=0;if(document.caretPositionFromPoint){var cp=document.caretPositionFromPoint(ev.clientX,ev.clientY);if(cp){node=cp.offsetNode;off=cp.offset}}
+else if(document.caretRangeFromPoint){var cr=document.caretRangeFromPoint(ev.clientX,ev.clientY);if(cr){node=cr.startContainer;off=cr.startOffset}}
+if(!node)return;for(var i=0;i<TRM.length;i++){try{if(TRM[i][1].isPointInRange(node,off)){ev.preventDefault();var b=TRM[i][1].getClientRects()[0]||TRM[i][1].getBoundingClientRect();
+parent.postMessage({type:'docvault:term',title:TRM[i][0],x:b.left,y:b.top,w:b.width,h:b.height},'*');return}}catch(e){}}},true);
 addEventListener('message',function(ev){var d=ev.data||{};
 if(d.type==='docvault:goto'&&HD[d.index])HD[d.index].scrollIntoView({behavior:'smooth',block:'start'});
 else if(d.type==='docvault:find'&&typeof d.quote==='string')doFind(d.quote);
+else if(d.type==='docvault:terms'&&Array.isArray(d.terms))markTerms(d.terms);
 else if(d.type==='docvault:theme')document.documentElement.dataset.theme=String(d.theme)});
 ${ratio !== null || offset > 0 ? `var ap=function(){var s=se(),d=s.scrollHeight-s.clientHeight;s.scrollTop=${ratio !== null ? `d>0?Math.round(d*${ratio}):${offset}` : `${offset}`}};if(document.readyState==='complete')ap();else addEventListener('load',function(){requestAnimationFrame(ap)});` : ''}
 })()</${'script'}>`;
@@ -336,9 +365,13 @@ type Props = {
   /** 카드 출처로 열렸을 때 찾아 형광펜 칠할 문장 — 심에 쪽지로 보낸다 */
   highlightQuote?: string;
   onQuoteFound?: (found: boolean) => void;
+  /** 밑줄 그을 내 카드 용어 — 심에 쪽지로 보내고, 찾은 것·눌린 것을 심이 보고한다 */
+  terms?: { title: string; aliases: string[] }[];
+  onTermsFound?: (titles: string[]) => void;
+  onTermClick?: (title: string, rect: { x: number; y: number; w: number; h: number }) => void;
 };
 
-export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100, onSelection, highlightQuote, onQuoteFound }: Props) {
+export default function HtmlRenderer({ content, theme, initialOffset = 0, initialRatio, onScrollOffset, onToc, onInteract, fit = true, fontScale = 100, onSelection, highlightQuote, onQuoteFound, terms, onTermsFound, onTermClick }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   // 문서가 다 올라온 뒤에야 찾기 쪽지를 보낼 수 있다 — 심이 'docvault:toc'를 보내면 준비된 것
   const [ready, setReady] = useState(false);
@@ -359,14 +392,20 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, initia
       // 반드시 이 iframe에서 온 메시지만 신뢰한다 (아키텍처 — HTML 렌더러 호환 심)
       if (e.source !== frameRef.current?.contentWindow) return;
       const d = e.data as {
-        type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown; ok?: unknown;
+        type?: unknown; offset?: unknown; ratio?: unknown; items?: unknown; ok?: unknown; titles?: unknown; title?: unknown;
         quote?: unknown; context?: unknown; x?: unknown; y?: unknown; w?: unknown; h?: unknown;
       } | null;
       if (!d || typeof d !== 'object') return;
+      const frameRect = () => frameRef.current?.getBoundingClientRect();
       if (d.type === 'docvault:interact') {
         onInteract?.();
       } else if (d.type === 'docvault:found') {
         onQuoteFound?.(d.ok === true);
+      } else if (d.type === 'docvault:terms-found' && Array.isArray(d.titles)) {
+        onTermsFound?.((d.titles as unknown[]).map(String));
+      } else if (d.type === 'docvault:term' && typeof d.title === 'string') {
+        const fr = frameRect();
+        onTermClick?.(d.title, { x: (fr?.left ?? 0) + Number(d.x ?? 0), y: (fr?.top ?? 0) + Number(d.y ?? 0), w: Number(d.w ?? 0), h: Number(d.h ?? 0) });
       } else if (d.type === 'docvault:selection') {
         const quote = typeof d.quote === 'string' ? d.quote : '';
         if (!quote) {
@@ -400,7 +439,13 @@ export default function HtmlRenderer({ content, theme, initialOffset = 0, initia
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onScrollOffset, onToc, onInteract, onSelection, onQuoteFound]);
+  }, [onScrollOffset, onToc, onInteract, onSelection, onQuoteFound, onTermsFound, onTermClick]);
+
+  // 용어 목록 — 문서가 준비된 뒤, 그리고 목록이 바뀔 때마다
+  useEffect(() => {
+    if (!ready) return;
+    frameRef.current?.contentWindow?.postMessage({ type: 'docvault:terms', terms: (terms ?? []).map((t) => ({ title: t.title, aliases: t.aliases })) }, '*');
+  }, [ready, terms]);
 
   // 출처 문장 찾기 — 문서가 준비된 뒤, 그리고 문장이 바뀔 때마다
   useEffect(() => {

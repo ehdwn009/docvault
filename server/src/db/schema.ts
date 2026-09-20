@@ -140,6 +140,8 @@ export const userSettings = sqliteTable('user_settings', {
     .default('normal'),
   /** 패치노트 모달용 — 마지막으로 확인한 앱 버전. 기기 간 동기화되어 한 번 본 공지는 다시 안 뜬다 */
   lastSeenVersion: text('last_seen_version'),
+  /** 문서 속 내 카드 용어에 점선 밑줄 (배움 카드 활용 ②). 읽기 취향이라 기기가 아니라 사람에 붙는다. 1=켬 */
+  termHighlight: integer('term_highlight').notNull().default(1),
   updatedAt: integer('updated_at').notNull(),
 });
 

@@ -82,6 +82,7 @@ export const DEFAULT_USER_SETTINGS = {
   lineHeight: null as string | null,
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
+  termHighlight: 1,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */

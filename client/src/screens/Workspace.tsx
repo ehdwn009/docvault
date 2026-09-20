@@ -116,6 +116,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
   // 카드 출처로 연 파일에서 형광펜 칠할 문장 — 출처가 "파일 속 한 문장"을 가리킬 때 (배움 카드 — 출처 클릭)
   const [quoteJump, setQuoteJump] = useState<{ fileId: number; quote: string } | null>(null);
+  // 내 카드 목록 — 문서 속 용어 밑줄(활용 ②)의 재료. 카드가 바뀌면(dv:cards-changed) 다시 받는다
+  const [cards, setCards] = useState<CardSummary[]>([]);
+  useEffect(() => {
+    const load = () => void api<{ cards: CardSummary[] }>('/cards').then((r) => setCards(r.cards)).catch(() => {});
+    load();
+    window.addEventListener('dv:cards-changed', load);
+    return () => window.removeEventListener('dv:cards-changed', load);
+  }, []);
   // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대)을 접는다 (IA — 크롬 자동 숨김)
   // 크롬 안착 상태(aria·pointer-events용) — 접히는 동안의 움직임은 drawerBtnRef가 DOM에 직접 쓴다
   const chromeHidden = useChromeHidden();
@@ -1131,6 +1139,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }
 
   // 정렬 (SCR-111) + 태그 필터를 적용한 트리 데이터
+  /** 뷰어에 넘길 용어 — 설정이 꺼져 있으면 빈 배열. 주제 카드는 용어가 아니라 묶음이라 뺀다 */
+  const terms = useMemo(
+    () => (settings.termHighlight === 1 ? cards.filter((c) => c.kind !== '주제').map((c) => ({ id: c.id, title: c.title, aliases: c.aliases, oneLine: c.oneLine, kind: c.kind })) : []),
+    [cards, settings.termHighlight],
+  );
+
   const visibleFiles = useMemo(() => {
     const filtered =
       tagFilter === null ? tree.files : tree.files.filter((f) => f.tags.includes(tagFilter));
@@ -1516,6 +1530,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
                 onOpenSource={(tid) => void openSource(tid)}
                 onOpenCard={(title) => void openCardByTitle(title)}
+                terms={terms}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
               />
             )}

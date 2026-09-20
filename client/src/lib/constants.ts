@@ -28,6 +28,7 @@ export const DEFAULT_USER_SETTINGS = {
   lineHeight: null as string | null,
   contentWidth: 'normal' as const,
   lastSeenVersion: null as string | null,
+  termHighlight: 1,
 };
 
 /** 질문(배움 카드) 입력 한도 — 서버 ASK 상수와 같아야 한다. 초과분은 클라이언트가 먼저 자른다 */
