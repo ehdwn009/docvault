@@ -1,5 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from 'react';
 import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
+import ExportCardsDialog from '../../components/ExportCardsDialog';
 import FileName from '../../components/FileName';
 import SwipeRow from '../../components/SwipeRow';
 import { api, ApiError, cardToTreeFile, type CardSummary, type TreeFile } from '../../lib/api';
@@ -23,6 +24,7 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
   const [q, setQ] = useState('');
   const [group, setGroup] = useState<Group>('topic');
   const [menu, setMenu] = useState<Menu | null>(null);
+  const [exportOpen, setExportOpen] = useState(false); // SCR-185 내보내기
 
   const reload = () => {
     void api<{ cards: CardSummary[] }>('/cards')
@@ -123,6 +125,15 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
           >
             + 빈 카드
           </button>
+          {cards.length > 0 && (
+            <button
+              onClick={() => setExportOpen(true)}
+              title="용어집 md · Anki CSV로 내보내기"
+              className="shrink-0 rounded-md border border-slate-700 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              내보내기
+            </button>
+          )}
         </div>
         <div className="flex gap-1 text-xs">
           {(
@@ -196,6 +207,17 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
       )}
 
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {exportOpen && (
+        <ExportCardsDialog
+          cards={cards}
+          isPc={window.matchMedia('(hover: hover) and (pointer: fine)').matches}
+          onClose={() => setExportOpen(false)}
+          onOpenFile={(f) => {
+            setExportOpen(false);
+            onSelect(f);
+          }}
+        />
+      )}
     </div>
   );
 }

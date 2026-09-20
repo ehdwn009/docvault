@@ -97,6 +97,7 @@
 | API-115 | PUT | /cards/{id} | 카드 머리말·본문 갱신 (재구성 저장). 버전 스냅샷, 출처는 더하기만 | 소유자 |
 | API-116 | POST | /cards/outline | 대화 정리 — 대화 하나 → 개념 N개 초안 + 주제 카드 초안. 기존 카드와 같은 개념은 재구성까지 미리 (LLM) | 소유자 |
 | API-117 | POST | /cards/batch | 묶음 저장 — 개념 카드 N장(새로/이어쓰기) + 주제 카드 1장을 한 트랜잭션으로. LLM 없음. 되돌리기 재료 반환 | 소유자 |
+| API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
 
@@ -499,7 +500,7 @@ GET /api/v1/google/files/{driveFileId}/content
 ### API-105 Response — GET /ask/threads/{id}
 `{ "thread": {...}, "messages": [ { id, role: "user"|"assistant", content, createdAt } ] }`
 
-## API-111 ~ API-117: 배움 카드 (2판)
+## API-111 ~ API-118: 배움 카드 (2판)
 
 설계: [배움카드_docvault_20260918.md](배움카드_docvault_20260918.md) "카드의 모양". 카드는 files의 md(kind='card')라 본문 조회·편집·버전·태그·공유는 파일 API를 그대로 쓴다. 여기는 **머리말을 아는** API만.
 
@@ -525,3 +526,9 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ### API-117 Request — POST /cards/batch
 `{ "threadId", "items": [ API-114 필드 + "existingCardId"? ], "topic"?: { title, oneLine, body, topic?, tags? } }` — items가 비어도 topic이 있으면 된다.
 **201** `{ "created": 카드 요약[], "merged": [ { "card": 요약, "versionId" } ], "topic": 요약 | null }`. 한 트랜잭션: existingCardId가 있는 항목은 API-115 규칙(스냅샷 + 출처 더하기)으로 이어 쓰고, 나머지는 API-114 규칙으로 만든다. 주제 카드는 kind='주제', 연결 = 개념 카드 제목들이고, 개념 카드에도 주제 카드로 가는 연결을 더한다. 되돌리기는 클라이언트가 created·topic을 API-036(휴지통), merged를 API-043(versionId로 복원)으로 한다.
+
+### API-118 — GET /cards/export?format=md|csv&topics=a,b
+텍스트로 응답한다 (`Content-Disposition: attachment`, 같은 경로가 미리보기와 다운로드에 쓰인다). `topics`는 쉼표 목록, 없으면 전체, 주제 없음은 `-`. md는 가나다 머리(ㄱ·ㄴ·…·A·B·#)별 목록 `- **제목** (별칭) — 한 줄 · 주제`, 주제 카드는 뒤에 따로. csv는 Anki 가져오기 머리 세 줄(`#separator:;` `#html:true` `#columns:…`) + `앞면;뒷면;태그` — 뒷면은 한 줄(굵게) + 본문 앞 600자(줄바꿈은 `<br>`), 태그는 주제+태그(공백은 `_`). LLM 없음.
+
+### API-118 — POST /cards/export
+`{ "topics"?: string[] }` → **201/200** `{ "file": { id, name, fileType, updatedAt }, "updated": boolean, "count" }`. 최상위의 `용어집.md`(kind=doc)가 있으면 편집기 저장 규칙(API-034 스냅샷)으로 새로 쓰고(200), 없으면 만든다(201). 파일 하나를 계속 갱신하는 이유: 내보낼 때마다 새 파일이면 트리에 용어집이 쌓인다.

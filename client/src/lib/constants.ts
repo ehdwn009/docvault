@@ -34,3 +34,6 @@ export const DEFAULT_USER_SETTINGS = {
 export const ASK_QUOTE_MAX_CHARS = 500;
 export const ASK_CONTEXT_MAX_CHARS = 1500;
 export const ASK_QUESTION_MAX_CHARS = 2000;
+
+/** 카드 내보내기 범위에서 "주제 없음"을 뜻하는 표식 — 서버 CARD.NO_TOPIC_MARK와 같아야 한다 */
+export const NO_TOPIC_MARK = '-';
