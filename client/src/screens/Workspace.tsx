@@ -28,6 +28,7 @@ import {
   type Tag,
   type Tree,
   type TreeFile,
+  type TreeWire,
   type User,
   type UserSettings,
 } from '../lib/api';
@@ -167,7 +168,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const dirtyMapRef = useRef(new Map<number, boolean>());
 
   const loadTree = useCallback(async (): Promise<Tree | null> => {
-    const t = await api<Tree>('/tree').catch(() => null);
+    const raw = await api<TreeWire>('/tree').catch(() => null);
+    // 서버는 응답을 줄이려고 기본값 state·빈 tags를 빼고 보낸다 (API-021) — 여기서 한 번 채워 앱 안에서는 늘 있는 걸로 본다
+    const t: Tree | null = raw ? { folders: raw.folders, files: raw.files.map((f) => toTreeFile(f)) } : null;
     if (t) {
       setTree(t);
       treeRef.current = t;
@@ -1171,7 +1174,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     files: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z|M14 3v6h6|M9 13h6|M9 17h6',
     favorites: 'M12 3l2.8 6 6.2.7-4.6 4.3 1.3 6.3L12 17l-5.7 3.3 1.3-6.3L3 9.7 9.2 9z',
     shared: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M8 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M2 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1|M16 16h1a4 4 0 0 1 4 4v1',
-    cards: 'M6 3h12v18l-6-4-6 4z',
+    // 카드 두 장 겹침 — 앞장 뒤에 한 장이 살짝 밀려 있다 ("카드 묶음"이 바로 읽히게. 책갈피는 카드로 안 보였다)
+    cards: 'M3 9a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z|M7 7V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-1',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
     admin: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
   };
@@ -1221,18 +1225,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           drawerOpen ? '' : 'touch:-translate-x-full'
         } ${immersive ? 'hidden' : ''}`}
       >
-      {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
+      {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃) */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
         {railButton('shared', '공유 파일')}
         {railButton('cards', '배움 카드')}
+        <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
         {railButton('settings', '설정')}
         {user.role === 'admin' && railButton('admin', '관리자')}
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
-          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
         >
           {railIcon('M18.4 6.6a9 9 0 1 1-12.8 0|M12 2v10')}
         </button>

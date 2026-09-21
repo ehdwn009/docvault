@@ -78,7 +78,7 @@ export const DEFAULT_FILE_STATE: TreeFile['state'] = {
  * 여기 값들은 목록 표시용이다.
  */
 export function toTreeFile(
-  f: Partial<TreeFile> & Pick<TreeFile, 'id' | 'name' | 'fileType'>,
+  f: Partial<Omit<TreeFile, 'state'>> & { state?: Partial<TreeFile['state']> } & Pick<TreeFile, 'id' | 'name' | 'fileType'>,
 ): TreeFile {
   return {
     folderId: null,
@@ -88,9 +88,12 @@ export function toTreeFile(
     updatedAt: 0,
     ...f,
     tags: f.tags ?? [],
-    state: f.state ?? { ...DEFAULT_FILE_STATE },
+    state: { ...DEFAULT_FILE_STATE, ...(f.state ?? {}) },
   };
 }
+
+/** API-021의 실제 응답 — tags·state는 기본값이면 생략, state에 readingPosition은 없다(열 때 API-073 GET로 받는다) */
+export type TreeWire = { folders: TreeFolder[]; files: (Omit<TreeFile, 'tags' | 'state'> & { tags?: number[]; state?: Partial<TreeFile['state']> })[] };
 
 export type Tag = { id: number; name: string; color: string };
 

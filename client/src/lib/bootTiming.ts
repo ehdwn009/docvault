@@ -24,6 +24,8 @@ export type BootRequest = {
   serverMs: number | null;
   /** 응답이 다 온 뒤 단계가 끝나기까지. 단계와 짝지어진 요청에만 있다 */
   afterMs: number | null;
+  /** 회선으로 받은 바이트(압축된 크기). 0이면 캐시 */
+  bytes: number;
 };
 
 export type BootRecord = { at: number; total: number; jsFiles: number; jsKB: number; steps: BootStep[]; requests: BootRequest[] };
@@ -103,6 +105,7 @@ function collectRequests(until: number): BootRequest[] {
         downloadMs: Math.round(r.responseEnd - r.responseStart),
         serverMs: app ? Math.round(app.duration) : null,
         afterMs: step && r.responseEnd === lastInStep ? Math.round(step.endAt - r.responseEnd) : null,
+        bytes: r.transferSize || 0,
       };
     });
 }

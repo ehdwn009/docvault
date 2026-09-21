@@ -153,7 +153,7 @@
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | folders | array | [{ id, parentId, name, isShared, sortOrder }] |
-| files | array | [{ id, folderId, name, fileType, sizeBytes, isShared, sortOrder, updatedAt, tags: [tagId], state: { isFavorite, lastOpenedAt } }] |
+| files | array | [{ id, folderId, name, fileType, sizeBytes, isShared, sortOrder, updatedAt, tags?: [tagId], state?: { isFavorite, lastOpenedAt, viewerFit, fontScale } }] — **응답을 줄이려고** `tags`는 비어 있으면, `state`는 전부 기본값이면 생략한다(클라이언트 `toTreeFile`이 채움). 읽던 위치(readingPosition)는 트리에 싣지 않는다 — 문서를 열 때 API-073 GET으로 받는다 (v0.39.0, IA — 시작 시간 측정) |
 
 트리 구조 조립(중첩)은 클라이언트가 수행합니다. 파일별 태그와 개인 상태(USER_FILE_STATE)를 조인해 함께 내려주어 탐색기 초기 로드를 1 요청으로 만듭니다.
 

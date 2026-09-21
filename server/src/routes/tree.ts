@@ -69,23 +69,17 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
   }
   lap('tags');
 
+  // 응답을 줄인다 — 파일마다 반복되는 기본값 state·빈 tags는 빼고, 읽던 위치(JSON)는 싣지 않는다(열 때 API-073 GET).
+  // 폰에서 목록 다운로드가 1초를 먹고 그동안 작은 요청들이 뒤에 줄을 섰다 (IA — 시작 시간 측정)
   return c.json({
     folders: folderRows,
     files: fileRows.map((f) => {
       const s = stateByFile.get(f.id);
-      return {
-        ...f,
-        tags: tagsByFile.get(f.id) ?? [],
-        state: s
-          ? {
-              isFavorite: s.isFavorite,
-              lastOpenedAt: s.lastOpenedAt,
-              readingPosition: s.readingPosition ? JSON.parse(s.readingPosition) : null,
-              viewerFit: s.viewerFit,
-              fontScale: s.fontScale,
-            }
-          : DEFAULT_FILE_STATE,
-      };
+      const tags = tagsByFile.get(f.id);
+      const state = s ? { isFavorite: s.isFavorite, lastOpenedAt: s.lastOpenedAt, viewerFit: s.viewerFit, fontScale: s.fontScale } : null;
+      const isDefault =
+        !state || (state.isFavorite === DEFAULT_FILE_STATE.isFavorite && state.lastOpenedAt === null && state.viewerFit === DEFAULT_FILE_STATE.viewerFit && state.fontScale === null);
+      return { ...f, ...(tags ? { tags } : {}), ...(isDefault ? {} : { state }) };
     }),
   });
 });
