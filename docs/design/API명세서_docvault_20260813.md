@@ -44,12 +44,14 @@
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
 | API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드) | 로그인 |
+| API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
 | API-024 | DELETE | /folders/{id} | 폴더 삭제 (하위 포함) | 로그인 |
 | API-025 | PUT | /folders/{id}/share | 폴더 공유 토글 | 관리자 |
 | API-031 | POST | /files | 파일 업로드 (multipart) | 로그인 |
-| API-032 | GET | /files/{id} | 파일 메타 조회 (정보 모달용) | 로그인 |
+| API-032 | GET | /files/{id} | 파일 메타 조회 (트리 밖 파일 열기용) | 로그인 |
+| API-039 | GET | /files/{id}/info | 속성창(SCR-113): `{ file, path[], versionCount, threadCount, cardCount, tagIds[], isFavorite, lastOpenedAt, charCount, lineCount, storagePath }`. cardCount = 이 문서를 읽다 시작한 대화에서 태어난 카드 수(card_threads↔ask_threads.file_id). 본문은 세기만 하고 보내지 않는다 (v0.41) | 열람 가능자 |
 | API-033 | GET | /files/{id}/content | 텍스트 본문 조회 (JSON) | 로그인 |
 | API-034 | PUT | /files/{id}/content | 본문 저장 (버전 스냅샷 포함) | 로그인 |
 | API-035 | PUT | /files/{id} | 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -91,7 +93,8 @@
 | API-104 | GET | /ask/threads | 지난 대화 목록 (최근순, 본문 제외) | 로그인 |
 | API-105 | GET | /ask/threads/{id} | 대화 하나 + 메시지 전부 | 소유자 |
 | API-106 | DELETE | /ask/threads/{id} | 대화 삭제 | 소유자 |
-| API-107 | PUT | /ask/threads/{id} | 대화 설정 바꾸기 — `{ model }` (ASK_MODELS.id). 다음 답부터 적용 (v0.40) | 소유자 |
+| API-107 | PUT | /ask/threads/{id} | 대화 바꾸기 — `{ title?, model? }` 보낸 칸만. title 1~60자(직접 쓴 제목), model은 다음 답부터 (v0.40·41) | 소유자 |
+| API-109 | POST | /ask/threads/{id}/title | AI가 제목 짓기 → `{ title }`. **저장하지 않는다** — 제목 편집 입력창의 ✦가 채우고 저장은 API-107. 빠른 모델(CARD.MODEL), 앞 6개 말풍선 각 300자만 (v0.41) | 소유자 |
 | API-111 | GET | /cards | 내 카드 목록 (머리말 요약: 제목·한 줄·별칭·종류·주제·태그·연결·출처) | 로그인 |
 | API-112 | POST | /cards/draft | 대화 전체·답 하나·고른 답들에서 카드 초안 + 비슷한 카드 판단 (LLM, 구조화 출력) | 소유자 |
 | API-113 | POST | /cards/merge-preview | 기존 카드 + 대화 → 재구성 결과 미리보기 (LLM). 저장 안 함 | 소유자 |

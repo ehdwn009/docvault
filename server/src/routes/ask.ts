@@ -18,6 +18,7 @@ import {
   isAskConfigured,
   purgeExpiredThreads,
   resolveModel,
+  suggestTitle,
   toApiMessages,
   type AskSource,
 } from '../lib/ask.js';
@@ -34,10 +35,13 @@ const createSchema = z.object({
   model: z.enum(ASK_MODEL_IDS).optional(),
 });
 
-/** API-107: 대화 설정 바꾸기 — 지금은 모델만. 다음 답부터 적용된다 */
-const updateSchema = z.object({
-  model: z.enum(ASK_MODEL_IDS),
-});
+/** API-107: 대화 바꾸기 — 제목(직접 쓴 것)과 모델(다음 답부터). 보낸 칸만 바뀐다 */
+const updateSchema = z
+  .object({
+    title: z.string().trim().min(1).max(ASK.TITLE_MAX_CHARS).optional(),
+    model: z.enum(ASK_MODEL_IDS).optional(),
+  })
+  .refine((v) => v.title !== undefined || v.model !== undefined, { message: '변경할 필드가 없습니다' });
 
 const messageSchema = z.object({
   question: z.string().trim().min(1).max(ASK.QUESTION_MAX_CHARS),
@@ -122,7 +126,7 @@ export const askRoutes = new Hono<AppEnv>()
         quote: body.quote || null,
         context: body.context || null,
         // 첫 질문이 오면 그것으로 바뀐다
-        title: body.quote ? body.quote.slice(0, 60) : '새 대화',
+        title: body.quote ? body.quote.slice(0, ASK.TITLE_MAX_CHARS) : '새 대화',
         model: body.model ?? null,
         createdAt: now,
         updatedAt: now,
@@ -164,15 +168,31 @@ export const askRoutes = new Hono<AppEnv>()
     return c.json({ thread: serializeThread(found.thread, found.fileName), messages });
   })
 
-  // API-107: 대화 설정(모델) 바꾸기 — 다음 답부터
+  // API-107: 대화 바꾸기 — 제목(직접 쓴 것) / 모델(다음 답부터)
   .put('/threads/:id', jsonBody(updateSchema), (c) => {
     const id = parseId(c.req.param('id'));
     if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
     const found = findOwnThread(c.get('user').id, id);
     if (!found) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
-    const { model } = c.req.valid('json');
-    const thread = db.update(askThreads).set({ model }).where(eq(askThreads.id, id)).returning().get()!;
+    const patch = c.req.valid('json');
+    const thread = db.update(askThreads).set(patch).where(eq(askThreads.id, id)).returning().get()!;
     return c.json({ thread: serializeThread(thread, found.fileName) });
+  })
+
+  // API-109: AI가 제목 짓기 — 저장하지 않는다. 제목 편집 입력창의 ✦ 버튼이 이 값으로 채우고, 저장은 API-107
+  .post('/threads/:id/title', async (c) => {
+    if (!isAskConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', '관리자가 아직 LLM을 연결하지 않았습니다');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    const found = findOwnThread(c.get('user').id, id);
+    if (!found) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
+    const rows = db.select().from(askMessages).where(eq(askMessages.threadId, id)).orderBy(asc(askMessages.id)).all();
+    if (rows.length === 0) return fail(c, 400, 'VALIDATION_ERROR', '아직 주고받은 말이 없습니다');
+    try {
+      return c.json({ title: await suggestTitle(rows, found.fileName) });
+    } catch (e) {
+      return fail(c, 502, 'ASK_UPSTREAM_ERROR', describeUpstreamError(e));
+    }
   })
 
   // API-106: 대화 삭제
@@ -223,7 +243,7 @@ export const askRoutes = new Hono<AppEnv>()
       .returning()
       .get();
     db.update(askThreads)
-      .set({ updatedAt: now, ...(isFirst ? { title: question.slice(0, 60) } : {}) })
+      .set({ updatedAt: now, ...(isFirst ? { title: question.slice(0, ASK.TITLE_MAX_CHARS) } : {}) })
       .where(eq(askThreads.id, id))
       .run();
 

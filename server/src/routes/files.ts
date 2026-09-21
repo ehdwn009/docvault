@@ -12,7 +12,7 @@ import {
   MAX_VERSIONS_PER_FILE,
 } from '../constants.js';
 import { db } from '../db/index.js';
-import { files, fileTags, fileVersions, folders, tags } from '../db/schema.js';
+import { askThreads, cardThreads, fileTags, fileVersions, files, folders, tags, userFileState } from '../db/schema.js';
 import { canReadFile, canWriteFile, failFileAccess } from '../lib/access.js';
 import {
   ArchiveTooLargeError,
@@ -42,6 +42,19 @@ import type { AppEnv } from '../types.js';
 function toFileMeta(row: typeof files.$inferSelect) {
   const { contentText: _c, storagePath: _s, ...meta } = row;
   return meta;
+}
+
+/** 폴더의 조상 사슬 — 속성창의 "위치" (최상위부터). 사슬은 짧아 한 단계씩 읽는다 */
+export function folderPath(folderId: number | null): { id: number; name: string }[] {
+  const path: { id: number; name: string }[] = [];
+  let cur = folderId;
+  while (cur !== null) {
+    const f = db.select({ id: folders.id, name: folders.name, parentId: folders.parentId }).from(folders).where(eq(folders.id, cur)).get();
+    if (!f) break;
+    path.unshift({ id: f.id, name: f.name });
+    cur = f.parentId;
+  }
+  return path;
 }
 
 // name/folderId/sortOrder 중 보낸 필드만 갱신 (API-035: 이름 변경 / 이동 / 정렬)
@@ -304,6 +317,43 @@ export const fileRoutes = new Hono<AppEnv>()
     if (!canReadFile(c.get('user'), file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
 
     return c.json(toFileMeta(file));
+  })
+
+  // API-039: 속성창(SCR-113) — 메타 + 위치(폴더 경로) + 버전·글자·연결(카드·대화) 개수. 본문은 세기만 하고 보내지 않는다
+  .get('/:id/info', (c) => {
+    const user = c.get('user');
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    const file = db.select().from(files).where(eq(files.id, id)).get();
+    if (!file || !canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
+
+    const versionCount = db.select({ n: sql<number>`count(*)` }).from(fileVersions).where(eq(fileVersions.fileId, id)).get()?.n ?? 0;
+    const threadCount = db.select({ n: sql<number>`count(*)` }).from(askThreads).where(eq(askThreads.fileId, id)).get()?.n ?? 0;
+    // 이 문서가 출처인 카드 = 이 문서를 읽다 시작한 대화에서 태어난 카드 (card_threads ↔ ask_threads.file_id)
+    const cardCount =
+      db
+        .select({ n: sql<number>`count(distinct ${cardThreads.cardFileId})` })
+        .from(cardThreads)
+        .innerJoin(askThreads, eq(askThreads.id, cardThreads.threadId))
+        .where(eq(askThreads.fileId, id))
+        .get()?.n ?? 0;
+    const tagIds = db.select({ tagId: fileTags.tagId }).from(fileTags).where(eq(fileTags.fileId, id)).all().map((t) => t.tagId);
+    const state = db.select().from(userFileState).where(and(eq(userFileState.userId, user.id), eq(userFileState.fileId, id))).get();
+    const text = file.contentText;
+    return c.json({
+      file: toFileMeta(file),
+      path: folderPath(file.folderId),
+      versionCount,
+      threadCount,
+      cardCount,
+      tagIds,
+      isFavorite: state?.isFavorite ?? 0,
+      lastOpenedAt: state?.lastOpenedAt ?? null,
+      // 텍스트만: 글자 수·줄 수. 바이너리는 원본 저장 위치 — 백업 폴더에서 찾을 때 쓴다
+      charCount: text === null ? null : text.length,
+      lineCount: text === null ? null : text.split('\n').length,
+      storagePath: file.storagePath,
+    });
   })
 
   // API-033: 텍스트 본문 조회

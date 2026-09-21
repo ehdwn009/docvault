@@ -97,6 +97,32 @@ export type TreeWire = { folders: TreeFolder[]; files: (Omit<TreeFile, 'tags' | 
 
 export type Tag = { id: number; name: string; color: string };
 
+/** API-039: 속성창(SCR-113)의 파일 쪽 */
+export type FileInfo = {
+  file: Omit<TreeFile, 'tags' | 'state'> & { createdAt: number; mimeType: string };
+  path: { id: number; name: string }[];
+  versionCount: number;
+  threadCount: number;
+  cardCount: number;
+  tagIds: number[];
+  isFavorite: number;
+  lastOpenedAt: number | null;
+  charCount: number | null;
+  lineCount: number | null;
+  storagePath: string | null;
+};
+
+/** API-026: 속성창의 폴더 쪽 — 하위 전부를 센 값 */
+export type FolderInfo = {
+  folder: TreeFolder & { createdAt: number; updatedAt: number };
+  path: { id: number; name: string }[];
+  folderCount: number;
+  fileCount: number;
+  bytes: number;
+  byType: Record<string, number>;
+  latest: { id: number; name: string; updatedAt: number } | null;
+};
+
 export type SharedFolder = { id: number; parentId: number | null; name: string; ownerName: string };
 export type SharedFile = {
   id: number;

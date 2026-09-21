@@ -40,6 +40,9 @@ export type TreeActions = {
   editTags: (file: TreeFile) => void;
   shareFile: (file: TreeFile) => void;
   shareFolder: (folder: TreeFolder) => void;
+  /** 속성창(SCR-113) */
+  showFileInfo: (file: TreeFile) => void;
+  showFolderInfo: (folder: TreeFolder) => void;
 };
 
 type Props = {
@@ -315,8 +318,24 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     ...(isAdmin
       ? [{ label: folder.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFolder(folder) }]
       : []),
+    { label: '속성', action: () => actions.showFolderInfo(folder) },
     { label: '삭제', danger: true, action: () => actions.deleteFolder(folder.id) },
   ];
+
+  /** 폴더 행 스와이프 — 파일과 같은 손동작, 트레이만 폴더에 맞게. 폴더는 안의 파일이 같이 가므로
+      끝까지 밀어 바로 삭제는 두지 않는다 (삭제는 확인 창을 거친다) */
+  const folderSwipe = (folder: TreeFolder): SwipeConfig => ({
+    right: [
+      { label: '속성', onAction: () => actions.showFolderInfo(folder) },
+      { label: '이름', onAction: () => setRenaming({ kind: 'folder', id: folder.id, value: folder.name }) },
+      { label: '삭제', danger: true, onAction: () => actions.deleteFolder(folder.id) },
+    ],
+    left: [
+      { label: '업로드', onAction: () => actions.uploadTo(folder.id) },
+      { label: '새 폴더', onAction: () => actions.createFolder(folder.id) },
+      ...(isAdmin ? [{ label: folder.isShared ? '공유 해제' : '공유', onAction: () => actions.shareFolder(folder) }] : []),
+    ],
+  });
 
   const fileMenu = (file: TreeFile): MenuItem[] => [
     // 터치 기기의 선택 모드 진입점 (PC는 Ctrl+클릭)
@@ -333,6 +352,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     ...(isAdmin
       ? [{ label: file.isShared ? '공유 해제' : '공유하기', action: () => actions.shareFile(file) }]
       : []),
+    { label: '속성', action: () => actions.showFileInfo(file) },
     { label: '삭제', danger: true, action: () => actions.deleteFile(file.id) },
   ];
 
@@ -377,6 +397,8 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
           const isRenaming = renaming?.kind === 'folder' && renaming.id === folder.id;
           return (
             <div key={`d${folder.id}`}>
+              {/* 스와이프 껍데기가 바깥, 행이 안쪽 — 파일 행과 같은 구조 (data-row는 행에 그대로) */}
+              <SwipeRow {...folderSwipe(folder)}>
               <div
                 data-row={`d${folder.id}`}
                 draggable={!isRenaming}
@@ -416,6 +438,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   {moreButton(() => folderMenu(folder))}
                 </span>
               </div>
+              </SwipeRow>
               {expanded.has(folder.id) && renderLevel(folder.id, depth + 1)}
             </div>
           );

@@ -135,6 +135,13 @@ export const ASK = {
   PAUSE_CONTINUATIONS: 2,
   /** 답 아래에 붙이는 출처 링크 최대 개수 */
   MAX_SOURCES: 5,
+  /** 대화 제목 최대 길이 — 직접 쓰든 AI가 짓든 같은 상한. 목록 한 줄에 들어갈 길이 */
+  TITLE_MAX_CHARS: 60,
+  /** AI 제목 짓기(API-109)의 답 길이 상한 — 제목 한 줄이면 충분하다 */
+  TITLE_MAX_OUTPUT_TOKENS: 60,
+  /** AI 제목 짓기에 보여 주는 말풍선 수·말풍선당 글자 수 — 앞부분만으로 충분하고 비용은 상수로 묶는다 */
+  TITLE_CONTEXT_MESSAGES: 6,
+  TITLE_CONTEXT_CHARS: 300,
   /** 웹 검색 단가 (USD/1000회) — 모델별 토큰 단가는 ASK_MODELS에. 청구서가 아니라 감 잡기용 대략값 */
   SEARCH_PER_1000_USD: 10,
   /** 챗봇 "내 자료 참고" — 질문 낱말로 찾는 내 문서 단락 수와 단락 길이(FTS snippet 토큰). 문서 전체는 절대 안 간다 */

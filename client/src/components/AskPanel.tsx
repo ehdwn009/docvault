@@ -20,6 +20,9 @@ import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
+import ContextMenu, { type MenuItem } from './ContextMenu';
+import Icon from './Icon';
+import SwipeRow from './SwipeRow';
 
 /** 드래그로 시작할 때 붙는 문맥 — 선택 문장 + 앞뒤 문단 (설계 — 문서 전체는 보내지 않는다) */
 export type AskSeed = { quote: string; context: string };
@@ -95,6 +98,10 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
   // 새 대화에 쓸 모델(칩). 대화가 생기면 thread.model이 진실이고, 바꾸면 서버에도 저장한다 (API-107)
   const [pendingModel, setPendingModel] = useState<string | null>(() => readLocal(MODEL_KEY));
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  // 지난 대화의 제목 편집 — 그 자리가 입력창이 되고, 오른쪽 끝의 ✦가 AI 제목을 채운다 (VS Code의 커밋 메시지 생성 자리와 같은 발상)
+  const [renaming, setRenaming] = useState<{ id: number; draft: string } | null>(null);
+  const [titleBusy, setTitleBusy] = useState(false);
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   // 답마다 함께 본 내 문서 — 카드와 같은 방식 (meta로 먼저, done에서 답의 id에 붙인다)
   const [usedDocs, setUsedDocs] = useState<Record<number, AskUsedDoc[]>>({});
   const pendingDocsRef = useRef<AskUsedDoc[]>([]);
@@ -313,6 +320,41 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
     });
   }
 
+  /** 제목 저장 (API-107). 직접 쓴 제목은 AI가 덮어쓰지 않는다 — AI는 버튼을 눌렀을 때만 입력창을 채운다 */
+  async function saveTitle() {
+    if (!renaming) return;
+    const title = renaming.draft.trim();
+    const { id } = renaming;
+    setRenaming(null);
+    if (!title) return;
+    try {
+      const r = await api<{ thread: AskThread }>(`/ask/threads/${id}`, { method: 'PUT', body: JSON.stringify({ title }) });
+      setHistory((h) => h.map((t) => (t.id === id ? r.thread : t)));
+      if (thread?.id === id) setThread(r.thread);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '제목을 바꾸지 못했습니다', 'error');
+    }
+  }
+
+  /** ✦ — AI가 지은 제목을 입력창에 채운다 (API-109). 저장은 사용자가 확인한 뒤 */
+  async function fillAiTitle() {
+    if (!renaming || titleBusy) return;
+    setTitleBusy(true);
+    try {
+      const r = await api<{ title: string }>(`/ask/threads/${renaming.id}/title`, { method: 'POST' });
+      setRenaming((cur) => (cur ? { ...cur, draft: r.title } : cur));
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '제목을 짓지 못했습니다', 'error');
+    } finally {
+      setTitleBusy(false);
+    }
+  }
+
+  const rowMenuItems = (t: AskThread): MenuItem[] => [
+    { label: '제목 바꾸기', action: () => setRenaming({ id: t.id, draft: t.title }) },
+    { label: '삭제', danger: true, action: () => void deleteThread(t.id) },
+  ];
+
   async function openHistory() {
     setShowHistory(true);
     try {
@@ -370,7 +412,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
   const currentModelId = thread?.model ?? pendingModel ?? status?.defaultModel ?? null;
   const currentModel = status?.models.find((m) => m.id === currentModelId) ?? null;
   const modelName = (id: string | null | undefined) => status?.models.find((m) => m.id === id)?.name ?? (id ? id : 'Opus 5');
-  const threadKind = (t: AskThread) => (t.fileId !== null || t.fileName ? `📄 ${t.fileName ?? '문서'}` : '💬 자유 대화');
+  const threadKind = (t: AskThread) =>
+    t.fileId !== null || t.fileName ? (
+      <span className="inline-flex items-center gap-1"><Icon name="doc" size={11} />{t.fileName ?? '문서'}</span>
+    ) : (
+      <span className="inline-flex items-center gap-1"><Icon name="chat" size={11} />자유 대화</span>
+    );
   const notConfigured = status !== null && !status.configured;
   const canSend = !busy && !limitReached && !notConfigured && input.trim().length > 0;
   const hasAnswer = messages.some((m) => m.role === 'assistant' && typeof m.id === 'number' && m.id > 0);
@@ -410,9 +457,9 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
             <button
               onClick={() => setOutlineOpen(true)}
               title="이 대화 전체를 카드로 — 개념별로 나누거나 한 장으로"
-              className="rounded border border-teal-800 bg-teal-950/50 px-2 py-0.5 text-xs font-medium text-teal-200 hover:bg-teal-900"
+              className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-0.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
             >
-              카드로
+              <Icon name="cards" size={13} />카드로
             </button>
           )}
           <button onClick={() => void openHistory()} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
@@ -428,7 +475,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
           </button>
           {!inline && (
             <button onClick={onClose} title="닫기 (대화는 남아 있어요)" className="ml-1 px-1 text-slate-500 hover:text-slate-300">
-              ✕
+              <Icon name="close" size={16} />
             </button>
           )}
         </div>
@@ -461,23 +508,56 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
           {history.length === 0 ? (
             <p className="px-2 py-4 text-xs text-slate-600">지난 대화가 없습니다</p>
           ) : (
-            history.map((t) => (
-              <div key={t.id} className="flex items-center rounded-md hover:bg-slate-900">
-                <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
-                  <div className="truncate text-sm text-slate-200">{t.title}</div>
-                  <div className="truncate text-xs text-slate-500">
-                    {threadKind(t)} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
-                  </div>
-                </button>
-                <button
-                  onClick={() => void deleteThread(t.id)}
-                  title="이 대화 지우기"
-                  className="h-11 w-11 shrink-0 text-slate-600 hover:text-red-300"
+            history.map((t) =>
+              renaming?.id === t.id ? (
+                // 제목 편집 — 그 자리에 입력창. 오른쪽 끝 ✦ = AI가 짓기(입력창만 채움), 확인 = 저장
+                <form
+                  key={t.id}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveTitle();
+                  }}
+                  className="flex items-center gap-1 rounded-md border border-slate-600 bg-slate-950 px-2 py-1"
                 >
-                  ✕
-                </button>
-              </div>
-            ))
+                  <input
+                    autoFocus
+                    value={renaming.draft}
+                    onChange={(e) => setRenaming({ id: t.id, draft: e.target.value.slice(0, 60) })}
+                    onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)}
+                    placeholder="대화 제목"
+                    className="min-w-0 flex-1 bg-transparent py-1 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none"
+                  />
+                  <button type="button" onClick={() => void fillAiTitle()} disabled={titleBusy} title="AI가 제목 짓기 — 대화 내용으로 8자 안팎" className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40">
+                    <Icon name="sparkle" size={16} className={titleBusy ? 'animate-pulse' : ''} />
+                  </button>
+                  <button type="submit" title="저장" className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
+                    <Icon name="check" size={16} />
+                  </button>
+                </form>
+              ) : (
+                <SwipeRow
+                  key={t.id}
+                  left={[{ label: '제목', onAction: () => setRenaming({ id: t.id, draft: t.title }) }]}
+                  right={[{ label: '삭제', danger: true, onAction: () => void deleteThread(t.id) }]}
+                >
+                  <div className="flex items-center rounded-md hover:bg-slate-900" onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) }); }}>
+                    <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
+                      <div className="truncate text-sm text-slate-200">{t.title}</div>
+                      <div className="truncate text-xs text-slate-500">
+                        {threadKind(t)} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) })}
+                      title="메뉴"
+                      className="h-11 w-9 shrink-0 text-slate-500 hover:text-slate-200"
+                    >
+                      <Icon name="more" size={16} className="mx-auto" />
+                    </button>
+                  </div>
+                </SwipeRow>
+              ),
+            )
           )}
         </div>
       ) : (
@@ -535,14 +615,14 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
                     }}
                     title={picked.has(m.id) ? '고른 답에서 빼기' : '이 답 골라 담기 (여러 답을 한 카드로)'}
                     className={`absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-md border text-[11px] transition ${
-                      picked.has(m.id) ? 'border-teal-500 bg-teal-600 text-white' : `border-slate-600 text-transparent hover:border-slate-400 ${picking ? '' : 'opacity-40'}`
+                      picked.has(m.id) ? 'border-slate-300 bg-slate-200 text-slate-900' : `border-slate-600 text-transparent hover:border-slate-400 ${picking ? '' : 'opacity-40'}`
                     }`}
                   >
-                    ✓
+                    <Icon name="check" size={12} />
                   </button>
                 )}
                 {m.content === '' ? (
-                  <span className="text-slate-500">{searching ? '🌐 웹에서 찾는 중…' : '생각 중…'}</span>
+                  <span className="inline-flex items-center gap-1 text-slate-500">{searching ? <><Icon name="globe" size={13} />웹에서 찾는 중…</> : '생각 중…'}</span>
                 ) : MdRenderer ? (
                   <Suspense fallback={<span className="whitespace-pre-wrap">{m.content}</span>}>
                     <div className="ask-md">
@@ -555,12 +635,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
                 {typeof m.id === 'number' && usedCards[m.id] && (
                   // 이 답이 어떤 카드를 읽고 답했는지 — 누르면 그 카드
                   <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
-                    📚 함께 본 카드:
+                    <Icon name="card" size={12} /> 함께 본 카드:
                     {usedCards[m.id]!.map((k) => (
                       <button
                         key={k.id}
                         onClick={() => onOpenFile?.(toTreeFile({ id: k.id, name: `${k.title}.md`, fileType: 'md', kind: 'card' }))}
-                        className="rounded border border-teal-800 bg-teal-950/40 px-1.5 py-0.5 text-teal-200 hover:bg-teal-900"
+                        className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-200 hover:bg-slate-800"
                       >
                         {k.title}
                       </button>
@@ -570,12 +650,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
                 {typeof m.id === 'number' && usedDocs[m.id] && (
                   // 이 답이 어떤 내 문서 단락을 읽고 답했는지 — 누르면 그 문서
                   <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
-                    📄 함께 본 문서:
+                    <Icon name="doc" size={12} /> 함께 본 문서:
                     {usedDocs[m.id]!.map((d) => (
                       <button
                         key={d.id}
                         onClick={() => onOpenFile?.(toTreeFile({ id: d.id, name: d.name, fileType: d.fileType as TreeFile['fileType'] }))}
-                        className="rounded border border-sky-800 bg-sky-950/40 px-1.5 py-0.5 text-sky-200 hover:bg-sky-900"
+                        className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-200 hover:bg-slate-800"
                       >
                         {d.name}
                       </button>
@@ -588,9 +668,9 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
                     {thread && typeof m.id === 'number' && m.id > 0 && (
                       <button
                         onClick={() => setSave({ messageId: m.id as number })}
-                        className="rounded border border-teal-700 bg-teal-950/50 px-2 py-0.5 font-medium text-teal-200 hover:bg-teal-900"
+                        className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-0.5 font-medium text-slate-200 hover:bg-slate-800"
                       >
-                        📚 카드로 저장
+                        <Icon name="card" size={12} />카드로 저장
                       </button>
                     )}
                     <button
@@ -648,7 +728,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
             className="mb-1.5 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-xs text-slate-300 hover:bg-slate-900"
             title={myStuff ? '끄면 질문과 대화 이력만 보냅니다 (순수 대화)' : '켜면 관련 카드·문서 단락을 함께 보냅니다'}
           >
-            <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition ${myStuff ? 'bg-teal-600' : 'bg-slate-700'}`}>
+            <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition ${myStuff ? 'bg-sky-600' : 'bg-slate-700'}`}>
               <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition ${myStuff ? 'left-[15px]' : 'left-0.5'}`} />
             </span>
             <span className="whitespace-nowrap">내 자료 참고</span>
@@ -657,12 +737,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
         )}
         {matchedCards.length > 0 && !busy && (
           // 무엇을 보내는지 모르게 하지 않는다 — 함께 갈 카드를 보여 주고 ✕로 뺄 수 있다
-          <div className="mb-1.5 flex flex-wrap items-center gap-1 rounded-md border border-teal-900 border-l-2 border-l-teal-500 bg-teal-950/30 px-2 py-1 text-[11px] text-slate-300">
-            📚 내 카드 {matchedCards.length}장 함께 보냄
+          <div className="mb-1.5 flex flex-wrap items-center gap-1 rounded-md border border-slate-800 border-l-2 border-l-slate-500 bg-slate-900 px-2 py-1 text-[11px] text-slate-300">
+            <Icon name="card" size={12} /> 내 카드 {matchedCards.length}장 함께 보냄
             {matchedCards.map((k) => (
               <span key={k.id} className="inline-flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-200">
                 {k.title}
-                <button onClick={() => setExcluded((p) => new Set(p).add(k.id))} title="이번 질문에서 빼기" className="px-0.5 text-slate-500 hover:text-red-300">✕</button>
+                <button onClick={() => setExcluded((p) => new Set(p).add(k.id))} title="이번 질문에서 빼기" className="px-0.5 text-slate-500 hover:text-red-300"><Icon name="close" size={10} /></button>
               </span>
             ))}
           </div>
@@ -670,7 +750,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
         {pendingQuote && (
           <div className="mb-1.5 flex items-start gap-1 rounded-md border border-slate-800 border-l-2 border-l-amber-500 bg-slate-900 px-2 py-1 text-xs text-slate-400">
             <span className="line-clamp-2 flex-1">“{pendingQuote}”</span>
-            <button onClick={onConsumePendingQuote} className="text-slate-500 hover:text-slate-300" title="인용 빼기">✕</button>
+            <button onClick={onConsumePendingQuote} className="text-slate-500 hover:text-slate-300" title="인용 빼기"><Icon name="close" size={12} /></button>
           </div>
         )}
         {messages.length === 0 && !notConfigured && !limitReached && ((seed && !seedUsedRef.current) || pendingQuote) && (
@@ -716,18 +796,18 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
             <button
               onClick={() => abortRef.current?.abort()}
               title="답변 중단"
-              className="h-11 w-11 shrink-0 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
             >
-              ■
+              <Icon name="stop" size={16} />
             </button>
           ) : (
             <button
               onClick={() => void send(input)}
               disabled={!canSend}
               title="보내기 (Enter)"
-              className="h-11 w-11 shrink-0 rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40"
             >
-              ➤
+              <Icon name="send" size={18} />
             </button>
           )}
         </div>
@@ -739,6 +819,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
             : '문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 LLM에 보냅니다'}
         </p>
       </div>
+      {rowMenu && <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} onClose={() => setRowMenu(null)} />}
       {save && thread && (
         <CardSaveDialog
           threadId={thread.id}
