@@ -198,8 +198,11 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ---- 질문 (배움 카드 1판, API-101~106) ----
 
+/** 모델 칩 한 줄 — 서버 상수 ASK_MODELS에서 온다 */
+export type AskModelInfo = { id: string; label: string; name: string; note: string };
+
 /** limit·remaining이 null이면 한도 없음 (관리자) */
-export type AskStatus = { configured: boolean; limit: number | null; used: number; remaining: number | null };
+export type AskStatus = { configured: boolean; limit: number | null; used: number; remaining: number | null; models: AskModelInfo[]; defaultModel: string };
 
 export type AskThread = {
   id: number;
@@ -207,27 +210,33 @@ export type AskThread = {
   fileName: string | null;
   quote: string | null;
   title: string;
+  /** 이 대화의 답변 모델 — 칩에서 바꾸면 다음 답부터 (API-107) */
+  model: string;
   messageCount?: number;
   createdAt: number;
   updatedAt: number;
 };
 
-export type AskMessage = { id: number; role: 'user' | 'assistant'; content: string; createdAt: number };
+/** model: 답(assistant)을 낸 모델. 옛 답은 null(= Opus) */
+export type AskMessage = { id: number; role: 'user' | 'assistant'; content: string; model?: string | null; createdAt: number };
+
+export type AskUsedDoc = { id: number; name: string; fileType: string };
 
 export type AskStreamHandlers = {
-  /** cards = 이번 답에 문맥으로 함께 간 내 카드 (활용 ④) */
-  onMeta?: (meta: { userMessageId: number; remaining: number | null; cards?: { id: number; title: string }[] }) => void;
+  /** cards = 이번 답에 문맥으로 함께 간 내 카드 (활용 ④), docs = 함께 간 내 문서 단락의 출처 (챗봇 내 자료 참고) */
+  onMeta?: (meta: { userMessageId: number; remaining: number | null; model?: string; cards?: { id: number; title: string }[]; docs?: AskUsedDoc[] }) => void;
   /** 모델이 웹 검색을 시작했다 — 답이 늦어지는 이유를 화면이 보여 줄 수 있게 */
   onSearching?: () => void;
   onDelta: (text: string) => void;
-  onDone: (done: { assistantMessageId: number; content: string }) => void;
+  onDone: (done: { assistantMessageId: number; content: string; model?: string }) => void;
   onError: (err: { code: string; message: string }) => void;
 };
 
-/** API-103: 질문을 보내고 답을 SSE로 받는다. 스트림이 열리기 전의 실패(한도·검증)는 ApiError로 던진다 */
+/** API-103: 질문을 보내고 답을 SSE로 받는다. 스트림이 열리기 전의 실패(한도·검증)는 ApiError로 던진다.
+    myStuff: 챗봇의 "내 자료 참고" 스위치 — true면 내 카드+문서 단락, false면 순수 대화. 문서 질문은 보내지 않는다 */
 export async function askStream(
   threadId: number,
-  body: { question: string; quote?: string; excludeCardIds?: number[] },
+  body: { question: string; quote?: string; excludeCardIds?: number[]; myStuff?: boolean },
   handlers: AskStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -264,9 +273,9 @@ export async function askStream(
     if (data.length === 0) return;
     const payload = JSON.parse(data.join('\n')) as Record<string, unknown>;
     if (event === 'delta') handlers.onDelta(String(payload.text ?? ''));
-    else if (event === 'done') handlers.onDone(payload as { assistantMessageId: number; content: string });
+    else if (event === 'done') handlers.onDone(payload as { assistantMessageId: number; content: string; model?: string });
     else if (event === 'error') handlers.onError(payload as { code: string; message: string });
-    else if (event === 'meta') handlers.onMeta?.(payload as { userMessageId: number; remaining: number | null; cards?: { id: number; title: string }[] });
+    else if (event === 'meta') handlers.onMeta?.(payload as Parameters<NonNullable<AskStreamHandlers['onMeta']>>[0]);
     else if (event === 'searching') handlers.onSearching?.();
   };
   for (;;) {

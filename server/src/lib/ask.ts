@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { and, eq, gte, lt, notInArray, sql } from 'drizzle-orm';
 import { config } from '../config.js';
-import { ASK } from '../constants.js';
+import { ASK, ASK_MODELS, type AskModelId } from '../constants.js';
 import { db } from '../db/index.js';
 import { askMessages, askThreads, cardThreads } from '../db/schema.js';
 
@@ -86,17 +86,23 @@ export function toApiMessages(
 /** 답변 스트림. 라우트가 text_delta를 흘려보내고 finalMessage()로 마무리한다.
     웹 검색은 서버 도구 — 모델이 필요하다고 판단할 때만 Anthropic 쪽에서 실행되고 결과가 같은 응답에 실려 온다.
     학습 시점 이후에 바뀐 버전·화면 질문에 옛 답을 하지 않기 위한 장치 (설계 — 웹 검색은 모델 판단, 답당 최대 3회) */
-export function createAnswerStream(messages: Anthropic.MessageParam[], extraSystem = '') {
+export function createAnswerStream(messages: Anthropic.MessageParam[], extraSystem = '', modelId: AskModelId = ASK.DEFAULT_MODEL) {
+  const spec = ASK_MODELS.find((m) => m.id === modelId) ?? ASK_MODELS.find((m) => m.id === ASK.DEFAULT_MODEL)!;
   return getClient().messages.stream({
-    model: ASK.MODEL,
+    model: spec.id,
     max_tokens: ASK.MAX_OUTPUT_TOKENS,
-    // 내 카드 문맥(활용 ④)은 시스템 프롬프트 뒤에 붙는다 — 대화 이력이 아니라 "이 사람이 아는 것"이라서
+    // 내 카드·문서 문맥은 시스템 프롬프트 뒤에 붙는다 — 대화 이력이 아니라 "이 사람이 아는 것·가진 것"이라서
     system: SYSTEM_PROMPT + extraSystem,
-    // 설명 대화라 깊은 추론은 낭비 — 비용·속도 쪽으로 기울인다
-    output_config: { effort: 'medium' },
-    tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: ASK.WEB_SEARCH_MAX_USES }],
+    // 설명 대화라 깊은 추론은 낭비 — 비용·속도 쪽으로 기울인다. Haiku는 이 칸을 받지 않는다
+    ...(spec.effort ? { output_config: { effort: 'medium' } } : {}),
+    tools: [{ type: spec.webSearch, name: 'web_search', max_uses: ASK.WEB_SEARCH_MAX_USES }],
     messages,
   });
+}
+
+/** 저장된 모델 칸 → 실제 쓸 모델. 목록에 없는 값(모델이 목록에서 빠진 뒤)은 기본으로 */
+export function resolveModel(stored: string | null | undefined): AskModelId {
+  return (ASK_MODELS.find((m) => m.id === stored)?.id ?? ASK.DEFAULT_MODEL) as AskModelId;
 }
 
 export type AskSource = { url: string; title: string };

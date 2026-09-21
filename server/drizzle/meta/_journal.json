@@ -99,6 +99,13 @@
       "when": 1789896605409,
       "tag": "0013_shocking_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1789954962505,
+      "tag": "0014_skinny_power_pack",
+      "breakpoints": true
     }
   ]
 }

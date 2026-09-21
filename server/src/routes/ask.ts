@@ -2,11 +2,12 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
-import { ASK } from '../constants.js';
+import { ASK, ASK_MODELS, ASK_MODEL_IDS } from '../constants.js';
 import { db } from '../db/index.js';
 import { askMessages, askThreads, files } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
 import { cardContextParagraph, listCards, matchCardsForAsk } from '../lib/cards.js';
+import { docContextParagraph, findDocPassages } from '../lib/askDocs.js';
 import { userSettings } from '../db/schema.js';
 import {
   collectSources,
@@ -16,6 +17,7 @@ import {
   formatSources,
   isAskConfigured,
   purgeExpiredThreads,
+  resolveModel,
   toApiMessages,
   type AskSource,
 } from '../lib/ask.js';
@@ -29,6 +31,12 @@ const createSchema = z.object({
   fileId: z.number().int().positive().optional(),
   quote: z.string().trim().max(ASK.QUOTE_MAX_CHARS).optional(),
   context: z.string().trim().max(ASK.CONTEXT_MAX_CHARS).optional(),
+  model: z.enum(ASK_MODEL_IDS).optional(),
+});
+
+/** API-107: 대화 설정 바꾸기 — 지금은 모델만. 다음 답부터 적용된다 */
+const updateSchema = z.object({
+  model: z.enum(ASK_MODEL_IDS),
 });
 
 const messageSchema = z.object({
@@ -37,6 +45,9 @@ const messageSchema = z.object({
   quote: z.string().trim().max(ASK.QUOTE_MAX_CHARS).optional(),
   /** 띠에서 ✕로 뺀 카드 — 이번 질문에 함께 보내지 않는다 (활용 ④) */
   excludeCardIds: z.array(z.number().int().positive()).max(20).optional(),
+  /** 챗봇의 "내 자료 참고" 스위치(SCR-187). true면 내 카드 + 내 문서 단락, false면 순수 대화(카드도 안 감).
+      비우면 문서 질문(SCR-180)의 지금 동작 — 설정에 따라 카드만 */
+  myStuff: z.boolean().optional(),
 });
 
 type ThreadRow = typeof askThreads.$inferSelect;
@@ -53,6 +64,7 @@ function serializeThread(t: ThreadRow, fileName: string | null, messageCount?: n
     fileName,
     quote: t.quote,
     title: t.title,
+    model: resolveModel(t.model),
     ...(messageCount !== undefined ? { messageCount } : {}),
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
@@ -81,6 +93,9 @@ export const askRoutes = new Hono<AppEnv>()
       limit,
       used,
       remaining: limit === null ? null : Math.max(0, limit - used),
+      // 모델 칩의 재료 — 목록은 서버 상수 한 곳(ASK_MODELS)
+      models: ASK_MODELS.map((m) => ({ id: m.id, label: m.label, name: m.name, note: m.note })),
+      defaultModel: ASK.DEFAULT_MODEL,
     });
   })
 
@@ -108,6 +123,7 @@ export const askRoutes = new Hono<AppEnv>()
         context: body.context || null,
         // 첫 질문이 오면 그것으로 바뀐다
         title: body.quote ? body.quote.slice(0, 60) : '새 대화',
+        model: body.model ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -140,12 +156,23 @@ export const askRoutes = new Hono<AppEnv>()
     const found = findOwnThread(c.get('user').id, id);
     if (!found) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
     const messages = db
-      .select({ id: askMessages.id, role: askMessages.role, content: askMessages.content, createdAt: askMessages.createdAt })
+      .select({ id: askMessages.id, role: askMessages.role, content: askMessages.content, model: askMessages.model, createdAt: askMessages.createdAt })
       .from(askMessages)
       .where(eq(askMessages.threadId, id))
       .orderBy(asc(askMessages.id))
       .all();
     return c.json({ thread: serializeThread(found.thread, found.fileName), messages });
+  })
+
+  // API-107: 대화 설정(모델) 바꾸기 — 다음 답부터
+  .put('/threads/:id', jsonBody(updateSchema), (c) => {
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    const found = findOwnThread(c.get('user').id, id);
+    if (!found) return fail(c, 404, 'NOT_FOUND', '대화가 없습니다');
+    const { model } = c.req.valid('json');
+    const thread = db.update(askThreads).set({ model }).where(eq(askThreads.id, id)).returning().get()!;
+    return c.json({ thread: serializeThread(thread, found.fileName) });
   })
 
   // API-106: 대화 삭제
@@ -173,14 +200,19 @@ export const askRoutes = new Hono<AppEnv>()
       return fail(c, 429, 'ASK_LIMIT_EXCEEDED', `오늘 질문 한도(${limit}번)를 다 썼습니다. 내일 다시 물어보세요`);
     }
 
-    const { question, quote, excludeCardIds } = c.req.valid('json');
+    const { question, quote, excludeCardIds, myStuff } = c.req.valid('json');
     const content = quote ? `「${quote}」\n\n${question}` : question;
-    // 내 카드 문맥 — 설정이 켜져 있으면 질문·인용·대화의 드래그 문맥에서 카드 이름을 찾아 최대 3장을 시스템에 덧붙인다
-    const withCards = (db.select({ v: userSettings.askWithCards }).from(userSettings).where(eq(userSettings.userId, user.id)).get()?.v ?? 1) === 1;
+    // 내 카드 문맥 — 문서 질문은 설정(askWithCards)을 따르고, 챗봇은 "내 자료 참고" 스위치(myStuff)를 따른다.
+    // 켜져 있으면 질문·인용·대화의 드래그 문맥에서 카드 이름을 찾아 최대 3장을 시스템에 덧붙인다
+    const withCards =
+      myStuff !== undefined ? myStuff : (db.select({ v: userSettings.askWithCards }).from(userSettings).where(eq(userSettings.userId, user.id)).get()?.v ?? 1) === 1;
     const matched = withCards
       ? matchCardsForAsk(listCards(user.id), [question, quote ?? '', found.thread.quote ?? '', found.thread.context ?? ''].join('\n'), excludeCardIds)
       : [];
-    const cardContext = cardContextParagraph(user.id, matched);
+    // 내 문서 단락 — 스위치를 켠 챗봇만. 질문 낱말로 전문 검색해 맞는 단락 몇 개 (문서 전체는 절대 안 간다)
+    const docs = myStuff === true ? findDocPassages(user, question) : [];
+    const cardContext = cardContextParagraph(user.id, matched) + docContextParagraph(docs);
+    const model = resolveModel(found.thread.model);
     const now = Date.now();
     const isFirst =
       (db.select({ n: sql<number>`count(*)` }).from(askMessages).where(eq(askMessages.threadId, id)).get()?.n ?? 0) === 0;
@@ -201,7 +233,13 @@ export const askRoutes = new Hono<AppEnv>()
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({
         event: 'meta',
-        data: JSON.stringify({ userMessageId: userMsg.id, remaining: limit === null ? null : limit - used - 1, cards: matched.map((k) => ({ id: k.id, title: k.title })) }),
+        data: JSON.stringify({
+          userMessageId: userMsg.id,
+          remaining: limit === null ? null : limit - used - 1,
+          model,
+          cards: matched.map((k) => ({ id: k.id, title: k.title })),
+          docs: docs.map((d) => ({ id: d.id, name: d.name, fileType: d.fileType })),
+        }),
       });
       let text = '';
       const sources: AskSource[] = [];
@@ -213,7 +251,7 @@ export const askRoutes = new Hono<AppEnv>()
         let turnMessages = apiMessages;
         let final: Awaited<ReturnType<ReturnType<typeof createAnswerStream>['finalMessage']>>;
         for (let round = 0; ; round++) {
-          const answer = createAnswerStream(turnMessages, cardContext);
+          const answer = createAnswerStream(turnMessages, cardContext, model);
           stream.onAbort(() => answer.abort());
           for await (const ev of answer) {
             if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
@@ -239,11 +277,11 @@ export const askRoutes = new Hono<AppEnv>()
         text += formatSources(sources);
         const saved = db
           .insert(askMessages)
-          .values({ threadId: id, role: 'assistant', content: text, ...usage, createdAt: Date.now() })
+          .values({ threadId: id, role: 'assistant', content: text, ...usage, model, createdAt: Date.now() })
           .returning()
           .get();
         db.update(askThreads).set({ updatedAt: saved.createdAt }).where(eq(askThreads.id, id)).run();
-        await stream.writeSSE({ event: 'done', data: JSON.stringify({ assistantMessageId: saved.id, content: text }) });
+        await stream.writeSSE({ event: 'done', data: JSON.stringify({ assistantMessageId: saved.id, content: text, model }) });
       } catch (e) {
         // assistant 메시지는 저장하지 않는다 — 반쪽 답이 이력에 남아 다음 답을 오염시키지 않게
         await stream.writeSSE({ event: 'error', data: JSON.stringify({ code: 'ASK_UPSTREAM_ERROR', message: describeUpstreamError(e) }) });

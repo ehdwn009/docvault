@@ -43,9 +43,10 @@ import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
 import SharedPanel from './panels/SharedPanel';
+import AskPanel from '../components/AskPanel';
 import Viewer from './Viewer';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'settings' | 'admin';
+type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
@@ -53,6 +54,7 @@ const PANEL_TITLE: Record<Panel, string> = {
   favorites: '즐겨찾기',
   shared: '공유 파일',
   cards: '배움 카드',
+  chat: '대화',
   settings: '설정',
   admin: '관리자',
 };
@@ -1176,6 +1178,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     shared: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M8 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M2 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1|M16 16h1a4 4 0 0 1 4 4v1',
     // 카드 두 장 겹침 — 앞장 뒤에 한 장이 살짝 밀려 있다 ("카드 묶음"이 바로 읽히게. 책갈피는 카드로 안 보였다)
     cards: 'M3 9a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z|M7 7V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-1',
+    // 말풍선 — 문서 없이 시작하는 대화(챗봇, SCR-187). 카드의 재료라 배움 카드 바로 아래
+    chat: 'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4z|M8 8h8|M8 12h5',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
     admin: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
   };
@@ -1231,6 +1235,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {railButton('favorites', '즐겨찾기')}
         {railButton('shared', '공유 파일')}
         {railButton('cards', '배움 카드')}
+        {railButton('chat', '대화')}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
         {railButton('settings', '설정')}
         {user.role === 'admin' && railButton('admin', '관리자')}
@@ -1245,7 +1250,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {/* 접힘은 PC 전용 — 터치 드로어에서는 패널이 곧 내비게이션이라 항상 펼친다 */}
       <aside
-        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 ${panelCollapsed ? 'pc:hidden' : ''}`}
+        // 대화 패널만 PC에서 넓다(문서 질문 패널과 같은 384px) — 답이 길어 288px에서는 읽기 답답하다 (SCR-187)
+        className={`flex shrink-0 flex-col border-r border-slate-800 ${panel === 'chat' ? 'w-72 pc:w-96' : 'w-72'} ${panelCollapsed ? 'pc:hidden' : ''}`}
       >
         <div className="flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
@@ -1472,6 +1478,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         )}
 
+        {panel === 'chat' && (
+          // SCR-187: 대화 — 문서 없이 시작하는 챗봇. 패널을 떠나도 언마운트하지 않아야 대화가 살지만,
+          // 서버에 자동 저장되므로 다시 열면 "최근 대화"에서 이어 간다 (첫 판은 단순하게)
+          <AskPanel file={null} inline seed={null} pendingQuote={null} onConsumePendingQuote={() => {}} onOpenFile={(f) => void selectFile(f)} isPc={!IS_TOUCH} onClose={() => setPanelCollapsed(true)} />
+        )}
         {panel === 'settings' && (
           <SettingsPanel
             settings={settings}
