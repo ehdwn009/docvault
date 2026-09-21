@@ -43,6 +43,8 @@ type Props = {
   onOpenSource?: (threadId: number) => void;
   /** 카드 뷰의 연결 클릭 — 그 이름의 카드를 연다 */
   onOpenCard?: (title: string) => void;
+  /** 헤더 메뉴의 속성 — 속성창(SCR-113)을 연다 */
+  onShowProperties?: () => void;
   /** 문서 속에 점선 밑줄을 그을 내 카드 용어 (활용 ②). 설정이 꺼져 있으면 빈 배열 */
   terms?: { id: number; title: string; aliases: string[]; oneLine: string; kind: string }[];
   /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
@@ -97,7 +99,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, jumpQuote, onOpenSource, onOpenCard, terms }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -593,6 +595,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       : [{ label: '버전 기록', onClick: () => setShowVersions((v) => !v), active: showVersions }]),
     // 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다)
     { label: '다운로드', href: `/api/v1/files/${file.id}/raw`, download: file.name },
+    ...(onShowProperties ? [{ label: '속성', onClick: onShowProperties }] : []),
     ...(data.readonly ? [] : [{ label: '편집 (E)', onClick: () => setMode('edit') }]),
   ];
 

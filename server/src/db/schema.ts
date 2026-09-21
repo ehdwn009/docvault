@@ -177,6 +177,8 @@ export const askThreads = sqliteTable('ask_threads', {
   outlineJson: text('outline_json'),
   /** 정리 결과를 만든 시각 — updated_at보다 오래됐으면 "그 뒤에 답이 붙었다" */
   outlineAt: integer('outline_at'),
+  /** 이 대화의 답변 모델(ASK_MODELS.id). NULL이면 기본(ASK.DEFAULT_MODEL). 칩에서 바꾸면 다음 답부터 (v0.40) */
+  model: text('model'),
 });
 
 export const askMessages = sqliteTable('ask_messages', {
@@ -190,6 +192,8 @@ export const askMessages = sqliteTable('ask_messages', {
   inputTokens: integer('input_tokens'),
   outputTokens: integer('output_tokens'),
   webSearches: integer('web_searches'),
+  /** 답(assistant) 행만: 그 답을 낸 모델. NULL이면 v0.40 이전 = Opus. 답 아래 표시와 모델별 비용 추정에 쓴다 */
+  model: text('model'),
   createdAt: integer('created_at').notNull(),
 });
 

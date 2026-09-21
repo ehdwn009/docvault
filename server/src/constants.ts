@@ -96,8 +96,24 @@ export const DEFAULT_USER_SETTINGS = {
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
+/**
+ * 답변 모델 목록 — 대화 헤더의 모델 칩이 이 순서로 보여 준다(SCR-187·180). 새 모델은 여기 한 줄.
+ * effort: Haiku 4.5는 output_config.effort를 받지 않는다(400). webSearch: 최신 검색 도구는 Sonnet/Opus만.
+ * 단가(USD/백만 토큰)는 관리자 AI 사용량의 추정 근거 — 답마다 어느 모델이었는지 ask_messages.model에 남긴다
+ */
+export const ASK_MODELS = [
+  { id: 'claude-haiku-4-5', label: '빠름', name: 'Haiku 4.5', note: '즉답. 간단한 질문·잡담·번역', inputPerMtok: 1, outputPerMtok: 5, effort: false, webSearch: 'web_search_20250305' },
+  { id: 'claude-sonnet-5', label: '균형', name: 'Sonnet 5', note: '설명 품질 충분, 몇 초 안에. 평소 기본', inputPerMtok: 2, outputPerMtok: 10, effort: true, webSearch: 'web_search_20260209' },
+  { id: 'claude-opus-5', label: '깊게', name: 'Opus 5', note: '긴 추론·어려운 개념. 느리고 비용 5배쯤', inputPerMtok: 5, outputPerMtok: 25, effort: true, webSearch: 'web_search_20260209' },
+] as const;
+export type AskModelId = (typeof ASK_MODELS)[number]['id'];
+export const ASK_MODEL_IDS = ASK_MODELS.map((m) => m.id) as [AskModelId, ...AskModelId[]];
+/** 모델 칸이 비어 있는 옛 답(v0.40 이전)은 전부 Opus였다 — 비용 추정도 그 단가로 */
+export const ASK_LEGACY_MODEL: AskModelId = 'claude-opus-5';
+
 export const ASK = {
-  MODEL: 'claude-opus-5',
+  /** 새 대화의 기본 모델 — 균형(Sonnet). 깊게 파고 싶을 때만 칩에서 Opus */
+  DEFAULT_MODEL: 'claude-sonnet-5' as AskModelId,
   /** 사용자별 하루 질문 한도 (UTC 날짜). 되돌릴 수 있는 값이라 낮게 잡지 않았다. 관리자에게는 걸지 않는다 */
   DAILY_LIMIT: 30,
   /** 저장 안 한 대화 보관 기간 — 휴지통과 같은 감각 */
@@ -119,8 +135,21 @@ export const ASK = {
   PAUSE_CONTINUATIONS: 2,
   /** 답 아래에 붙이는 출처 링크 최대 개수 */
   MAX_SOURCES: 5,
-  /** 비용 추정 단가 (USD) — 관리자 "AI 사용량" 탭용. 청구서가 아니라 감 잡기용이라 대략값. 단가가 바뀌면 여기만 */
-  PRICE_USD: { INPUT_PER_MTOK: 5, OUTPUT_PER_MTOK: 25, SEARCH_PER_1000: 10 },
+  /** 대화 제목 최대 길이 — 직접 쓰든 AI가 짓든 같은 상한. 목록 한 줄에 들어갈 길이 */
+  TITLE_MAX_CHARS: 60,
+  /** AI 제목 짓기(API-109)의 답 길이 상한 — 제목 한 줄이면 충분하다 */
+  TITLE_MAX_OUTPUT_TOKENS: 60,
+  /** AI 제목 짓기에 보여 주는 말풍선 수·말풍선당 글자 수 — 앞부분만으로 충분하고 비용은 상수로 묶는다 */
+  TITLE_CONTEXT_MESSAGES: 6,
+  TITLE_CONTEXT_CHARS: 300,
+  /** 웹 검색 단가 (USD/1000회) — 모델별 토큰 단가는 ASK_MODELS에. 청구서가 아니라 감 잡기용 대략값 */
+  SEARCH_PER_1000_USD: 10,
+  /** 챗봇 "내 자료 참고" — 질문 낱말로 찾는 내 문서 단락 수와 단락 길이(FTS snippet 토큰). 문서 전체는 절대 안 간다 */
+  DOC_PASSAGES: 3,
+  DOC_PASSAGE_TOKENS: 48,
+  /** 검색어로 삼는 낱말의 최소 글자 수·최대 개수 — 한 글자 조사·너무 긴 OR는 잡음만 늘린다 */
+  DOC_TERM_MIN_CHARS: 2,
+  DOC_TERMS_MAX: 12,
   /** 원화 환산 (대략). 통계 화면의 "≈ n원"에만 쓰인다 */
   KRW_PER_USD: 1400,
 } as const;

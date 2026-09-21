@@ -44,12 +44,14 @@
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
 | API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드) | 로그인 |
+| API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
 | API-024 | DELETE | /folders/{id} | 폴더 삭제 (하위 포함) | 로그인 |
 | API-025 | PUT | /folders/{id}/share | 폴더 공유 토글 | 관리자 |
 | API-031 | POST | /files | 파일 업로드 (multipart) | 로그인 |
-| API-032 | GET | /files/{id} | 파일 메타 조회 (정보 모달용) | 로그인 |
+| API-032 | GET | /files/{id} | 파일 메타 조회 (트리 밖 파일 열기용) | 로그인 |
+| API-039 | GET | /files/{id}/info | 속성창(SCR-113): `{ file, path[], versionCount, threadCount, cardCount, tagIds[], isFavorite, lastOpenedAt, charCount, lineCount, storagePath }`. cardCount = 이 문서를 읽다 시작한 대화에서 태어난 카드 수(card_threads↔ask_threads.file_id). 본문은 세기만 하고 보내지 않는다 (v0.41) | 열람 가능자 |
 | API-033 | GET | /files/{id}/content | 텍스트 본문 조회 (JSON) | 로그인 |
 | API-034 | PUT | /files/{id}/content | 본문 저장 (버전 스냅샷 포함) | 로그인 |
 | API-035 | PUT | /files/{id} | 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -85,12 +87,14 @@
 | API-097 | DELETE | /google/recent/{driveFileId} | 바로가기 목록에서 제거 | 로그인 |
 | API-098 | GET | /google/files/{driveFileId}/content | 드라이브 문서 메타+텍스트 본문 (구글 문서는 md로 변환) | 로그인 |
 | API-099 | GET | /google/files/{driveFileId}/raw | 드라이브 원본 스트리밍 (PDF·이미지 등) | 로그인 |
-| API-101 | GET | /ask/status | 질문 기능 상태 (키 설정 여부·오늘 남은 횟수·한도) | 로그인 |
-| API-102 | POST | /ask/threads | 대화 시작 (문서·선택 문장·문맥을 붙여 빈 대화 생성) | 로그인 |
-| API-103 | POST | /ask/threads/{id}/messages | 질문 보내기 → 답변 SSE 스트리밍. 요청 excludeCardIds[], meta 이벤트에 cards[] (활용 ④) | 소유자 |
+| API-101 | GET | /ask/status | 질문 기능 상태 (키 설정 여부·오늘 남은 횟수·한도) + 모델 목록 models[]·defaultModel (v0.40) | 로그인 |
+| API-102 | POST | /ask/threads | 대화 시작 (문서·선택 문장·문맥을 붙여 빈 대화 생성). fileId 없으면 자유 대화(챗봇), model? | 로그인 |
+| API-103 | POST | /ask/threads/{id}/messages | 질문 보내기 → 답변 SSE 스트리밍. 요청 excludeCardIds[]·myStuff?(챗봇 스위치), meta 이벤트에 model·cards[]·docs[] | 소유자 |
 | API-104 | GET | /ask/threads | 지난 대화 목록 (최근순, 본문 제외) | 로그인 |
 | API-105 | GET | /ask/threads/{id} | 대화 하나 + 메시지 전부 | 소유자 |
 | API-106 | DELETE | /ask/threads/{id} | 대화 삭제 | 소유자 |
+| API-107 | PUT | /ask/threads/{id} | 대화 바꾸기 — `{ title?, model? }` 보낸 칸만. title 1~60자(직접 쓴 제목), model은 다음 답부터 (v0.40·41) | 소유자 |
+| API-109 | POST | /ask/threads/{id}/title | AI가 제목 짓기 → `{ title }`. **저장하지 않는다** — 제목 편집 입력창의 ✦가 채우고 저장은 API-107. 빠른 모델(CARD.MODEL), 앞 6개 말풍선 각 300자만 (v0.41) | 소유자 |
 | API-111 | GET | /cards | 내 카드 목록 (머리말 요약: 제목·한 줄·별칭·종류·주제·태그·연결·출처) | 로그인 |
 | API-112 | POST | /cards/draft | 대화 전체·답 하나·고른 답들에서 카드 초안 + 비슷한 카드 판단 (LLM, 구조화 출력) | 소유자 |
 | API-113 | POST | /cards/merge-preview | 기존 카드 + 대화 → 재구성 결과 미리보기 (LLM). 저장 안 함 | 소유자 |
@@ -153,7 +157,7 @@
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | folders | array | [{ id, parentId, name, isShared, sortOrder }] |
-| files | array | [{ id, folderId, name, fileType, sizeBytes, isShared, sortOrder, updatedAt, tags: [tagId], state: { isFavorite, lastOpenedAt } }] |
+| files | array | [{ id, folderId, name, fileType, sizeBytes, isShared, sortOrder, updatedAt, tags?: [tagId], state?: { isFavorite, lastOpenedAt, viewerFit, fontScale } }] — **응답을 줄이려고** `tags`는 비어 있으면, `state`는 전부 기본값이면 생략한다(클라이언트 `toTreeFile`이 채움). 읽던 위치(readingPosition)는 트리에 싣지 않는다 — 문서를 열 때 API-073 GET으로 받는다 (v0.39.0, IA — 시작 시간 측정) |
 
 트리 구조 조립(중첩)은 클라이언트가 수행합니다. 파일별 태그와 개인 상태(USER_FILE_STATE)를 조인해 함께 내려주어 탐색기 초기 로드를 1 요청으로 만듭니다.
 
@@ -484,16 +488,16 @@ GET /api/v1/google/files/{driveFileId}/content
 **201** — `{ "thread": { id, fileId, fileName, quote, title, createdAt, updatedAt } }`. title은 첫 질문이 오면 그 앞 60자로 채워진다(그 전엔 quote 또는 "새 대화").
 
 ### API-103 — POST /ask/threads/{id}/messages
-**Body** `{ "question": string(1~2000), "quote"?: string(≤500) }` — quote는 대화 중 문서에서 다시 드래그한 문장. 저장되는 user 메시지는 `「quote」\n\n question` 꼴.
+**Body** `{ "question": string(1~2000), "quote"?: string(≤500), "excludeCardIds"?: number[], "myStuff"?: boolean }` — quote는 대화 중 문서에서 다시 드래그한 문장. 저장되는 user 메시지는 `「quote」\n\n question` 꼴. `myStuff`는 챗봇(SCR-187)의 "내 자료 참고" 스위치: true면 이름이 걸린 내 카드(최대 3장) + 질문 낱말로 찾은 내 문서 단락(최대 3개)을 시스템에 덧붙이고, false면 순수 대화(카드도 안 감). 비우면 문서 질문의 동작 — 설정(askWithCards)에 따라 카드만. 답변 모델은 대화의 `model`(없으면 기본 Sonnet 5).
 
 한도 검사는 스트림을 열기 **전**에 한다(429는 보통 JSON 응답). 통과하면 user 메시지를 먼저 저장하고 `text/event-stream`으로 답한다:
 
 | event | data | 언제 |
 |---|---|---|
-| meta | `{ "userMessageId", "remaining" }` | 첫 이벤트 |
+| meta | `{ "userMessageId", "remaining", "model", "cards": [{id,title}], "docs": [{id,name,fileType}] }` | 첫 이벤트. cards·docs = 이번 답에 함께 간 내 카드·문서 단락의 출처 (화면의 "함께 본" 칩) |
 | delta | `{ "text" }` | 토큰 조각마다 |
 | searching | `{ "tool": "web_search" }` | 모델이 웹 검색을 시작했을 때 (답당 최대 3회). 화면은 "찾는 중"을 보여 준다 |
-| done | `{ "assistantMessageId", "content" }` | 답이 끝나 저장된 뒤. 검색했으면 content 끝에 `🌐 참고한 곳: [제목](url) · …`가 md로 붙어 있다 (별도 칸 없음 — 저장·표시·복사가 본문 하나로) |
+| done | `{ "assistantMessageId", "content", "model" }` | 답이 끝나 저장된 뒤. 검색했으면 content 끝에 `🌐 참고한 곳: [제목](url) · …`가 md로 붙어 있다 (별도 칸 없음 — 저장·표시·복사가 본문 하나로) |
 | error | `{ "code", "message" }` | LLM 실패. assistant 메시지는 저장하지 않는다(질문만 남음) |
 
 첫 메시지일 때만 문맥(문서 이름·quote·context)을 user 메시지 앞에 인용으로 붙여 보낸다. 이후는 대화 이력 + 새 질문. 문맥은 system이 아니라 user 턴 안의 인용이다(문서가 LLM에게 지시하는 글을 담고 있어도 역할을 못 바꾸게).
@@ -502,7 +506,7 @@ GET /api/v1/google/files/{driveFileId}/content
 `{ "threads": [ { id, fileId, fileName, quote, title, messageCount, updatedAt } ] }` — 최근 갱신순. 30일 지난 대화는 서버가 정리해 여기 없다.
 
 ### API-105 Response — GET /ask/threads/{id}
-`{ "thread": {...}, "messages": [ { id, role: "user"|"assistant", content, createdAt } ] }`
+`{ "thread": {..., model}, "messages": [ { id, role: "user"|"assistant", content, model, createdAt } ] }` — message.model은 assistant 행에만(v0.40 이전 답은 null = Opus)
 
 ## API-111 ~ API-121: 배움 카드 (2판)
 

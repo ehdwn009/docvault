@@ -150,6 +150,7 @@ erDiagram
         integer updated_at "마지막 메시지 시각 — 30일 정리 기준"
         text outline_json "대화 정리 결과 JSON, 카드로 저장하면 NULL (2026-09-20)"
         integer outline_at "정리 만든 시각, updated_at보다 오래면 낡음"
+        text model "답변 모델 id, NULL=기본(Sonnet). 칩에서 바꾸면 다음 답부터 (2026-09-21)"
     }
     ASK_MESSAGES {
         integer id PK
@@ -159,6 +160,7 @@ erDiagram
         integer input_tokens "assistant 행만 — 사용량 (v0.25)"
         integer output_tokens
         integer web_searches
+        text model "assistant 행만 — 그 답을 낸 모델. NULL=v0.40 이전(Opus)"
         integer created_at
     }
     CARD_THREADS {
@@ -183,9 +185,9 @@ erDiagram
 | GOOGLE_ACCOUNTS | 사용자×구글 계정 연결 (1:0..1). 드라이브 문서 열람과 백업 업로드가 이 토큰을 쓴다. **refresh token은 사실상 비밀번호와 같은 힘**을 가지므로 암호화해서 넣는다 — data/ 폴더가 곧 백업 단위라 DB 파일이 밖으로 나갈 수 있다 |
 | DRIVE_RECENTS | 드라이브에서 열어 본 문서의 **바로가기 기록**. 이름·형식만 두고 본문은 저장하지 않는다 — 원본은 드라이브에 있고 우리는 볼 때마다 새로 읽는다 |
 | BACKUP_SETTINGS | 자동 백업 설정 단일 행. 앱이 스스로 `data/`를 묶어 연결된 구글 드라이브에 올린다. 꺼져 있으면 아무 일도 하지 않는다(기본값 꺼짐) |
-| ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나. 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다 |
+| ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나, 또는 문서 없이 시작한 자유 대화(챗봇, file_id NULL). 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다. model은 이 대화의 답변 모델 |
 | CARD_THREADS | 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때). 카드가 참조하는 대화는 30일 정리에서 빠진다 |
-| ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수를 적어 두어 관리자 사용량 통계(API-020)의 근거가 된다 |
+| ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
 
 ## 관계 설명
 
@@ -197,6 +199,7 @@ erDiagram
 - **글자 크기 2층 구조 (2026-08-18)**: HTML 글자 크기는 USER_SETTINGS.html_font_scale(전역 기본 배율)과 USER_FILE_STATE.font_scale(이 파일만의 배율)로 나뉩니다. font_scale이 **NULL이면 전역을 따르고**, 값이 있으면 그것으로 **대체**합니다(곱하지 않습니다). NULL을 "없음"으로 쓰기 때문에 대부분의 파일은 전역 설정을 바꾸면 같이 따라오고, 유별난 문서만 자기 값을 갖습니다 — 그래서 UI에는 반드시 "기본값 따르기"(= NULL로 되돌리기)가 있어야 합니다. font_scale은 형식을 가리지 않습니다 — HTML은 문서 자신의 크기를 100%로, md·텍스트는 USER_SETTINGS.font_size를 100%로 삼을 뿐 규칙은 같습니다(전역 기본 배율 html_font_scale은 HTML에만 있습니다).
 - **복습 (2026-09-20)**: 카드의 복습 상태(next_review_at·review_interval_days)도 USER_FILE_STATE에 둡니다 — 카드는 files의 한 행이고 "이 사람이 이 카드를 얼마나 외웠나"는 사용자×파일 사실이라 즐겨찾기와 같은 자리입니다. NULL이면 아직 복습한 적 없음 = 만든 날 + 1일에 첫 복습. 몰랐다 → 1일, 알았다 → 간격 두 배(2·4·8…60일 상한). 문서(kind=doc) 행에는 늘 NULL입니다.
 - **정리 결과 저장 (2026-09-20)**: ASK_THREADS.outline_json·outline_at은 대화 정리(API-116) 결과입니다. 창을 닫았다 열어도, 앱을 나갔다 와도 같은 결과가 바로 뜨게 하려고 대화에 붙여 둡니다(정리는 대화 하나의 파생물이라 별도 표를 두지 않았습니다). outline_at이 updated_at보다 오래되면 "그 뒤에 답이 붙었다"고 표시하고, 카드로 저장(API-117)하면 지웁니다.
+- **모델 선택 (2026-09-21)**: ASK_THREADS.model은 대화의 답변 모델(서버 상수 ASK_MODELS의 id), NULL이면 기본(Sonnet 5). 칩에서 바꾸면 다음 답부터. ASK_MESSAGES.model은 그 답을 실제로 낸 모델 — 대화 중에 모델을 바꿔도 답마다 무엇이었는지 남고, 관리자 사용량의 비용 추정이 모델별 단가를 CASE로 적용한다. NULL(v0.40 이전)은 전부 Opus였다.
 - **질문 때 카드 (2026-09-20)**: USER_SETTINGS.ask_with_cards가 켜져 있으면 질문·인용·드래그 문맥에 이름이 나오는 내 카드(최대 3장)의 한 줄·본문 앞부분을 LLM 시스템 프롬프트에 덧붙입니다. 어떤 카드가 갔는지는 저장하지 않습니다 — 답 안에서 화면에만 보입니다(meta). 저장하려면 ASK_MESSAGES에 칸이 필요한데, 답을 다시 볼 때 그 정보가 꼭 필요하진 않아 미뤘습니다.
 - **용어 밑줄 (2026-09-20)**: USER_SETTINGS.term_highlight는 문서를 읽을 때 내 배움 카드의 제목·별칭이 나오는 자리에 점선 밑줄을 그을지입니다(기본 1=켬). 읽기 취향이라 기기(localStorage)가 아니라 사람(USER_SETTINGS)에 붙습니다 — 폰에서 끄면 PC에서도 꺼집니다.
 - 즐겨찾기·읽던 위치는 파일 속성이 아니라 USER_FILE_STATE(사용자×파일)에 둡니다. 공유 파일을 열람하는 다른 사용자도 자신만의 즐겨찾기·읽던 위치를 가질 수 있게 하기 위한 구조입니다 (기존 Manus 버전에서 파일에 붙어 있던 isFavorite의 개선).

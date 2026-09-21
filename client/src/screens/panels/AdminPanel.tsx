@@ -42,7 +42,7 @@ type AskUsage = {
   users: UsageRow[];
   totals: Omit<UsageRow, 'id' | 'username' | 'displayName'>;
   topFiles: { fileName: string | null; count: number }[];
-  pricing: { INPUT_PER_MTOK: number; OUTPUT_PER_MTOK: number; SEARCH_PER_1000: number; krwPerUsd: number };
+  pricing: { models: { id: string; name: string; inputPerMtok: number; outputPerMtok: number }[]; searchPer1000: number; krwPerUsd: number };
 };
 
 type Props = { meId: number; onSelectFile: (file: TreeFile) => void };
@@ -334,7 +334,7 @@ function UsageTab({ usage }: { usage: AskUsage }) {
         </div>
       )}
       <p className="text-xs text-slate-600">
-        단가: 입력 ${usage.pricing.INPUT_PER_MTOK}/백만 토큰 · 출력 ${usage.pricing.OUTPUT_PER_MTOK}/백만 토큰 · 검색 ${usage.pricing.SEARCH_PER_1000}/1000회 · 1달러 {usage.pricing.krwPerUsd}원 기준의 대략값. 정확한 금액은 console.anthropic.com
+        단가(백만 토큰당 입력/출력): {usage.pricing.models.map((m) => `${m.name} $${m.inputPerMtok}/$${m.outputPerMtok}`).join(' · ')} · 검색 ${usage.pricing.searchPer1000}/1000회 · 1달러 {usage.pricing.krwPerUsd}원 기준의 대략값. 답마다 쓴 모델로 계산합니다. 정확한 금액은 console.anthropic.com
       </p>
     </div>
   );

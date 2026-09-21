@@ -7,6 +7,7 @@ import {
   type AskMessage,
   type AskStatus,
   type AskThread,
+  type AskUsedDoc,
   type CardSummary,
   type TreeFile,
 } from '../lib/api';
@@ -19,12 +20,18 @@ import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
+import ContextMenu, { type MenuItem } from './ContextMenu';
+import Icon from './Icon';
+import SwipeRow from './SwipeRow';
 
 /** 드래그로 시작할 때 붙는 문맥 — 선택 문장 + 앞뒤 문단 (설계 — 문서 전체는 보내지 않는다) */
 export type AskSeed = { quote: string; context: string };
 
 type Props = {
-  file: TreeFile;
+  /** 읽던 문서. null이면 문서 없이 시작하는 대화 — 챗봇(SCR-187): 인용 대신 "내 자료 참고" 스위치가 있다 */
+  file: TreeFile | null;
+  /** true면 레일 패널 안에 그냥 세로로 그린다 (오른쪽 패널·바텀 시트가 아니라) */
+  inline?: boolean;
   /** 열릴 때의 문맥. null이면 문맥 없는 대화(설계 흐름 G) */
   seed: AskSeed | null;
   /** 대화 중 문서에서 다시 드래그한 문장 — 다음 질문에 인용으로 붙는다. 붙이고 나면 부모가 비운다 */
@@ -41,6 +48,27 @@ type Props = {
 };
 
 type UsedCard = { id: number; title: string };
+
+/** 챗봇 "내 자료 참고" 스위치의 기억 — 기기별 취향이라 localStorage. 기본 꺼짐(순수 대화) */
+const MY_STUFF_KEY = 'dv_chat_mystuff';
+/** 새 대화에 쓸 모델 — 마지막에 고른 것을 기억한다. 없으면 서버 기본(균형) */
+const MODEL_KEY = 'dv_ask_model';
+/** 챗봇 빈 화면에 보여 주는 최근 대화 수 */
+const RECENT_THREADS = 5;
+function readLocal(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeLocal(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* 사생활 모드 등 */
+  }
+}
 
 /** 글에 카드 이름이 나오나 — 서버 lib/cards.ts mentions와 같은 규칙 (띠를 보내기 전에 미리 보여 주기 위해 클라이언트도 안다) */
 function mentions(text: string, name: string): boolean {
@@ -60,9 +88,23 @@ const SHEET_RATIO = 0.78;
 /** 펼쳤을 때 위에 남기는 여백(px) — 상태 표시줄 밑에 딱 붙지 않게 */
 const SHEET_EXPANDED_TOP_INSET = 44;
 
-// SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판)
-export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
+// SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판).
+// file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
+export default function AskPanel({ file, inline = false, seed, pendingQuote, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
+  const chatMode = file === null;
   const [status, setStatus] = useState<AskStatus | null>(null);
+  // 챗봇: 내 자료 참고 스위치 — 질문마다 바꿀 수 있고 끈 상태를 기기가 기억한다 (기본 꺼짐)
+  const [myStuff, setMyStuff] = useState(() => readLocal(MY_STUFF_KEY) === '1');
+  // 새 대화에 쓸 모델(칩). 대화가 생기면 thread.model이 진실이고, 바꾸면 서버에도 저장한다 (API-107)
+  const [pendingModel, setPendingModel] = useState<string | null>(() => readLocal(MODEL_KEY));
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  // 지난 대화의 제목 편집 — 그 자리가 입력창이 되고, 오른쪽 끝의 ✦가 AI 제목을 채운다 (VS Code의 커밋 메시지 생성 자리와 같은 발상)
+  const [renaming, setRenaming] = useState<{ id: number; draft: string } | null>(null);
+  const [titleBusy, setTitleBusy] = useState(false);
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  // 답마다 함께 본 내 문서 — 카드와 같은 방식 (meta로 먼저, done에서 답의 id에 붙인다)
+  const [usedDocs, setUsedDocs] = useState<Record<number, AskUsedDoc[]>>({});
+  const pendingDocsRef = useRef<AskUsedDoc[]>([]);
   const [thread, setThread] = useState<AskThread | null>(null);
   const [messages, setMessages] = useState<Bubble[]>([]);
   const [input, setInput] = useState('');
@@ -84,13 +126,15 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   // 답마다 함께 본 카드 — meta로 먼저 오고 done에서 답의 id에 붙인다
   const [usedCards, setUsedCards] = useState<Record<number, UsedCard[]>>({});
   const pendingCardsRef = useRef<UsedCard[]>([]);
+  // 카드를 함께 보내나 — 문서 질문은 설정(withCards), 챗봇은 스위치(myStuff)
+  const cardsOn = chatMode ? myStuff : withCards;
   useEffect(() => {
-    if (!withCards) return;
+    if (!cardsOn) return;
     const load = () => void api<{ cards: CardSummary[] }>('/cards').then((r) => setMyCards(r.cards)).catch(() => {});
     load();
     window.addEventListener('dv:cards-changed', load);
     return () => window.removeEventListener('dv:cards-changed', load);
-  }, [withCards]);
+  }, [cardsOn]);
   // 모델이 웹 검색 중 — 답이 늦는 이유를 보여 준다 (글자가 오기 시작하면 끈다)
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<AskThread[]>([]);
@@ -100,7 +144,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   // 이 패널이 지금 들고 있는 seed로 대화를 만들었는지 — 같은 seed로 두 번 만들지 않게
   const seedUsedRef = useRef(false);
   const matchedCards = (() => {
-    if (!withCards || myCards.length === 0) return [];
+    if (!cardsOn || myCards.length === 0) return [];
     const text = [input, pendingQuote ?? '', thread?.quote ?? (seed && !seedUsedRef.current ? seed.quote : ''), seed && !seedUsedRef.current ? seed.context : ''].join('\n');
     if (!text.trim()) return [];
     return myCards
@@ -120,6 +164,18 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   useEffect(() => {
     void api<AskStatus>('/ask/status').then(setStatus).catch(() => setStatus(null));
   }, []);
+  // 챗봇은 열자마자 최근 대화를 보여 준다 — 어제 하던 걸 이어 가는 일이 새 질문보다 잦다
+  useEffect(() => {
+    if (!chatMode) return;
+    void api<{ threads: AskThread[] }>('/ask/threads').then((r) => setHistory(r.threads)).catch(() => {});
+  }, [chatMode]);
+  // 모델 메뉴는 바깥을 누르면 닫힌다
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const close = () => setModelMenuOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [modelMenuOpen]);
 
   // 문맥(seed)이 새로 오면 아직 대화가 없는 한 그것을 쓴다 — 안 보내고 닫았다가 다른 문장을 고른 경우 (설계 흐름 A 되풀이).
   // 입력창은 채우지 않는다: 채워 두면 다른 걸 묻고 싶을 때 지우는 일이 생긴다. 대신 빠른 질문 버튼을 둔다
@@ -147,7 +203,8 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     const { thread: t } = await api<{ thread: AskThread }>('/ask/threads', {
       method: 'POST',
       body: JSON.stringify({
-        fileId: file.id,
+        ...(file ? { fileId: file.id } : {}),
+        ...(pendingModel ? { model: pendingModel } : {}),
         ...(useSeed ? { quote: useSeed.quote, context: useSeed.context } : {}),
       }),
     });
@@ -178,14 +235,22 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       pendingCardsRef.current = [];
+      pendingDocsRef.current = [];
       const excludeCardIds = [...excluded];
       setExcluded(new Set()); // 뺀 것은 이번 질문에만 — 다음 질문에서 다시 걸리면 다시 보인다
       await askStream(
         t.id,
-        { question: q, ...(quote ? { quote } : {}), ...(excludeCardIds.length ? { excludeCardIds } : {}) },
+        {
+          question: q,
+          ...(quote ? { quote } : {}),
+          ...(excludeCardIds.length ? { excludeCardIds } : {}),
+          // 챗봇만 스위치를 보낸다 — 문서 질문은 지금 동작(설정에 따라 카드만) 그대로
+          ...(chatMode ? { myStuff } : {}),
+        },
         {
           onMeta: (m) => {
             pendingCardsRef.current = m.cards ?? [];
+            pendingDocsRef.current = m.docs ?? [];
           },
           onSearching: () => setSearching(true),
           onDelta: (text) => {
@@ -194,14 +259,17 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
               m.map((b) => (b.id === 'streaming' ? { ...b, content: b.content + text } : b)),
             );
           },
-          onDone: ({ assistantMessageId, content }) => {
+          onDone: ({ assistantMessageId, content, model }) => {
             const used = pendingCardsRef.current;
             if (used.length) setUsedCards((prev) => ({ ...prev, [assistantMessageId]: used }));
+            const docs = pendingDocsRef.current;
+            if (docs.length) setUsedDocs((prev) => ({ ...prev, [assistantMessageId]: docs }));
             setMessages((m) =>
               m.map((b) =>
-                b.id === 'streaming' ? { id: assistantMessageId, role: 'assistant', content, createdAt: Date.now() } : b,
+                b.id === 'streaming' ? { id: assistantMessageId, role: 'assistant', content, model: model ?? null, createdAt: Date.now() } : b,
               ),
             );
+            if (chatMode) void api<{ threads: AskThread[] }>('/ask/threads').then((r) => setHistory(r.threads)).catch(() => {});
           },
           onError: ({ message }) => {
             setMessages((m) => m.filter((b) => b.id !== 'streaming'));
@@ -230,6 +298,62 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
       refreshStatus();
     }
   }
+
+  /** 모델 칩 — 대화가 있으면 서버에 저장(다음 답부터), 없으면 새 대화에 쓸 값으로. 고른 것은 기기가 기억한다 */
+  async function chooseModel(id: string) {
+    setModelMenuOpen(false);
+    setPendingModel(id);
+    writeLocal(MODEL_KEY, id);
+    if (!thread) return;
+    try {
+      const r = await api<{ thread: AskThread }>(`/ask/threads/${thread.id}`, { method: 'PUT', body: JSON.stringify({ model: id }) });
+      setThread(r.thread);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '모델을 바꾸지 못했습니다', 'error');
+    }
+  }
+
+  function toggleMyStuff() {
+    setMyStuff((v) => {
+      writeLocal(MY_STUFF_KEY, v ? '0' : '1');
+      return !v;
+    });
+  }
+
+  /** 제목 저장 (API-107). 직접 쓴 제목은 AI가 덮어쓰지 않는다 — AI는 버튼을 눌렀을 때만 입력창을 채운다 */
+  async function saveTitle() {
+    if (!renaming) return;
+    const title = renaming.draft.trim();
+    const { id } = renaming;
+    setRenaming(null);
+    if (!title) return;
+    try {
+      const r = await api<{ thread: AskThread }>(`/ask/threads/${id}`, { method: 'PUT', body: JSON.stringify({ title }) });
+      setHistory((h) => h.map((t) => (t.id === id ? r.thread : t)));
+      if (thread?.id === id) setThread(r.thread);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '제목을 바꾸지 못했습니다', 'error');
+    }
+  }
+
+  /** ✦ — AI가 지은 제목을 입력창에 채운다 (API-109). 저장은 사용자가 확인한 뒤 */
+  async function fillAiTitle() {
+    if (!renaming || titleBusy) return;
+    setTitleBusy(true);
+    try {
+      const r = await api<{ title: string }>(`/ask/threads/${renaming.id}/title`, { method: 'POST' });
+      setRenaming((cur) => (cur ? { ...cur, draft: r.title } : cur));
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '제목을 짓지 못했습니다', 'error');
+    } finally {
+      setTitleBusy(false);
+    }
+  }
+
+  const rowMenuItems = (t: AskThread): MenuItem[] => [
+    { label: '제목 바꾸기', action: () => setRenaming({ id: t.id, draft: t.title }) },
+    { label: '삭제', danger: true, action: () => void deleteThread(t.id) },
+  ];
 
   async function openHistory() {
     setShowHistory(true);
@@ -285,6 +409,15 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   }
 
   const limitReached = status !== null && status.remaining !== null && status.remaining <= 0;
+  const currentModelId = thread?.model ?? pendingModel ?? status?.defaultModel ?? null;
+  const currentModel = status?.models.find((m) => m.id === currentModelId) ?? null;
+  const modelName = (id: string | null | undefined) => status?.models.find((m) => m.id === id)?.name ?? (id ? id : 'Opus 5');
+  const threadKind = (t: AskThread) =>
+    t.fileId !== null || t.fileName ? (
+      <span className="inline-flex items-center gap-1"><Icon name="doc" size={11} />{t.fileName ?? '문서'}</span>
+    ) : (
+      <span className="inline-flex items-center gap-1"><Icon name="chat" size={11} />자유 대화</span>
+    );
   const notConfigured = status !== null && !status.configured;
   const canSend = !busy && !limitReached && !notConfigured && input.trim().length > 0;
   const hasAnswer = messages.some((m) => m.role === 'assistant' && typeof m.id === 'number' && m.id > 0);
@@ -293,28 +426,40 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
   const contextChip =
     thread?.quote || (seed && !seedUsedRef.current) ? (
       <div className="rounded-md border border-slate-800 border-l-2 border-l-amber-500 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-400">
-        <div className="mb-0.5 truncate text-slate-500">{thread?.fileName ?? file.name}</div>
+        <div className="mb-0.5 truncate text-slate-500">{thread?.fileName ?? file?.name}</div>
         <div className="line-clamp-3">“{thread?.quote ?? seed?.quote}”</div>
       </div>
     ) : null;
 
   const body = (
     <>
-      <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-        <h3 className="text-sm font-medium text-slate-200">질문</h3>
+      <div className="relative flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-slate-800 px-3 py-2 [&_button]:whitespace-nowrap">
+        {/* 레일 패널 안에서는 패널 머리가 이미 "대화"라고 적혀 있다 — 한 번 더 적으면 좁은 폭에서 자리만 먹는다 */}
+        {!inline && <h3 className="whitespace-nowrap text-sm font-medium text-slate-200">질문</h3>}
         {status && status.configured && (
-          <span className={`text-xs ${limitReached ? 'text-amber-400' : 'text-slate-600'}`}>
+          <span className={`whitespace-nowrap text-xs ${limitReached ? 'text-amber-400' : 'text-slate-600'}`}>
             오늘 {status.used}{status.limit !== null ? `/${status.limit}` : '번'}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {status?.configured && currentModel && !showHistory && (
+            // 모델 칩 — 셋 중 하나. 고른 모델은 대화에 저장되고 다음 답부터. 답마다 아래에 어느 모델인지 남는다
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setModelMenuOpen((v) => !v)}
+              title={`답변 모델: ${currentModel.label} (${currentModel.name}) — ${currentModel.note}`}
+              className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800"
+            >
+              <b className="font-semibold text-slate-100">{currentModel.name.split(' ')[0]}</b> ▾
+            </button>
+          )}
           {thread && !showHistory && hasAnswer && (
             <button
               onClick={() => setOutlineOpen(true)}
               title="이 대화 전체를 카드로 — 개념별로 나누거나 한 장으로"
-              className="rounded border border-teal-800 bg-teal-950/50 px-2 py-0.5 text-xs font-medium text-teal-200 hover:bg-teal-900"
+              className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-0.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
             >
-              카드로
+              <Icon name="cards" size={13} />카드로
             </button>
           )}
           <button onClick={() => void openHistory()} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
@@ -328,10 +473,30 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
           <button onClick={newThread} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
             새 대화
           </button>
-          <button onClick={onClose} title="닫기 (대화는 남아 있어요)" className="ml-1 px-1 text-slate-500 hover:text-slate-300">
-            ✕
-          </button>
+          {!inline && (
+            <button onClick={onClose} title="닫기 (대화는 남아 있어요)" className="ml-1 px-1 text-slate-500 hover:text-slate-300">
+              <Icon name="close" size={16} />
+            </button>
+          )}
         </div>
+        {modelMenuOpen && status && (
+          <div onPointerDown={(e) => e.stopPropagation()} className="absolute right-3 top-full z-20 mt-1 w-60 rounded-xl border border-slate-700 bg-slate-950 p-1.5 text-sm shadow-xl shadow-black/40">
+            {status.models.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => void chooseModel(m.id)}
+                className={`flex w-full flex-col rounded-lg px-2.5 py-2 text-left hover:bg-slate-800 ${m.id === currentModelId ? 'bg-sky-950/60' : ''}`}
+              >
+                <span className="flex items-center gap-1.5 font-semibold text-slate-100">
+                  {m.label}
+                  <span className="ml-auto text-[10px] font-medium text-slate-500">{m.name}</span>
+                </span>
+                <span className="text-[11px] text-slate-400">{m.note}</span>
+              </button>
+            ))}
+            <p className="border-t border-slate-800 px-2.5 pb-0.5 pt-1.5 text-[10px] text-slate-500">다음 답부터 적용 · 답마다 어느 모델인지 표시</p>
+          </div>
+        )}
       </div>
 
       {showHistory ? (
@@ -343,23 +508,56 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
           {history.length === 0 ? (
             <p className="px-2 py-4 text-xs text-slate-600">지난 대화가 없습니다</p>
           ) : (
-            history.map((t) => (
-              <div key={t.id} className="flex items-center rounded-md hover:bg-slate-900">
-                <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
-                  <div className="truncate text-sm text-slate-200">{t.title}</div>
-                  <div className="truncate text-xs text-slate-500">
-                    {t.fileName ?? '문서 없음'} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
-                  </div>
-                </button>
-                <button
-                  onClick={() => void deleteThread(t.id)}
-                  title="이 대화 지우기"
-                  className="h-11 w-11 shrink-0 text-slate-600 hover:text-red-300"
+            history.map((t) =>
+              renaming?.id === t.id ? (
+                // 제목 편집 — 그 자리에 입력창. 오른쪽 끝 ✦ = AI가 짓기(입력창만 채움), 확인 = 저장
+                <form
+                  key={t.id}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveTitle();
+                  }}
+                  className="flex items-center gap-1 rounded-md border border-slate-600 bg-slate-950 px-2 py-1"
                 >
-                  ✕
-                </button>
-              </div>
-            ))
+                  <input
+                    autoFocus
+                    value={renaming.draft}
+                    onChange={(e) => setRenaming({ id: t.id, draft: e.target.value.slice(0, 60) })}
+                    onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)}
+                    placeholder="대화 제목"
+                    className="min-w-0 flex-1 bg-transparent py-1 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none"
+                  />
+                  <button type="button" onClick={() => void fillAiTitle()} disabled={titleBusy} title="AI가 제목 짓기 — 대화 내용으로 8자 안팎" className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40">
+                    <Icon name="sparkle" size={16} className={titleBusy ? 'animate-pulse' : ''} />
+                  </button>
+                  <button type="submit" title="저장" className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
+                    <Icon name="check" size={16} />
+                  </button>
+                </form>
+              ) : (
+                <SwipeRow
+                  key={t.id}
+                  left={[{ label: '제목', onAction: () => setRenaming({ id: t.id, draft: t.title }) }]}
+                  right={[{ label: '삭제', danger: true, onAction: () => void deleteThread(t.id) }]}
+                >
+                  <div className="flex items-center rounded-md hover:bg-slate-900" onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) }); }}>
+                    <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
+                      <div className="truncate text-sm text-slate-200">{t.title}</div>
+                      <div className="truncate text-xs text-slate-500">
+                        {threadKind(t)} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) })}
+                      title="메뉴"
+                      className="h-11 w-9 shrink-0 text-slate-500 hover:text-slate-200"
+                    >
+                      <Icon name="more" size={16} className="mx-auto" />
+                    </button>
+                  </div>
+                </SwipeRow>
+              ),
+            )
           )}
         </div>
       ) : (
@@ -372,12 +570,29 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
           )}
           {messages.length === 0 && !notConfigured && (
             <p className="px-1 text-xs text-slate-600">
-              {seed
-                ? '아래 문장에 대해 물어보세요.'
-                : isPc
-                  ? '문서에서 문장을 드래그하면 그 부분이 문맥으로 붙어요. 그냥 물어봐도 됩니다.'
-                  : '시트를 내리고 문장을 길게 눌러 고른 뒤 [질문]을 누르면 그 문장이 붙어요. 그냥 물어봐도 됩니다.'}
+              {chatMode
+                ? '무엇이든 물어보세요. 공부든 아니든 괜찮아요. 답은 카드로 남길 수 있어요.'
+                : seed
+                  ? '아래 문장에 대해 물어보세요.'
+                  : isPc
+                    ? '문서에서 문장을 드래그하면 그 부분이 문맥으로 붙어요. 그냥 물어봐도 됩니다.'
+                    : '시트를 내리고 문장을 길게 눌러 고른 뒤 [질문]을 누르면 그 문장이 붙어요. 그냥 물어봐도 됩니다.'}
             </p>
+          )}
+          {chatMode && messages.length === 0 && !notConfigured && history.length > 0 && (
+            // 최근 대화가 먼저 — 문서에서 시작한 대화도 같은 대화라 섞어 보여 주고 표시만 다르다
+            <div className="rounded-lg border border-slate-800">
+              <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold tracking-wide text-slate-500">최근 대화</div>
+              {history.slice(0, RECENT_THREADS).map((t) => (
+                <button key={t.id} onClick={() => void loadThread(t.id)} className="flex w-full items-center gap-2 border-t border-slate-800 px-2.5 py-2 text-left hover:bg-slate-900">
+                  <span className="min-w-0 flex-1 truncate text-slate-200">{t.title}</span>
+                  <span className="shrink-0 text-[11px] text-slate-500">{threadKind(t)} · {new Date(t.updatedAt).toLocaleDateString()}</span>
+                </button>
+              ))}
+              {history.length > RECENT_THREADS && (
+                <button onClick={() => void openHistory()} className="w-full border-t border-slate-800 px-2.5 py-1.5 text-left text-xs text-slate-500 hover:text-slate-300">더 보기 → 지난 대화</button>
+              )}
+            </div>
           )}
           {messages.map((m) =>
             m.role === 'user' ? (
@@ -400,14 +615,14 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                     }}
                     title={picked.has(m.id) ? '고른 답에서 빼기' : '이 답 골라 담기 (여러 답을 한 카드로)'}
                     className={`absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-md border text-[11px] transition ${
-                      picked.has(m.id) ? 'border-teal-500 bg-teal-600 text-white' : `border-slate-600 text-transparent hover:border-slate-400 ${picking ? '' : 'opacity-40'}`
+                      picked.has(m.id) ? 'border-slate-300 bg-slate-200 text-slate-900' : `border-slate-600 text-transparent hover:border-slate-400 ${picking ? '' : 'opacity-40'}`
                     }`}
                   >
-                    ✓
+                    <Icon name="check" size={12} />
                   </button>
                 )}
                 {m.content === '' ? (
-                  <span className="text-slate-500">{searching ? '🌐 웹에서 찾는 중…' : '생각 중…'}</span>
+                  <span className="inline-flex items-center gap-1 text-slate-500">{searching ? <><Icon name="globe" size={13} />웹에서 찾는 중…</> : '생각 중…'}</span>
                 ) : MdRenderer ? (
                   <Suspense fallback={<span className="whitespace-pre-wrap">{m.content}</span>}>
                     <div className="ask-md">
@@ -420,26 +635,42 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                 {typeof m.id === 'number' && usedCards[m.id] && (
                   // 이 답이 어떤 카드를 읽고 답했는지 — 누르면 그 카드
                   <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
-                    📚 함께 본 카드:
+                    <Icon name="card" size={12} /> 함께 본 카드:
                     {usedCards[m.id]!.map((k) => (
                       <button
                         key={k.id}
                         onClick={() => onOpenFile?.(toTreeFile({ id: k.id, name: `${k.title}.md`, fileType: 'md', kind: 'card' }))}
-                        className="rounded border border-teal-800 bg-teal-950/40 px-1.5 py-0.5 text-teal-200 hover:bg-teal-900"
+                        className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-200 hover:bg-slate-800"
                       >
                         {k.title}
                       </button>
                     ))}
                   </div>
                 )}
+                {typeof m.id === 'number' && usedDocs[m.id] && (
+                  // 이 답이 어떤 내 문서 단락을 읽고 답했는지 — 누르면 그 문서
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                    <Icon name="doc" size={12} /> 함께 본 문서:
+                    {usedDocs[m.id]!.map((d) => (
+                      <button
+                        key={d.id}
+                        onClick={() => onOpenFile?.(toTreeFile({ id: d.id, name: d.name, fileType: d.fileType as TreeFile['fileType'] }))}
+                        className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-200 hover:bg-slate-800"
+                      >
+                        {d.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {m.id !== 'streaming' && (
-                  <div className="mt-1.5 flex gap-1 text-xs">
+                  // 좁은 드로어(288px)에서도 버튼 글자가 두 줄로 꺾이지 않게 — 줄이 모자라면 버튼째 다음 줄로
+                  <div className="mt-1.5 flex flex-wrap gap-1 text-xs [&_button]:whitespace-nowrap">
                     {thread && typeof m.id === 'number' && m.id > 0 && (
                       <button
                         onClick={() => setSave({ messageId: m.id as number })}
-                        className="rounded border border-teal-700 bg-teal-950/50 px-2 py-0.5 font-medium text-teal-200 hover:bg-teal-900"
+                        className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-0.5 font-medium text-slate-200 hover:bg-slate-800"
                       >
-                        📚 카드로 저장
+                        <Icon name="card" size={12} />카드로 저장
                       </button>
                     )}
                     <button
@@ -455,6 +686,10 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
                     >
                       더 쉽게
                     </button>
+                    {typeof m.id === 'number' && m.id > 0 && (
+                      // 어느 모델이 답했나 — 모델을 바꿔 가며 물을 때 나중에 봐도 안다
+                      <span className="ml-auto self-center whitespace-nowrap text-[10px] text-slate-600">{modelName(m.model)}</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -486,14 +721,28 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             </button>
           </div>
         )}
+        {chatMode && (
+          // "내 자료 참고" 스위치 — 켜면 이름이 걸린 내 카드 + 질문 낱말로 찾은 내 문서 단락을 함께 보낸다. 질문마다 바꿀 수 있다
+          <button
+            onClick={toggleMyStuff}
+            className="mb-1.5 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-xs text-slate-300 hover:bg-slate-900"
+            title={myStuff ? '끄면 질문과 대화 이력만 보냅니다 (순수 대화)' : '켜면 관련 카드·문서 단락을 함께 보냅니다'}
+          >
+            <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition ${myStuff ? 'bg-sky-600' : 'bg-slate-700'}`}>
+              <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition ${myStuff ? 'left-[15px]' : 'left-0.5'}`} />
+            </span>
+            <span className="whitespace-nowrap">내 자료 참고</span>
+            <span className="ml-auto min-w-0 truncate text-[11px] text-slate-500">{myStuff ? '관련 카드 · 문서 단락을 함께 보냄' : '끔 — 질문과 대화만 보냄'}</span>
+          </button>
+        )}
         {matchedCards.length > 0 && !busy && (
           // 무엇을 보내는지 모르게 하지 않는다 — 함께 갈 카드를 보여 주고 ✕로 뺄 수 있다
-          <div className="mb-1.5 flex flex-wrap items-center gap-1 rounded-md border border-teal-900 border-l-2 border-l-teal-500 bg-teal-950/30 px-2 py-1 text-[11px] text-slate-300">
-            📚 내 카드 {matchedCards.length}장 함께 보냄
+          <div className="mb-1.5 flex flex-wrap items-center gap-1 rounded-md border border-slate-800 border-l-2 border-l-slate-500 bg-slate-900 px-2 py-1 text-[11px] text-slate-300">
+            <Icon name="card" size={12} /> 내 카드 {matchedCards.length}장 함께 보냄
             {matchedCards.map((k) => (
               <span key={k.id} className="inline-flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-200">
                 {k.title}
-                <button onClick={() => setExcluded((p) => new Set(p).add(k.id))} title="이번 질문에서 빼기" className="px-0.5 text-slate-500 hover:text-red-300">✕</button>
+                <button onClick={() => setExcluded((p) => new Set(p).add(k.id))} title="이번 질문에서 빼기" className="px-0.5 text-slate-500 hover:text-red-300"><Icon name="close" size={10} /></button>
               </span>
             ))}
           </div>
@@ -501,7 +750,7 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
         {pendingQuote && (
           <div className="mb-1.5 flex items-start gap-1 rounded-md border border-slate-800 border-l-2 border-l-amber-500 bg-slate-900 px-2 py-1 text-xs text-slate-400">
             <span className="line-clamp-2 flex-1">“{pendingQuote}”</span>
-            <button onClick={onConsumePendingQuote} className="text-slate-500 hover:text-slate-300" title="인용 빼기">✕</button>
+            <button onClick={onConsumePendingQuote} className="text-slate-500 hover:text-slate-300" title="인용 빼기"><Icon name="close" size={12} /></button>
           </div>
         )}
         {messages.length === 0 && !notConfigured && !limitReached && ((seed && !seedUsedRef.current) || pendingQuote) && (
@@ -538,8 +787,8 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
               limitReached
                 ? '오늘 질문을 다 썼어요 — 읽기는 계속 됩니다'
                 : isPc
-                  ? '꼬리질문… (Enter 보내기 · Shift+Enter 줄바꿈)'
-                  : '질문을 입력하세요'
+                  ? `${messages.length ? '꼬리질문' : chatMode ? '무엇이든 물어보세요' : '질문'}… (Enter 보내기 · Shift+Enter 줄바꿈)`
+                  : messages.length ? '꼬리질문…' : chatMode ? '무엇이든 물어보세요' : '질문을 입력하세요'
             }
             className="min-h-[44px] flex-1 resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-600 focus:outline-none disabled:opacity-50"
           />
@@ -547,23 +796,30 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
             <button
               onClick={() => abortRef.current?.abort()}
               title="답변 중단"
-              className="h-11 w-11 shrink-0 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
             >
-              ■
+              <Icon name="stop" size={16} />
             </button>
           ) : (
             <button
               onClick={() => void send(input)}
               disabled={!canSend}
               title="보내기 (Enter)"
-              className="h-11 w-11 shrink-0 rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40"
             >
-              ➤
+              <Icon name="send" size={18} />
             </button>
           )}
         </div>
-        <p className="mt-1 text-[11px] text-slate-600">문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 LLM에 보냅니다</p>
+        <p className="mt-1 text-[11px] text-slate-600">
+          {chatMode
+            ? myStuff
+              ? '내 카드 최대 3장과 내 문서에서 찾은 단락 최대 3개를 함께 보냅니다. 문서 전체는 가지 않습니다'
+              : '내 자료 없이 답합니다. 카드·문서를 함께 보내려면 스위치를 켜세요'
+            : '문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 LLM에 보냅니다'}
+        </p>
       </div>
+      {rowMenu && <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} onClose={() => setRowMenu(null)} />}
       {save && thread && (
         <CardSaveDialog
           threadId={thread.id}
@@ -596,6 +852,10 @@ export default function AskPanel({ file, seed, pendingQuote, onConsumePendingQuo
     </>
   );
 
+  if (inline) {
+    // 레일 패널 안 — 폭·위치는 부모(Workspace의 aside)가 정한다 (SCR-187)
+    return <div className="flex min-h-0 flex-1 flex-col">{body}</div>;
+  }
   if (isPc) {
     // 버전 기록 패널과 같은 자리·같은 폭 (IA — SCR-180)
     return <aside className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-950">{body}</aside>;

@@ -38,7 +38,8 @@ export default function BootTimingTable() {
                 <th className="px-1 text-right font-normal">대기</th>
                 <th className="px-1 text-right font-normal">응답</th>
                 <th className="px-1 text-right font-normal">받기</th>
-                <th className="pl-1 text-right font-normal">그 뒤</th>
+                <th className="px-1 text-right font-normal">그 뒤</th>
+                <th className="pl-1 text-right font-normal">크기</th>
               </tr>
             </thead>
             <tbody className="tabular-nums whitespace-nowrap">
@@ -51,7 +52,8 @@ export default function BootTimingTable() {
                     {r.serverMs !== null && <span className="text-slate-600"> (서버 {r.serverMs})</span>}
                   </td>
                   <td className="px-1 py-0.5 text-right text-slate-300">{r.downloadMs.toLocaleString()}</td>
-                  <td className="py-0.5 pl-1 text-right text-slate-300">{r.afterMs === null ? '–' : r.afterMs.toLocaleString()}</td>
+                  <td className="px-1 py-0.5 text-right text-slate-300">{r.afterMs === null ? '–' : r.afterMs.toLocaleString()}</td>
+                  <td className="py-0.5 pl-1 text-right text-slate-300">{r.bytes === 0 ? '캐시' : `${(r.bytes / 1024).toFixed(r.bytes < 10240 ? 1 : 0)}K`}</td>
                 </tr>
               ))}
             </tbody>
@@ -59,7 +61,7 @@ export default function BootTimingTable() {
         </>
       )}
       <p className="mt-1.5 text-[10px] text-slate-600">
-        새로고침하면 다시 잽니다. 서버 첫 응답이 크면 서버가 잠에서 깨는 시간, 다운로드가 크면 앱 파일 크기입니다. 요청별 표는 전부 ms — 대기=보내기 전, 응답=답을 기다린 시간(괄호는 그중 서버가 일한 시간), 받기=다운로드, 그 뒤=받고 나서 화면까지.
+        새로고침하면 다시 잽니다. 서버 첫 응답이 크면 서버가 잠에서 깨는 시간, 다운로드가 크면 앱 파일 크기입니다. 요청별 표는 전부 ms — 대기=보내기 전, 응답=답을 기다린 시간(괄호는 그중 서버가 일한 시간), 받기=다운로드, 그 뒤=받고 나서 화면까지, 크기=회선으로 받은 양(압축 후, KB).
         응답이 큰데 괄호의 서버가 작으면 폰과 서버 사이 회선이, "그 뒤"가 크면 폰이 바빠서 응답을 못 챙긴 시간입니다. 서버가 0.5초 넘게 일한 요청은 서버 로그에 [slow]로 부분별 시간이 찍힙니다
       </p>
     </div>

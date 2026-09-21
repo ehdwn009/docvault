@@ -28,6 +28,7 @@ import {
   type Tag,
   type Tree,
   type TreeFile,
+  type TreeWire,
   type User,
   type UserSettings,
 } from '../lib/api';
@@ -42,9 +43,12 @@ import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
 import SharedPanel from './panels/SharedPanel';
+import AskPanel from '../components/AskPanel';
+import Icon, { type IconName } from '../components/Icon';
+import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'settings' | 'admin';
+type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
@@ -52,6 +56,7 @@ const PANEL_TITLE: Record<Panel, string> = {
   favorites: '즐겨찾기',
   shared: '공유 파일',
   cards: '배움 카드',
+  chat: '대화',
   settings: '설정',
   admin: '관리자',
 };
@@ -141,6 +146,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagFilter, setTagFilter] = useState<number | null>(null);
   const [tagEditorFile, setTagEditorFile] = useState<TreeFile | null>(null);
+  // 속성창(SCR-113) — 파일 하나 또는 폴더 하나
+  const [propsTarget, setPropsTarget] = useState<PropertiesTarget | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false); // 활성 레일 버튼 재클릭 시 패널 접기 (PC 전용)
@@ -167,7 +174,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const dirtyMapRef = useRef(new Map<number, boolean>());
 
   const loadTree = useCallback(async (): Promise<Tree | null> => {
-    const t = await api<Tree>('/tree').catch(() => null);
+    const raw = await api<TreeWire>('/tree').catch(() => null);
+    // 서버는 응답을 줄이려고 기본값 state·빈 tags를 빼고 보낸다 (API-021) — 여기서 한 번 채워 앱 안에서는 늘 있는 걸로 본다
+    const t: Tree | null = raw ? { folders: raw.folders, files: raw.files.map((f) => toTreeFile(f)) } : null;
     if (t) {
       setTree(t);
       treeRef.current = t;
@@ -1023,6 +1032,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       moveMany(ids, folderId);
     },
     editTags: setTagEditorFile,
+    showFileInfo: (file) => setPropsTarget({ kind: 'file', file }),
+    showFolderInfo: (folder) => setPropsTarget({ kind: 'folder', folder }),
     shareFile: (file) =>
       void guard(() =>
         api(`/files/${file.id}/share`, {
@@ -1053,6 +1064,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           label: file.state.isFavorite === 1 ? '즐겨찾기 해제' : '즐겨찾기',
           onAction: () => toggleFavorite(file),
         },
+        { label: '속성', onAction: () => actions.showFileInfo(file) },
         ...(user.role === 'admin'
           ? [
               {
@@ -1161,20 +1173,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     [tree.folders],
   );
 
-  // 레일 아이콘 — 이모지는 OS마다 모양·굵기가 달라 한 줄에 놓으면 들쭉날쭉하다. 같은 선 굵기(1.8)의 SVG로 통일
-  const railIcon = (paths: string) => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {paths.split('|').map((d, i) => <path key={i} d={d} />)}
-    </svg>
-  );
-  const RAIL_ICONS: Record<Panel, string> = {
-    files: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z|M14 3v6h6|M9 13h6|M9 17h6',
-    favorites: 'M12 3l2.8 6 6.2.7-4.6 4.3 1.3 6.3L12 17l-5.7 3.3 1.3-6.3L3 9.7 9.2 9z',
-    shared: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M8 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M2 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1|M16 16h1a4 4 0 0 1 4 4v1',
-    cards: 'M6 3h12v18l-6-4-6 4z',
-    settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
-    admin: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
-  };
+  // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
+  const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', settings: 'settings', admin: 'admin' };
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
@@ -1192,7 +1192,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           : 'text-slate-500 hover:text-slate-200'
       }`}
     >
-      {railIcon(RAIL_ICONS[target])}
+      <Icon name={RAIL_ICONS[target]} />
     </button>
   );
 
@@ -1221,26 +1221,29 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           drawerOpen ? '' : 'touch:-translate-x-full'
         } ${immersive ? 'hidden' : ''}`}
       >
-      {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA) */}
+      {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃) */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
         {railButton('shared', '공유 파일')}
         {railButton('cards', '배움 카드')}
+        {railButton('chat', '대화')}
+        <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
         {railButton('settings', '설정')}
         {user.role === 'admin' && railButton('admin', '관리자')}
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
-          className="mt-auto flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
         >
-          {railIcon('M18.4 6.6a9 9 0 1 1-12.8 0|M12 2v10')}
+          <Icon name="logout" />
         </button>
       </div>
 
       {/* 접힘은 PC 전용 — 터치 드로어에서는 패널이 곧 내비게이션이라 항상 펼친다 */}
       <aside
-        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 ${panelCollapsed ? 'pc:hidden' : ''}`}
+        // 대화 패널만 PC에서 넓다(문서 질문 패널과 같은 384px) — 답이 길어 288px에서는 읽기 답답하다 (SCR-187)
+        className={`flex shrink-0 flex-col border-r border-slate-800 ${panel === 'chat' ? 'w-72 pc:w-96' : 'w-72'} ${panelCollapsed ? 'pc:hidden' : ''}`}
       >
         <div className="flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
@@ -1467,6 +1470,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         )}
 
+        {panel === 'chat' && (
+          // SCR-187: 대화 — 문서 없이 시작하는 챗봇. 패널을 떠나도 언마운트하지 않아야 대화가 살지만,
+          // 서버에 자동 저장되므로 다시 열면 "최근 대화"에서 이어 간다 (첫 판은 단순하게)
+          <AskPanel file={null} inline seed={null} pendingQuote={null} onConsumePendingQuote={() => {}} onOpenFile={(f) => void selectFile(f)} isPc={!IS_TOUCH} onClose={() => setPanelCollapsed(true)} />
+        )}
         {panel === 'settings' && (
           <SettingsPanel
             settings={settings}
@@ -1534,6 +1542,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
                 onOpenSource={(tid) => void openSource(tid)}
                 onOpenCard={(title) => void openCardByTitle(title)}
+                onShowProperties={() => setPropsTarget({ kind: 'file', file: f })}
                 terms={terms}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
               />
@@ -1618,6 +1627,26 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         />
       )}
 
+      {propsTarget && (
+        <PropertiesDialog
+          target={propsTarget}
+          tags={tags}
+          isPc={!IS_TOUCH}
+          onClose={() => setPropsTarget(null)}
+          onRename={(name) => {
+            if (propsTarget.kind === 'file') actions.renameFile(propsTarget.file.id, name);
+            else actions.renameFolder(propsTarget.folder.id, name);
+            setPropsTarget(null);
+          }}
+          onGoFolder={(folderId) => {
+            // 위치 클릭 = 그 폴더를 트리에서 고른다 (업로드·새 폴더의 대상이 되는 그 선택)
+            setPropsTarget(null);
+            setPanel('files');
+            setPanelCollapsed(false);
+            setSelectedFolder(folderId);
+          }}
+        />
+      )}
       {tagEditorFile && (
         <TagEditor
           file={tagEditorFile}

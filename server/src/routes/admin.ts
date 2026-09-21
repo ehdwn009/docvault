@@ -3,7 +3,7 @@ import { desc, eq, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
-import { ASK, BCRYPT_ROUNDS, PASSWORD_MIN_LENGTH } from '../constants.js';
+import { ASK, ASK_LEGACY_MODEL, ASK_MODELS, BCRYPT_ROUNDS, PASSWORD_MIN_LENGTH } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, folders, users } from '../db/schema.js';
 import { fail } from '../lib/errors.js';
@@ -65,7 +65,13 @@ export const adminRoutes = new Hono<AppEnv>()
     type Row = {
       id: number; username: string; display_name: string | null;
       today: number; week: number; month: number;
-      input_tokens: number; output_tokens: number; web_searches: number;
+      input_tokens: number; output_tokens: number; web_searches: number; token_cost: number;
+    };
+    // 모델별 단가 — 답마다 적힌 model로 CASE. 모델 칸이 없는 옛 답은 전부 Opus였다 (ASK_LEGACY_MODEL)
+    const legacy = ASK_MODELS.find((m) => m.id === ASK_LEGACY_MODEL)!;
+    const priceCase = (col: 'input' | 'output') => {
+      const branches = ASK_MODELS.map((m) => sql`WHEN ${m.id} THEN ${col === 'input' ? m.inputPerMtok : m.outputPerMtok}`);
+      return sql`(CASE m.model ${sql.join(branches, sql` `)} ELSE ${col === 'input' ? legacy.inputPerMtok : legacy.outputPerMtok} END)`;
     };
     // 질문 수는 user 행, 토큰·검색은 assistant 행에만 있다 — 한 조인으로 둘 다 센다
     const rows = db.all<Row>(sql`
@@ -75,19 +81,18 @@ export const adminRoutes = new Hono<AppEnv>()
         sum(CASE WHEN m.role = 'user' AND m.created_at >= ${monthStart} THEN 1 ELSE 0 END) AS month,
         coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.input_tokens END), 0) AS input_tokens,
         coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.output_tokens END), 0) AS output_tokens,
-        coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.web_searches END), 0) AS web_searches
+        coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN m.web_searches END), 0) AS web_searches,
+        coalesce(sum(CASE WHEN m.created_at >= ${monthStart} THEN
+          (m.input_tokens / 1000000.0) * ${priceCase('input')} + (m.output_tokens / 1000000.0) * ${priceCase('output')} END), 0) AS token_cost
       FROM users u
       LEFT JOIN ask_threads t ON t.owner_id = u.id
       LEFT JOIN ask_messages m ON m.thread_id = t.id
       GROUP BY u.id ORDER BY month DESC, u.id`);
-    const p = ASK.PRICE_USD;
-    const cost = (r: Pick<Row, 'input_tokens' | 'output_tokens' | 'web_searches'>) =>
-      (r.input_tokens / 1e6) * p.INPUT_PER_MTOK + (r.output_tokens / 1e6) * p.OUTPUT_PER_MTOK + (r.web_searches / 1000) * p.SEARCH_PER_1000;
     const usersOut = rows.map((r) => ({
       id: r.id, username: r.username, displayName: r.display_name,
       today: r.today, week: r.week, month: r.month,
       inputTokens: r.input_tokens, outputTokens: r.output_tokens, webSearches: r.web_searches,
-      costUsd: cost(r),
+      costUsd: r.token_cost + (r.web_searches / 1000) * ASK.SEARCH_PER_1000_USD,
     }));
     const totals = usersOut.reduce(
       (a, u) => ({
@@ -108,7 +113,11 @@ export const adminRoutes = new Hono<AppEnv>()
       users: usersOut,
       totals,
       topFiles: topFiles.map((r) => ({ fileName: r.file_name, count: r.n })),
-      pricing: { ...p, krwPerUsd: ASK.KRW_PER_USD },
+      pricing: {
+        models: ASK_MODELS.map((m) => ({ id: m.id, name: m.name, inputPerMtok: m.inputPerMtok, outputPerMtok: m.outputPerMtok })),
+        searchPer1000: ASK.SEARCH_PER_1000_USD,
+        krwPerUsd: ASK.KRW_PER_USD,
+      },
     });
   })
 
