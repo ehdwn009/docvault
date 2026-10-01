@@ -76,8 +76,37 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
       related: [],
     });
   }
-  // 출처 하나가 후보를 독차지하지 않게 — 최신순으로 상한까지
-  return out.sort((a, b) => b.publishedAt - a.publishedAt).slice(0, BRIEFING.MAX_PER_SOURCE);
+  // 출처 하나가 후보를 독차지하지 않게 — 상한까지, 범위 전체에서 고르게
+  return spreadPick(out, BRIEFING.MAX_PER_SOURCE, since, until);
+}
+
+/**
+ * 상한까지 자르되 범위 전체에서 고르게 남긴다 — 범위를 SPREAD_SLOTS칸으로 나눠 칸마다 최신 것부터 한 건씩 돌아가며.
+ * 최신순으로 잘랐더니 24시간판의 137건이 전부 마지막 90분 기사였다 (설계 "① 수집", 사용성 평가 2026-10-01).
+ * 기사가 적은 칸은 금방 바닥나고 남은 몫은 기사가 많은 칸이 가져간다 — 실제 뉴스 흐름의 굴곡은 남는다
+ */
+export function spreadPick<T extends { publishedAt: number }>(list: T[], max: number, since: number, until: number): T[] {
+  const newest = [...list].sort((a, b) => b.publishedAt - a.publishedAt);
+  if (newest.length <= max) return newest;
+  const width = Math.max(1, (until - since) / BRIEFING.SPREAD_SLOTS);
+  const slots: T[][] = Array.from({ length: BRIEFING.SPREAD_SLOTS }, () => []);
+  for (const it of newest) {
+    const i = Math.min(BRIEFING.SPREAD_SLOTS - 1, Math.max(0, Math.floor((until - it.publishedAt) / width)));
+    slots[i]!.push(it); // 0번 칸이 가장 최근
+  }
+  const out: T[] = [];
+  for (let round = 0; out.length < max; round++) {
+    let took = false;
+    for (const slot of slots) {
+      const it = slot[round];
+      if (!it) continue;
+      out.push(it);
+      took = true;
+      if (out.length >= max) break;
+    }
+    if (!took) break;
+  }
+  return out.sort((a, b) => b.publishedAt - a.publishedAt);
 }
 
 /** 같은 제목은 하나로 — 분야를 아는 쪽(검색), 긴 발췌를 남기고 나머지는 related로 */
@@ -97,7 +126,8 @@ export function dedupe(list: Candidate[]): Candidate[] {
     }
     prev.sub ??= c.sub;
     if (c.snippet.length > prev.snippet.length) prev.snippet = c.snippet;
-    if (!prev.related.some((r) => r.url === c.url)) prev.related.push({ source: c.source, url: c.url });
+    // 같은 언론사의 같은 기사(피드·검색 양쪽에서 온 것)는 "다른 보도"가 아니다
+    if (c.source !== prev.source && !prev.related.some((r) => r.url === c.url)) prev.related.push({ source: c.source, url: c.url });
   }
   return [...byKey.values()];
 }
@@ -123,8 +153,6 @@ export async function collect(
     if (r.ok) all.push(...r.value);
     else failed.push({ name: sources[i]?.name ?? '?', reason: errorText(r.error) });
   });
-  const candidates = dedupe(all)
-    .sort((a, b) => b.publishedAt - a.publishedAt)
-    .slice(0, BRIEFING.MAX_CANDIDATES);
+  const candidates = spreadPick(dedupe(all), BRIEFING.MAX_CANDIDATES, opts.since, opts.until);
   return { candidates, sourceCount: sources.length, failed };
 }

@@ -1,14 +1,15 @@
 import { z } from 'zod/v4';
 import { BRIEFING } from '../../constants.js';
 import { callAndCount, SYSTEM_BASE, type AiCaller, type Usage } from './ai.js';
-import { isAggregator, type Candidate } from './collect.js';
+import { isAggregator, spreadPick, type Candidate } from './collect.js';
+import { NO_META_RULE, stripMeta } from './clean.js';
 import { errorText, mapLimit } from './limit.js';
 import { subPath, type BriefingSub } from './taxonomy.js';
 
 // ③ 선별 (Haiku) — 세부 분야마다 한 번: 같은 사건 묶기 · 중요도 · new/updated · 분야당 상한.
 // 참고(1) 기사는 여기서 제목·요약·의미까지 쓴다 — 참고 기사에 Sonnet을 쓰지 않는 것이 비용 설계의 핵심 (설계 "③ 선별")
 
-/** 한 분야에 한 번에 보여 주는 후보 상한 — 검색 하나가 100건을 가져와도 최신 것부터 이만큼 */
+/** 한 분야에 한 번에 보여 주는 후보 상한 — 검색 하나가 100건을 가져와도 범위 전체에서 고르게 이만큼 */
 const MAX_INPUT_PER_SUB = 60;
 
 export type PrevStory = { storyId: string; title: string };
@@ -46,8 +47,8 @@ const IMPORTANCE_RULES = [
   '- 1 참고: 관심 있으면 볼 뉴스, 개별 기업·지역 소식',
 ].join('\n');
 
-async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[], ai: AiCaller, usage: Usage, signal?: AbortSignal): Promise<Picked[]> {
-  const input = [...cands].sort((a, b) => b.publishedAt - a.publishedAt).slice(0, MAX_INPUT_PER_SUB);
+async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[], range: { since: number; until: number }, ai: AiCaller, usage: Usage, signal?: AbortSignal): Promise<Picked[]> {
+  const input = spreadPick(cands, MAX_INPUT_PER_SUB, range.since, range.until);
   const max = sub.wide ? BRIEFING.MAX_ITEMS_WIDE : BRIEFING.MAX_ITEMS_NARROW;
   const lines = input.map((c, i) => `${i + 1}. (${c.source}) ${c.title}${c.snippet ? ` — ${c.snippet}` : ' (발췌 없음 — 제목뿐)'}`).join('\n');
   const prevLines = prev.length ? prev.map((p) => `${p.storyId}: ${p.title}`).join('\n') : '(없음)';
@@ -61,6 +62,7 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
       '- 직전 회차에 같은 이슈가 있었으면 prevStoryId에 그 id를 적는다(새 국면이 있을 때만 고른다).',
       '- 참고(1) 이슈만 title·summary·why를 한국어로 새로 쓴다. 해외 기사도 한국어로.',
       '- 발췌 없이 제목뿐인 기사는 summary를 제목을 풀어 쓴 한 문장으로만 쓰고 사실을 덧붙이지 않는다. why는 주어진 글에서 근거를 댈 수 있을 때만 쓰고, 일반론이면 빈 문자열.',
+      NO_META_RULE,
       IMPORTANCE_RULES,
       `\n직전 회차의 이 분야 이슈:\n${prevLines}`,
       `\n<기사>\n${lines}\n</기사>`,
@@ -86,6 +88,9 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
       }
     }
     const importance = Math.min(3, Math.max(1, Math.round(s.importance))) as 1 | 2 | 3;
+    const briefSummary = stripMeta(s.summary);
+    // 참고 기사인데 요약이 없으면 싣지 않는다 — 원문 제목(영어 그대로일 때도)만 덩그러니 실리던 것 (사용성 평가 2026-10-01)
+    if (importance === 1 && !briefSummary) continue;
     // 발췌가 있고 포털 재게재 주소가 아닌 기사를 대표로 — 요약의 근거와 화면의 출처가 둘 다 나아진다 (설계 "③-1 근거 보강")
     const pool = [main, ...related];
     const score = (c: Candidate) => (c.snippet ? 2 : 0) + (isAggregator(c.source) ? 0 : 1);
@@ -96,8 +101,8 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
       related: pool.filter((c) => c !== lead),
       importance,
       prevStoryId: s.prevStoryId && prevIds.has(s.prevStoryId) ? s.prevStoryId : null,
-      // 참고인데 글을 안 썼으면 원문 제목으로라도 싣는다 — 요약 칸은 비워 둔다
-      brief: importance === 1 ? { title: s.title.trim() || main.title, summary: s.summary.trim(), why: s.why.trim() } : null,
+      // 참고인데 제목을 안 썼으면 원문 제목으로 싣는다. 의미에 작업 사정이 섞였으면 통째로 비운다
+      brief: importance === 1 ? { title: s.title.trim() || main.title, summary: briefSummary, why: stripMeta(s.why) === s.why.trim() ? s.why.trim() : '' } : null,
     });
     if (picked.length >= max) break;
   }
@@ -109,13 +114,13 @@ export async function select(
   prevBySub: Map<string, PrevStory[]>,
   ai: AiCaller,
   usage: Usage,
-  opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+  opts: { since: number; until: number; signal?: AbortSignal; onProgress?: (done: number, total: number) => void },
 ): Promise<Picked[]> {
   const entries = [...bySub.entries()].filter(([, list]) => list.length > 0);
   let done = 0;
   opts.onProgress?.(0, entries.length);
   const results = await mapLimit(entries, BRIEFING.SELECT_CONCURRENCY, async ([sub, list]) => {
-    const r = await selectOne(sub, list, prevBySub.get(sub.id) ?? [], ai, usage, opts.signal);
+    const r = await selectOne(sub, list, prevBySub.get(sub.id) ?? [], opts, ai, usage, opts.signal);
     opts.onProgress?.(++done, entries.length);
     return r;
   });

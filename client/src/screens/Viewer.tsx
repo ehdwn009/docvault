@@ -370,6 +370,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     if (!data || !freshState || mode !== 'view' || data.fileType === 'html') return;
     if (data.fileType === 'pdf' && !pdfReady) return; // 페이지 자리가 잡히면 pdfReady가 다시 불러 준다
     if (jumpLines || jumpQuote) return; // 줄 앵커·출처 문장으로 열렸으면 렌더러가 그리로 데려간다 — 읽던 위치 복원과 겹치지 않게
+    // 브리핑 회차는 늘 맨 위(오늘의 핵심)에서 연다 — 비율로 저장된 위치가 기기·탭·펼침에 따라 목록 중간이나
+    // "이번 브리핑 끝"에 떨어뜨렸다. 이어 읽기는 회차 화면의 [이어 읽기]가 읽음 기록으로 한다 (설계 SCR-191 9)
+    if (isBriefing && !showAsCode) return;
     const pos = freshState.readingPosition;
     const el = scrollRef.current;
     if (!pos || !el) return;
@@ -476,9 +479,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       // 비율은 html이면 심이 재서 주고(ratioOverride), 아니면 여기서 계산한다
       const ratio =
         ratioOverride ?? (denom !== null && denom > 0 ? Math.min(1, Math.max(0, y / denom)) : null);
-      saveOffset(y, ratio);
+      if (!isBriefing) saveOffset(y, ratio); // 브리핑은 위치를 복원하지 않으니 저장도 하지 않는다
     },
-    [saveOffset],
+    [saveOffset, isBriefing],
   );
 
   function handleScroll() {

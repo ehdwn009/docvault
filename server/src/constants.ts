@@ -221,6 +221,9 @@ export const BRIEFING = {
   /** 후보 상한 — 이것이 곧 비용 상한이다 */
   MAX_CANDIDATES: 600,
   MAX_PER_SOURCE: 40,
+  /** 상한으로 자를 때 범위를 이만큼의 칸으로 나눠 칸마다 고르게 남긴다 (24시간이면 2시간씩).
+      최신순으로 자르면 24시간판에 마지막 90분 기사만 남았다 (설계 "① 수집") */
+  SPREAD_SLOTS: 12,
   /** 분야당 최대 기사 수 — 경제·IT·테크 계열(wide)과 나머지 (기획서 5~7 / 3~5의 상한) */
   MAX_ITEMS_WIDE: 7,
   MAX_ITEMS_NARROW: 5,
@@ -268,6 +271,8 @@ export const BRIEFING = {
   SOURCES_FILE_NAME: '수집 목록.json',
   /** 오늘의 핵심 기사 수 — 한 화면 안에서 1분에 훑는 양 (v0.43) */
   LEAD_COUNT: 6,
+  /** 오늘의 핵심 중 세계 몫 — 세계 핵심이 있으면 최소 이만큼 (영어 기사는 다른 보도가 거의 안 묶여 언론사 수로만 겨루면 밀린다) */
+  LEAD_WORLD_MIN: 2,
   /** 회차 하나에서 기억하는 읽은 기사 id 상한, 한 번에 보내는 상한, id 길이 상한 (API-073 markRead) */
   READ_ITEMS_MAX: 1000,
   MARK_READ_BATCH_MAX: 200,

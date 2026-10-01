@@ -6,6 +6,7 @@ import {
   kstTime,
   leadIdsOf,
   longDate,
+  outletsOf,
   parseEdition,
   SLOT_SHORT,
   slotName,
@@ -114,17 +115,18 @@ function badgeOf(importance: Importance, p: Palette): { label: string; className
 const BASIS_LABEL: Record<NonNullable<EditionItem['basis']>, string> = { body: '본문 앞부분 기준', lede: '발췌 기준', title: '제목 기준' };
 
 /** 기사 하나와 그 자리(국내/세계·분야) */
-type Located = { item: EditionItem; section: Section; category: string; sub: string };
+type Located = { item: EditionItem; section: Section; category: string; sub: string; subId: string };
 
 function locateAll(e: Edition): Map<string, Located> {
   const m = new Map<string, Located>();
-  for (const s of e.sections) for (const c of s.categories) for (const sub of c.subs) for (const item of sub.items) m.set(item.id, { item, section: s.section, category: c.name, sub: sub.name });
+  for (const s of e.sections) for (const c of s.categories) for (const sub of c.subs) for (const item of sub.items) m.set(item.id, { item, section: s.section, category: c.name, sub: sub.name, subId: sub.id });
   return m;
 }
 
 /** "증시 · 연합뉴스 외 3곳 · 15:40 · 갱신됨" — NEW는 거의 전부라 정보가 없어서 뺐다(설계) */
 function metaLine(l: Located): string {
-  const parts = [l.sub, l.item.related.length > 0 ? `${l.item.source} 외 ${l.item.related.length}곳` : l.item.source, kstTime(l.item.publishedAt, false)];
+  const more = outletsOf(l.item) - 1;
+  const parts = [l.sub, more > 0 ? `${l.item.source} 외 ${more}곳` : l.item.source, kstTime(l.item.publishedAt, false)];
   if (l.item.status === 'updated') parts.push('갱신됨');
   return parts.join(' · ');
 }
@@ -139,6 +141,11 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   const [refOpen, setRefOpen] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [read, setRead] = useState<Set<string>>(() => new Set());
+  /** 지난번에 마지막으로 읽은 기사 — [이어 읽기]가 데려갈 곳. 회차는 항상 맨 위에서 열린다 (설계 SCR-191 9) */
+  const [resumeId, setResumeId] = useState<string | null>(null);
+  /** 그림이 바뀐 뒤 해야 할 스크롤 — 탭을 바꾸면 목록 시작, 이어 읽기면 그 기사 */
+  const [pendingScroll, setPendingScroll] = useState<{ to: 'list' } | { to: 'item'; id: string } | null>(null);
+  const listTopRef = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState<EditionNav | null>(null);
   const [wide, setWide] = useState(false);
   const [activeCat, setActiveCat] = useState<string | null>(null);
@@ -156,10 +163,18 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     setRefOpen(new Set());
     setSelected(null);
     setRead(new Set());
+    setResumeId(null);
+    setPendingScroll(null);
     setNav(null);
     let alive = true;
     void api<{ state: { readItems?: string[] } }>(`/me/files/${fileId}/state`)
-      .then((r) => alive && setRead((prev) => new Set([...prev, ...(r.state.readItems ?? [])])))
+      .then((r) => {
+        if (!alive) return;
+        const items = r.state.readItems ?? [];
+        setRead((prev) => new Set([...prev, ...items]));
+        // 읽음 기록은 읽은 순서대로 쌓인다 — 마지막 것이 지난번에 멈춘 곳
+        setResumeId(items.at(-1) ?? null);
+      })
       .catch(() => {});
     void api<EditionNav>(`/briefing/editions/${fileId}/nav`)
       .then((r) => alive && setNav(r))
@@ -195,6 +210,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
 
   const markRead = useCallback(
     (id: string) => {
+      // 이번에 읽기 시작했으면 [이어 읽기]는 할 일을 다 했다
+      setResumeId(null);
       setRead((prev) => {
         if (prev.has(id)) return prev;
         pendingRead.current.add(id);
@@ -284,6 +301,19 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     return () => window.removeEventListener('keydown', handler);
   }, [isActive, wide, order, selected, located, markRead]);
 
+  useEffect(() => {
+    if (!pendingScroll) return;
+    if (pendingScroll.to === 'list') {
+      const anchor = listTopRef.current;
+      // 이미 목록 시작이 보이면(맨 위 근처) 움직이지 않는다
+      if (anchor && anchor.getBoundingClientRect().top < 0) anchor.scrollIntoView({ block: 'start' });
+    } else {
+      rowRefs.current.get(pendingScroll.id)?.scrollIntoView({ block: 'center' });
+      if (wide) setSelected(pendingScroll.id);
+    }
+    setPendingScroll(null);
+  }, [pendingScroll, wide]);
+
   if (!edition) {
     return (
       <div className="flex flex-col gap-3">
@@ -293,10 +323,25 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     );
   }
 
+  // 바꾼 쪽 목록의 첫 기사로 — 고정 막대로 스크롤하면 이미 화면 위에 붙어 있어 아무 일도 없었고,
+  // 반대쪽 목록의 같은 높이나 끝에 떨어졌다 (사용성 평가 2026-10-01). 막대 원래 자리의 표지로 간다
   const setTab = (s: Section) => {
     setTabState(s);
     writeTab(fileId, s);
-    stickyRef.current?.scrollIntoView({ block: 'start' });
+    setPendingScroll({ to: 'list' });
+  };
+  /** 이어 읽기 — 그 기사가 다른 탭이거나, 필터에 가렸거나, 접힌 참고면 보이게 바꾼 뒤 데려간다 */
+  const resume = (id: string) => {
+    const l = located.get(id);
+    setResumeId(null);
+    if (!l) return;
+    if (l.section !== tab) {
+      setTabState(l.section);
+      writeTab(fileId, l.section);
+    }
+    if ((filter === 'core' && l.item.importance < 3) || (filter === 'major' && l.item.importance < 2)) setFilter('all');
+    if (l.item.importance === 1) setRefOpen((prev) => new Set(prev).add(l.subId));
+    setPendingScroll({ to: 'item', id });
   };
   const setFilter = (f: Filter) => {
     setFilterState(f);
@@ -380,6 +425,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
 
   const list = (
     <>
+      {/* 터치는 위쪽 바(오버레이)가 가리지 않게 그 높이만큼 띄워 멈춘다 */}
+      <div ref={listTopRef} aria-hidden="true" className="touch:scroll-mt-14" />
       <nav ref={stickyRef} className={`sticky top-0 z-[2] -mx-1 flex items-center gap-2 border-b px-1 py-2 ${p.line} ${stickyBg}`}>
         <div className={`flex shrink-0 rounded-lg p-[3px] ${p.seg}`}>
           {(['국내', '세계'] as const).map((s) => (
@@ -500,6 +547,14 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
               </button>
             ))}
           </div>
+        )}
+        {resumeId && located.has(resumeId) && (
+          <button
+            onClick={() => resume(resumeId)}
+            className={`mx-auto flex h-9 items-center gap-1.5 rounded-full border px-4 text-[0.82em] font-semibold ${p.line} ${p.accent}`}
+          >
+            이어 읽기 <Icon name="chevron" size={14} className="rotate-90" />
+          </button>
         )}
       </header>
 

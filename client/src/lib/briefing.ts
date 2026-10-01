@@ -5,6 +5,8 @@
 export const BRIEFING_EDITION_VERSION = 1;
 /** 오늘의 핵심 기사 수 — 서버 BRIEFING.LEAD_COUNT와 같아야 한다 (옛 회차는 화면이 계산한다) */
 export const BRIEFING_LEAD_COUNT = 6;
+/** 오늘의 핵심 중 세계 몫 — 서버 BRIEFING.LEAD_WORLD_MIN과 같아야 한다 */
+export const BRIEFING_LEAD_WORLD_MIN = 2;
 /** 회차 화면에서 기사를 읽었다 — 패널이 듣고 읽음 상태를 다시 받는다 */
 export const BRIEFING_READ_EVENT = 'dv:briefing-read';
 /** 브리핑 폴더·수집 목록 문서 이름 — 서버 BRIEFING.FOLDER_NAME·SOURCES_FILE_NAME과 같아야 한다 */
@@ -29,6 +31,8 @@ export type EditionItem = {
   related: { source: string; url: string }[];
   /** 요약의 근거 — body(원문 앞부분) · lede(발췌) · title(제목뿐). 옛 회차에는 없다 */
   basis?: 'body' | 'lede' | 'title';
+  /** 이 사건을 다룬 서로 다른 언론사 수(대표 포함). 옛 회차에는 없다 — outletsOf로 센다 */
+  outlets?: number;
 };
 
 export type Edition = {
@@ -124,16 +128,27 @@ export function fileLabel(f: { name: string; kind?: string }): string {
   return f.kind === 'briefing' ? (briefingNameFromFile(f.name) ?? f.name) : f.name;
 }
 
-/** 오늘의 핵심 — 핵심(3) 기사를 다룬 언론사 수(대표 1 + 다른 보도) 많은 순, 같으면 최신순.
-    서버 leadIdsOf와 같은 규칙 — lead가 없는 옛 회차용 */
+/** 포털 재게재 주소 — 서버 collect.ts의 AGGREGATORS와 같아야 한다 */
+const AGGREGATORS = new Set(['v.daum.net', 'news.v.daum.net', 'n.news.naver.com', 'news.naver.com', 'm.news.naver.com']);
+
+/** 이 사건을 다룬 서로 다른 언론사 수(대표 포함). 옛 회차는 related에 같은 언론사가 겹쳐 있어 직접 센다 */
+export function outletsOf(it: EditionItem): number {
+  if (it.outlets !== undefined) return it.outlets;
+  const main = it.source.trim().toLowerCase();
+  return 1 + new Set((it.related ?? []).map((r) => r.source.trim().toLowerCase()).filter((s) => s !== main && !AGGREGATORS.has(s))).size;
+}
+
+/** 오늘의 핵심 — 서버 leadIdsOf와 같은 규칙(lead가 없는 옛 회차용): 핵심(3)을 언론사 수 많은 순, 같으면 최신순.
+    세계 핵심이 있으면 최소 BRIEFING_LEAD_WORLD_MIN자리는 세계에 */
 export function leadIdsOf(e: Edition): string[] {
   if (e.lead) return e.lead;
-  const top: EditionItem[] = [];
-  for (const s of e.sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push(it);
-  return top
-    .sort((a, b) => (b.related?.length ?? 0) - (a.related?.length ?? 0) || b.publishedAt - a.publishedAt)
-    .slice(0, BRIEFING_LEAD_COUNT)
-    .map((it) => it.id);
+  const top: { it: EditionItem; world: boolean }[] = [];
+  for (const s of e.sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push({ it, world: s.section === '세계' });
+  const ranked = top.sort((a, b) => outletsOf(b.it) - outletsOf(a.it) || b.it.publishedAt - a.it.publishedAt);
+  const world = ranked.filter((x) => x.world).slice(0, BRIEFING_LEAD_WORLD_MIN);
+  const rest = ranked.filter((x) => !world.includes(x)).slice(0, Math.max(0, BRIEFING_LEAD_COUNT - world.length));
+  const chosen = new Set([...world, ...rest]);
+  return ranked.filter((x) => chosen.has(x)).map((x) => x.it.id);
 }
 
 /** 한국시간 몇 시 */

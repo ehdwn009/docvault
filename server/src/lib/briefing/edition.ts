@@ -4,6 +4,7 @@ import { db } from '../../db/index.js';
 import { files } from '../../db/schema.js';
 import type { DbOrTx } from '../content.js';
 import { basisOf } from './body.js';
+import { isAggregator } from './collect.js';
 import { costOf, type Usage } from './ai.js';
 import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
@@ -30,6 +31,8 @@ export type EditionItem = {
   related: { source: string; url: string }[];
   /** 요약의 근거 — body(원문 앞부분) · lede(발췌) · title(제목뿐). v0.43부터, 옛 회차에는 없다 */
   basis?: 'body' | 'lede' | 'title';
+  /** 이 사건을 다룬 서로 다른 언론사 수(대표 포함, 상한 없음) — 오늘의 핵심 순위에 쓴다. v0.43부터, 없으면 related 수 + 1 */
+  outlets?: number;
 };
 
 export type Edition = {
@@ -81,6 +84,7 @@ export function assembleEdition(args: {
     const n = (counter.get(p.sub.id) ?? 0) + 1;
     counter.set(p.sub.id, n);
     const id = `${p.sub.id}.${String(n).padStart(3, '0')}`;
+    const others = otherOutlets(p);
     const item: EditionItem = {
       id,
       title: text.title,
@@ -94,9 +98,8 @@ export function assembleEdition(args: {
       storyId: p.prevStoryId ?? `${p.sub.id}.${date}.${args.slot}.${n}`,
       status: p.prevStoryId ? 'updated' : 'new',
       basis: basisOf(p, args.bodies.has(i)),
-      related: [...p.related.map((r) => ({ source: r.source, url: r.url })), ...p.main.related].filter(
-        (r, j, arr) => r.url !== p.main.url && arr.findIndex((x) => x.url === r.url) === j,
-      ).slice(0, BRIEFING.MAX_RELATED),
+      related: others.slice(0, BRIEFING.MAX_RELATED),
+      outlets: 1 + others.length,
     };
     bySub.set(p.sub.id, [...(bySub.get(p.sub.id) ?? []), item]);
   });
@@ -134,15 +137,35 @@ export function assembleEdition(args: {
   };
 }
 
-/** 오늘의 핵심 — 핵심(3) 기사를 다룬 언론사 수(대표 1 + 다른 보도) 많은 순, 같으면 최신순.
+/** 다른 보도 — 언론사마다 하나만. 대표 기사의 언론사와 포털 재게재 주소는 뺀다.
+    같은 언론사가 네 번 들어가 "외 5곳"이 실제 2곳이었고, 그 수로 오늘의 핵심 순위가 매겨졌다 (설계 "related", 사용성 평가 2026-10-01) */
+function otherOutlets(p: Picked): { source: string; url: string }[] {
+  const all = [...p.related.map((r) => ({ source: r.source, url: r.url })), ...p.related.flatMap((r) => r.related), ...p.main.related];
+  const seen = new Set([p.main.source.trim().toLowerCase()]);
+  const out: { source: string; url: string }[] = [];
+  for (const r of all) {
+    const key = r.source.trim().toLowerCase();
+    if (r.url === p.main.url || isAggregator(r.source) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
+/** 오늘의 핵심 — 핵심(3) 기사를 다룬 언론사 수 많은 순, 같으면 최신순. 세계 핵심이 있으면 최소 LEAD_WORLD_MIN자리는 세계에 —
+    영어 기사는 다른 보도가 거의 안 묶여 언론사 수로만 겨루면 구조적으로 밀린다(6건 모두 국내였다).
     AI를 부르지 않는다: 여러 언론이 다룬 사건일수록 큰 뉴스라는 신호다 (설계 "lead"). 클라이언트에도 같은 규칙이 있다(옛 회차용) */
 export function leadIdsOf(sections: Edition['sections']): string[] {
-  const top: EditionItem[] = [];
-  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push(it);
-  return top
-    .sort((a, b) => (b.related?.length ?? 0) - (a.related?.length ?? 0) || b.publishedAt - a.publishedAt)
-    .slice(0, BRIEFING.LEAD_COUNT)
-    .map((it) => it.id);
+  const top: { it: EditionItem; world: boolean }[] = [];
+  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push({ it, world: s.section === '세계' });
+  // 옛 회차(outlets 없음)는 related에서 서로 다른 언론사만 센다 — 옛 related에는 같은 언론사가 겹쳐 있다
+  const outlets = (it: EditionItem) =>
+    it.outlets ?? 1 + new Set((it.related ?? []).map((r) => r.source.trim().toLowerCase()).filter((src) => src !== it.source.trim().toLowerCase() && !isAggregator(src))).size;
+  const ranked = top.sort((a, b) => outlets(b.it) - outlets(a.it) || b.it.publishedAt - a.it.publishedAt);
+  const world = ranked.filter((x) => x.world).slice(0, BRIEFING.LEAD_WORLD_MIN);
+  const rest = ranked.filter((x) => !world.includes(x)).slice(0, Math.max(0, BRIEFING.LEAD_COUNT - world.length));
+  const chosen = new Set([...world, ...rest]);
+  return ranked.filter((x) => chosen.has(x)).map((x) => x.it.id);
 }
 
 /** 직전 회차에서 다음 회차가 쓰는 것 — 분야별 이슈 목록(updated 판정)과 이미 실린 링크(중복 제외).
