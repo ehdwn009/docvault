@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AskPanel, { type AskSeed } from '../components/AskPanel';
 import BriefingView from '../components/BriefingView';
+import Icon from '../components/Icon';
 import CardView from '../components/CardView';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
@@ -41,6 +42,9 @@ type Props = {
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
   onSwapBriefing?: (fileId: number) => void;
+  /** 막 만든 새 문서 — 본문이 오면 곧바로 편집 화면으로 */
+  startEditing?: boolean;
+  onEditStarted?: () => void;
   /** 카드 출처로 열렸을 때 문서에서 찾아 형광펜 칠할 문장 (배움 카드 — 출처 클릭) */
   jumpQuote?: string;
   /** 카드 뷰의 출처 클릭 — 그 대화의 문서를 열고 문장으로 간다 */
@@ -103,7 +107,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -269,6 +273,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   useEffect(() => {
     if (mode === 'edit') showChrome();
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 새 문서는 쓰려고 만든 것이다 — 보기 화면을 거치지 않고 편집으로 들어간다
+  useEffect(() => {
+    if (!startEditing || !data || data.readonly) return;
+    setMode('edit');
+    onEditStarted?.();
+  }, [startEditing, data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // E = 편집 — ⋯ 메뉴의 "편집 (E)" 표기 이행. 활성 칸에서만, 입력 중·수식키 조합은 무시
   // (IA — 신규 단축키. HTML 문서 iframe 안을 클릭한 상태에서는 키가 iframe에 머물러 안 온다)
@@ -558,11 +569,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     return (
       <Editor
         file={data}
+        fileName={fileLabel(file)}
         onCancel={() => setMode('view')}
         onDirtyChange={onDirtyChange}
-        onSaved={(content, updatedAt) => {
+        onSaved={(content, updatedAt, close) => {
           setData({ ...data, content, updatedAt });
-          setMode('view');
+          if (close) setMode('view');
           onContentSaved();
         }}
       />
@@ -605,14 +617,23 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     // 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다)
     { label: '다운로드', href: `/api/v1/files/${file.id}/raw`, download: file.name },
     ...(onShowProperties ? [{ label: '속성', onClick: onShowProperties }] : []),
-    ...(data.readonly || isBriefing ? [] : [{ label: '편집 (E)', onClick: () => setMode('edit') }]),
   ];
+  // 편집은 ⋯ 메뉴 맨 아래에만 있어 못 찾았다(사용성 평가 2026-10-01, 4명) — 도구막대에 꺼내 둔다
+  const canEdit = !data.readonly && !isBriefing && !isBinary;
 
   const actions = (
     <>
       {onClosePane && (
         <button onClick={onClosePane} title="이 칸 닫기 (문서는 탭에 남음)" className={actionButton(false)}>
           ✕
+        </button>
+      )}
+      {canEdit && !(!isPc && selection) && (
+        <button onClick={() => setMode('edit')} className={actionButton(false)} title="고치기 (E)">
+          <span className="flex items-center justify-center gap-1">
+            <Icon name="pencil" size={15} />
+            고치기
+          </span>
         </button>
       )}
       {!isBinary &&

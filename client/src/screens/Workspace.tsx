@@ -154,6 +154,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [propsTarget, setPropsTarget] = useState<PropertiesTarget | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** 막 만든 문서 — 열자마자 편집 화면으로 들어가게 뷰어에 알린다 */
+  const [editRequest, setEditRequest] = useState<number | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false); // 활성 레일 버튼 재클릭 시 패널 접기 (PC 전용)
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
@@ -974,6 +976,27 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }, [immersive]);
 
   const actions: TreeActions = {
+    // "＋ 새 문서" — 문서를 만들 방법이 업로드·복사뿐이었다 (사용성 평가 2026-10-01: 3명이 못 찾거나 우회).
+    // 이름만 묻고 md로 만들어 바로 편집 화면을 연다. 확장자를 몰라도 되게 .md는 알아서 붙인다
+    createDoc: (folderId) => {
+      void promptDialog('새 문서 이름', '제목 없음').then(async (name) => {
+        const trimmed = name?.trim();
+        if (!trimmed) return;
+        const final = /\.(md|markdown|txt|html)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+        const heading = splitExt(final).stem;
+        try {
+          const r = await uploadCore([new File([`# ${heading}\n\n`], final, { type: 'text/markdown' })], folderId);
+          const created = r?.created[0];
+          if (!created) return;
+          await loadTree();
+          setEditRequest(created.id);
+          setDrawerOpen(false);
+          void selectFile(created);
+        } catch (e) {
+          toast(e instanceof ApiError ? e.message : '문서를 만들지 못했습니다', 'error');
+        }
+      });
+    },
     createFolder: (parentId) => {
       void promptDialog('폴더 이름').then((name) => {
         if (!name?.trim()) return;
@@ -1221,6 +1244,32 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     </button>
   );
 
+  /** 터치 첫 화면의 큰 버튼들 — 서랍(☰)을 몰라도 시작할 수 있게 */
+  const openPanel = (p: Panel) => {
+    setPanel(p);
+    setPanelCollapsed(false);
+    setDrawerOpen(true);
+  };
+  const startButtons = (
+    <div className="grid w-full max-w-sm grid-cols-2 gap-2">
+      {[
+        { label: '내 파일 보기', icon: 'files' as const, on: () => openPanel('files') },
+        { label: '함께 보는 파일', icon: 'users' as const, on: () => openPanel('shared') },
+        { label: '검색', icon: 'search' as const, on: () => setPaletteOpen(true) },
+        { label: '새 문서', icon: 'plus' as const, on: () => actions.createDoc(null) },
+      ].map((b) => (
+        <button
+          key={b.label}
+          onClick={b.on}
+          className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 text-sm font-medium text-slate-200 transition active:bg-slate-800"
+        >
+          <Icon name={b.icon} size={18} />
+          {b.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex h-dvh bg-slate-950 text-slate-100">
       {/* 터치 기기: 드로어 토글 (입력 방식 기준 — 가로모드에서도 드로어 유지).
@@ -1248,6 +1297,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃) */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
+        {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01) */}
+        <button
+          onClick={() => {
+            setDrawerOpen(false);
+            setPaletteOpen(true);
+          }}
+          title="검색 (Ctrl+K)"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:text-slate-200"
+        >
+          <Icon name="search" />
+        </button>
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
         {railButton('shared', '공유 파일')}
@@ -1295,7 +1355,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   e.target.value = '';
                 }}
               />
-              {/* 폴더가 선택돼 있으면 업로드·새 폴더가 그 폴더로 들어간다 (IA — 폴더 선택) */}
+              {/* 폴더가 선택돼 있으면 새 문서·업로드·새 폴더가 그 폴더로 들어간다 (IA — 폴더 선택) */}
+              <button
+                onClick={() => actions.createDoc(selectedFolder)}
+                title={
+                  selectedFolder !== null
+                    ? `"${tree.folders.find((f) => f.id === selectedFolder)?.name}" 폴더에 새 문서`
+                    : '새 문서 만들기'
+                }
+                className="flex-1 rounded-md border border-sky-800 bg-sky-950/40 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-900/40"
+              >
+                + 새 문서
+              </button>
               <button
                 onClick={() => actions.uploadTo(selectedFolder)}
                 title={
@@ -1576,6 +1647,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
                 onOpenFile={(target) => void selectFile(target)}
                 onSwapBriefing={(toId) => swapBriefing(f.id, toId)}
+                startEditing={editRequest === f.id}
+                onEditStarted={() => setEditRequest(null)}
                 jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
                 onOpenSource={(tid) => void openSource(tid)}
                 onOpenCard={(title) => void openCardByTitle(title)}
@@ -1616,14 +1689,23 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   </p>
                 </button>
               ))}
-            <p className="mt-2 text-xs text-slate-600">다른 문서는 ☰ 메뉴에서</p>
+            {startButtons}
+          </div>
+        ) : IS_TOUCH ? (
+          // 터치는 "좌측"도 끌어다 놓기도 Ctrl도 없다 — 할 수 있는 일을 버튼으로 (사용성 평가 2026-10-01)
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6">
+            <p className="text-sm text-slate-500">무엇을 할까요?</p>
+            {startButtons}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-sm text-slate-600">
-            <p>좌측에서 파일을 선택하거나, 여기로 파일을 끌어다 놓으세요</p>
+            <p>왼쪽에서 파일을 고르거나, 여기로 파일을 끌어다 놓으세요</p>
             <p>
               <span className="rounded border border-slate-800 px-1.5 py-0.5 text-xs">Ctrl+K</span>{' '}
-              검색
+              검색 ·{' '}
+              <button onClick={() => actions.createDoc(selectedFolder)} className="text-sky-400 hover:underline">
+                새 문서 만들기
+              </button>
             </p>
           </div>
         )}

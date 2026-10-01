@@ -22,6 +22,8 @@ const BADGE_LABEL: Record<string, string> = { binary: 'bin', audio: 'aud', video
 
 export type TreeActions = {
   createFolder: (parentId: number | null) => void;
+  /** 새 문서 — 이름만 묻고 md로 만들어 바로 편집 화면으로 */
+  createDoc: (folderId: number | null) => void;
   renameFolder: (id: number, name: string) => void;
   moveFolder: (id: number, parentId: number | null) => void;
   deleteFolder: (id: number) => void;
@@ -309,6 +311,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
 
   // 우클릭과 ⋯ 버튼이 같은 메뉴를 공유한다 (모바일은 우클릭이 없어서 ⋯가 유일한 진입점)
   const folderMenu = (folder: TreeFolder): MenuItem[] => [
+    { label: '새 문서', action: () => actions.createDoc(folder.id) },
     { label: '새 하위 폴더', action: () => actions.createFolder(folder.id) },
     { label: '여기에 업로드', action: () => actions.uploadTo(folder.id) },
     { label: '폴더째 다운로드', action: () => actions.downloadFolder(folder) },

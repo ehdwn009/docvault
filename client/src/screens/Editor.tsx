@@ -7,13 +7,16 @@ import { MarkdownRenderer } from '../renderers';
 
 type Props = {
   file: FileContent;
-  onSaved: (content: string, updatedAt: number) => void;
+  /** close: 저장하고 닫기인가 — Ctrl+S는 저장만 하고 편집을 이어 간다 */
+  onSaved: (content: string, updatedAt: number, close: boolean) => void;
   onCancel: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  /** 머리에 보일 이름 — "편집 중"만으로는 무엇을 고치는지 몰랐다 */
+  fileName: string;
 };
 
 // SCR-160: 편집기 — 분할 화면(에디터 + 실시간 미리보기, md만). Ctrl+S 저장
-export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props) {
+export default function Editor({ file, fileName, onSaved, onCancel, onDirtyChange }: Props) {
   const [draft, setDraft] = useState(file.content);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +51,7 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (close: boolean) => {
     setSaving(true);
     setError(null);
     try {
@@ -57,7 +60,7 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
         body: JSON.stringify({ content: draft, baseUpdatedAt: file.updatedAt }),
       });
       toast('저장되었습니다', 'success');
-      onSaved(draft, r.updatedAt);
+      onSaved(draft, r.updatedAt, close);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'EDIT_CONFLICT') {
         setError('다른 곳에서 먼저 수정되었습니다. 편집을 취소하고 최신 내용을 확인하세요.');
@@ -73,8 +76,10 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
     if (
       dirty &&
       !(await confirmDialog('저장하지 않은 변경이 있습니다', {
-        message: '편집을 취소하면 작성한 내용이 사라집니다.',
+        message: '저장하지 않고 나가면 쓴 내용이 사라집니다.',
         danger: true,
+        confirmLabel: '저장 안 하고 나가기',
+        cancelLabel: '계속 쓰기',
       }))
     ) {
       return;
@@ -84,20 +89,28 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Ctrl+S는 저장만 — 저장하면서 편집이 끝나 매번 E를 다시 눌러야 했다 (사용성 평가 2026-10-01).
+      // 닫기는 Ctrl+Enter(저장하고 닫기)와 Esc(닫기)
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        void save();
+        void save(false);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        void save(true);
+      } else if (e.key === 'Escape' && (e.target === areaRef.current || e.target === document.body)) {
+        // 입력칸에서 누른 Esc만 — 확인 창의 Esc(창 닫기)가 여기까지 올라와 창을 또 띄우지 않게
+        void cancel();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [save]);
+  }, [save, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-2 touch:pl-14">
-        <span className="text-sm text-slate-400 touch:hidden">
-          편집 중{dirty && <span className="ml-1 text-amber-400">●</span>}
+        <span className="min-w-0 truncate text-sm text-slate-400 touch:hidden">
+          <span className="text-slate-200">{fileName}</span> 편집 중{dirty && <span className="ml-1 text-amber-400">●</span>}
         </span>
         <div className="flex gap-1 pc:hidden">
           {(['edit', 'preview'] as const).map((p) => (
@@ -116,16 +129,26 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
         <div className="ml-auto flex gap-2">
           <button
             onClick={() => void cancel()}
+            title="닫기 (Esc)"
             className="rounded border border-slate-700 px-3 py-1 text-sm text-slate-300 hover:bg-slate-900"
           >
-            취소
+            닫기
           </button>
           <button
-            onClick={() => void save()}
+            onClick={() => void save(false)}
+            disabled={saving || !dirty}
+            title="저장 (Ctrl+S) — 계속 쓸 수 있습니다"
+            className="rounded border border-slate-600 px-3 py-1 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+          >
+            {saving ? '저장 중…' : '저장'}
+          </button>
+          <button
+            onClick={() => void save(true)}
             disabled={saving}
+            title="저장하고 닫기 (Ctrl+Enter)"
             className="rounded bg-slate-100 px-3 py-1 text-sm font-medium text-slate-900 hover:bg-white disabled:opacity-40"
           >
-            {saving ? '저장 중…' : '저장 (Ctrl+S)'}
+            저장하고 닫기
           </button>
         </div>
       </div>

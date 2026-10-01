@@ -5,15 +5,17 @@ import { useEffect, useRef, useState } from 'react';
 export type ChoiceOption = { label: string; value: string; danger?: boolean };
 
 type DialogRequest =
-  | { kind: 'confirm'; title: string; message?: string; danger?: boolean; resolve: (ok: boolean) => void }
+  | { kind: 'confirm'; title: string; message?: string; danger?: boolean; confirmLabel?: string; cancelLabel?: string; resolve: (ok: boolean) => void }
   | { kind: 'prompt'; title: string; message?: string; defaultValue?: string; resolve: (value: string | null) => void }
   | { kind: 'choice'; title: string; message?: string; choices: ChoiceOption[]; resolve: (value: string | null) => void };
 
 let open: ((r: DialogRequest) => void) | null = null;
 
+/** confirmLabel·cancelLabel: 버튼에 하는 일을 그대로 쓴다 — "취소/확인"은 편집 "취소"를 누른 뒤 다시 "취소"가 나와
+    무엇을 취소하는지 헷갈렸다 (사용성 평가 2026-10-01) */
 export function confirmDialog(
   title: string,
-  opts?: { message?: string; danger?: boolean },
+  opts?: { message?: string; danger?: boolean; confirmLabel?: string; cancelLabel?: string },
 ): Promise<boolean> {
   return new Promise((resolve) => {
     if (open) open({ kind: 'confirm', title, ...opts, resolve });
@@ -118,7 +120,7 @@ export function DialogHost() {
             onClick={() => close(false)}
             className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
           >
-            취소
+            {(req.kind === 'confirm' && req.cancelLabel) || '취소'}
           </button>
           {req.kind !== 'choice' && (
             <button
@@ -130,7 +132,7 @@ export function DialogHost() {
                   : 'bg-slate-100 text-slate-900 hover:bg-white'
               }`}
             >
-              확인
+              {(req.kind === 'confirm' && req.confirmLabel) || '확인'}
             </button>
           )}
         </div>
