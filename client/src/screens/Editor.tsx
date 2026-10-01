@@ -31,7 +31,12 @@ export default function Editor({ file, fileName, onSaved, onCancel, onDirtyChang
   // 터치 기기는 건드리지 않는다 — 키보드가 저절로 올라와 화면 절반을 가린다
   useEffect(() => {
     if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-    areaRef.current?.focus({ preventScroll: true });
+    const area = areaRef.current;
+    if (!area) return;
+    area.focus({ preventScroll: true });
+    // 제목 한 줄뿐인 새 문서는 그 아래에서 바로 쓰게 끝으로 — 맨 앞이면 친 글이 "# 제목" 줄에 붙었다.
+    // 긴 문서는 맨 앞 그대로 (끝으로 보내면 화면이 문서 끝으로 튄다)
+    if (area.value.trim().split('\n').length <= 1) area.setSelectionRange(area.value.length, area.value.length);
   }, []);
 
   // 부모(Workspace)가 파일 전환을 막을 수 있도록 dirty 상태를 올려보낸다

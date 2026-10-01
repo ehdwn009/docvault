@@ -216,7 +216,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const codeViewRef = useRef(codeView);
   codeViewRef.current = codeView;
 
+  /** 이 뷰어의 저장이 만든 수정 시각 — 저장 뒤 트리를 다시 받으면 file.updatedAt이 바뀌는데,
+      그걸 "남이 고쳤다"로 보고 새로 열면 Ctrl+S(저장만)가 편집기를 닫아 버린다 */
+  const ownSaveRef = useRef<{ id: number; updatedAt: number } | null>(null);
   useEffect(() => {
+    if (ownSaveRef.current?.id === file.id && ownSaveRef.current.updatedAt === file.updatedAt) return;
     setData(null);
     setError(null);
     setMode('view');
@@ -574,6 +578,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         onCancel={() => setMode('view')}
         onDirtyChange={onDirtyChange}
         onSaved={(content, updatedAt, close) => {
+          ownSaveRef.current = { id: data.id, updatedAt };
           setData({ ...data, content, updatedAt });
           if (close) setMode('view');
           onContentSaved();
