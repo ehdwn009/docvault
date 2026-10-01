@@ -24,6 +24,8 @@ export const SHORTCUTS: Shortcut[] = [
   { context: '뷰어', input: 'Alt+1~4', effect: '분할 칸 활성화 (왼쪽부터 번호순)', pcOnly: true },
   { context: '뷰어', input: 'Ctrl+Shift+A', effect: '질문 패널 열기 (문장을 드래그해 두면 그 문장이 붙음)', pcOnly: true },
   { context: '뷰어', input: '문장 드래그', effect: '선택 근처에 [물어보기] — 그 문장과 앞뒤 문단을 문맥으로 LLM에 묻기' },
+  { context: '뉴스 브리핑', input: 'J / K', effect: '다음·이전 기사 (두 칸이면 오른쪽에, 한 칸이면 그 자리에서 펼침). 목록 끝에서는 다른 탭으로', pcOnly: true },
+  { context: '뉴스 브리핑', input: 'O', effect: '고른 기사의 원문 열기', pcOnly: true },
   { context: '편집기', input: 'Ctrl+S', effect: '저장 — 편집은 이어 간다' },
   { context: '편집기', input: 'Ctrl+Enter', effect: '저장하고 닫기', pcOnly: true },
   { context: '편집기', input: 'Esc', effect: '닫기 (저장 안 한 내용이 있으면 묻는다)', pcOnly: true },

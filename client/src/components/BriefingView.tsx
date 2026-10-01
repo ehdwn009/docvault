@@ -4,6 +4,7 @@ import {
   BRIEFING_READ_EVENT,
   isSafeUrl,
   kstTime,
+  kstToday,
   leadIdsOf,
   longDate,
   outletsOf,
@@ -144,7 +145,9 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   /** 지난번에 마지막으로 읽은 기사 — [이어 읽기]가 데려갈 곳. 회차는 항상 맨 위에서 열린다 (설계 SCR-191 9) */
   const [resumeId, setResumeId] = useState<string | null>(null);
   /** 그림이 바뀐 뒤 해야 할 스크롤 — 탭을 바꾸면 목록 시작, 이어 읽기면 그 기사 */
-  const [pendingScroll, setPendingScroll] = useState<{ to: 'list' } | { to: 'item'; id: string } | null>(null);
+  const [pendingScroll, setPendingScroll] = useState<{ to: 'list' } | { to: 'item'; id: string } | { to: 'edge'; which: 'first' | 'last' } | null>(null);
+  /** 키보드 J/K가 따라가는 줄 — 핵심 상자에서 골랐으면 핵심 순서로, 목록에서 골랐으면 목록 순서로 */
+  const [cursor, setCursor] = useState<{ id: string; fromLead: boolean } | null>(null);
   const listTopRef = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState<EditionNav | null>(null);
   const [wide, setWide] = useState(false);
@@ -257,11 +260,18 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     () => visible.flatMap((c) => c.subs.flatMap((s) => [...s.items, ...(refOpen.has(s.id) ? s.refs : [])].map((i) => i.id))),
     [visible, refOpen],
   );
+  const leadOrder = useMemo(() => lead.map((l) => l.item.id), [lead]);
+  /** 이 탭의 모든 기사 순서(필터와 상관없이) — 필터에 가려진 선택의 "가장 가까운 다음 기사"를 찾는 데 쓴다 */
+  const fullOrder = useMemo(
+    () => (edition?.sections.find((s) => s.section === tab)?.categories ?? []).flatMap((c) => c.subs.flatMap((s) => s.items.map((i) => i.id))),
+    [edition, tab],
+  );
 
   /** key: 펼침 자리 — 핵심 상자와 목록에 같은 기사가 있어도 따로 펼친다 */
   const pick = useCallback(
     (id: string, key: string) => {
       markRead(id);
+      setCursor({ id, fromLead: key.startsWith('lead:') });
       if (wide) setSelected(id);
       else
         setOpen((prev) => {
@@ -274,32 +284,71 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     [wide, markRead],
   );
 
-  // PC: J/K 다음·이전 기사, O 원문. 활성 칸에서만, 입력 중·수식키 조합은 무시
+  /** 키보드로 기사 하나로 가기 — 두 칸이면 오른쪽에 띄우고, 한 칸이면 그 줄만 펼친다. 줄은 화면 가운데로
+      (맨 아래에 붙으면 다음 기사가 안 보이고, 위로 가면 고정 막대 뒤에 숨었다) */
+  const go = useCallback(
+    (id: string, fromLead: boolean) => {
+      const key = fromLead ? `lead:${id}` : id;
+      markRead(id);
+      setCursor({ id, fromLead });
+      if (wide) setSelected(id);
+      else setOpen(new Set([key]));
+      requestAnimationFrame(() => rowRefs.current.get(key)?.scrollIntoView({ block: 'center' }));
+    },
+    [wide, markRead],
+  );
+
+  // 필터를 바꿔 고른 기사가 목록에서 빠지면, 그 자리에서 가장 가까운 다음 기사로 옮긴다 —
+  // 숨은 기사가 오른쪽에 남고 J가 맨 앞으로 가던 것 (사용성 평가 2026-10-01)
   useEffect(() => {
-    if (!isActive || !wide) return;
+    if (!wide || !selected || cursor?.fromLead || order.includes(selected)) return;
+    const at = fullOrder.indexOf(selected);
+    const next = order.find((id) => fullOrder.indexOf(id) >= at) ?? order.at(-1) ?? null;
+    setSelected(next);
+    if (next) setCursor({ id: next, fromLead: false });
+  }, [order]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // J/K 다음·이전 기사, O 원문 (활성 칸에서만, 입력 중·수식키 조합은 무시). 두 칸이면 오른쪽에 띄우고 한 칸이면 펼친다.
+  // 목록 끝에서 J는 다른 탭의 첫 기사로, 세계 맨 앞에서 K는 국내 끝으로 — 한 회차를 키보드만으로 끝까지 읽게
+  useEffect(() => {
+    if (!isActive) return;
     const handler = (e: KeyboardEvent) => {
       const t = e.target;
       if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'j' || k === 'k') {
-        if (order.length === 0) return;
-        const i = selected ? order.indexOf(selected) : -1;
-        const next = k === 'j' ? (i < 0 ? 0 : Math.min(i + 1, order.length - 1)) : i < 0 ? 0 : Math.max(i - 1, 0);
-        const id = order[next];
-        if (!id) return;
+        const fromLead = cursor?.fromLead ?? false;
+        const seq = fromLead ? leadOrder : order;
+        const i = cursor ? seq.indexOf(cursor.id) : -1;
         e.preventDefault();
-        markRead(id);
-        setSelected(id);
-        rowRefs.current.get(id)?.scrollIntoView({ block: 'nearest' });
-      } else if (k === 'o' && selected) {
-        const url = located.get(selected)?.item.url;
-        if (url && isSafeUrl(url)) window.open(url, '_blank', 'noopener,noreferrer');
+        if (k === 'j') {
+          if (i < seq.length - 1) return go(seq[i + 1]!, fromLead);
+          if (!fromLead && tab === '국내' && edition?.sections.some((s) => s.section === '세계')) {
+            setTabState('세계');
+            writeTab(fileId, '세계');
+            setPendingScroll({ to: 'edge', which: 'first' });
+          }
+        } else {
+          if (i > 0) return go(seq[i - 1]!, fromLead);
+          if (i === -1 && seq[0]) return go(seq[0], fromLead);
+          if (!fromLead && tab === '세계' && edition?.sections.some((s) => s.section === '국내')) {
+            setTabState('국내');
+            writeTab(fileId, '국내');
+            setPendingScroll({ to: 'edge', which: 'last' });
+          }
+        }
+      } else if (k === 'o' && cursor) {
+        const url = located.get(cursor.id)?.item.url;
+        if (url && isSafeUrl(url)) {
+          markRead(cursor.id);
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isActive, wide, order, selected, located, markRead]);
+  }, [isActive, cursor, order, leadOrder, tab, edition, located, go, markRead, fileId]);
 
   useEffect(() => {
     if (!pendingScroll) return;
@@ -307,12 +356,16 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
       const anchor = listTopRef.current;
       // 이미 목록 시작이 보이면(맨 위 근처) 움직이지 않는다
       if (anchor && anchor.getBoundingClientRect().top < 0) anchor.scrollIntoView({ block: 'start' });
+    } else if (pendingScroll.to === 'edge') {
+      const id = pendingScroll.which === 'first' ? order[0] : order.at(-1);
+      if (id) go(id, false);
     } else {
       rowRefs.current.get(pendingScroll.id)?.scrollIntoView({ block: 'center' });
       if (wide) setSelected(pendingScroll.id);
+      setCursor({ id: pendingScroll.id, fromLead: false });
     }
     setPendingScroll(null);
-  }, [pendingScroll, wide]);
+  }, [pendingScroll, wide]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!edition) {
     return (
@@ -372,9 +425,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
       <li
         key={key}
         ref={(el) => {
-          if (opts.lead) return;
-          if (el) rowRefs.current.set(id, el);
-          else rowRefs.current.delete(id);
+          if (el) rowRefs.current.set(key, el);
+          else rowRefs.current.delete(key);
         }}
         className={`m-0 list-none border-b p-0 last:border-b-0 ${p.line}`}
       >
@@ -382,7 +434,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
           onClick={() => pick(id, key)}
           aria-expanded={wide ? undefined : isOpen}
           aria-current={wide && selected === id ? 'true' : undefined}
-          className={`flex w-full items-start gap-2.5 rounded-md px-1 py-3 text-left transition ${wide && selected === id ? p.selected : ''}`}
+          // 마우스 클릭에는 테두리를 그리지 않는다 — J로 옮긴 뒤에도 클릭한 줄에 테두리가 남아 선택이 둘처럼 보였다
+          className={`flex w-full items-start gap-2.5 rounded-md px-1 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] ${wide && selected === id ? p.selected : ''}`}
         >
           {opts.lead ? (
             <span className={`mt-[0.1em] w-6 shrink-0 text-center text-[0.95em] font-bold ${isRead ? 'opacity-40' : p.accent}`}>{opts.lead}</span>
@@ -528,9 +581,14 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
               {longDate(e.date)} {slotName(e.slot, e.label)}
             </h1>
             <p className={`m-0 mt-0.5 text-[0.78em] ${p.muted}`}>
-              {kstTime(e.since, false)}–{kstTime(e.until, false)} 기사 · {edition.stats.items}건
+              {/* 날짜가 다르면 날짜를 붙인다 — 24시간 범위가 "14:51–14:51"로 0분처럼 읽혔다 */}
+              {kstToday(e.since) === kstToday(e.until)
+                ? `${kstTime(e.since, false)}–${kstTime(e.until, false)}`
+                : `${kstTime(e.since)} – ${kstTime(e.until)}`}{' '}
+              기사 · {edition.stats.items}건
               {edition.stats.sourcesFailed > 0 && ` · 출처 ${edition.stats.sourcesFailed}곳 못 받음`}
             </p>
+            <p className={`m-0 mt-0.5 text-[0.72em] ${p.muted}`}>제목·요약은 AI가 기사를 읽고 다시 쓴 글이에요 · 원문으로 확인하세요</p>
           </div>
           <NavButton label="다음 회차" disabled={!nav?.nextId} onClick={() => nav?.nextId && onOpenFile(nav.nextId)} p={p} />
         </div>
@@ -611,7 +669,11 @@ function ItemDetail({ l, p, onOpened }: { l: Located; p: Palette; onOpened: () =
   const { item } = l;
   return (
     <div className="flex flex-col gap-2.5 text-[0.95em]">
-      {item.summary && <p className="m-0 leading-relaxed">{item.summary}</p>}
+      {item.summary ? (
+        <p className="m-0 leading-relaxed">{item.summary}</p>
+      ) : (
+        <p className={`m-0 text-[0.9em] ${p.muted}`}>요약이 없는 기사예요 · 원문을 확인하세요</p>
+      )}
       {item.why && (
         <div className={`flex flex-col gap-0.5 rounded-xl px-3 py-2.5 ${p.whyBg}`}>
           <span className={`text-[0.72em] font-bold ${p.accent}`}>왜 중요한가</span>
@@ -623,7 +685,7 @@ function ItemDetail({ l, p, onOpened }: { l: Located; p: Palette; onOpened: () =
           {item.source} · {kstTime(item.publishedAt)}
           {item.status === 'updated' && ' · 갱신됨'}
         </span>
-        <span className="ml-auto">AI 요약{item.basis ? ` · ${BASIS_LABEL[item.basis]}` : ''}</span>
+        {item.summary && <span className="ml-auto">AI 요약{item.basis ? ` · ${BASIS_LABEL[item.basis]}` : ''}</span>}
       </div>
       {isSafeUrl(item.url) && (
         <a

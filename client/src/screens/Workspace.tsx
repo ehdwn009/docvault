@@ -115,6 +115,28 @@ function fileIdFromPath(pathname: string): number | null {
 const IS_TOUCH = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
+/** 열린 탭·분할 칸 기억 (기기별, 사용자별) — 열린 문서 id만 둔다. 본문은 열 때 다시 받는다 */
+type SavedWorkspace = { tabs: number[]; panes: number[]; active: number; ratio: number };
+const WORKSPACE_KEY = 'dv_workspace';
+/** 기억하는 탭 상한 — 오래 쓰다 보면 수십 개가 쌓여 시작할 때 그만큼 조회한다 */
+const WORKSPACE_MAX_TABS = 20;
+
+function readWorkspace(userId: number): SavedWorkspace | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(`${WORKSPACE_KEY}:${userId}`) ?? 'null') as SavedWorkspace | null;
+    return v && Array.isArray(v.tabs) && Array.isArray(v.panes) ? v : null;
+  } catch {
+    return null;
+  }
+}
+function writeWorkspace(userId: number, w: SavedWorkspace) {
+  try {
+    localStorage.setItem(`${WORKSPACE_KEY}:${userId}`, JSON.stringify({ ...w, tabs: w.tabs.slice(-WORKSPACE_MAX_TABS) }));
+  } catch {
+    /* 사생활 모드 등 — 이번 화면에는 영향 없다 */
+  }
+}
+
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
   // 탭 = "열려 있는" 문서들, 칸(pane) = 그중 화면에 "보이는" 부분집합 (IA — 탭 바 + 분할 보기)
@@ -122,6 +144,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [panes, setPanes] = useState<TreeFile[]>([]);
   const [activeIdx, setActiveIdx] = useState(0); // 활성 칸 — 탭 클릭·단축키·URL이 향하는 곳
   const [splitRatio, setSplitRatio] = useState(50); // 첫 칸의 크기 비율(%) — 구분선 드래그로 조절
+  const restoredRef = useRef(false); // 지난 탭 복원이 끝났나 — 끝나기 전의 빈 상태로 기억을 덮어쓰지 않게
   // 줄 번호 앵커(#L16-L26)로 연 파일의 하이라이트 범위 — 링크가 "파일 속 한 지점"을 가리킬 때
   const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
   // 카드 출처로 연 파일에서 형광펜 칠할 문장 — 출처가 "파일 속 한 문장"을 가리킬 때 (배움 카드 — 출처 클릭)
@@ -565,20 +588,36 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     }
   }, [isWide, panes.length]);
 
-  // 초기 로드 + 딥링크(/f/{id}) 복원
+  // 초기 로드 + 딥링크(/f/{id}) 복원 + 지난번 탭·분할 복원(기기별)
   useEffect(() => {
     void (async () => {
       // 시작 시간 측정 — 각 단계가 얼마나 걸리는지 설정 → 정보에서 본다 (lib/bootTiming.ts)
       await timed('파일 목록·태그 (/tree, /tags)', () => Promise.all([loadTree(), loadTags()]), ['/tree', '/tags']);
       const id = fileIdFromPath(location.pathname);
-      if (id !== null) {
-        const f = await timed('열 문서 찾기', () => resolveFile(id), [`/files/${id}`]);
-        if (f) {
-          setTabs([f]);
-          setPanes([f]);
-          setActiveIdx(0);
-          return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
+      const saved = readWorkspace(user.id);
+      const restore = await timed('지난 탭 되살리기', async () => {
+        const ids = [...new Set([...(saved?.tabs ?? []), ...(id !== null ? [id] : [])])];
+        const found = (await Promise.all(ids.map((x) => resolveFile(x)))).filter((f): f is TreeFile => f !== null);
+        const byId = new Map(found.map((f) => [f.id, f]));
+        let paneList = (saved?.panes ?? []).map((x) => byId.get(x)).filter((f): f is TreeFile => !!f);
+        let active = Math.min(saved?.active ?? 0, Math.max(0, paneList.length - 1));
+        // 주소가 가리키는 문서가 우선 — 이미 칸에 있으면 그 칸을, 없으면 활성 칸 자리에 둔다
+        const linked = id !== null ? byId.get(id) : undefined;
+        if (linked) {
+          const at = paneList.findIndex((f) => f.id === linked.id);
+          if (at !== -1) active = at;
+          else if (paneList.length === 0) paneList = [linked];
+          else paneList = paneList.map((f, i) => (i === active ? linked : f));
         }
+        return { tabs: found, panes: paneList, active };
+      }, []);
+      restoredRef.current = true;
+      if (restore.panes.length > 0) {
+        setTabs(restore.tabs);
+        setPanes(restore.panes);
+        setActiveIdx(restore.active);
+        if (saved?.ratio) setSplitRatio(saved.ratio);
+        return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
       }
       finishBoot();
     })();
@@ -594,6 +633,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       })
       .catch(() => {});
   }, [loadTree, loadTags, resolveFile]);
+
+  // 탭·분할 구성을 기기에 기억한다 — 새로고침하면 탭 1개만 남았다(사용성 평가 2026-10-01).
+  // 기기마다 따로: 폰과 PC는 화면이 달라 열어 두는 문서도 다르다(사용자 결정). 복원이 끝나기 전에는 쓰지 않는다
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    writeWorkspace(user.id, {
+      tabs: tabs.map((t) => t.id),
+      panes: panes.map((p) => p.id),
+      active: activeIdx,
+      ratio: splitRatio,
+    });
+  }, [tabs, panes, activeIdx, splitRatio, user.id]);
 
   // 서버가 새 버전으로 배포됐는지 감시 — 탭 복귀 시 + 10분 주기
   useEffect(() => {
@@ -625,7 +676,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       .catch(() => toast('업데이트 기록을 불러오지 못했습니다', 'error'));
   }
 
-  // 뒤로가기/앞으로가기 — URL은 활성 문서 하나만 가리킨다 (탭·분할 구성은 세션 한정)
+  // 뒤로가기/앞으로가기 — URL은 활성 문서 하나만 가리킨다 (탭·분할 구성은 기기에 따로 기억한다)
   useEffect(() => {
     const handler = () => {
       const id = fileIdFromPath(location.pathname);
