@@ -696,9 +696,27 @@ function NavButton({ label, disabled, onClick, p, flip = false }: { label: strin
 /** 펼친 내용 — 요약 → 왜 중요한가 → 언론사·시각·근거 → [원문 보기] → 다른 보도 */
 function ItemDetail({ l, p, onOpened }: { l: Located; p: Palette; onOpened: () => void }) {
   const { item } = l;
+  // 칸 구성(v0.43): 무슨 일·배경·숫자로 보면·앞으로 — 요약 한 덩어리는 제목을 되풀이해 읽을 것이 없었다. 빈 칸은 숨긴다
+  const parts = item.detail
+    ? ([
+        ['무슨 일', item.summary],
+        ['배경', item.detail.background],
+        ['숫자로 보면', item.detail.numbers],
+        ['앞으로', item.detail.next],
+      ] as const).filter(([, text]) => text)
+    : null;
   return (
     <div className="flex flex-col gap-2.5 text-[0.95em]">
-      {item.summary ? (
+      {parts ? (
+        <dl className="m-0 flex flex-col gap-2.5">
+          {parts.map(([label, text]) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <dt className={`text-[0.72em] font-bold ${p.muted}`}>{label}</dt>
+              <dd className="m-0 leading-relaxed">{text}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : item.summary ? (
         <p className="m-0 leading-relaxed">{item.summary}</p>
       ) : (
         <p className={`m-0 text-[0.9em] ${p.muted}`}>요약이 없는 기사예요 · 원문을 확인하세요</p>
@@ -714,7 +732,7 @@ function ItemDetail({ l, p, onOpened }: { l: Located; p: Palette; onOpened: () =
           {item.source} · {kstTime(item.publishedAt)}
           {item.status === 'updated' && ' · 갱신됨'}
         </span>
-        {item.summary && <span className="ml-auto">AI 요약{item.basis ? ` · ${BASIS_LABEL[item.basis]}` : ''}</span>}
+        {(item.summary || item.detail) && <span className="ml-auto">AI 요약{item.basis ? ` · ${BASIS_LABEL[item.basis]}` : ''}</span>}
       </div>
       {isSafeUrl(item.url) && (
         <a

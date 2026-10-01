@@ -8,7 +8,7 @@ import { isAggregator } from './collect.js';
 import { costOf, type Usage } from './ai.js';
 import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
-import type { Written } from './summarize.js';
+import type { Detail, Written } from './summarize.js';
 import { categoriesOf, SECTIONS, type BriefingSection } from './taxonomy.js';
 import { kstParts } from './time.js';
 
@@ -33,6 +33,8 @@ export type EditionItem = {
   basis?: 'body' | 'lede' | 'title';
   /** 이 사건을 다룬 서로 다른 언론사 수(대표 포함, 상한 없음) — 오늘의 핵심 순위에 쓴다. v0.43부터, 없으면 related 수 + 1 */
   outlets?: number;
+  /** 핵심·주요의 펼침 칸(summary가 "무슨 일"). 쓸 칸이 하나도 없거나 참고·옛 회차면 없다 — v0.43부터 */
+  detail?: Detail;
 };
 
 export type Edition = {
@@ -79,6 +81,7 @@ export function assembleEdition(args: {
 
   args.picked.forEach((p, i) => {
     const text = p.importance >= 2 ? args.written.get(i) : p.brief;
+    const detail: Detail | undefined = p.importance >= 2 ? args.written.get(i)?.detail : undefined;
     // 핵심·주요인데 요약을 못 받았으면 싣지 않는다 — 원문 제목만 덩그러니 두지 않는다
     if (!text) return;
     const n = (counter.get(p.sub.id) ?? 0) + 1;
@@ -100,6 +103,7 @@ export function assembleEdition(args: {
       basis: basisOf(p, args.bodies.has(i)),
       related: others.slice(0, BRIEFING.MAX_RELATED),
       outlets: 1 + others.length,
+      ...(detail ? { detail } : {}),
     };
     bySub.set(p.sub.id, [...(bySub.get(p.sub.id) ?? []), item]);
   });

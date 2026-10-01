@@ -33,6 +33,8 @@ export type EditionItem = {
   basis?: 'body' | 'lede' | 'title';
   /** 이 사건을 다룬 서로 다른 언론사 수(대표 포함). 옛 회차에는 없다 — outletsOf로 센다 */
   outlets?: number;
+  /** 핵심·주요의 펼침 칸 — summary가 "무슨 일", 빈 칸은 숨긴다. 참고·옛 회차에는 없다 (v0.43) */
+  detail?: { background: string; numbers: string; next: string };
 };
 
 export type Edition = {

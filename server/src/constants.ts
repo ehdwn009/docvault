@@ -229,8 +229,8 @@ export const BRIEFING = {
   MAX_ITEMS_NARROW: 5,
   /** 분류 한 번에 보내는 기사 수 */
   CLASSIFY_CHUNK: 80,
-  /** 요약 한 번에 보내는 기사 수 */
-  SUMMARY_CHUNK: 15,
+  /** 요약 한 번에 보내는 기사 수 — 기사마다 원문 앞부분이 붙고 답도 칸 구성으로 길어져 15 → 8 (v0.43) */
+  SUMMARY_CHUNK: 8,
   /** 동시 실행 수 — 1GB e2-micro와 API 속도 제한 사이 */
   FETCH_CONCURRENCY: 8,
   SELECT_CONCURRENCY: 5,
@@ -245,12 +245,13 @@ export const BRIEFING = {
   /** 실행 시간 한도 — 30분 안에 끝낸다는 목표의 안전 여유 */
   RUN_TIMEOUT_MS: 20 * 60 * 1000,
   /** 이번 달(한국시간) 추정 비용 한도 — 넘으면 자동 생성 정지, 버튼은 확인 후 진행 */
-  MONTHLY_BUDGET_USD: 50,
+  MONTHLY_BUDGET_USD: 80,
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
   SUMMARY_MAX_OUTPUT_TOKENS: 8000,
-  /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수 */
-  BODY_FETCH_MIN_IMPORTANCE: 3,
+  /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수.
+      주요(2)까지 읽는다 — 펼침을 칸 구성으로 길게 쓰려면 재료가 있어야 한다. 발췌만으로는 제목을 되풀이했다 (v0.43) */
+  BODY_FETCH_MIN_IMPORTANCE: 2,
   BODY_MAX_CHARS: 2000,
   BODY_FETCH_TIMEOUT_MS: 8000,
   BODY_FETCH_MAX_BYTES: 1536 * 1024,
@@ -262,6 +263,9 @@ export const BRIEFING = {
   SNIPPET_MIN_EXTRA_CHARS: 20,
   /** 기사 하나에 붙이는 "같은 사건 다른 보도" 링크 수 상한 */
   MAX_RELATED: 5,
+  /** 핵심·주요 펼침(무슨 일·배경·숫자로 보면·앞으로)을 합친 목표 길이 (글자, 사용자 결정 v0.43) */
+  DETAIL_MIN_CHARS: 200,
+  DETAIL_MAX_CHARS: 300,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
   TITLE_MAX_CHARS: 40,
   /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */

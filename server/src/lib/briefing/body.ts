@@ -52,7 +52,7 @@ export function extractArticleText(html: string): string {
   return text.slice(0, BRIEFING.BODY_MAX_CHARS);
 }
 
-/** 핵심 기사들의 본문 앞부분 — 열쇠는 picked 배열의 위치. 못 읽은 기사는 빠진다 */
+/** 핵심·주요 기사들(BODY_FETCH_MIN_IMPORTANCE 이상)의 본문 앞부분 — 열쇠는 picked 배열의 위치. 못 읽은 기사는 빠진다 */
 export async function readBodies(
   picked: Picked[],
   opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
