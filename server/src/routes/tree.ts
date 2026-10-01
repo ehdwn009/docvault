@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { DEFAULT_FILE_STATE } from '../constants.js';
 import { db } from '../db/index.js';
@@ -40,10 +40,12 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
       isShared: files.isShared,
       sortOrder: files.sortOrder,
       updatedAt: files.updatedAt,
+      kind: files.kind,
     })
     .from(files)
-    // 휴지통 파일 제외. 카드(kind='card')도 제외 — 서랍(SCR-181)에서만 보인다 (설계 — 문서와 섞이지 않게)
-    .where(and(eq(files.ownerId, user.id), isNull(files.deletedAt), eq(files.kind, 'doc')))
+    // 휴지통 파일 제외. 카드(kind='card')도 제외 — 서랍(SCR-181)에서만 보인다 (설계 — 문서와 섞이지 않게).
+    // 브리핑 회차는 나온다 — 보관함이 곧 트리다 (뉴스 브리핑 설계)
+    .where(and(eq(files.ownerId, user.id), isNull(files.deletedAt), inArray(files.kind, ['doc', 'briefing'])))
     .all();
   lap('files');
 
@@ -79,7 +81,9 @@ export const treeRoutes = new Hono<AppEnv>().get('/', (c) => {
       const state = s ? { isFavorite: s.isFavorite, lastOpenedAt: s.lastOpenedAt, viewerFit: s.viewerFit, fontScale: s.fontScale } : null;
       const isDefault =
         !state || (state.isFavorite === DEFAULT_FILE_STATE.isFavorite && state.lastOpenedAt === null && state.viewerFit === DEFAULT_FILE_STATE.viewerFit && state.fontScale === null);
-      return { ...f, ...(tags ? { tags } : {}), ...(isDefault ? {} : { state }) };
+      // kind도 기본값(doc)이면 뺀다 — 브리핑만 전용 뷰어가 알아보게 싣는다
+      const { kind, ...rest } = f;
+      return { ...rest, ...(kind === 'doc' ? {} : { kind }), ...(tags ? { tags } : {}), ...(isDefault ? {} : { state }) };
     }),
   });
 });

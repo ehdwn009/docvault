@@ -38,7 +38,9 @@ import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
 import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
+import { BRIEFING_FOLDER_NAME, BRIEFING_SOURCES_FILE_NAME } from '../lib/briefing';
 import AdminPanel from './panels/AdminPanel';
+import BriefingPanel from './panels/BriefingPanel';
 import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPanel from './panels/SettingsPanel';
@@ -48,7 +50,7 @@ import Icon, { type IconName } from '../components/Icon';
 import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'settings' | 'admin';
+type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
@@ -57,6 +59,7 @@ const PANEL_TITLE: Record<Panel, string> = {
   shared: '공유 파일',
   cards: '배움 카드',
   chat: '대화',
+  briefing: '뉴스 브리핑',
   settings: '설정',
   admin: '관리자',
 };
@@ -203,6 +206,25 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }, []);
 
   const maxPanes = isWide ? 4 : 2;
+
+  // ---- 뉴스 브리핑 (SCR-190·147) — 회차는 평범한 파일이라 여는 길도 파일과 같다 ----
+  const openFileById = (id: number) =>
+    void resolveFile(id).then((f) => (f ? void selectFile(f) : toast('파일을 찾지 못했어요', 'error')));
+  /** 내 파일 최상위의 "뉴스 브리핑" 폴더 — 이름으로 찾는다(서버도 이름으로 찾는다) */
+  const briefingFolderId = () => treeRef.current.folders.find((f) => f.parentId === null && f.name === BRIEFING_FOLDER_NAME)?.id ?? null;
+  const openBriefingFolder = () => {
+    const id = briefingFolderId();
+    if (id === null) return toast('아직 브리핑 폴더가 없어요. 첫 브리핑을 만들면 생깁니다', 'info');
+    setPanel('files');
+    setPanelCollapsed(false);
+    setSelectedFolder(id);
+  };
+  const openBriefingSources = () => {
+    const folderId = briefingFolderId();
+    const file = treeRef.current.files.find((f) => f.folderId === folderId && f.name === BRIEFING_SOURCES_FILE_NAME);
+    if (folderId === null || !file) return toast('수집 목록은 첫 브리핑을 만들 때 생깁니다', 'info');
+    void selectFile(file);
+  };
 
   /** 칸에 있던 문서를 교체·닫기 전 미저장 편집 확인 */
   const confirmReplace = useCallback(async (target: TreeFile | undefined, incomingId: number | null) => {
@@ -1174,7 +1196,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
-  const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', settings: 'settings', admin: 'admin' };
+  const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings', admin: 'admin' };
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
@@ -1228,6 +1250,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {railButton('shared', '공유 파일')}
         {railButton('cards', '배움 카드')}
         {railButton('chat', '대화')}
+        {/* 뉴스 브리핑은 관리자만 — LLM 요금을 내는 사람 (설계 — 원칙) */}
+        {user.role === 'admin' && railButton('briefing', '뉴스 브리핑')}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
         {railButton('settings', '설정')}
         {user.role === 'admin' && railButton('admin', '관리자')}
@@ -1475,12 +1499,22 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           // 서버에 자동 저장되므로 다시 열면 "최근 대화"에서 이어 간다 (첫 판은 단순하게)
           <AskPanel file={null} inline seed={null} pendingQuote={null} onConsumePendingQuote={() => {}} onOpenFile={(f) => void selectFile(f)} isPc={!IS_TOUCH} onClose={() => setPanelCollapsed(true)} />
         )}
+        {panel === 'briefing' && user.role === 'admin' && (
+          <BriefingPanel
+            onOpenFile={openFileById}
+            onOpenFolder={openBriefingFolder}
+            onOpenSettings={() => setPanel('settings')}
+            onCreated={() => void loadTree()}
+          />
+        )}
         {panel === 'settings' && (
           <SettingsPanel
             settings={settings}
             onChange={changeSettings}
             onShowChangelog={showChangelog}
             onShowShortcuts={() => setShortcutsOpen(true)}
+            isAdmin={user.role === 'admin'}
+            onOpenBriefingSources={openBriefingSources}
           />
         )}
 

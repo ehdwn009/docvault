@@ -44,8 +44,8 @@ export type TreeFile = {
   folderId: number | null;
   name: string;
   fileType: FileType;
-  /** card = 배움 카드 (서랍에서만 보임, 뷰어는 머리말을 표로 그린다). 없으면 doc */
-  kind?: 'doc' | 'card';
+  /** card = 배움 카드 (서랍에서만 보임, 뷰어는 머리말을 표로 그린다), briefing = 뉴스 브리핑 회차 (전용 뷰어). 없으면 doc */
+  kind?: 'doc' | 'card' | 'briefing';
   sizeBytes: number;
   isShared: number;
   sortOrder: number;

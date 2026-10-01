@@ -23,6 +23,8 @@
 | GOOGLE_ERROR | 502 | 구글 API 호출 실패 — 토큰 만료·사용자가 권한 회수·드라이브 장애. message에 사람이 읽을 사유 |
 | ASK_NOT_CONFIGURED | 503 | 서버에 LLM API 키(`ANTHROPIC_API_KEY`)가 없음. 질문 기능만 막히고 나머지는 정상 |
 | ASK_LIMIT_EXCEEDED | 429 | 오늘 질문 한도(30) 초과. 읽기·지난 대화는 됨 |
+| BRIEFING_RUNNING | 409 | 뉴스 브리핑이 이미 만들어지는 중. 응답에 지금 도는 실행(`run`)이 함께 온다 — 화면은 그 진행을 이어서 보여 준다 |
+| BRIEFING_BUDGET_EXCEEDED | 409 | 이번 달 브리핑 비용이 월 한도에 닿음. `force: true`로 다시 보내면 만든다(사용자 확인 후) |
 | ASK_UPSTREAM_ERROR | 502 | LLM 호출 실패 (인증·과부하·시간 초과). 스트리밍 중이면 `error` 이벤트로 옴. 사용자 질문은 저장돼 있어 다시 시도 가능 |
 
 ## API 목록
@@ -43,7 +45,7 @@
 | API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
-| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드) | 로그인 |
+| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드는 빠지고 브리핑 회차는 들어간다 — 파일 행의 `kind`는 doc이 아닐 때만 실린다 | 로그인 |
 | API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -105,6 +107,10 @@
 | API-117 | POST | /cards/batch | 묶음 저장 — 개념 카드 N장(새로/이어쓰기) + 주제 카드 1장을 한 트랜잭션으로. LLM 없음. 되돌리기 재료 반환 | 소유자 |
 | API-119 | GET | /cards/review | 오늘 복습할 카드 (예정 시각이 지난 것, 오래된 순, 하루 20장) + 내일 장수 | 로그인 |
 | API-120 | POST | /cards/{id}/review | 채점 — again(내일) / ok(간격 두 배, 60일 상한). USER_FILE_STATE의 복습 칸만 갱신 | 소유자 |
+| API-131 | GET | /briefing/status | 뉴스 브리핑 상태 — 키 설정 여부·자동 생성 여부와 다음 시각·지금 실행·최근 결과·이번 달 비용/한도·최근 회차 10개 | 관리자 |
+| API-132 | POST | /briefing/runs | 브리핑 만들기 시작 (직전 회차 이후 기사로 수시판). 곧바로 202 + 실행, 만드는 일은 뒤에서 | 관리자 |
+| API-133 | GET | /briefing/runs | 실행 기록 (최근순, 상태·건수·비용·걸린 시간·실패 이유·실패 출처) | 관리자 |
+| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기 `{ autoEnabled }` | 관리자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -551,3 +557,52 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-120 — POST /cards/{id}/review
 `{ "result": "ok" | "again" }` → **200** `{ "nextReviewAt", "intervalDays" }`. again → 1일, ok → max(2, 이전×2), 상한 60일. 즐겨찾기·읽던 위치는 건드리지 않는다.
+
+## API-131 ~ API-134: 뉴스 브리핑
+
+설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md). 전부 관리자 전용(다른 계정은 403 FORBIDDEN). 회차는 files의 문서(`kind='briefing'`, 본문 = 회차 JSON)라 열기·삭제·태그·즐겨찾기·검색은 파일 API를 그대로 쓴다. 여기는 **만드는 일**만.
+
+실행(run) 객체 — 아래 응답들에 공통으로 쓰인다:
+```json
+{
+  "id": 42, "trigger": "manual", "slot": "adhoc", "editionDate": "2026-10-01",
+  "status": "running", "stage": "summarize", "progressDone": 6, "progressTotal": 12,
+  "sinceAt": 1790830800000, "untilAt": 1790847000000,
+  "fileId": null, "fileName": null,
+  "sourceCount": 48, "failedSources": ["한겨레 경제"], "candidateCount": 512, "itemCount": null,
+  "costUsd": 0.18, "message": null, "startedAt": 1790847000000, "finishedAt": null
+}
+```
+`status`: running | ok | error | skipped. `stage`: collect | classify | select | summarize | save. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
+
+### API-131 Response — GET /briefing/status
+```json
+{
+  "configured": true,
+  "autoEnabled": false,
+  "nextAutoAt": null,
+  "running": null,
+  "last": { "...": "실행 객체 — 가장 최근에 끝난 것" },
+  "monthCostUsd": 12.4,
+  "monthBudgetUsd": 50,
+  "recent": [ { "fileId": 901, "name": "뉴스 브리핑 2026-10-01 저녁.json", "slot": "evening", "editionDate": "2026-10-01", "itemCount": 164, "costUsd": 0.41 } ]
+}
+```
+`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`은 자동이 켜져 있을 때 다음 시작 시각(unix ms), 꺼져 있으면 null. `recent`는 지워지지 않은 회차 문서만.
+
+### API-132 — POST /briefing/runs
+**Body** `{ "force"?: boolean }` — 월 한도를 넘었을 때 사용자가 확인했다는 표시.
+
+**202** `{ "run": 실행 객체 }` — 만드는 일은 뒤에서 계속된다(응답이 끝을 기다리지 않는다). 범위는 직전 `ok` 실행의 untilAt부터 지금까지(최대 24시간).
+
+| 에러 | HTTP | 언제 |
+|---|---|---|
+| ASK_NOT_CONFIGURED | 503 | 키 없음 |
+| BRIEFING_RUNNING | 409 | 이미 도는 실행이 있음. body에 `run`(지금 실행)이 함께 온다 |
+| BRIEFING_BUDGET_EXCEEDED | 409 | 이번 달 한도 도달 + `force` 없음. body에 `monthCostUsd`·`monthBudgetUsd` |
+
+### API-133 — GET /briefing/runs?limit=30
+**200** `{ "runs": [ 실행 객체 ] }` — 최근 시작순, limit 최대 100. 자동 실행이 한도로 건너뛴 기록(`skipped`)도 여기 보인다.
+
+### API-134 — PUT /briefing/settings
+**Body** `{ "autoEnabled": boolean }` → **200** `{ "autoEnabled", "nextAutoAt" }`. USER_SETTINGS.briefing_auto에 저장한다. 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).

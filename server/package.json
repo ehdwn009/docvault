@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "briefing:check": "tsx src/scripts/check-briefing-sources.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
@@ -16,6 +17,7 @@
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "drizzle-orm": "^0.39.3",
+    "fast-xml-parser": "^5.11.2",
     "hono": "^4.7.0",
     "jose": "^5.9.6",
     "tsx": "^4.19.2",

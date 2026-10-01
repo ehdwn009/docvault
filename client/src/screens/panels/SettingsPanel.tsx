@@ -3,6 +3,7 @@ import { api, ApiError, type UserSettings } from '../../lib/api';
 import { APP_THEMES, applyAppTheme, getAppTheme, type AppThemeId } from '../../lib/appTheme';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/constants';
 import { downloadArchive } from '../../lib/download';
+import BriefingSettings from './BriefingSettings';
 
 type Props = {
   settings: UserSettings;
@@ -10,13 +11,16 @@ type Props = {
   onShowChangelog: () => void;
   /** 단축키 치트시트 열기 — ? 키와 같은 오버레이 (SCR-145) */
   onShowShortcuts: () => void;
+  /** 관리자에게만 뉴스 브리핑 설정(SCR-147)이 보인다 — LLM 요금을 내는 사람 */
+  isAdmin: boolean;
+  onOpenBriefingSources: () => void;
 };
 
 const selectClass =
   'mt-1 w-full rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-400';
 
 // SCR-140: 설정 패널 — 뷰어 설정(SCR-141) + 비밀번호 변경(SCR-142) + 정보·업데이트 기록(SCR-144)
-export default function SettingsPanel({ settings, onChange, onShowChangelog, onShowShortcuts }: Props) {
+export default function SettingsPanel({ settings, onChange, onShowChangelog, onShowShortcuts, isAdmin, onOpenBriefingSources }: Props) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -216,6 +220,8 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
           </span>
         </label>
       </section>
+
+      {isAdmin && <BriefingSettings onOpenSources={onOpenBriefingSources} />}
 
       <section>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">내보내기</h3>

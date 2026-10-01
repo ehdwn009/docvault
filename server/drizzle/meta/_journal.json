@@ -106,6 +106,13 @@
       "when": 1789954962505,
       "tag": "0014_skinny_power_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1790822557595,
+      "tag": "0015_fancy_saracen",
+      "breakpoints": true
     }
   ]
 }

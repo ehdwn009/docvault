@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AskPanel, { type AskSeed } from '../components/AskPanel';
+import BriefingView from '../components/BriefingView';
 import CardView from '../components/CardView';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
@@ -193,9 +194,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
 
-  // 렌더링 대신 코드(강조+줄 번호)로 볼 수 있는 형식 — code 형식은 이미 코드 뷰어라 제외
+  // 뉴스 브리핑 회차 — 본문(JSON)을 전용 뷰어(SCR-191)로 그린다. 기계가 만든 문서라 편집은 없다
+  const isBriefing = file.kind === 'briefing';
+  // 렌더링 대신 코드(강조+줄 번호)로 볼 수 있는 형식 — code 형식은 이미 코드 뷰어라 제외(브리핑은 JSON 원문을 볼 수 있게)
   const canCodeView =
-    !isBinary && (file.fileType === 'md' || file.fileType === 'html' || file.fileType === 'text');
+    !isBinary && (file.fileType === 'md' || file.fileType === 'html' || file.fileType === 'text' || isBriefing);
   // 코드로 보기 — 세션 한정 임시 모드. 줄 앵커로 열리면 자동으로 켠다 (IA — 코드로 보기)
   const [codeView, setCodeView] = useState(() => canCodeView && !!jumpLines);
   // 줄을 가리키는 링크는 "코드를 보라"는 뜻으로 해석한다
@@ -267,7 +270,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // E = 편집 — ⋯ 메뉴의 "편집 (E)" 표기 이행. 활성 칸에서만, 입력 중·수식키 조합은 무시
   // (IA — 신규 단축키. HTML 문서 iframe 안을 클릭한 상태에서는 키가 iframe에 머물러 안 온다)
   useEffect(() => {
-    if (!isActive || mode !== 'view' || !data || data.readonly) return;
+    if (!isActive || mode !== 'view' || !data || data.readonly || isBriefing) return;
     const handler = (e: KeyboardEvent) => {
       const t = e.target;
       const typing =
@@ -278,7 +281,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isActive, mode, data]);
+  }, [isActive, mode, data, isBriefing]);
 
   /** 우리가 그리는 본문(md·텍스트·코드)의 선택을 읽는다 — HTML은 iframe 심이 같은 모양으로 보고한다 */
   const readOwnSelection = useCallback(() => {
@@ -596,7 +599,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     // 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다)
     { label: '다운로드', href: `/api/v1/files/${file.id}/raw`, download: file.name },
     ...(onShowProperties ? [{ label: '속성', onClick: onShowProperties }] : []),
-    ...(data.readonly ? [] : [{ label: '편집 (E)', onClick: () => setMode('edit') }]),
+    ...(data.readonly || isBriefing ? [] : [{ label: '편집 (E)', onClick: () => setMode('edit') }]),
   ];
 
   const actions = (
@@ -923,7 +926,17 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   📚 이 문서에 내 카드 {foundTerms.length}장 · {foundTerms.join(', ')}
                 </p>
               )}
-              {BodyRenderer && file.kind === 'card' && !showAsCode ? (
+              {isBriefing && !showAsCode ? (
+                <BriefingView
+                  content={data.content}
+                  theme={settings.viewerTheme}
+                  fallback={
+                    <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
+                      <CodeRenderer content={data.content} theme={settings.viewerTheme} fileName={file.name} />
+                    </Suspense>
+                  }
+                />
+              ) : BodyRenderer && file.kind === 'card' && !showAsCode ? (
                 // 카드: 머리말은 표로, 본문은 md 렌더러로 (설계 — 카드 한 장 = 머리말 + 자유 본문)
                 <CardView
                   title={cardTitle(file.name)}

@@ -2,6 +2,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   type AnySQLiteColumn,
@@ -58,8 +59,9 @@ export const files = sqliteTable('files', {
   storagePath: text('storage_path'),
   isShared: integer('is_shared').notNull().default(0),
   sortOrder: integer('sort_order').notNull().default(0),
-  /** doc=보통 문서, card=배움 카드(2판). 카드는 md 파일이지만 파일 트리에는 안 나오고 서랍(SCR-181)에서만 보인다 */
-  kind: text('kind', { enum: ['doc', 'card'] }).notNull().default('doc'),
+  /** doc=보통 문서, card=배움 카드(2판), briefing=뉴스 브리핑 회차. 카드는 md 파일이지만 파일 트리에는 안 나오고
+      서랍(SCR-181)에서만 보인다. 브리핑은 본문이 회차 JSON인 code 파일이고 트리에 나온다 — 보관함이 곧 트리 (뉴스 브리핑 설계) */
+  kind: text('kind', { enum: ['doc', 'card', 'briefing'] }).notNull().default('doc'),
   /** 휴지통 이동 시각. null이면 정상 파일. 보관 기한이 지나면 서버가 자동 영구 삭제한다 */
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
@@ -153,6 +155,8 @@ export const userSettings = sqliteTable('user_settings', {
   termHighlight: integer('term_highlight').notNull().default(1),
   /** 질문할 때 관련 배움 카드를 문맥으로 함께 보낼지 (활용 ④). 1=켬 */
   askWithCards: integer('ask_with_cards').notNull().default(1),
+  /** 뉴스 브리핑 자동 생성 (06:30·11:30·17:30 KST). 관리자에게만 의미가 있다. 기본 꺼짐 — 켜야 돈이 나간다 */
+  briefingAuto: integer('briefing_auto').notNull().default(0),
   updatedAt: integer('updated_at').notNull(),
 });
 
@@ -211,4 +215,44 @@ export const cardThreads = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.cardFileId, t.threadId] })],
+);
+
+/** 뉴스 브리핑을 만든 실행 한 번 — 진행 상태·실패 이유·사용량·비용·다룬 범위. 회차 내용은 files의 문서에 있다.
+    다음 회차의 범위는 직전 ok 실행의 until_at부터 — 문서를 지우거나 옮겨도 흔들리지 않게 파일이 아니라 여기서 읽는다 */
+export const briefingRuns = sqliteTable(
+  'briefing_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    ownerId: integer('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    trigger: text('trigger', { enum: ['manual', 'auto'] }).notNull(),
+    slot: text('slot', { enum: ['morning', 'noon', 'evening', 'adhoc'] }).notNull(),
+    /** 한국시간 날짜 YYYY-MM-DD — 자동 회차가 하루에 한 번만 돌게 하는 기준 */
+    editionDate: text('edition_date').notNull(),
+    status: text('status', { enum: ['running', 'ok', 'error', 'skipped'] }).notNull(),
+    stage: text('stage', { enum: ['collect', 'classify', 'select', 'summarize', 'save'] }),
+    progressDone: integer('progress_done').notNull().default(0),
+    progressTotal: integer('progress_total').notNull().default(0),
+    sinceAt: integer('since_at').notNull(),
+    untilAt: integer('until_at').notNull(),
+    // SET NULL: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 월 합계가 문서 삭제로 줄면 안 된다
+    fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
+    sourceCount: integer('source_count').notNull().default(0),
+    /** 실패한 출처 이름 JSON 배열 */
+    failedSources: text('failed_sources'),
+    candidateCount: integer('candidate_count').notNull().default(0),
+    itemCount: integer('item_count').notNull().default(0),
+    haikuInputTokens: integer('haiku_input_tokens').notNull().default(0),
+    haikuOutputTokens: integer('haiku_output_tokens').notNull().default(0),
+    sonnetInputTokens: integer('sonnet_input_tokens').notNull().default(0),
+    sonnetOutputTokens: integer('sonnet_output_tokens').notNull().default(0),
+    /** 그때의 단가로 계산해 둔 추정 비용 — 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남는다 */
+    costUsd: real('cost_usd').notNull().default(0),
+    /** 실패·건너뜀 이유 (사람이 읽는 글) */
+    message: text('message'),
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [index('briefing_runs_owner_started_idx').on(t.ownerId, t.startedAt)],
 );
