@@ -19,6 +19,10 @@ export type PipelineProgress = {
   onStage: (stage: Stage, done: number, total: number) => void;
   /** 수집이 끝나면 한 번 — 실행 기록에 출처 수·실패 출처·후보 수를 먼저 적어 둔다 */
   onCollected?: (info: { sourceCount: number; failed: { name: string; reason: string }[]; candidateCount: number }) => void;
+  /** 진행 기록 한 줄 — 화면의 [진행 기록]에 쌓인다 (설계 "실행 관리 — 진행 기록") */
+  log?: (text: string) => void;
+  /** 바깥에서 받는 일(피드·원문) 하나의 시작. 돌려받은 함수로 끝을 알린다 — 오래 걸리면 "기다리는 중"으로 보인다 */
+  track?: (name: string) => () => void;
 };
 
 export type PipelineResult =
@@ -46,9 +50,11 @@ export async function generateEdition(args: {
   const { progress, signal } = args;
   try {
     // ① 수집
+    const log = (text: string) => progress.log?.(text);
     progress.onStage('collect', 0, 0);
     const { sources } = loadSources(args.ownerId);
     if (sources.length === 0) throw new Error('수집 목록이 비어 있습니다');
+    log(`수집 시작 — 출처 ${sources.length}곳`);
     const prev = readPrevious(args.prevFileId);
     const got = await collect(sources, {
       since: args.since,
@@ -56,7 +62,9 @@ export async function generateEdition(args: {
       excludeUrls: prev.urls,
       signal,
       onProgress: (d, t) => progress.onStage('collect', d, t),
+      track: progress.track,
     });
+    log(`수집 끝 — 후보 ${got.candidates.length}건${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(${got.failed.slice(0, 3).map((f) => f.name).join(', ')}${got.failed.length > 3 ? ' 외' : ''})` : ''}`);
     progress.onCollected?.({ sourceCount: got.sourceCount, failed: got.failed, candidateCount: got.candidates.length });
     const okCount = got.sourceCount - got.failed.length;
     // 망가진 수집으로 만든 회차는 직전 회차보다 나쁘다
@@ -70,6 +78,7 @@ export async function generateEdition(args: {
     const bySub = new Map<BriefingSub, Candidate[]>();
     for (const c of classified) if (c.sub) bySub.set(c.sub, [...(bySub.get(c.sub) ?? []), c]);
     if (bySub.size === 0) return { kind: 'empty', usage, message: '브리핑에 실을 기사가 없어요' };
+    log(`분류 끝 — ${classified.length}건이 ${bySub.size}개 분야로`);
 
     // ③ 선별
     const selected = await select(bySub, prev.storiesBySub, args.ai, usage, {
@@ -81,12 +90,16 @@ export async function generateEdition(args: {
 
     // ③-2 분야를 넘는 같은 사건을 하나로 — 분야별 선별은 서로를 못 본다 (설계 "③-2"). 진행 표시는 선별에 포함
     const picked = await mergeSameStories(selected, args.ai, usage, signal);
+    log(`선별 끝 — ${picked.length}건${selected.length > picked.length ? ` (같은 사건 ${selected.length - picked.length}건 합침)` : ''}`);
 
-    // ③-1 핵심 기사만 원문 앞부분 읽기 — 실패한 기사는 발췌로 돌아간다 (설계 "③-1 근거 보강")
-    const bodies = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t) });
+    // ③-1 핵심·주요 기사 원문 앞부분 읽기 — 실패한 기사는 발췌로 돌아간다 (설계 "③-1 근거 보강")
+    const bodies = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t), track: progress.track });
+    const readTargets = picked.filter((p) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE).length;
+    log(`원문 읽기 끝 — ${readTargets}건 중 ${bodies.size}건`);
 
     // ④ 요약
     const written = await summarize(picked, bodies, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('summarize', d, t) });
+    log(`요약 끝 — ${written.size}건`);
 
     const edition = assembleEdition({
       picked,

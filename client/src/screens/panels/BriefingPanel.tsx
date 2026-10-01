@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from '../../components/Icon';
 import { api, ApiError } from '../../lib/api';
 import {
@@ -35,6 +35,7 @@ function runLine(r: BriefingRun): string {
   const when = kstTime(r.finishedAt ?? r.startedAt);
   if (r.status === 'ok') return `${SLOT_FULL[r.slot]} ${r.itemCount ?? 0}건 · ≈ $${r.costUsd.toFixed(2)} · ${when}`;
   if (r.status === 'skipped') return `${r.message ?? '건너뜀'} · ${when}`;
+  if (r.status === 'cancelled') return `멈춤 · ${when}`;
   if (r.status === 'error') return `실패: ${r.message ?? '알 수 없는 오류'} · ${when}`;
   return `만드는 중 · ${when}`;
 }
@@ -42,6 +43,7 @@ function runLine(r: BriefingRun): string {
 const STATUS_COLOR: Record<BriefingRun['status'], string> = {
   ok: 'text-slate-300',
   skipped: 'text-slate-500',
+  cancelled: 'text-slate-500',
   error: 'text-red-400',
   running: 'text-sky-300',
 };
@@ -100,6 +102,8 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
         toast(`${SLOT_FULL[last.slot]} ${last.itemCount ?? 0}건을 만들었어요`, 'success', { action: { label: '열기', onAction: () => openRef.current(fileId) } });
       } else if (last.status === 'error') {
         toast(`브리핑을 만들지 못했어요 — ${last.message ?? ''}`, 'error');
+      } else if (last.status === 'cancelled') {
+        toast('브리핑 만들기를 멈췄어요', 'info');
       } else if (last.status === 'skipped') {
         toast(last.message ?? '새 기사가 없어요', 'info');
       }
@@ -228,7 +232,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             </p>
           )}
           {running ? (
-            <ProgressCard run={running} />
+            <ProgressCard run={running} onStopped={() => void load()} />
           ) : (
             <>
               <button
@@ -242,7 +246,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             </>
           )}
           {!running && last && last.status !== 'ok' && (
-            <p className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</p>
+            <ClampLine className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</ClampLine>
           )}
           {!running && last && last.failedSources.length > 0 && (
             <div className="text-xs">
@@ -345,10 +349,12 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             <ul className="space-y-1.5">
               {runs.length === 0 && <li className="text-xs text-slate-600">기록이 없습니다.</li>}
               {runs.map((r) => (
-                <li key={r.id} className={`text-[11px] leading-snug ${STATUS_COLOR[r.status]}`}>
-                  <span className="text-slate-600">{r.trigger === 'auto' ? '자동' : '버튼'} · </span>
-                  {runLine(r)}
-                  {r.finishedAt && r.status !== 'skipped' && <span className="text-slate-600"> · {Math.round((r.finishedAt - r.startedAt) / 1000)}초</span>}
+                <li key={r.id}>
+                  <ClampLine className={`text-[11px] leading-snug ${STATUS_COLOR[r.status]}`}>
+                    <span className="text-slate-600">{r.trigger === 'auto' ? '자동' : '버튼'} · </span>
+                    {runLine(r)}
+                    {r.finishedAt && r.status !== 'skipped' && r.status !== 'cancelled' && <span className="text-slate-600"> · {Math.round((r.finishedAt - r.startedAt) / 1000)}초</span>}
+                  </ClampLine>
                 </li>
               ))}
             </ul>
@@ -377,6 +383,16 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
 }
 
 /** 자동 회차 시작 시각 → 칸. 06·11·17시 — 서버 BRIEFING.AUTO_SLOTS와 같은 순서 */
+/** 두 줄까지만 — 누르면 펼친다. 옛 실패 기록에는 영어 오류 원문이 통째로 남아 화면을 덮었다(v0.42.1 전 기록, 2026-10-02) */
+function ClampLine({ className, children }: { className: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <p onClick={() => setOpen((v) => !v)} className={`m-0 cursor-pointer break-words ${open ? '' : 'line-clamp-2'} ${className}`}>
+      {children}
+    </p>
+  );
+}
+
 function SlotChip({ label, accent = false }: { label: string; accent?: boolean }) {
   return (
     <span className={`w-10 shrink-0 rounded-lg py-1 text-center text-xs font-bold ${accent ? 'bg-sky-950/60 text-sky-300' : 'bg-slate-900 text-slate-500'}`}>
@@ -386,8 +402,27 @@ function SlotChip({ label, accent = false }: { label: string; accent?: boolean }
 }
 
 /** 진행 카드 — 지금 단계와 n/m, 걸린 시간, 막대, 단계 줄 */
-function ProgressCard({ run }: { run: BriefingRun }) {
+function ProgressCard({ run, onStopped }: { run: BriefingRun; onStopped: () => void }) {
+  const [showLog, setShowLog] = useState(false);
   const stage = run.stage ?? 'collect';
+  const waiting = run.live?.waiting ?? [];
+  const log = run.live?.log ?? [];
+  // 받는 곳이 응답하지 않아 몇 분째 멈춘 실행을 사람이 끝낼 수 있게 (2026-10-02, 수집 63/67에서 멈춤)
+  async function stop() {
+    const ok = await confirmDialog('브리핑 만들기를 멈출까요?', {
+      message: '만든 내용은 저장되지 않아요. 이미 쓴 AI 비용은 이번 달 비용에 남아요.',
+      confirmLabel: '멈추기',
+      cancelLabel: '계속 만들기',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api(`/briefing/runs/${run.id}/cancel`, { method: 'POST' });
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : '멈추지 못했어요', 'error');
+    }
+    onStopped();
+  }
   const at = STAGE_ORDER.indexOf(stage);
   const pct = run.progressTotal > 0 ? Math.round((run.progressDone / run.progressTotal) * 100) : 5;
   const elapsed = Math.max(0, Math.round((Date.now() - run.startedAt) / 1000));
@@ -410,7 +445,37 @@ function ProgressCard({ run }: { run: BriefingRun }) {
           </span>
         ))}
       </p>
+      {/* 8초 넘게 응답이 없는 출처 — 어디서 막혔는지 바로 보이게 */}
+      {waiting.length > 0 && (
+        <p className="text-[11px] leading-relaxed text-amber-300/90">
+          기다리는 중: {waiting.map((w) => `${w.name} (${w.seconds}초)`).join(' · ')}
+        </p>
+      )}
       <p className="text-[11px] text-slate-500">{run.trigger === 'auto' ? '자동 생성' : '버튼으로 시작'} · 화면을 닫아도 계속 만듭니다</p>
+      <div className="flex items-center gap-2">
+        {log.length > 0 && (
+          <button onClick={() => setShowLog((v) => !v)} className="min-h-9 text-[11px] text-slate-400 underline hover:text-slate-200">
+            진행 기록 {showLog ? '접기' : '보기'}
+          </button>
+        )}
+        <button
+          // 오른쪽 끝 — 진행 기록이 없을 때도 같은 자리
+          onClick={() => void stop()}
+          className="ml-auto flex min-h-9 shrink-0 items-center rounded-lg border border-slate-700 px-3 text-xs text-slate-300 transition hover:border-red-800 hover:text-red-300"
+        >
+          중지
+        </button>
+      </div>
+      {showLog && (
+        <ol className="m-0 max-h-40 list-none space-y-0.5 overflow-y-auto p-0 text-[11px] text-slate-400">
+          {log.map((l, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="shrink-0 tabular-nums text-slate-600">{elapsedText(Math.max(0, Math.round((l.at - run.startedAt) / 1000)))}</span>
+              <span>{l.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

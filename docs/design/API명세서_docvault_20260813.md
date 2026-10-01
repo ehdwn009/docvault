@@ -112,6 +112,7 @@
 | API-133 | GET | /briefing/runs | 실행 기록 (최근순, 상태·건수·비용·걸린 시간·실패 이유·실패 출처) | 관리자 |
 | API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기와 회차별 켜기·시각 `{ autoEnabled?, schedule? }` | 관리자 |
 | API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43) | 관리자 |
+| API-137 | POST | /briefing/runs/{id}/cancel | 도는 실행 중지 — 진행 카드의 [중지] (2026-10-02) | 관리자 |
 | API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
@@ -573,10 +574,11 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "sinceAt": 1790830800000, "untilAt": 1790847000000,
   "fileId": null, "fileName": null,
   "sourceCount": 48, "failedSources": ["한겨레 경제"], "candidateCount": 512, "itemCount": null,
-  "costUsd": 0.18, "message": null, "startedAt": 1790847000000, "finishedAt": null
+  "costUsd": 0.18, "message": null, "startedAt": 1790847000000, "finishedAt": null,
+  "live": { "log": [ { "at": 1790847001000, "text": "수집 시작 — 출처 67곳" } ], "waiting": [ { "name": "한겨레 경제", "seconds": 12 } ] }
 }
 ```
-`status`: running | ok | error | skipped. `stage`: collect | classify | select | read(핵심 기사 원문 읽기, v0.43) | summarize | save. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
+`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | summarize | save. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
 
 ### API-131 Response — GET /briefing/status
 ```json
@@ -617,6 +619,9 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 - 최신순. `before`(그날은 빼고 그 전) 없이 부르면 오늘부터, 회차가 있는 날을 `days`일치(기본 7, 최대 31) 돌려준다. `nextBefore`로 [더 보기]를 이어 부른다.
 - 성공한 실행(ok)의 회차 문서 중 휴지통에 없는 것만. `state`: 읽은 기사 0 = unread, 핵심(lead)이 다 읽혔으면 done, 그 사이 partial. 핵심은 BRIEFING_RUNS.lead_ids로 센다(없는 옛 회차는 이때 JSON에서 채운다).
 - `label`은 화면용 이름("저녁", "14시 53분").
+
+### API-137 — POST /briefing/runs/{id}/cancel (2026-10-02)
+**200** `{ "run": 실행 객체 }` — 도는 실행이면 곧바로 `cancelled`("직접 멈췄어요")로 닫고 멈춤 신호를 보낸다. 기록이 먼저 닫히므로 뒤에서 도는 일이 신호를 듣지 않아도 다음 실행이 막히지 않는다. 늦게 끝난 그 일은 파일을 만들지 않고, 쓴 AI 비용만 기록에 더한다. 이미 끝난 실행이면 아무것도 하지 않고 지금 상태를 돌려준다(두 번 눌러도 같다). 내 실행이 아니거나 없으면 404.
 
 ### API-136 — GET /briefing/editions/{fileId}/nav (v0.43)
 **200** `{ "prevId": number | null, "nextId": number | null, "sameDay": [ { "fileId", "slot", "label" } ] }` — 생성 순서로 바로 앞·뒤 회차와, 같은 날(한국시간) 회차들(이른 순). 회차 문서가 아니면 404.

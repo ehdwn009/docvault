@@ -55,13 +55,14 @@ export function extractArticleText(html: string): string {
 /** 핵심·주요 기사들(BODY_FETCH_MIN_IMPORTANCE 이상)의 본문 앞부분 — 열쇠는 picked 배열의 위치. 못 읽은 기사는 빠진다 */
 export async function readBodies(
   picked: Picked[],
-  opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+  opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void; track?: (name: string) => () => void } = {},
 ): Promise<Map<number, string>> {
   const targets = picked.map((p, i) => ({ p, i })).filter(({ p }) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE);
   const bodies = new Map<number, string>();
   let done = 0;
   opts.onProgress?.(0, targets.length);
   await mapLimit(targets, BRIEFING.BODY_FETCH_CONCURRENCY, async ({ p, i }) => {
+    const finish = opts.track?.(`${p.main.source} — ${p.main.title.slice(0, BRIEFING.LIVE_TITLE_CHARS)}`);
     try {
       for (const url of bodyUrls(p)) {
         try {
@@ -75,6 +76,7 @@ export async function readBodies(
         }
       }
     } finally {
+      finish?.();
       opts.onProgress?.(++done, targets.length);
     }
   });
