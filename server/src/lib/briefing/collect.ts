@@ -3,6 +3,7 @@ import { fetchFeedText } from './fetch.js';
 import { errorText, mapLimit } from './limit.js';
 import { parseFeed, type FeedItem } from './rss.js';
 import { outletName } from './outlets.js';
+import { isRoundupTitle } from './roundup.js';
 import type { Source } from './sources.js';
 import type { BriefingSection, BriefingSub } from './taxonomy.js';
 
@@ -27,6 +28,8 @@ export type CollectResult = {
   candidates: Candidate[];
   sourceCount: number;
   failed: { name: string; reason: string }[];
+  /** 제목으로 거른 모음 기사 수 (roundup.ts ①) */
+  roundups: number;
 };
 
 /** 중복 판정용 제목 열쇠 — 말머리([속보]·[단독]), 공백, 문장부호를 지운다 */
@@ -58,7 +61,7 @@ export function usefulSnippet(title: string, snippet: string): string {
   return snippet;
 }
 
-function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>): Candidate[] {
+function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>, onRoundup: () => void): Candidate[] {
   const out: Candidate[] = [];
   for (const it of items) {
     if (!it.title || !/^https?:\/\//i.test(it.link)) continue;
@@ -66,6 +69,11 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
     if (it.publishedAt === null || it.publishedAt <= since || it.publishedAt > until) continue;
     if (excludeUrls.has(it.link)) continue;
     const title = stripSourceSuffix(it.title, it.source);
+    // 모음 기사(헤드라인·주요뉴스 모음)는 사건 하나가 아니다 — 담긴 사건은 개별 기사로 따로 들어온다 (roundup.ts ①)
+    if (isRoundupTitle(title)) {
+      onRoundup();
+      continue;
+    }
     out.push({
       title,
       url: it.link,
@@ -147,12 +155,13 @@ export async function collect(
   },
 ): Promise<CollectResult> {
   let done = 0;
+  let roundups = 0;
   opts.onProgress?.(0, sources.length);
   const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (src) => {
     const finish = opts.track?.(src.name);
     try {
       const xml = await fetchFeedText(src.url, opts.signal);
-      return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls);
+      return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls, () => roundups++);
     } finally {
       finish?.();
       opts.onProgress?.(++done, sources.length);
@@ -166,5 +175,5 @@ export async function collect(
     else failed.push({ name: sources[i]?.name ?? '?', reason: errorText(r.error) });
   });
   const candidates = spreadPick(dedupe(all), BRIEFING.MAX_CANDIDATES, opts.since, opts.until);
-  return { candidates, sourceCount: sources.length, failed };
+  return { candidates, sourceCount: sources.length, failed, roundups };
 }

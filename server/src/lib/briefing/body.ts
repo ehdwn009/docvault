@@ -1,6 +1,7 @@
 import { BRIEFING } from '../../constants.js';
 import { isAggregator, type Candidate } from './collect.js';
 import { fetchPageText } from './fetch.js';
+import { isRoundupPage } from './roundup.js';
 import { mapLimit } from './limit.js';
 import { plainText } from './rss.js';
 import type { Picked } from './select.js';
@@ -52,13 +53,17 @@ export function extractArticleText(html: string): string {
   return text.slice(0, BRIEFING.BODY_MAX_CHARS);
 }
 
-/** 핵심·주요 기사들(BODY_FETCH_MIN_IMPORTANCE 이상)의 본문 앞부분 — 열쇠는 picked 배열의 위치. 못 읽은 기사는 빠진다 */
+/**
+ * 핵심·주요 기사들(BODY_FETCH_MIN_IMPORTANCE 이상)의 본문 앞부분 — 열쇠는 picked 배열의 위치. 못 읽은 기사는 빠진다.
+ * 열어 보니 모음 기사(roundup.ts ③)였던 기사의 위치는 roundups로 따로 돌려준다 — 부르는 쪽이 싣지 않는다
+ */
 export async function readBodies(
   picked: Picked[],
   opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void; track?: (name: string) => () => void } = {},
-): Promise<Map<number, string>> {
+): Promise<{ bodies: Map<number, string>; roundups: Set<number> }> {
   const targets = picked.map((p, i) => ({ p, i })).filter(({ p }) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE);
   const bodies = new Map<number, string>();
+  const roundups = new Set<number>();
   let done = 0;
   opts.onProgress?.(0, targets.length);
   await mapLimit(targets, BRIEFING.BODY_FETCH_CONCURRENCY, async ({ p, i }) => {
@@ -66,7 +71,12 @@ export async function readBodies(
     try {
       for (const url of bodyUrls(p)) {
         try {
-          const text = extractArticleText(await fetchPageText(url, opts.signal));
+          const html = await fetchPageText(url, opts.signal);
+          const text = extractArticleText(html);
+          if (isRoundupPage(html, text)) {
+            roundups.add(i);
+            return;
+          }
           if (text.length >= 100) {
             bodies.set(i, text);
             return;
@@ -80,7 +90,7 @@ export async function readBodies(
       opts.onProgress?.(++done, targets.length);
     }
   });
-  return bodies;
+  return { bodies, roundups };
 }
 
 /** 요약의 근거 — 화면이 "무엇을 보고 쓴 요약인지" 밝히는 데 쓴다 */

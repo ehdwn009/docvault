@@ -5,7 +5,7 @@ import { classify } from './classify.js';
 import { collect, type Candidate } from './collect.js';
 import { assembleEdition, readPrevious, type Edition, type Slot } from './edition.js';
 import { mergeSameStories } from './merge.js';
-import { select } from './select.js';
+import { select, type Picked } from './select.js';
 import { loadSources } from './sources.js';
 import { summarize } from './summarize.js';
 import type { BriefingSub } from './taxonomy.js';
@@ -64,7 +64,7 @@ export async function generateEdition(args: {
       onProgress: (d, t) => progress.onStage('collect', d, t),
       track: progress.track,
     });
-    log(`수집 끝 — 후보 ${got.candidates.length}건${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(${got.failed.slice(0, 3).map((f) => f.name).join(', ')}${got.failed.length > 3 ? ' 외' : ''})` : ''}`);
+    log(`수집 끝 — 후보 ${got.candidates.length}건${got.roundups ? ` (모음 기사 ${got.roundups}건 뺌)` : ''}${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(${got.failed.slice(0, 3).map((f) => f.name).join(', ')}${got.failed.length > 3 ? ' 외' : ''})` : ''}`);
     progress.onCollected?.({ sourceCount: got.sourceCount, failed: got.failed, candidateCount: got.candidates.length });
     const okCount = got.sourceCount - got.failed.length;
     // 망가진 수집으로 만든 회차는 직전 회차보다 나쁘다
@@ -89,13 +89,22 @@ export async function generateEdition(args: {
     });
 
     // ③-2 분야를 넘는 같은 사건을 하나로 — 분야별 선별은 서로를 못 본다 (설계 "③-2"). 진행 표시는 선별에 포함
-    const picked = await mergeSameStories(selected, args.ai, usage, signal);
-    log(`선별 끝 — ${picked.length}건${selected.length > picked.length ? ` (같은 사건 ${selected.length - picked.length}건 합침)` : ''}`);
+    const merged = await mergeSameStories(selected, args.ai, usage, signal);
+    log(`선별 끝 — ${merged.length}건${selected.length > merged.length ? ` (같은 사건 ${selected.length - merged.length}건 합침)` : ''}`);
 
     // ③-1 핵심·주요 기사 원문 앞부분 읽기 — 실패한 기사는 발췌로 돌아간다 (설계 "③-1 근거 보강")
-    const bodies = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t), track: progress.track });
-    const readTargets = picked.filter((p) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE).length;
-    log(`원문 읽기 끝 — ${readTargets}건 중 ${bodies.size}건`);
+    const read = await readBodies(merged, { signal, onProgress: (d, t) => progress.onStage('read', d, t), track: progress.track });
+    const readTargets = merged.filter((p) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE).length;
+    log(`원문 읽기 끝 — ${readTargets}건 중 ${read.bodies.size}건${read.roundups.size ? ` (모음 기사 ${read.roundups.size}건 뺌)` : ''}`);
+    // 열어 보니 모음 기사였던 것은 싣지 않는다 — 본문 열쇠(picked 위치)를 남은 기사 기준으로 다시 붙인다 (roundup.ts ③)
+    const picked: Picked[] = [];
+    const bodies = new Map<number, string>();
+    merged.forEach((p, i) => {
+      if (read.roundups.has(i)) return;
+      const body = read.bodies.get(i);
+      if (body !== undefined) bodies.set(picked.length, body);
+      picked.push(p);
+    });
 
     // ④ 요약
     const written = await summarize(picked, bodies, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('summarize', d, t) });
