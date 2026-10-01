@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from '../../components/Icon';
 import { api, ApiError } from '../../lib/api';
 import {
@@ -246,7 +246,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             </>
           )}
           {!running && last && last.status !== 'ok' && (
-            <p className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</p>
+            <ClampLine className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</ClampLine>
           )}
           {!running && last && last.failedSources.length > 0 && (
             <div className="text-xs">
@@ -349,10 +349,12 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             <ul className="space-y-1.5">
               {runs.length === 0 && <li className="text-xs text-slate-600">기록이 없습니다.</li>}
               {runs.map((r) => (
-                <li key={r.id} className={`text-[11px] leading-snug ${STATUS_COLOR[r.status]}`}>
-                  <span className="text-slate-600">{r.trigger === 'auto' ? '자동' : '버튼'} · </span>
-                  {runLine(r)}
-                  {r.finishedAt && r.status !== 'skipped' && r.status !== 'cancelled' && <span className="text-slate-600"> · {Math.round((r.finishedAt - r.startedAt) / 1000)}초</span>}
+                <li key={r.id}>
+                  <ClampLine className={`text-[11px] leading-snug ${STATUS_COLOR[r.status]}`}>
+                    <span className="text-slate-600">{r.trigger === 'auto' ? '자동' : '버튼'} · </span>
+                    {runLine(r)}
+                    {r.finishedAt && r.status !== 'skipped' && r.status !== 'cancelled' && <span className="text-slate-600"> · {Math.round((r.finishedAt - r.startedAt) / 1000)}초</span>}
+                  </ClampLine>
                 </li>
               ))}
             </ul>
@@ -381,6 +383,16 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
 }
 
 /** 자동 회차 시작 시각 → 칸. 06·11·17시 — 서버 BRIEFING.AUTO_SLOTS와 같은 순서 */
+/** 두 줄까지만 — 누르면 펼친다. 옛 실패 기록에는 영어 오류 원문이 통째로 남아 화면을 덮었다(v0.42.1 전 기록, 2026-10-02) */
+function ClampLine({ className, children }: { className: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <p onClick={() => setOpen((v) => !v)} className={`m-0 cursor-pointer break-words ${open ? '' : 'line-clamp-2'} ${className}`}>
+      {children}
+    </p>
+  );
+}
+
 function SlotChip({ label, accent = false }: { label: string; accent?: boolean }) {
   return (
     <span className={`w-10 shrink-0 rounded-lg py-1 text-center text-xs font-bold ${accent ? 'bg-sky-950/60 text-sky-300' : 'bg-slate-900 text-slate-500'}`}>
