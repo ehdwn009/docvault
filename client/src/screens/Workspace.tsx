@@ -212,13 +212,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     void resolveFile(id).then((f) => (f ? void selectFile(f) : toast('파일을 찾지 못했어요', 'error')));
   /** 내 파일 최상위의 "뉴스 브리핑" 폴더 — 이름으로 찾는다(서버도 이름으로 찾는다) */
   const briefingFolderId = () => treeRef.current.folders.find((f) => f.parentId === null && f.name === BRIEFING_FOLDER_NAME)?.id ?? null;
-  const openBriefingFolder = () => {
-    const id = briefingFolderId();
-    if (id === null) return toast('아직 브리핑 폴더가 없어요. 첫 브리핑을 만들면 생깁니다', 'info');
-    setPanel('files');
-    setPanelCollapsed(false);
-    setSelectedFolder(id);
-  };
+  /** 회차 화면의 ‹ ›·회차 칩 — 보던 회차의 탭 자리를 새 회차로 바꾼다. 넘길 때마다 탭이 쌓이지 않게 */
+  const swapBriefing = (fromId: number, toId: number) =>
+    void resolveFile(toId).then((f) => {
+      if (!f) return toast('회차를 찾지 못했어요', 'error');
+      setTabs((prev) => (prev.some((t) => t.id === f.id) ? prev : prev.map((t) => (t.id === fromId ? f : t))));
+      void selectFile(f);
+    });
   const openBriefingSources = () => {
     const folderId = briefingFolderId();
     const file = treeRef.current.files.find((f) => f.folderId === folderId && f.name === BRIEFING_SOURCES_FILE_NAME);
@@ -1502,9 +1502,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {panel === 'briefing' && user.role === 'admin' && (
           <BriefingPanel
             onOpenFile={openFileById}
-            onOpenFolder={openBriefingFolder}
             onOpenSettings={() => setPanel('settings')}
-            onCreated={() => void loadTree()}
+            onOpenSources={openBriefingSources}
           />
         )}
         {panel === 'settings' && (
@@ -1573,6 +1572,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onSplitView={splitCandidates.length > 0 ? () => void splitView() : undefined}
                 onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
                 onOpenFile={(target) => void selectFile(target)}
+                onSwapBriefing={(toId) => swapBriefing(f.id, toId)}
                 jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
                 onOpenSource={(tid) => void openSource(tid)}
                 onOpenCard={(title) => void openCardByTitle(title)}

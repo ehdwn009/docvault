@@ -7,6 +7,7 @@ import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
+import { fileLabel } from '../lib/briefing';
 import { cardTitle } from '../lib/frontmatter';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { toast } from '../lib/toast';
@@ -38,6 +39,8 @@ type Props = {
   onOpenSwitcher?: () => void;
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
+  /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
+  onSwapBriefing?: (fileId: number) => void;
   /** 카드 출처로 열렸을 때 문서에서 찾아 형광펜 칠할 문장 (배움 카드 — 출처 클릭) */
   jumpQuote?: string;
   /** 카드 뷰의 출처 클릭 — 그 대화의 문서를 열고 문장으로 간다 */
@@ -100,7 +103,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -775,11 +778,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         {onOpenSwitcher ? (
           // 터치: 파일명이 곧 문서 스위처 버튼 — 탭 바 대신 시트로 오간다 (IA — 문서 스위처)
           <button onClick={onOpenSwitcher} className="flex min-w-0 items-center gap-1.5 text-left">
-            <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
+            <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
             <span className="shrink-0 text-xs text-slate-500">▾</span>
           </button>
         ) : (
-          <h2 className="truncate font-medium text-slate-100">{file.name}</h2>
+          <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
         )}
         <span className="text-xs text-slate-500 touch:hidden">
           {new Date(data.updatedAt).toLocaleString()} 수정
@@ -912,6 +915,23 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               onTermsFound={onTermsFound}
               onTermClick={onTermClick}
             />
+          ) : isBriefing && !showAsCode ? (
+            // 브리핑은 폭 설정(좁게·보통)을 따르지 않는다 — 보이는 폭이 넓으면 목록|상세 두 칸이 된다 (SCR-191)
+            <div className="p-4 sm:p-6 touch:pt-14 touch:pb-24" style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}>
+              <BriefingView
+                fileId={file.id}
+                content={data.content}
+                theme={settings.viewerTheme}
+                stickyBg={THEME_BG[settings.viewerTheme]}
+                isActive={isActive ?? false}
+                onOpenFile={(id) => onSwapBriefing?.(id)}
+                fallback={
+                  <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
+                    <CodeRenderer content={data.content} theme={settings.viewerTheme} fileName={file.name} />
+                  </Suspense>
+                }
+              />
+            </div>
           ) : (
             <div
               // 터치의 pt·pb: 오버레이 바가 본문 첫·끝 줄을 가리지 않게 하는 상수 공간 (크롬 자동 숨김)
@@ -926,17 +946,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   📚 이 문서에 내 카드 {foundTerms.length}장 · {foundTerms.join(', ')}
                 </p>
               )}
-              {isBriefing && !showAsCode ? (
-                <BriefingView
-                  content={data.content}
-                  theme={settings.viewerTheme}
-                  fallback={
-                    <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
-                      <CodeRenderer content={data.content} theme={settings.viewerTheme} fileName={file.name} />
-                    </Suspense>
-                  }
-                />
-              ) : BodyRenderer && file.kind === 'card' && !showAsCode ? (
+              {BodyRenderer && file.kind === 'card' && !showAsCode ? (
                 // 카드: 머리말은 표로, 본문은 md 렌더러로 (설계 — 카드 한 장 = 머리말 + 자유 본문)
                 <CardView
                   title={cardTitle(file.name)}

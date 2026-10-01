@@ -587,10 +587,11 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "running": null,
   "last": { "...": "실행 객체 — 가장 최근에 끝난 것" },
   "monthCostUsd": 12.4,
-  "monthBudgetUsd": 50
+  "monthBudgetUsd": 50,
+  "nextSinceAt": 1790837540572
 }
 ```
-`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`은 자동이 켜져 있을 때 다음 시작 시각(unix ms), 꺼져 있으면 null. 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
+`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`은 자동이 켜져 있을 때 다음 시작 시각(unix ms), 꺼져 있으면 null. `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
 
 ### API-132 — POST /briefing/runs
 **Body** `{ "force"?: boolean }` — 월 한도를 넘었을 때 사용자가 확인했다는 표시.

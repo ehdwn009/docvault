@@ -11,6 +11,7 @@ import {
   isConfigured,
   listRuns,
   monthCostUsd,
+  nextSinceAt,
   runningRun,
   startRun,
   toRunDto,
@@ -58,6 +59,7 @@ export const briefingRoutes = new Hono<AppEnv>()
       last: last ? toRunDto(last) : null,
       monthCostUsd: monthCostUsd(user.id),
       monthBudgetUsd: BRIEFING.MONTHLY_BUDGET_USD,
+      nextSinceAt: nextSinceAt(user.id),
     });
   })
 
