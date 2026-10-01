@@ -15,6 +15,7 @@ import { toast } from '../lib/toast';
 import { finishBoot, timed } from '../lib/bootTiming';
 import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
+import { formatDate, formatDateTime } from '../lib/date';
 
 type Props = {
   file: TreeFile;
@@ -646,8 +647,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             💬 「{selection.quote.length > 12 ? `${selection.quote.slice(0, 12)}…` : selection.quote}」 물어보기
           </button>
         ) : (
-          <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="LLM에게 물어보기 (Ctrl+Shift+A)">
-            질문
+          <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="AI에게 묻기 (Ctrl+Shift+A)">
+            AI 질문
           </button>
         ))}
       {(data.fileType === 'md' || data.fileType === 'html') && !codeView && (
@@ -809,7 +810,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
         )}
         <span className="text-xs text-slate-500 touch:hidden">
-          {new Date(data.updatedAt).toLocaleString()} 수정
+          {formatDateTime(data.updatedAt)} 수정
         </span>
         {/* PC는 헤더 오른쪽에, 터치 기기는 아래 도구막대에 둔다 */}
         {isPc && <div className="ml-auto flex gap-2">{actions}</div>}
@@ -906,7 +907,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   {file.sizeBytes >= 1024 * 1024
                     ? `${(file.sizeBytes / 1024 / 1024).toFixed(1)}MB`
                     : `${Math.max(1, Math.round(file.sizeBytes / 1024))}KB`}
-                  {file.updatedAt > 0 && ` · ${new Date(file.updatedAt).toLocaleDateString()}`}
+                  {file.updatedAt > 0 && ` · ${formatDate(file.updatedAt)}`}
                 </p>
                 <p className="text-xs text-slate-500">이 형식은 미리보기를 지원하지 않습니다</p>
                 <a

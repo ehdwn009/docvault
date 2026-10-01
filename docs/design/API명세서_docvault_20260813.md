@@ -483,9 +483,9 @@ GET /api/v1/google/files/{driveFileId}/content
 
 ### API-101 Response — GET /ask/status
 ```json
-{ "configured": true, "limit": 30, "used": 7, "remaining": 23 }
+{ "configured": true, "canConfigure": false, "limit": 30, "used": 7, "remaining": 23 }
 ```
-`configured=false`면 키가 없는 것. 나머지 API는 503 ASK_NOT_CONFIGURED. **관리자는 한도가 없다** — `limit`·`remaining`이 `null`로 온다 (키를 넣고 요금을 내는 사람이 자기를 막을 이유가 없다).
+`configured=false`면 키가 없는 것. `canConfigure`는 키를 넣을 수 있는 사람(관리자)인지 — 화면이 안내를 나눈다: 관리자에게는 설정 방법, 다른 사람에게는 "관리자에게 알려 주세요"(v0.43, 개발자 용어를 일반 사용자에게 보이지 않게). 나머지 API는 503 ASK_NOT_CONFIGURED. **관리자는 한도가 없다** — `limit`·`remaining`이 `null`로 온다 (키를 넣고 요금을 내는 사람이 자기를 막을 이유가 없다).
 
 ### API-102 Request — POST /ask/threads
 | 필드 | 타입 | 필수 | 설명 |

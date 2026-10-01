@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { confirmDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
+import { formatDate } from '../lib/date';
 
 type TrashedFile = {
   id: number;
@@ -72,7 +73,7 @@ export default function TrashPanel({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{f.name}</span>
                   <span className="text-[10px] text-slate-600">
-                    {new Date(f.deletedAt).toLocaleDateString('ko-KR')} 삭제됨
+                    {formatDate(f.deletedAt)} 삭제됨
                   </span>
                 </span>
                 <button

@@ -228,7 +228,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export type AskModelInfo = { id: string; label: string; name: string; note: string };
 
 /** limit·remaining이 null이면 한도 없음 (관리자) */
-export type AskStatus = { configured: boolean; limit: number | null; used: number; remaining: number | null; models: AskModelInfo[]; defaultModel: string };
+export type AskStatus = { configured: boolean; canConfigure?: boolean; limit: number | null; used: number; remaining: number | null; models: AskModelInfo[]; defaultModel: string };
 
 export type AskThread = {
   id: number;

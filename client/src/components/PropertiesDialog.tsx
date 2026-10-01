@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, type FileInfo, type FolderInfo, type Tag, type TreeFile, type TreeFolder } from '../lib/api';
 import { toast } from '../lib/toast';
 import Icon from './Icon';
+import { formatDateTime } from '../lib/date';
 
 export type PropertiesTarget = { kind: 'file'; file: TreeFile } | { kind: 'folder'; folder: TreeFolder };
 
@@ -28,10 +29,9 @@ export function formatBytes(n: number): string {
 
 function when(ts: number | null | undefined): string {
   if (!ts) return '—';
-  const d = new Date(ts);
   const diff = Date.now() - ts;
   const rel = diff < 60_000 ? '방금' : diff < 3_600_000 ? `${Math.floor(diff / 60_000)}분 전` : diff < 86_400_000 ? `${Math.floor(diff / 3_600_000)}시간 전` : diff < 30 * 86_400_000 ? `${Math.floor(diff / 86_400_000)}일 전` : '';
-  return `${d.toLocaleString()}${rel ? ` (${rel})` : ''}`;
+  return `${formatDateTime(ts)}${rel ? ` (${rel})` : ''}`;
 }
 
 // SCR-113: 속성창 — 윈도우의 "속성"처럼 파일·폴더 하나의 사실을 한 자리에. 폰은 아래에서 올라오는 시트, PC는 가운데 창.

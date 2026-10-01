@@ -50,6 +50,7 @@ import Icon, { type IconName } from '../components/Icon';
 import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
+import { formatDateTime } from '../lib/date';
 
 type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
@@ -1736,7 +1737,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 >
                   <p className="truncate font-medium text-slate-200">{f.name}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {new Date(f.state.lastOpenedAt!).toLocaleString()} 열람 · 이어 읽기 →
+                    {formatDateTime(f.state.lastOpenedAt!)} 열람 · 이어 읽기 →
                   </p>
                 </button>
               ))}

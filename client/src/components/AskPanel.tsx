@@ -23,6 +23,7 @@ import { renderers } from '../renderers';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import Icon from './Icon';
 import SwipeRow from './SwipeRow';
+import { formatDate } from '../lib/date';
 
 /** 드래그로 시작할 때 붙는 문맥 — 선택 문장 + 앞뒤 문단 (설계 — 문서 전체는 보내지 않는다) */
 export type AskSeed = { quote: string; context: string };
@@ -544,7 +545,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
                     <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
                       <div className="truncate text-sm text-slate-200">{t.title}</div>
                       <div className="truncate text-xs text-slate-500">
-                        {threadKind(t)} · {t.messageCount ?? 0}개 · {new Date(t.updatedAt).toLocaleDateString()}
+                        {threadKind(t)} · {t.messageCount ?? 0}개 · {formatDate(t.updatedAt)}
                       </div>
                     </button>
                     <button
@@ -564,8 +565,15 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
         <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto overscroll-contain p-3 text-sm">
           {contextChip}
           {notConfigured && (
+            // 일반 사용자에게 "LLM", "ANTHROPIC_API_KEY"는 뜻 모를 말이었다(사용성 평가 2026-10-01) — 관리자에게만 설정 방법을
             <p className="rounded-md border border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
-              관리자가 아직 LLM을 연결하지 않았어요. 서버의 <code>ANTHROPIC_API_KEY</code>가 필요합니다.
+              {status?.canConfigure ? (
+                <>
+                  AI 키가 아직 연결되지 않았어요. 서버의 .env에 <code>ANTHROPIC_API_KEY</code>를 넣고 다시 시작하면 켜집니다.
+                </>
+              ) : (
+                '지금은 AI에게 물어볼 수 없어요. 관리자에게 알려 주세요.'
+              )}
             </p>
           )}
           {messages.length === 0 && !notConfigured && (
@@ -586,7 +594,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
               {history.slice(0, RECENT_THREADS).map((t) => (
                 <button key={t.id} onClick={() => void loadThread(t.id)} className="flex w-full items-center gap-2 border-t border-slate-800 px-2.5 py-2 text-left hover:bg-slate-900">
                   <span className="min-w-0 flex-1 truncate text-slate-200">{t.title}</span>
-                  <span className="shrink-0 text-[11px] text-slate-500">{threadKind(t)} · {new Date(t.updatedAt).toLocaleDateString()}</span>
+                  <span className="shrink-0 text-[11px] text-slate-500">{threadKind(t)} · {formatDate(t.updatedAt)}</span>
                 </button>
               ))}
               {history.length > RECENT_THREADS && (
@@ -816,7 +824,9 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
             ? myStuff
               ? '내 카드 최대 3장과 내 문서에서 찾은 단락 최대 3개를 함께 보냅니다. 문서 전체는 가지 않습니다'
               : '내 자료 없이 답합니다. 카드·문서를 함께 보내려면 스위치를 켜세요'
-            : '문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 LLM에 보냅니다'}
+            : isPc
+              ? '문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 AI에 보냅니다'
+              : '문서 전체가 아니라 고른 문장의 앞뒤 문단만 AI에 보냅니다'}
         </p>
       </div>
       {rowMenu && <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} onClose={() => setRowMenu(null)} />}

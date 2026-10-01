@@ -14,6 +14,7 @@ import { getAppProseTheme } from '../lib/appTheme';
 import { CARD_KINDS } from '../lib/frontmatter';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
+import { formatDate } from '../lib/date';
 
 type Props = {
   threadId: number;
@@ -175,7 +176,7 @@ export default function CardSaveDialog({ threadId, messageId, messageIds, isPc, 
             <div className="text-slate-300">{step.draft.oneLine}</div>
           </div>
           <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 p-3">
-            <div className="text-xs text-amber-300/80">이미 있는 카드 · {new Date(step.similar.updatedAt).toLocaleDateString()}</div>
+            <div className="text-xs text-amber-300/80">이미 있는 카드 · {formatDate(step.similar.updatedAt)}</div>
             <div className="mt-1 font-semibold">{step.similar.title}</div>
             <div className="text-slate-300">{step.similar.oneLine}</div>
           </div>
