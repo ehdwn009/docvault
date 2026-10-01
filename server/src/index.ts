@@ -14,6 +14,7 @@ import { adminRoutes } from './routes/admin.js';
 import { askRoutes, purgeExpiredThreads } from './routes/ask.js';
 import { briefingRoutes } from './routes/briefing.js';
 import { recoverStaleRuns } from './lib/briefing/run.js';
+import { startScheduler } from './lib/briefing/schedule.js';
 import { cardRoutes } from './routes/cards.js';
 import { shareTargetRoutes } from './routes/share-target.js';
 import { authRoutes } from './routes/auth.js';
@@ -37,6 +38,8 @@ purgeExpiredThreads();
 setInterval(purgeExpiredThreads, TRASH_PURGE_INTERVAL_MS);
 // 뉴스 브리핑 — 재시작 전에 돌던 실행은 끝난 것으로 정리한다 (설계 — 실패 처리)
 recoverStaleRuns();
+// 자동 생성 시계 — 켜 둔 관리자가 없으면 1분마다 한 번 확인만 하고 끝난다
+startScheduler();
 
 const app = new Hono();
 
