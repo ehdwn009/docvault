@@ -14,6 +14,7 @@ import TabSwitcher from '../components/TabSwitcher';
 import TrashPanel from '../components/TrashPanel';
 import TagEditor from '../components/TagEditor';
 import UpdateNotes from '../components/UpdateNotes';
+import WelcomeGuide from '../components/WelcomeGuide';
 import {
   api,
   ApiError,
@@ -194,6 +195,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     localStorage.getItem('dv_viewmode') === 'grid' ? 'grid' : 'list',
   );
   const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
+  const [welcomeOpen, setWelcomeOpen] = useState(false); // 첫 사용 안내 (SCR-148)
   const [shortcutsOpen, setShortcutsOpen] = useState(false); // 단축키 치트시트 (SCR-145)
   const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -625,8 +627,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     void timed('설정 (/me/settings)', () => api<{ settings: UserSettings }>('/me/settings'), ['/me/settings'])
       .then(({ settings }) => {
         setSettings(settings);
+        // 한 번도 본 버전이 없으면 새 계정 — 패치노트 대신 사용 안내 3장 (SCR-148)
+        if (settings.lastSeenVersion === null) setWelcomeOpen(true);
         // 새 버전 이후 첫 로그인이면 패치노트를 한 번 보여준다 (확인 시 기록 → 기기 간 공유)
-        if (settings.lastSeenVersion !== __APP_VERSION__) {
+        else if (settings.lastSeenVersion !== __APP_VERSION__) {
           void api<Changelog>('/changelog')
             .then(({ content }) => content && setChangelogContent(content))
             .catch(() => {});
@@ -669,6 +673,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     if (settings.lastSeenVersion !== __APP_VERSION__) {
       changeSettings({ lastSeenVersion: __APP_VERSION__ });
     }
+  }
+
+  function closeWelcome() {
+    setWelcomeOpen(false);
+    // 안내를 본 시점의 버전까지는 이미 쓰고 있는 것 — 이 버전의 패치노트는 건너뛴다
+    changeSettings({ lastSeenVersion: __APP_VERSION__ });
   }
 
   function showChangelog() {
@@ -1848,6 +1858,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         />
       )}
 
+      {welcomeOpen && (
+        <WelcomeGuide
+          touch={IS_TOUCH}
+          onClose={closeWelcome}
+          onOpenSettings={() => {
+            closeWelcome();
+            openPanel('settings');
+            // 비밀번호 칸은 설정 패널 아래쪽이라 열기만 하면 안 보인다 — 패널이 그려진 뒤 그 칸으로 내린다
+            window.setTimeout(() => document.getElementById('settings-password')?.scrollIntoView({ block: 'start' }), 100);
+          }}
+        />
+      )}
       {changelogContent !== null && (
         <UpdateNotes content={changelogContent} onClose={closeChangelog} />
       )}
