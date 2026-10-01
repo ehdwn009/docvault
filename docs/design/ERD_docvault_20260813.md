@@ -26,6 +26,8 @@ erDiagram
     ASK_THREADS ||--o{ ASK_MESSAGES : "주고받음"
     FILES ||--o{ CARD_THREADS : "카드가 태어난 대화"
     ASK_THREADS ||--o{ CARD_THREADS : "카드를 낳음"
+    USERS ||--o{ BRIEFING_RUNS : "브리핑을 만든다"
+    FILES ||--o| BRIEFING_RUNS : "성공한 실행의 회차 문서"
 
     USERS {
         integer id PK
@@ -61,7 +63,7 @@ erDiagram
         text storage_path "바이너리만, 텍스트는 null"
         integer is_shared "0|1"
         integer sort_order
-        text kind "doc|card — card는 배움 카드, 트리에 안 나오고 서랍에서만 (v0.26)"
+        text kind "doc|card|briefing — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 나오고 전용 뷰어로, 2026-10-01)"
         integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15). 목록용 커버링 인덱스 files_owner_kind_idx — 비고 참조"
         integer created_at
         integer updated_at
@@ -107,6 +109,7 @@ erDiagram
         text last_seen_version "마지막으로 확인한 앱 버전, 패치노트 모달용 (2026-08-14)"
         integer term_highlight "0|1 문서 속 카드 용어 밑줄 (기본 1, 2026-09-20)"
         integer ask_with_cards "0|1 질문 때 관련 카드 함께 보내기 (기본 1, 2026-09-20)"
+        integer briefing_auto "0|1 뉴스 브리핑 자동 생성 (기본 0, 관리자만 의미, 2026-10-01)"
         integer updated_at
     }
     GOOGLE_ACCOUNTS {
@@ -168,6 +171,32 @@ erDiagram
         integer thread_id PK, FK
         integer created_at
     }
+    BRIEFING_RUNS {
+        integer id PK
+        integer owner_id FK "만든 관리자"
+        text trigger "manual|auto"
+        text slot "morning|noon|evening|adhoc"
+        text edition_date "YYYY-MM-DD (한국시간) — 자동 회차 중복 방지 기준"
+        text status "running|ok|error|skipped"
+        text stage "collect|classify|select|summarize|save — 진행 표시용"
+        integer progress_done
+        integer progress_total
+        integer since_at "다룬 기사 범위 시작 (unix ms)"
+        integer until_at "범위 끝 — 다음 회차의 시작점"
+        integer file_id FK "성공 시 만든 회차 문서, 문서를 지우면 NULL"
+        integer source_count "출처 수 (피드 + 검색)"
+        text failed_sources "실패한 출처 이름 JSON 배열"
+        integer candidate_count
+        integer item_count
+        integer haiku_input_tokens
+        integer haiku_output_tokens
+        integer sonnet_input_tokens
+        integer sonnet_output_tokens
+        real cost_usd "끝날 때의 단가로 계산한 추정 비용"
+        text message "실패·건너뜀 이유 (사람이 읽는 글)"
+        integer started_at
+        integer finished_at
+    }
 ```
 
 ## 엔티티 설명
@@ -187,6 +216,7 @@ erDiagram
 | BACKUP_SETTINGS | 자동 백업 설정 단일 행. 앱이 스스로 `data/`를 묶어 연결된 구글 드라이브에 올린다. 꺼져 있으면 아무 일도 하지 않는다(기본값 꺼짐) |
 | ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나, 또는 문서 없이 시작한 자유 대화(챗봇, file_id NULL). 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다. model은 이 대화의 답변 모델 |
 | CARD_THREADS | 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때). 카드가 참조하는 대화는 30일 정리에서 빠진다 |
+| BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
 
 ## 관계 설명
@@ -211,6 +241,13 @@ erDiagram
   - BACKUP_SETTINGS의 run_by는 업로드에 쓸 구글 계정입니다. 관리자 계정이어야 하고, 그 관리자가 연결을 해제하면 백업은 자동으로 꺼집니다(토큰 없이 켜져 있으면 매일 조용히 실패합니다).
 - **질문 대화 (2026-09-18, 배움 카드 1판)**: ASK_THREADS.file_id는 **SET NULL**이다 — 문서를 지워도 대화는 남는다(설계 흐름 D: 카드는 문서보다 오래 산다). 대화는 저장 버튼 없이 자동 보관되고, updated_at이 30일 지나면 서버가 정리한다(휴지통과 같은 주기). 2판부터 카드가 참조하는 대화는 정리 대상에서 뺀다. context 컬럼은 "LLM에 무엇을 보냈나"의 기록이기도 하다 — 문서 전체가 아니라 이 컬럼의 내용만 나간다. 소유자 삭제 시 CASCADE.
 - **배움 카드 (2026-09-18, v0.26)**: 카드는 FILES의 md 행이다(`kind='card'`). 별도 테이블을 만들지 않은 이유 — 편집·버전·태그·검색·공유·백업이 전부 FILES에 걸려 있어, 카드를 따로 두면 그 모든 기능을 다시 만들어야 한다. 대신 `kind`로 **파일 트리에서만 뺀다**(문서와 섞이면 구분이 안 된다). 카드의 머리말(한 줄·별칭·종류·주제·태그·연결·출처)은 컬럼이 아니라 **본문 맨 위의 frontmatter**에 있다 — 사람이 편집기에서 고칠 수 있어야 하고, 목록은 수백 장까지 매번 파싱해도 싸다. 제목은 파일 이름이다(두 군데 두지 않는다). CARD_THREADS는 카드가 어느 대화에서 왔는지 — 대화 정리 예외와 "원 대화 보기"의 근거.
+- **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
+  - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 보관함(트리)·검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. 카드와 다른 점은 **파일 트리에 나온다**는 것(보관함이 곧 트리). `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
+  - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
+  - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.
+  - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.
+  - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다.
+  - `running` 행은 기동 시 `error`("서버 재시작으로 중단")로 정리한다 — 한 번에 하나만 돈다는 잠금이 DB 행에도 걸려 있어, 남겨 두면 영원히 실행 중으로 보인다.
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.
 
 ## 비고
