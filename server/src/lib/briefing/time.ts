@@ -19,3 +19,15 @@ export function kstToMs(date: string, hour: number, minute: number): number {
 export function kstMonthStart(ms: number): number {
   return kstToMs(`${kstParts(ms).month}-01`, 0, 0);
 }
+
+/** 지금 이후 가장 가까운 자동 회차의 시작 시각 (unix ms) — 오늘 남은 것이 없으면 내일 아침 */
+export function nextSlotStart(now: number): number {
+  const { date } = kstParts(now);
+  for (const s of BRIEFING.AUTO_SLOTS) {
+    const at = kstToMs(date, s.hour, s.minute);
+    if (at > now) return at;
+  }
+  const first = BRIEFING.AUTO_SLOTS[0];
+  const tomorrow = kstParts(now + 24 * 60 * 60 * 1000).date;
+  return kstToMs(tomorrow, first.hour, first.minute);
+}
