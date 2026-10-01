@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AskPanel, { type AskSeed } from '../components/AskPanel';
 import BriefingView from '../components/BriefingView';
+import Icon from '../components/Icon';
 import CardView from '../components/CardView';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
@@ -14,6 +15,7 @@ import { toast } from '../lib/toast';
 import { finishBoot, timed } from '../lib/bootTiming';
 import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
+import { formatDate, formatDateTime } from '../lib/date';
 
 type Props = {
   file: TreeFile;
@@ -41,6 +43,9 @@ type Props = {
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
   onSwapBriefing?: (fileId: number) => void;
+  /** 막 만든 새 문서 — 본문이 오면 곧바로 편집 화면으로 */
+  startEditing?: boolean;
+  onEditStarted?: () => void;
   /** 카드 출처로 열렸을 때 문서에서 찾아 형광펜 칠할 문장 (배움 카드 — 출처 클릭) */
   jumpQuote?: string;
   /** 카드 뷰의 출처 클릭 — 그 대화의 문서를 열고 문장으로 간다 */
@@ -103,7 +108,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -211,7 +216,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const codeViewRef = useRef(codeView);
   codeViewRef.current = codeView;
 
+  /** 이 뷰어의 저장이 만든 수정 시각 — 저장 뒤 트리를 다시 받으면 file.updatedAt이 바뀌는데,
+      그걸 "남이 고쳤다"로 보고 새로 열면 Ctrl+S(저장만)가 편집기를 닫아 버린다 */
+  const ownSaveRef = useRef<{ id: number; updatedAt: number } | null>(null);
   useEffect(() => {
+    if (ownSaveRef.current?.id === file.id && ownSaveRef.current.updatedAt === file.updatedAt) return;
     setData(null);
     setError(null);
     setMode('view');
@@ -269,6 +278,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   useEffect(() => {
     if (mode === 'edit') showChrome();
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 새 문서는 쓰려고 만든 것이다 — 보기 화면을 거치지 않고 편집으로 들어간다
+  useEffect(() => {
+    if (!startEditing || !data || data.readonly) return;
+    setMode('edit');
+    onEditStarted?.();
+  }, [startEditing, data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // E = 편집 — ⋯ 메뉴의 "편집 (E)" 표기 이행. 활성 칸에서만, 입력 중·수식키 조합은 무시
   // (IA — 신규 단축키. HTML 문서 iframe 안을 클릭한 상태에서는 키가 iframe에 머물러 안 온다)
@@ -370,6 +386,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     if (!data || !freshState || mode !== 'view' || data.fileType === 'html') return;
     if (data.fileType === 'pdf' && !pdfReady) return; // 페이지 자리가 잡히면 pdfReady가 다시 불러 준다
     if (jumpLines || jumpQuote) return; // 줄 앵커·출처 문장으로 열렸으면 렌더러가 그리로 데려간다 — 읽던 위치 복원과 겹치지 않게
+    // 브리핑 회차는 늘 맨 위(오늘의 핵심)에서 연다 — 비율로 저장된 위치가 기기·탭·펼침에 따라 목록 중간이나
+    // "이번 브리핑 끝"에 떨어뜨렸다. 이어 읽기는 회차 화면의 [이어 읽기]가 읽음 기록으로 한다 (설계 SCR-191 9)
+    if (isBriefing && !showAsCode) return;
     const pos = freshState.readingPosition;
     const el = scrollRef.current;
     if (!pos || !el) return;
@@ -476,9 +495,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       // 비율은 html이면 심이 재서 주고(ratioOverride), 아니면 여기서 계산한다
       const ratio =
         ratioOverride ?? (denom !== null && denom > 0 ? Math.min(1, Math.max(0, y / denom)) : null);
-      saveOffset(y, ratio);
+      if (!isBriefing) saveOffset(y, ratio); // 브리핑은 위치를 복원하지 않으니 저장도 하지 않는다
     },
-    [saveOffset],
+    [saveOffset, isBriefing],
   );
 
   function handleScroll() {
@@ -555,11 +574,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     return (
       <Editor
         file={data}
+        fileName={fileLabel(file)}
         onCancel={() => setMode('view')}
         onDirtyChange={onDirtyChange}
-        onSaved={(content, updatedAt) => {
+        onSaved={(content, updatedAt, close) => {
+          ownSaveRef.current = { id: data.id, updatedAt };
           setData({ ...data, content, updatedAt });
-          setMode('view');
+          if (close) setMode('view');
           onContentSaved();
         }}
       />
@@ -581,7 +602,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const isPc = isPcDevice();
   const actionButton = (active: boolean) =>
     // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
-    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'w-full px-4 py-2'} ${
+    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'min-h-11 w-full px-4 py-2'} ${
       active
         ? 'border-slate-500 bg-slate-800 text-slate-100'
         : 'border-slate-700 text-slate-300 hover:bg-slate-900'
@@ -602,8 +623,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     // 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다)
     { label: '다운로드', href: `/api/v1/files/${file.id}/raw`, download: file.name },
     ...(onShowProperties ? [{ label: '속성', onClick: onShowProperties }] : []),
-    ...(data.readonly || isBriefing ? [] : [{ label: '편집 (E)', onClick: () => setMode('edit') }]),
   ];
+  // 편집은 ⋯ 메뉴 맨 아래에만 있어 못 찾았다(사용성 평가 2026-10-01, 4명) — 도구막대에 꺼내 둔다
+  const canEdit = !data.readonly && !isBriefing && !isBinary;
 
   const actions = (
     <>
@@ -612,18 +634,26 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ✕
         </button>
       )}
+      {canEdit && !(!isPc && selection) && (
+        <button onClick={() => setMode('edit')} className={actionButton(false)} title="고치기 (E)">
+          <span className="flex items-center justify-center gap-1">
+            <Icon name="pencil" size={15} />
+            고치기
+          </span>
+        </button>
+      )}
       {!isBinary &&
         (!isPc && selection ? (
           // 터치: 떠 있는 바 대신 도구막대의 이 버튼이 "고른 문장으로 묻기"가 된다 — 엄지 자리라 iOS 메뉴와 안 겹친다
           <button
             onClick={() => openAsk(true)}
-            className="w-full min-w-0 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+            className="min-h-11 w-full min-w-0 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
           >
             💬 「{selection.quote.length > 12 ? `${selection.quote.slice(0, 12)}…` : selection.quote}」 물어보기
           </button>
         ) : (
-          <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="LLM에게 물어보기 (Ctrl+Shift+A)">
-            질문
+          <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="AI에게 묻기 (Ctrl+Shift+A)">
+            AI 질문
           </button>
         ))}
       {(data.fileType === 'md' || data.fileType === 'html') && !codeView && (
@@ -771,13 +801,14 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
-          className={`text-lg leading-none ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
+          // 터치는 손가락 크기(40px 이상)만큼 누를 자리를 넓힌다 — 글자 하나 크기라 자꾸 빗나갔다 (사용성 평가 2026-10-01)
+          className={`-mx-1 flex shrink-0 items-center justify-center text-lg leading-none touch:h-10 touch:w-10 ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
         >
           ★
         </button>
         {onOpenSwitcher ? (
           // 터치: 파일명이 곧 문서 스위처 버튼 — 탭 바 대신 시트로 오간다 (IA — 문서 스위처)
-          <button onClick={onOpenSwitcher} className="flex min-w-0 items-center gap-1.5 text-left">
+          <button onClick={onOpenSwitcher} className="flex min-h-10 min-w-0 items-center gap-1.5 text-left">
             <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
             <span className="shrink-0 text-xs text-slate-500">▾</span>
           </button>
@@ -785,7 +816,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
         )}
         <span className="text-xs text-slate-500 touch:hidden">
-          {new Date(data.updatedAt).toLocaleString()} 수정
+          {formatDateTime(data.updatedAt)} 수정
         </span>
         {/* PC는 헤더 오른쪽에, 터치 기기는 아래 도구막대에 둔다 */}
         {isPc && <div className="ml-auto flex gap-2">{actions}</div>}
@@ -823,7 +854,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                       h.jump();
                       if (!isPcDevice()) setShowToc(false); // 터치에선 선택 즉시 드로어를 닫아 본문을 보여준다
                     }}
-                    className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
+                    className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200 touch:py-2.5 touch:text-sm"
                     style={{ paddingLeft: `${12 + (h.level - 1) * 12}px` }}
                   >
                     {h.text}
@@ -882,7 +913,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   {file.sizeBytes >= 1024 * 1024
                     ? `${(file.sizeBytes / 1024 / 1024).toFixed(1)}MB`
                     : `${Math.max(1, Math.round(file.sizeBytes / 1024))}KB`}
-                  {file.updatedAt > 0 && ` · ${new Date(file.updatedAt).toLocaleDateString()}`}
+                  {file.updatedAt > 0 && ` · ${formatDate(file.updatedAt)}`}
                 </p>
                 <p className="text-xs text-slate-500">이 형식은 미리보기를 지원하지 않습니다</p>
                 <a
@@ -951,6 +982,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                 <CardView
                   title={cardTitle(file.name)}
                   content={data.content}
+                  theme={settings.viewerTheme}
                   onAsk={() => openAsk(false)}
                   onOpenSource={onOpenSource}
                   onOpenLink={onOpenCard}

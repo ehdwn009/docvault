@@ -194,7 +194,6 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
                 <SwipeRow
                   key={c.id}
                   right={[{ label: '삭제', danger: true, onAction: () => deleteCard(c) }]}
-                  fullSwipe={{ label: '삭제', danger: true, onAction: () => deleteCard(c) }}
                 >
                   <div
                     onClick={() => onSelect(cardToTreeFile(c))}

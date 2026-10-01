@@ -265,6 +265,7 @@ function UsersTab({
                     void confirmDialog(`${u.username} 계정을 삭제할까요?`, {
                       message: '소유한 파일·폴더 등 모든 데이터가 함께 삭제됩니다.',
                       danger: true,
+                      confirmLabel: '계정 삭제',
                     }).then((ok) => {
                       if (ok) void run(() => api(`/admin/users/${u.id}`, { method: 'DELETE' }));
                     });

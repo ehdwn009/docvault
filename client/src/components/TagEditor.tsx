@@ -58,6 +58,7 @@ export default function TagEditor({ file, tags, onChanged, onClose }: Props) {
     const ok = await confirmDialog('태그를 삭제할까요?', {
       message: '모든 파일에서 제거됩니다.',
       danger: true,
+      confirmLabel: '태그 삭제',
     });
     if (!ok) return;
     try {

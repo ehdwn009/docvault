@@ -94,6 +94,8 @@ export const askRoutes = new Hono<AppEnv>()
     const limit = dailyLimitFor(user);
     return c.json({
       configured: isAskConfigured(),
+      // 키가 없을 때 안내를 나눈다 — 관리자에게는 설정 방법, 다른 사람에게는 "관리자에게 알려 주세요"
+      canConfigure: user.role === 'admin',
       limit,
       used,
       remaining: limit === null ? null : Math.max(0, limit - used),

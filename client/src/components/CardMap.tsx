@@ -18,6 +18,19 @@ const GHOST_PREFIX = 'ghost:';
 const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase();
 
 /** 카드 목록 → 점·선. 연결 칸의 이름이 어느 카드도 아니면 점선 점("없는 카드")으로 그린다 */
+/** CSS 색 → "rgb(r,g,b)". 기본 테마의 Tailwind 색은 oklch()라 그래프 라이브러리가 못 읽고 검정으로 그렸다 —
+    미드나잇 블루에서 지도 이름표가 안 보였다 (사용성 평가 2026-10-01). 캔버스에 한 점 칠해 읽으면 어떤 형식이든 rgb가 된다 */
+function toRgb(color: string, fallback: string): string {
+  if (!color) return fallback;
+  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  if (!ctx) return fallback;
+  ctx.fillStyle = fallback;
+  ctx.fillStyle = color; // 못 읽는 값이면 앞의 fallback이 그대로 남는다
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 function buildElements(cards: CardSummary[], colorOf: (topic: string) => string): { elements: ElementDefinition[]; ghosts: number; edges: number } {
   const byName = new Map<string, CardSummary>();
   for (const c of cards) for (const n of [c.title, ...c.aliases]) byName.set(norm(n), c);
@@ -64,9 +77,9 @@ export default function CardMap({ cards, onOpen, onCardsChanged }: Props) {
     if (!el) return;
     // 글자색은 앱 테마 변수에서 — 캔버스라 CSS 클래스가 안 먹는다
     const css = getComputedStyle(document.documentElement);
-    const labelColor = css.getPropertyValue('--color-slate-300').trim() || '#cbd5e1';
-    const lineColor = css.getPropertyValue('--color-slate-700').trim() || '#334155';
-    const bg = css.getPropertyValue('--color-slate-950').trim() || '#020617';
+    const labelColor = toRgb(css.getPropertyValue('--color-slate-300').trim(), '#cbd5e1');
+    const lineColor = toRgb(css.getPropertyValue('--color-slate-700').trim(), '#334155');
+    const bg = toRgb(css.getPropertyValue('--color-slate-950').trim(), '#020617');
     void import('cytoscape').then(({ default: cytoscape }) => {
       if (!alive) return;
       cy = cytoscape({

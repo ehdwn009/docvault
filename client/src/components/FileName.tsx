@@ -1,3 +1,4 @@
+import { splitExt } from '../lib/fileName';
 /**
  * 목록에 파일 이름을 그리는 한 곳 (트리·최근·즐겨찾기·공유·격자·카드 서랍).
  *
@@ -22,10 +23,7 @@ export default function FileName({ name, expanded = false, className = '' }: Pro
   if (expanded) return <span className={`line-clamp-2 break-all ${className}`}>{name}</span>;
   if (name.length <= MIN_SPLIT) return <span className={`truncate ${className}`}>{name}</span>;
 
-  // 맨 앞 점은 확장자가 아니라 숨김 파일 표시다 (.gitignore)
-  const dot = name.lastIndexOf('.');
-  const ext = dot > 0 ? name.slice(dot) : '';
-  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const { stem, ext } = splitExt(name);
   const cut = Math.max(0, stem.length - TAIL_CHARS);
 
   return (

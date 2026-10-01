@@ -14,6 +14,7 @@ import TabSwitcher from '../components/TabSwitcher';
 import TrashPanel from '../components/TrashPanel';
 import TagEditor from '../components/TagEditor';
 import UpdateNotes from '../components/UpdateNotes';
+import WelcomeGuide from '../components/WelcomeGuide';
 import {
   api,
   ApiError,
@@ -49,6 +50,8 @@ import AskPanel from '../components/AskPanel';
 import Icon, { type IconName } from '../components/Icon';
 import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
+import { keepExt, splitExt } from '../lib/fileName';
+import { formatDateTime } from '../lib/date';
 
 type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
@@ -114,6 +117,28 @@ function fileIdFromPath(pathname: string): number | null {
 const IS_TOUCH = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
+/** 열린 탭·분할 칸 기억 (기기별, 사용자별) — 열린 문서 id만 둔다. 본문은 열 때 다시 받는다 */
+type SavedWorkspace = { tabs: number[]; panes: number[]; active: number; ratio: number };
+const WORKSPACE_KEY = 'dv_workspace';
+/** 기억하는 탭 상한 — 오래 쓰다 보면 수십 개가 쌓여 시작할 때 그만큼 조회한다 */
+const WORKSPACE_MAX_TABS = 20;
+
+function readWorkspace(userId: number): SavedWorkspace | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(`${WORKSPACE_KEY}:${userId}`) ?? 'null') as SavedWorkspace | null;
+    return v && Array.isArray(v.tabs) && Array.isArray(v.panes) ? v : null;
+  } catch {
+    return null;
+  }
+}
+function writeWorkspace(userId: number, w: SavedWorkspace) {
+  try {
+    localStorage.setItem(`${WORKSPACE_KEY}:${userId}`, JSON.stringify({ ...w, tabs: w.tabs.slice(-WORKSPACE_MAX_TABS) }));
+  } catch {
+    /* 사생활 모드 등 — 이번 화면에는 영향 없다 */
+  }
+}
+
 export default function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [tree, setTree] = useState<Tree>({ folders: [], files: [] });
   // 탭 = "열려 있는" 문서들, 칸(pane) = 그중 화면에 "보이는" 부분집합 (IA — 탭 바 + 분할 보기)
@@ -121,6 +146,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [panes, setPanes] = useState<TreeFile[]>([]);
   const [activeIdx, setActiveIdx] = useState(0); // 활성 칸 — 탭 클릭·단축키·URL이 향하는 곳
   const [splitRatio, setSplitRatio] = useState(50); // 첫 칸의 크기 비율(%) — 구분선 드래그로 조절
+  const restoredRef = useRef(false); // 지난 탭 복원이 끝났나 — 끝나기 전의 빈 상태로 기억을 덮어쓰지 않게
   // 줄 번호 앵커(#L16-L26)로 연 파일의 하이라이트 범위 — 링크가 "파일 속 한 지점"을 가리킬 때
   const [lineJump, setLineJump] = useState<{ fileId: number; start: number; end: number } | null>(null);
   // 카드 출처로 연 파일에서 형광펜 칠할 문장 — 출처가 "파일 속 한 문장"을 가리킬 때 (배움 카드 — 출처 클릭)
@@ -153,6 +179,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [propsTarget, setPropsTarget] = useState<PropertiesTarget | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** 막 만든 문서 — 열자마자 편집 화면으로 들어가게 뷰어에 알린다 */
+  const [editRequest, setEditRequest] = useState<number | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false); // 활성 레일 버튼 재클릭 시 패널 접기 (PC 전용)
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
@@ -167,6 +195,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     localStorage.getItem('dv_viewmode') === 'grid' ? 'grid' : 'list',
   );
   const [changelogContent, setChangelogContent] = useState<string | null>(null); // 패치노트 모달
+  const [welcomeOpen, setWelcomeOpen] = useState(false); // 첫 사용 안내 (SCR-148)
   const [shortcutsOpen, setShortcutsOpen] = useState(false); // 단축키 치트시트 (SCR-145)
   const [newVersionReady, setNewVersionReady] = useState(false); // 서버에 새 버전 배포됨
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -233,6 +262,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
       message: '이동하면 작성한 내용이 사라집니다.',
       danger: true,
+      confirmLabel: '버리고 이동',
+      cancelLabel: '계속 쓰기',
     });
     if (ok) dirtyMapRef.current.delete(target.id);
     return ok;
@@ -410,6 +441,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
           message: '닫으면 작성한 내용이 사라집니다.',
           danger: true,
+          confirmLabel: '버리고 닫기',
+          cancelLabel: '계속 쓰기',
         });
         if (!ok) return;
       }
@@ -426,6 +459,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
           message: '닫으면 작성한 내용이 사라집니다.',
           danger: true,
+          confirmLabel: '버리고 닫기',
+          cancelLabel: '계속 쓰기',
         });
         if (!ok) return;
       }
@@ -562,28 +597,46 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     }
   }, [isWide, panes.length]);
 
-  // 초기 로드 + 딥링크(/f/{id}) 복원
+  // 초기 로드 + 딥링크(/f/{id}) 복원 + 지난번 탭·분할 복원(기기별)
   useEffect(() => {
     void (async () => {
       // 시작 시간 측정 — 각 단계가 얼마나 걸리는지 설정 → 정보에서 본다 (lib/bootTiming.ts)
       await timed('파일 목록·태그 (/tree, /tags)', () => Promise.all([loadTree(), loadTags()]), ['/tree', '/tags']);
       const id = fileIdFromPath(location.pathname);
-      if (id !== null) {
-        const f = await timed('열 문서 찾기', () => resolveFile(id), [`/files/${id}`]);
-        if (f) {
-          setTabs([f]);
-          setPanes([f]);
-          setActiveIdx(0);
-          return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
+      const saved = readWorkspace(user.id);
+      const restore = await timed('지난 탭 되살리기', async () => {
+        const ids = [...new Set([...(saved?.tabs ?? []), ...(id !== null ? [id] : [])])];
+        const found = (await Promise.all(ids.map((x) => resolveFile(x)))).filter((f): f is TreeFile => f !== null);
+        const byId = new Map(found.map((f) => [f.id, f]));
+        let paneList = (saved?.panes ?? []).map((x) => byId.get(x)).filter((f): f is TreeFile => !!f);
+        let active = Math.min(saved?.active ?? 0, Math.max(0, paneList.length - 1));
+        // 주소가 가리키는 문서가 우선 — 이미 칸에 있으면 그 칸을, 없으면 활성 칸 자리에 둔다
+        const linked = id !== null ? byId.get(id) : undefined;
+        if (linked) {
+          const at = paneList.findIndex((f) => f.id === linked.id);
+          if (at !== -1) active = at;
+          else if (paneList.length === 0) paneList = [linked];
+          else paneList = paneList.map((f, i) => (i === active ? linked : f));
         }
+        return { tabs: found, panes: paneList, active };
+      }, []);
+      restoredRef.current = true;
+      if (restore.panes.length > 0) {
+        setTabs(restore.tabs);
+        setPanes(restore.panes);
+        setActiveIdx(restore.active);
+        if (saved?.ratio) setSplitRatio(saved.ratio);
+        return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
       }
       finishBoot();
     })();
     void timed('설정 (/me/settings)', () => api<{ settings: UserSettings }>('/me/settings'), ['/me/settings'])
       .then(({ settings }) => {
         setSettings(settings);
+        // 한 번도 본 버전이 없으면 새 계정 — 패치노트 대신 사용 안내 3장 (SCR-148)
+        if (settings.lastSeenVersion === null) setWelcomeOpen(true);
         // 새 버전 이후 첫 로그인이면 패치노트를 한 번 보여준다 (확인 시 기록 → 기기 간 공유)
-        if (settings.lastSeenVersion !== __APP_VERSION__) {
+        else if (settings.lastSeenVersion !== __APP_VERSION__) {
           void api<Changelog>('/changelog')
             .then(({ content }) => content && setChangelogContent(content))
             .catch(() => {});
@@ -591,6 +644,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       })
       .catch(() => {});
   }, [loadTree, loadTags, resolveFile]);
+
+  // 탭·분할 구성을 기기에 기억한다 — 새로고침하면 탭 1개만 남았다(사용성 평가 2026-10-01).
+  // 기기마다 따로: 폰과 PC는 화면이 달라 열어 두는 문서도 다르다(사용자 결정). 복원이 끝나기 전에는 쓰지 않는다
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    writeWorkspace(user.id, {
+      tabs: tabs.map((t) => t.id),
+      panes: panes.map((p) => p.id),
+      active: activeIdx,
+      ratio: splitRatio,
+    });
+  }, [tabs, panes, activeIdx, splitRatio, user.id]);
 
   // 서버가 새 버전으로 배포됐는지 감시 — 탭 복귀 시 + 10분 주기
   useEffect(() => {
@@ -616,13 +681,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     }
   }
 
+  function closeWelcome() {
+    setWelcomeOpen(false);
+    // 안내를 본 시점의 버전까지는 이미 쓰고 있는 것 — 이 버전의 패치노트는 건너뛴다
+    changeSettings({ lastSeenVersion: __APP_VERSION__ });
+  }
+
   function showChangelog() {
     void api<Changelog>('/changelog')
       .then(({ content }) => setChangelogContent(content || '아직 기록이 없습니다.'))
       .catch(() => toast('업데이트 기록을 불러오지 못했습니다', 'error'));
   }
 
-  // 뒤로가기/앞으로가기 — URL은 활성 문서 하나만 가리킨다 (탭·분할 구성은 세션 한정)
+  // 뒤로가기/앞으로가기 — URL은 활성 문서 하나만 가리킨다 (탭·분할 구성은 기기에 따로 기억한다)
   useEffect(() => {
     const handler = () => {
       const id = fileIdFromPath(location.pathname);
@@ -676,9 +747,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             used.add(f.name);
             return f;
           }
-          const dot = f.name.lastIndexOf('.');
-          const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
-          const ext = dot > 0 ? f.name.slice(dot) : '';
+          const { stem, ext } = splitExt(f.name);
           let n = 2;
           while (used.has(`${stem} (${n})${ext}`)) n++;
           const name = `${stem} (${n})${ext}`;
@@ -975,6 +1044,27 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }, [immersive]);
 
   const actions: TreeActions = {
+    // "＋ 새 문서" — 문서를 만들 방법이 업로드·복사뿐이었다 (사용성 평가 2026-10-01: 3명이 못 찾거나 우회).
+    // 이름만 묻고 md로 만들어 바로 편집 화면을 연다. 확장자를 몰라도 되게 .md는 알아서 붙인다
+    createDoc: (folderId) => {
+      void promptDialog('새 문서 이름', '제목 없음').then(async (name) => {
+        const trimmed = name?.trim();
+        if (!trimmed) return;
+        const final = /\.(md|markdown|txt|html)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+        const heading = splitExt(final).stem;
+        try {
+          const r = await uploadCore([new File([`# ${heading}\n\n`], final, { type: 'text/markdown' })], folderId);
+          const created = r?.created[0];
+          if (!created) return;
+          await loadTree();
+          setEditRequest(created.id);
+          setDrawerOpen(false);
+          void selectFile(created);
+        } catch (e) {
+          toast(e instanceof ApiError ? e.message : '문서를 만들지 못했습니다', 'error');
+        }
+      });
+    },
     createFolder: (parentId) => {
       void promptDialog('폴더 이름').then((name) => {
         if (!name?.trim()) return;
@@ -1005,12 +1095,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       void confirmDialog('폴더를 삭제할까요?', {
         message: '폴더 구조는 삭제되고, 안의 파일은 휴지통으로 이동합니다.',
         danger: true,
+        confirmLabel: '폴더 삭제',
       }).then((ok) => {
         if (ok) void guard(() => api(`/folders/${id}`, { method: 'DELETE' }));
       });
     },
-    renameFile: (id, name) =>
-      void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })),
+    renameFile: (id, name) => {
+      const old = treeRef.current.files.find((f) => f.id === id)?.name;
+      const next = old ? keepExt(old, name) : name;
+      void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ name: next }) }));
+    },
     moveFile: (id, folderId) => {
       const prev = treeRef.current.files.find((f) => f.id === id)?.folderId ?? null;
       if (prev === folderId) return;
@@ -1096,7 +1190,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             ]
           : []),
       ],
-      fullSwipe: del,
+      // 끝까지 밀기 = 바로 삭제는 걸지 않는다 — 한 손으로 스크롤하다 살짝 옆으로 밀리거나, 목록이
+      // 밀려 내려온 순간 엉뚱한 줄이 지워졌다(사용성 평가 2026-10-01). 삭제는 트레이 버튼을 눌러야 한다
     };
   }
 
@@ -1172,6 +1267,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }
 
   async function handleLogout() {
+    // 터치 서랍에서는 레일 맨 아래라 엄지가 잘못 닿기 쉽고, 저장 안 한 편집은 기기를 가리지 않고 사라진다 — 한 번 묻는다
+    const dirty = [...dirtyMapRef.current.values()].some(Boolean);
+    if (IS_TOUCH || dirty) {
+      const ok = await confirmDialog('로그아웃할까요?', {
+        message: dirty ? '저장하지 않은 변경이 사라집니다.' : undefined,
+        confirmLabel: '로그아웃',
+        danger: dirty,
+      });
+      if (!ok) return;
+    }
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
     onLogout();
   }
@@ -1197,6 +1302,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
   const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings', admin: 'admin' };
+  // 터치 서랍에서는 아이콘 밑에 이름을 붙인다 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
+  const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정', admin: '관리자' };
+  const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition touch:h-auto touch:min-h-11 touch:w-14 touch:flex-col touch:gap-0.5 touch:py-1.5';
+  const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
@@ -1208,14 +1317,41 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         }
       }}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-lg transition ${
+      className={`${railClass} ${
         panel === target && !panelCollapsed
           ? 'bg-slate-800 text-slate-100'
           : 'text-slate-500 hover:text-slate-200'
       }`}
     >
       <Icon name={RAIL_ICONS[target]} />
+      {railLabel(RAIL_SHORT[target])}
     </button>
+  );
+
+  /** 터치 첫 화면의 큰 버튼들 — 서랍(☰)을 몰라도 시작할 수 있게 */
+  const openPanel = (p: Panel) => {
+    setPanel(p);
+    setPanelCollapsed(false);
+    setDrawerOpen(true);
+  };
+  const startButtons = (
+    <div className="grid w-full max-w-sm grid-cols-2 gap-2">
+      {[
+        { label: '내 파일 보기', icon: 'files' as const, on: () => openPanel('files') },
+        { label: '함께 보는 파일', icon: 'users' as const, on: () => openPanel('shared') },
+        { label: '검색', icon: 'search' as const, on: () => setPaletteOpen(true) },
+        { label: '새 문서', icon: 'plus' as const, on: () => actions.createDoc(null) },
+      ].map((b) => (
+        <button
+          key={b.label}
+          onClick={b.on}
+          className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 text-sm font-medium text-slate-200 transition active:bg-slate-800"
+        >
+          <Icon name={b.icon} size={18} />
+          {b.label}
+        </button>
+      ))}
+    </div>
   );
 
   return (
@@ -1228,7 +1364,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         aria-hidden={chromeHidden}
         // 크롬이 접히면 이 버튼도 같이 비킨다 — 크롬이 숨으면 문서가 화면 맨 위까지 올라오는데,
         // 우리 버튼만 남아 있으면 문서 자신의 좌상단 고정 버튼(정독본의 목차 ☰ 등)을 정확히 덮는다
-        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${
+        aria-label="메뉴"
+        className={`fixed left-3 top-2 z-30 flex h-10 w-10 items-center justify-center rounded-md border border-slate-800 bg-slate-900/90 text-slate-300 pc:hidden ${
           immersive ? 'hidden' : ''
         } ${chromeHidden ? 'pointer-events-none' : ''}`}
       >
@@ -1244,7 +1381,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃) */}
-      <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
+      <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:w-16">
+        {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01) */}
+        <button
+          onClick={() => {
+            setDrawerOpen(false);
+            setPaletteOpen(true);
+          }}
+          title="검색 (Ctrl+K)"
+          className={`${railClass} text-slate-500 hover:text-slate-200`}
+        >
+          <Icon name="search" />
+          {railLabel('검색')}
+        </button>
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
         {railButton('shared', '공유 파일')}
@@ -1258,9 +1407,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
+          className={`${railClass} text-slate-600 hover:text-slate-300`}
         >
           <Icon name="logout" />
+          {railLabel('나가기')}
         </button>
       </div>
 
@@ -1292,7 +1442,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   e.target.value = '';
                 }}
               />
-              {/* 폴더가 선택돼 있으면 업로드·새 폴더가 그 폴더로 들어간다 (IA — 폴더 선택) */}
+              {/* 폴더가 선택돼 있으면 새 문서·업로드·새 폴더가 그 폴더로 들어간다 (IA — 폴더 선택) */}
+              <button
+                onClick={() => actions.createDoc(selectedFolder)}
+                title={
+                  selectedFolder !== null
+                    ? `"${tree.folders.find((f) => f.id === selectedFolder)?.name}" 폴더에 새 문서`
+                    : '새 문서 만들기'
+                }
+                className="flex-1 rounded-md border border-sky-800 bg-sky-950/40 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-900/40"
+              >
+                + 새 문서
+              </button>
               <button
                 onClick={() => actions.uploadTo(selectedFolder)}
                 title={
@@ -1573,6 +1734,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onOpenSwitcher={IS_TOUCH ? () => setSwitcherOpen(true) : undefined}
                 onOpenFile={(target) => void selectFile(target)}
                 onSwapBriefing={(toId) => swapBriefing(f.id, toId)}
+                startEditing={editRequest === f.id}
+                onEditStarted={() => setEditRequest(null)}
                 jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
                 onOpenSource={(tid) => void openSource(tid)}
                 onOpenCard={(title) => void openCardByTitle(title)}
@@ -1609,18 +1772,27 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 >
                   <p className="truncate font-medium text-slate-200">{f.name}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {new Date(f.state.lastOpenedAt!).toLocaleString()} 열람 · 이어 읽기 →
+                    {formatDateTime(f.state.lastOpenedAt!)} 열람 · 이어 읽기 →
                   </p>
                 </button>
               ))}
-            <p className="mt-2 text-xs text-slate-600">다른 문서는 ☰ 메뉴에서</p>
+            {startButtons}
+          </div>
+        ) : IS_TOUCH ? (
+          // 터치는 "좌측"도 끌어다 놓기도 Ctrl도 없다 — 할 수 있는 일을 버튼으로 (사용성 평가 2026-10-01)
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6">
+            <p className="text-sm text-slate-500">무엇을 할까요?</p>
+            {startButtons}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-sm text-slate-600">
-            <p>좌측에서 파일을 선택하거나, 여기로 파일을 끌어다 놓으세요</p>
+            <p>왼쪽에서 파일을 고르거나, 여기로 파일을 끌어다 놓으세요</p>
             <p>
               <span className="rounded border border-slate-800 px-1.5 py-0.5 text-xs">Ctrl+K</span>{' '}
-              검색
+              검색 ·{' '}
+              <button onClick={() => actions.createDoc(selectedFolder)} className="text-sky-400 hover:underline">
+                새 문서 만들기
+              </button>
             </p>
           </div>
         )}
@@ -1693,6 +1865,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         />
       )}
 
+      {welcomeOpen && (
+        <WelcomeGuide
+          touch={IS_TOUCH}
+          onClose={closeWelcome}
+          onOpenSettings={() => {
+            closeWelcome();
+            openPanel('settings');
+            // 비밀번호 칸은 설정 패널 아래쪽이라 열기만 하면 안 보인다 — 패널이 그려진 뒤 그 칸으로 내린다
+            window.setTimeout(() => document.getElementById('settings-password')?.scrollIntoView({ block: 'start' }), 100);
+          }}
+        />
+      )}
       {changelogContent !== null && (
         <UpdateNotes content={changelogContent} onClose={closeChangelog} />
       )}

@@ -167,7 +167,7 @@ if(d.type==='docvault:scale'&&typeof d.percent==='number'){cur=d.percent;run()}}
 function fitShim(enabled: boolean): string {
   return `<script>(function(){
 var TOL=2,MIN_ZOOM=.5,on=${enabled ? 'true' : 'false'};
-var css=null,zoomed=false,patched=[],timer,obs;
+var css=null,base=null,zoomed=false,patched=[],timer,obs;
 var de=function(){return document.documentElement};
 var over=function(){return (document.scrollingElement||de()).scrollWidth-de().clientWidth};
 // 덧씌우기 전 원래 값을 적어 둔다 — 보정을 끄면 그대로 되돌린다. 요소에 표식을 남겨 중복 적용을 막는다
@@ -179,7 +179,15 @@ var undo=function(){
 for(var i=patched.length-1;i>=0;i--){var p=patched[i];p[0].style.setProperty(p[1],p[2],p[3]);delete p[0].__dvFit}
 patched=[];
 if(css){if(css.parentNode)css.parentNode.removeChild(css);css=null}
+if(base){if(base.parentNode)base.parentNode.removeChild(base);base=null}
 if(zoomed){de().style.zoom='';zoomed=false}};
+// ⓪ 표는 낱말 단위로만 줄을 바꾼다 — 넘치기 전부터 건다. 표는 칸을 최소 내용 폭까지 줄여 화면에 맞추는데,
+// 한글은 글자마다 끊을 수 있어 "서울중앙지점"이 한 글자씩 세로로 쌓였다(넘침이 없으니 아래 단계도 안 돌았다).
+// 낱말 폭 아래로 줄지 않게 하면 표가 넘치고, 그 넘침은 ②가 표 안 가로 스크롤로 받는다 (사용성 평가 2026-10-01)
+var keepWords=function(){
+if(base)return;base=document.createElement('style');
+base.textContent='table{word-break:keep-all}';
+(document.head||de()).appendChild(base)};
 // ① 가드: 그림·영상은 화면보다 커지지 않게, 긴 낱말은 줄바꿈되게
 var guard=function(){
 if(css)return;css=document.createElement('style');
@@ -221,7 +229,8 @@ var sw=(document.scrollingElement||de()).scrollWidth,vw=de().clientWidth;
 if(sw<=vw+TOL)return;
 de().style.zoom=Math.max(MIN_ZOOM,Math.floor(vw/sw*100)/100);zoomed=true};
 var run=function(){
-if(!on||!document.body||over()<=TOL)return;
+if(!on||!document.body)return;
+keepWords();if(over()<=TOL)return;
 guard();if(over()<=TOL)return;
 try{patchWide()}catch(e){}
 if(over()<=TOL)return;

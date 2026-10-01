@@ -3,6 +3,7 @@ import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import FileName from './FileName';
 import SwipeRow, { type SwipeConfig } from './SwipeRow';
+import { splitExt } from '../lib/fileName';
 
 const TYPE_BADGE: Record<string, string> = {
   md: 'text-sky-400',
@@ -21,6 +22,8 @@ const BADGE_LABEL: Record<string, string> = { binary: 'bin', audio: 'aud', video
 
 export type TreeActions = {
   createFolder: (parentId: number | null) => void;
+  /** 새 문서 — 이름만 묻고 md로 만들어 바로 편집 화면으로 */
+  createDoc: (folderId: number | null) => void;
   renameFolder: (id: number, name: string) => void;
   moveFolder: (id: number, parentId: number | null) => void;
   deleteFolder: (id: number) => void;
@@ -308,6 +311,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
 
   // 우클릭과 ⋯ 버튼이 같은 메뉴를 공유한다 (모바일은 우클릭이 없어서 ⋯가 유일한 진입점)
   const folderMenu = (folder: TreeFolder): MenuItem[] => [
+    { label: '새 문서', action: () => actions.createDoc(folder.id) },
     { label: '새 하위 폴더', action: () => actions.createFolder(folder.id) },
     { label: '여기에 업로드', action: () => actions.uploadTo(folder.id) },
     { label: '폴더째 다운로드', action: () => actions.downloadFolder(folder) },
@@ -356,6 +360,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     { label: '삭제', danger: true, action: () => actions.deleteFile(file.id) },
   ];
 
+  // 터치는 줄 높이·⋯ 버튼을 손가락 크기(44px 안팎)로 — 28px 줄에서는 옆 파일이 자꾸 열렸다 (사용성 평가 2026-10-01)
   const moreButton = (items: () => MenuItem[]) => (
     <button
       onClick={(e) => {
@@ -363,7 +368,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
         openMenu(e, items());
       }}
       title="메뉴"
-      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
+      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block touch:-my-2 touch:flex touch:h-10 touch:w-10 touch:items-center touch:justify-center touch:px-0"
     >
       ⋯
     </button>
@@ -373,7 +378,11 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     <input
       value={r.value}
       autoFocus
-      onFocus={(e) => e.target.select()}
+      // 파일은 확장자를 빼고 이름만 고른다 — 통째로 고르면 새 이름을 치는 순간 ".md"가 지워진다
+      onFocus={(e) => {
+        const end = r.kind === 'file' ? splitExt(r.value).stem.length : r.value.length;
+        e.target.setSelectionRange(0, end);
+      }}
       onChange={(e) => setRenaming({ ...r, value: e.target.value })}
       onBlur={commitRename}
       onKeyDown={(e) => {
@@ -413,7 +422,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   setFocus({ kind: 'folder', id: folder.id });
                 }}
                 onContextMenu={(e) => openMenu(e, folderMenu(folder))}
-                className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-sm transition ${
+                className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 touch:py-3 text-sm transition ${
                   dropTarget === folder.id
                     ? 'bg-sky-900/50 outline outline-1 outline-sky-600'
                     : folder.id === selectedFolderId
@@ -470,7 +479,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   else onSelect(file);
                 }}
                 onContextMenu={(e) => openMenu(e, fileMenu(file))}
-                className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
+                className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 touch:py-3 text-left text-sm transition ${
                   isChecked
                     ? 'bg-sky-950/60 text-slate-100 outline outline-1 outline-sky-800'
                     : file.id === selectedId

@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { BRIEFING } from '../../constants.js';
 import { callAndCount, SYSTEM_BASE, type AiCaller, type Usage } from './ai.js';
+import { NO_META_RULE, stripMeta } from './clean.js';
 import { errorText, mapLimit } from './limit.js';
 import type { Picked } from './select.js';
 import { subPath } from './taxonomy.js';
@@ -72,6 +73,7 @@ export async function summarize(
         '- 제목뿐인 기사(발췌 없음)는 요약을 제목을 풀어 쓴 한 문장으로만 쓰고 사실을 덧붙이지 않는다. 의미는 빈 문자열.',
         '- 본문 앞부분이 있는 기사는 그것을 주된 근거로 쓴다.',
         '- 수치·날짜·고유명사는 주어진 글에 있는 것만 쓴다.',
+        NO_META_RULE,
         `\n<기사>\n${lines}\n</기사>`,
       ].join('\n'),
       schema: SummarySchema,
@@ -81,7 +83,9 @@ export async function summarize(
     opts.onProgress?.(++done, batches.length);
     for (const it of out.items) {
       const idx = batch[it.k - 1];
-      if (idx !== undefined && it.title.trim()) written.set(idx, { title: it.title.trim(), summary: it.summary.trim(), why: it.why.trim() });
+      // 작업 사정이 새어 나온 문장은 지운다 — 의미는 한 줄이라 섞였으면 통째로 비운다
+      const why = it.why.trim();
+      if (idx !== undefined && it.title.trim()) written.set(idx, { title: it.title.trim(), summary: stripMeta(it.summary), why: stripMeta(why) === why ? why : '' });
     }
   });
   const failed = results.find((r) => !r.ok);

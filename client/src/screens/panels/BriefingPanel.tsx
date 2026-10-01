@@ -151,6 +151,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
       } else if (err instanceof ApiError && err.code === 'BRIEFING_BUDGET_EXCEEDED') {
         const ok = await confirmDialog('이번 달 한도를 넘었어요', {
           message: `이번 달 브리핑 비용이 한도($${status?.monthBudgetUsd ?? 50})에 닿았습니다. 그래도 만들까요?`,
+          confirmLabel: '그래도 만들기',
         });
         if (ok) await start(true);
       } else {
@@ -224,7 +225,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
         <section className="space-y-2">
           {!status.configured && (
             <p className="rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
-              API 키가 연결되지 않았어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣으면 쓸 수 있습니다.
+              AI 키가 연결되지 않아 브리핑을 만들 수 없어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣고 다시 시작하면 켜집니다.
             </p>
           )}
           {running ? (

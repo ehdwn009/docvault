@@ -9,7 +9,8 @@ export type SwipeConfig = {
   right?: SwipeAction[];
   /** 오른쪽으로 밀면 왼쪽에서 나온다 */
   left?: SwipeAction[];
-  /** 끝까지 밀면 트레이를 거치지 않고 바로 실행 — 보통 right의 삭제와 같은 동작 */
+  /** 끝까지 밀면 트레이를 거치지 않고 바로 실행. 삭제처럼 되돌리기 어려운 동작에는 걸지 않는다 —
+      스크롤하다 옆으로 밀린 손가락이 파일을 지웠다 (사용성 평가 2026-10-01) */
   fullSwipe?: SwipeAction;
 };
 
@@ -41,6 +42,8 @@ export default function SwipeRow({ right = [], left = [], fullSwipe, children }:
       {actions.map((a) => (
         <button
           key={a.label}
+          // 닫힌 트레이의 버튼은 보이지 않으니 Tab 순서에서도 뺀다 — 키보드 포커스가 화면에서 사라졌다
+          tabIndex={open ? 0 : -1}
           onClick={() => {
             close();
             a.onAction();

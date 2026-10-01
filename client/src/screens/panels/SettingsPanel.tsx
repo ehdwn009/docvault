@@ -159,7 +159,8 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
         </button>
       </section>
 
-      <section>
+      {/* id: 첫 사용 안내(SCR-148)의 [비밀번호 바꾸기]가 여기로 스크롤한다 */}
+      <section id="settings-password" className="scroll-mt-4">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">비밀번호 변경</h3>
         <form onSubmit={(e) => void changePassword(e)} className="mt-3 space-y-2">
           <input

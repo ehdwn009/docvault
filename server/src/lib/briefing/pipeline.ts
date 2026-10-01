@@ -4,12 +4,13 @@ import { readBodies } from './body.js';
 import { classify } from './classify.js';
 import { collect, type Candidate } from './collect.js';
 import { assembleEdition, readPrevious, type Edition, type Slot } from './edition.js';
+import { mergeSameStories } from './merge.js';
 import { select } from './select.js';
 import { loadSources } from './sources.js';
 import { summarize } from './summarize.js';
 import type { BriefingSub } from './taxonomy.js';
 
-// 회차 하나를 만드는 순서 — 수집 → 분류 → 선별 → 요약 → 조립. 저장과 실행 기록은 run.ts가 한다
+// 회차 하나를 만드는 순서 — 수집 → 분류 → 선별 → 합치기 → 원문 읽기 → 요약 → 조립. 저장과 실행 기록은 run.ts가 한다
 // (뉴스 브리핑 설계 "만드는 과정"). 실패는 이유를 담아 던지고, 어느 단계에서 실패하든 파일은 생기지 않는다
 
 export type Stage = 'collect' | 'classify' | 'select' | 'read' | 'summarize' | 'save';
@@ -71,7 +72,15 @@ export async function generateEdition(args: {
     if (bySub.size === 0) return { kind: 'empty', usage, message: '브리핑에 실을 기사가 없어요' };
 
     // ③ 선별
-    const picked = await select(bySub, prev.storiesBySub, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('select', d, t) });
+    const selected = await select(bySub, prev.storiesBySub, args.ai, usage, {
+      since: args.since,
+      until: args.until,
+      signal,
+      onProgress: (d, t) => progress.onStage('select', d, t),
+    });
+
+    // ③-2 분야를 넘는 같은 사건을 하나로 — 분야별 선별은 서로를 못 본다 (설계 "③-2"). 진행 표시는 선별에 포함
+    const picked = await mergeSameStories(selected, args.ai, usage, signal);
 
     // ③-1 핵심 기사만 원문 앞부분 읽기 — 실패한 기사는 발췌로 돌아간다 (설계 "③-1 근거 보강")
     const bodies = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t) });

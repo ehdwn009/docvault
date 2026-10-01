@@ -3,6 +3,7 @@ import { api, ApiError, type ViewerTheme } from '../lib/api';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
+import { formatDateTime } from '../lib/date';
 
 type VersionMeta = { id: number; savedBy: number; sizeBytes: number; createdAt: number };
 type VersionContent = { id: number; content: string; sizeBytes: number; createdAt: number };
@@ -42,6 +43,7 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
   async function restore(vid: number) {
     const ok = await confirmDialog('이 버전으로 복원할까요?', {
       message: '현재 본문은 새 버전으로 저장되어 다시 되돌릴 수 있습니다.',
+      confirmLabel: '복원',
     });
     if (!ok) return;
     setBusy(true);
@@ -78,7 +80,7 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
               ← 목록
             </button>
             <span className="text-xs text-slate-400">
-              {new Date(preview.createdAt).toLocaleString()}
+              {formatDateTime(preview.createdAt)}
             </span>
             {!readonly && (
               <button
@@ -115,7 +117,7 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
                 {i === 0 ? '최신 스냅샷' : `버전 ${versions.length - i}`}
               </span>
               <span className="ml-auto text-xs text-slate-500">
-                {new Date(v.createdAt).toLocaleString()}
+                {formatDateTime(v.createdAt)}
               </span>
               <span className="text-[10px] text-slate-600">{(v.sizeBytes / 1024).toFixed(1)}KB</span>
             </button>
