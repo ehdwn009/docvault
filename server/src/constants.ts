@@ -93,6 +93,7 @@ export const DEFAULT_USER_SETTINGS = {
   lastSeenVersion: null as string | null,
   termHighlight: 1,
   askWithCards: 1,
+  briefingAuto: 0,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -187,4 +188,75 @@ export const CARD = {
   /** 질문 때 함께 보내는 카드 수 상한과 카드당 본문 길이 — 토큰이 카드 수에 비례해 는다 (활용 ④) */
   ASK_CONTEXT_MAX_CARDS: 3,
   ASK_CONTEXT_BODY_CHARS: 400,
+} as const;
+
+/**
+ * 뉴스 브리핑 — 값의 근거는 docs/design/뉴스브리핑_docvault_20261001.md "정한 값".
+ * 비용을 조절하는 손잡이(후보 상한·분야당 건수·월 한도)는 전부 여기 — 첫 주 실측을 보고 고친다
+ */
+export const BRIEFING = {
+  /** 분류·선별·참고 기사 요약 — 판단은 단순하고 양이 많다 */
+  SELECT_MODEL: 'claude-haiku-4-5',
+  /** 핵심·주요 기사 요약 — 양이 적고 품질이 보이는 자리 */
+  SUMMARY_MODEL: 'claude-sonnet-5-5',
+  /** 모델별 단가 (USD/백만 토큰) — 실행 기록의 추정 비용 계산용. 청구서가 아니라 감 잡기용 */
+  PRICES: {
+    'claude-haiku-4-5': { inputPerMtok: 1, outputPerMtok: 5 },
+    'claude-sonnet-5-5': { inputPerMtok: 2, outputPerMtok: 10 },
+  },
+  /** 자동 생성 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전 */
+  AUTO_SLOTS: [
+    { slot: 'morning', label: '아침', hour: 6, minute: 30 },
+    { slot: 'noon', label: '점심', hour: 11, minute: 30 },
+    { slot: 'evening', label: '저녁', hour: 17, minute: 30 },
+  ],
+  /** 서버가 꺼져 있다 켜졌을 때 그 회차를 늦게라도 시작해 주는 시간 */
+  AUTO_CATCHUP_MS: 2 * 60 * 60 * 1000,
+  /** 자동 생성 시계를 들여다보는 주기 */
+  SCHEDULER_TICK_MS: 60 * 1000,
+  /** 한국은 일광절약시간이 없다 — UTC+9 고정 */
+  KST_OFFSET_MS: 9 * 60 * 60 * 1000,
+  /** 한 회차가 다루는 최대 범위 — 첫 회차·오래 쉰 뒤 기사가 수천 건 쌓이는 것 방지 */
+  MAX_RANGE_MS: 24 * 60 * 60 * 1000,
+  /** 후보 상한 — 이것이 곧 비용 상한이다 */
+  MAX_CANDIDATES: 600,
+  MAX_PER_SOURCE: 40,
+  /** 분야당 최대 기사 수 — 경제·IT·테크 계열(wide)과 나머지 (기획서 5~7 / 3~5의 상한) */
+  MAX_ITEMS_WIDE: 7,
+  MAX_ITEMS_NARROW: 5,
+  /** 분류 한 번에 보내는 기사 수 */
+  CLASSIFY_CHUNK: 80,
+  /** 요약 한 번에 보내는 기사 수 */
+  SUMMARY_CHUNK: 15,
+  /** 동시 실행 수 — 1GB e2-micro와 API 속도 제한 사이 */
+  FETCH_CONCURRENCY: 8,
+  SELECT_CONCURRENCY: 5,
+  SUMMARY_CONCURRENCY: 4,
+  /** 피드 하나의 요청 시간·크기 상한 — 느린 피드 하나가 전체를 붙잡지 않게 */
+  FETCH_TIMEOUT_MS: 10_000,
+  FETCH_MAX_BYTES: 2 * 1024 * 1024,
+  /** 발췌는 AI에게 보여 주는 데만 쓰고 저장하지 않는다 */
+  SNIPPET_MAX_CHARS: 300,
+  /** 성공한 출처가 이 비율보다 적으면 실패 — 망가진 수집으로 만든 회차는 직전 회차보다 나쁘다 */
+  MIN_SOURCE_OK_RATIO: 0.5,
+  /** 실행 시간 한도 — 30분 안에 끝낸다는 목표의 안전 여유 */
+  RUN_TIMEOUT_MS: 20 * 60 * 1000,
+  /** 이번 달(한국시간) 추정 비용 한도 — 넘으면 자동 생성 정지, 버튼은 확인 후 진행 */
+  MONTHLY_BUDGET_USD: 50,
+  /** 분류·선별 답 길이 상한 (토큰) */
+  SELECT_MAX_OUTPUT_TOKENS: 8000,
+  SUMMARY_MAX_OUTPUT_TOKENS: 8000,
+  /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
+  TITLE_MAX_CHARS: 40,
+  /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */
+  EDITION_VERSION: 1,
+  /** 내 파일 최상위의 브리핑 폴더와 그 안의 수집 목록 문서 이름 */
+  FOLDER_NAME: '뉴스 브리핑',
+  SOURCES_FILE_NAME: '수집 목록.json',
+  /** 패널의 최근 회차 수, 실행 기록 기본·최대 개수 */
+  RECENT_EDITIONS: 10,
+  RUNS_LIST_DEFAULT: 30,
+  RUNS_LIST_MAX: 100,
+  /** 실행 중 진행 표시를 다시 읽는 주기 (클라이언트도 같은 값) */
+  STATUS_POLL_MS: 2000,
 } as const;

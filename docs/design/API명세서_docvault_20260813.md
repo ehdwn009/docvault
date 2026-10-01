@@ -45,7 +45,7 @@
 | API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
-| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드) | 로그인 |
+| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드는 빠지고 브리핑 회차는 들어간다 — 파일 행의 `kind`는 doc이 아닐 때만 실린다 | 로그인 |
 | API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -605,4 +605,4 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 **200** `{ "runs": [ 실행 객체 ] }` — 최근 시작순, limit 최대 100. 자동 실행이 한도로 건너뛴 기록(`skipped`)도 여기 보인다.
 
 ### API-134 — PUT /briefing/settings
-**Body** `{ "autoEnabled": boolean }` → **200** `{ "autoEnabled", "nextAutoAt" }`. USER_SETTINGS.briefing_auto에 저장한다. 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
+**Body** `{ "autoEnabled": boolean }` → **200** `{ "autoEnabled", "nextAutoAt" }`. USER_SETTINGS.briefing_auto에 저장한다. 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
