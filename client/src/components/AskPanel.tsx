@@ -384,7 +384,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
 
   /** 대화 삭제 (API-106). 지금 보는 대화면 빈 대화로 돌아간다 */
   async function deleteThread(id: number) {
-    const ok = await confirmDialog('이 대화를 지울까요? 되돌릴 수 없어요.');
+    const ok = await confirmDialog('이 대화를 지울까요? 되돌릴 수 없어요.', { danger: true, confirmLabel: '대화 지우기' });
     if (!ok) return;
     try {
       await api(`/ask/threads/${id}`, { method: 'DELETE' });

@@ -43,6 +43,7 @@ export default function VersionPanel({ fileId, fileType, theme, readonly, onRest
   async function restore(vid: number) {
     const ok = await confirmDialog('이 버전으로 복원할까요?', {
       message: '현재 본문은 새 버전으로 저장되어 다시 되돌릴 수 있습니다.',
+      confirmLabel: '복원',
     });
     if (!ok) return;
     setBusy(true);

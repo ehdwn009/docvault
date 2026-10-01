@@ -50,6 +50,7 @@ export default function TrashPanel({
                 void confirmDialog('휴지통을 비울까요?', {
                   message: '모든 파일이 영구 삭제되며 되돌릴 수 없습니다.',
                   danger: true,
+                  confirmLabel: '휴지통 비우기',
                 }).then((ok) => ok && run(() => api('/files/trash', { method: 'DELETE' })));
               }}
               className="ml-auto rounded border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950 touch:min-h-10 touch:px-3"
@@ -87,6 +88,7 @@ export default function TrashPanel({
                     void confirmDialog(`"${f.name}"을(를) 영구 삭제할까요?`, {
                       message: '되돌릴 수 없습니다.',
                       danger: true,
+                      confirmLabel: '영구 삭제',
                     }).then((ok) => ok && run(() => api(`/files/${f.id}/purge`, { method: 'DELETE' })));
                   }}
                   // 복원 바로 옆이라 이름으로 구분한다 — 되돌릴 수 없는 쪽이 "삭제" 두 글자뿐이었다 (사용성 평가 2026-10-01)

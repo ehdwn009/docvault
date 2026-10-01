@@ -151,6 +151,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
       } else if (err instanceof ApiError && err.code === 'BRIEFING_BUDGET_EXCEEDED') {
         const ok = await confirmDialog('이번 달 한도를 넘었어요', {
           message: `이번 달 브리핑 비용이 한도($${status?.monthBudgetUsd ?? 50})에 닿았습니다. 그래도 만들까요?`,
+          confirmLabel: '그래도 만들기',
         });
         if (ok) await start(true);
       } else {

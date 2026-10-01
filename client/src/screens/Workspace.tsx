@@ -262,6 +262,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
       message: '이동하면 작성한 내용이 사라집니다.',
       danger: true,
+      confirmLabel: '버리고 이동',
+      cancelLabel: '계속 쓰기',
     });
     if (ok) dirtyMapRef.current.delete(target.id);
     return ok;
@@ -439,6 +441,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
           message: '닫으면 작성한 내용이 사라집니다.',
           danger: true,
+          confirmLabel: '버리고 닫기',
+          cancelLabel: '계속 쓰기',
         });
         if (!ok) return;
       }
@@ -455,6 +459,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const ok = await confirmDialog('저장하지 않은 변경이 있습니다', {
           message: '닫으면 작성한 내용이 사라집니다.',
           danger: true,
+          confirmLabel: '버리고 닫기',
+          cancelLabel: '계속 쓰기',
         });
         if (!ok) return;
       }
@@ -1089,6 +1095,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       void confirmDialog('폴더를 삭제할까요?', {
         message: '폴더 구조는 삭제되고, 안의 파일은 휴지통으로 이동합니다.',
         danger: true,
+        confirmLabel: '폴더 삭제',
       }).then((ok) => {
         if (ok) void guard(() => api(`/folders/${id}`, { method: 'DELETE' }));
       });
