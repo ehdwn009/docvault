@@ -3,6 +3,9 @@
 
 /** 서버 BRIEFING.EDITION_VERSION과 같아야 한다 — 모르는 버전이면 코드 뷰어로 연다 */
 export const BRIEFING_EDITION_VERSION = 1;
+/** 브리핑 폴더·수집 목록 문서 이름 — 서버 BRIEFING.FOLDER_NAME·SOURCES_FILE_NAME과 같아야 한다 */
+export const BRIEFING_FOLDER_NAME = '뉴스 브리핑';
+export const BRIEFING_SOURCES_FILE_NAME = '수집 목록.json';
 /** 실행 중 상태를 다시 읽는 주기 — 서버 BRIEFING.STATUS_POLL_MS와 같은 값 */
 export const BRIEFING_STATUS_POLL_MS = 2000;
 
