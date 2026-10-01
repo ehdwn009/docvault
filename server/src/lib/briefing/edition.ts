@@ -3,6 +3,7 @@ import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { files } from '../../db/schema.js';
 import type { DbOrTx } from '../content.js';
+import { basisOf } from './body.js';
 import { costOf, type Usage } from './ai.js';
 import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
@@ -28,6 +29,8 @@ export type EditionItem = {
   storyId: string;
   status: 'new' | 'updated';
   related: { source: string; url: string }[];
+  /** 요약의 근거 — body(원문 앞부분) · lede(발췌) · title(제목뿐). v0.43부터, 옛 회차에는 없다 */
+  basis?: 'body' | 'lede' | 'title';
 };
 
 export type Edition = {
@@ -58,6 +61,7 @@ export function editionFileName(date: string, label: string): string {
 export function assembleEdition(args: {
   picked: Picked[];
   written: Map<number, Written>;
+  bodies: Map<number, string>;
   slot: Slot;
   since: number;
   until: number;
@@ -88,6 +92,7 @@ export function assembleEdition(args: {
       // 이어받은 이슈는 직전 id 그대로 — 다음 회차·2차 이슈 타임라인이 같은 열쇠로 묶는다
       storyId: p.prevStoryId ?? `${p.sub.id}.${date}.${args.slot}.${n}`,
       status: p.prevStoryId ? 'updated' : 'new',
+      basis: basisOf(p, args.bodies.has(i)),
       related: [...p.related.map((r) => ({ source: r.source, url: r.url })), ...p.main.related].filter(
         (r, j, arr) => r.url !== p.main.url && arr.findIndex((x) => x.url === r.url) === j,
       ).slice(0, BRIEFING.MAX_RELATED),

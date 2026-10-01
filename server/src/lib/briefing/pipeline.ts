@@ -1,5 +1,6 @@
 import { BRIEFING } from '../../constants.js';
 import { emptyUsage, type AiCaller, type Usage } from './ai.js';
+import { readBodies } from './body.js';
 import { classify } from './classify.js';
 import { collect, type Candidate } from './collect.js';
 import { assembleEdition, readPrevious, type Edition, type Slot } from './edition.js';
@@ -11,7 +12,7 @@ import type { BriefingSub } from './taxonomy.js';
 // 회차 하나를 만드는 순서 — 수집 → 분류 → 선별 → 요약 → 조립. 저장과 실행 기록은 run.ts가 한다
 // (뉴스 브리핑 설계 "만드는 과정"). 실패는 이유를 담아 던지고, 어느 단계에서 실패하든 파일은 생기지 않는다
 
-export type Stage = 'collect' | 'classify' | 'select' | 'summarize' | 'save';
+export type Stage = 'collect' | 'classify' | 'select' | 'read' | 'summarize' | 'save';
 
 export type PipelineProgress = {
   onStage: (stage: Stage, done: number, total: number) => void;
@@ -72,12 +73,16 @@ export async function generateEdition(args: {
     // ③ 선별
     const picked = await select(bySub, prev.storiesBySub, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('select', d, t) });
 
+    // ③-1 핵심 기사만 원문 앞부분 읽기 — 실패한 기사는 발췌로 돌아간다 (설계 "③-1 근거 보강")
+    const bodies = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t) });
+
     // ④ 요약
-    const written = await summarize(picked, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('summarize', d, t) });
+    const written = await summarize(picked, bodies, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('summarize', d, t) });
 
     const edition = assembleEdition({
       picked,
       written,
+      bodies,
       slot: args.slot,
       since: args.since,
       until: args.until,

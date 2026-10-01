@@ -42,6 +42,21 @@ function stripSourceSuffix(title: string, source: string | null): string {
   return title;
 }
 
+/** 포털 재게재 주소 — 언론사 이름 자리에 이것이 오면 대표 기사·출처로 쓰지 않는다 (설계 "③-1 근거 보강") */
+const AGGREGATORS = new Set(['v.daum.net', 'news.v.daum.net', 'n.news.naver.com', 'news.naver.com', 'm.news.naver.com']);
+export function isAggregator(source: string): boolean {
+  return AGGREGATORS.has(source.trim().toLowerCase());
+}
+
+/** 발췌가 제목을 되풀이할 뿐이면 빈 발췌 — Google 뉴스 RSS의 발췌는 "제목 + 언론사 이름"이다 */
+export function usefulSnippet(title: string, snippet: string): string {
+  const t = titleKey(title);
+  const s = titleKey(snippet);
+  if (!s) return '';
+  if (t && s.startsWith(t) && s.length - t.length < BRIEFING.SNIPPET_MIN_EXTRA_CHARS) return '';
+  return snippet;
+}
+
 function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>): Candidate[] {
   const out: Candidate[] = [];
   for (const it of items) {
@@ -49,12 +64,13 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
     // 발행 시각이 없으면 범위를 판정할 수 없다 — 버린다
     if (it.publishedAt === null || it.publishedAt <= since || it.publishedAt > until) continue;
     if (excludeUrls.has(it.link)) continue;
+    const title = stripSourceSuffix(it.title, it.source);
     out.push({
-      title: stripSourceSuffix(it.title, it.source),
+      title,
       url: it.link,
       publishedAt: it.publishedAt,
       source: it.source ?? src.publisher,
-      snippet: it.snippet,
+      snippet: usefulSnippet(title, it.snippet),
       region: src.region,
       sub: src.sub,
       related: [],

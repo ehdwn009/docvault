@@ -33,11 +33,12 @@ async function assertPublicUrl(url: URL): Promise<void> {
   if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) throw new Error('내부망 주소는 받을 수 없습니다');
 }
 
-/** XML 선언이나 Content-Type에서 문자 인코딩 — 국내 피드 일부는 아직 EUC-KR이다 */
+/** Content-Type, XML 선언, HTML의 meta charset 순으로 문자 인코딩 — 국내 피드·기사 일부는 아직 EUC-KR이다 */
 function detectCharset(contentType: string | null, head: Uint8Array): string {
   const fromHeader = contentType?.match(/charset=["']?([\w-]+)/i)?.[1];
   if (fromHeader) return fromHeader.toLowerCase();
-  const decl = new TextDecoder('latin1').decode(head.subarray(0, 200)).match(/encoding=["']([\w-]+)["']/i)?.[1];
+  const start = new TextDecoder('latin1').decode(head.subarray(0, 2048));
+  const decl = start.match(/encoding=["']([\w-]+)["']/i)?.[1] ?? start.match(/<meta[^>]+charset=["']?([\w-]+)/i)?.[1];
   return decl?.toLowerCase() ?? 'utf-8';
 }
 
@@ -65,16 +66,28 @@ async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> 
   return out;
 }
 
+const FEED_ACCEPT = 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5';
+const PAGE_ACCEPT = 'text/html, application/xhtml+xml;q=0.9, */*;q=0.5';
+
 /** 피드 하나를 글자로 받는다. 실패는 사람이 읽을 이유와 함께 던진다 */
-export async function fetchFeedText(rawUrl: string, outer?: AbortSignal): Promise<string> {
+export function fetchFeedText(rawUrl: string, outer?: AbortSignal): Promise<string> {
+  return fetchText(rawUrl, { accept: FEED_ACCEPT, timeoutMs: BRIEFING.FETCH_TIMEOUT_MS, maxBytes: BRIEFING.FETCH_MAX_BYTES, outer });
+}
+
+/** 기사 원문 페이지(HTML)를 받는다 — 핵심 기사 원문 읽기(설계 "③-1 근거 보강"). 같은 안전 장치, 더 짧은 시간 */
+export function fetchPageText(rawUrl: string, outer?: AbortSignal): Promise<string> {
+  return fetchText(rawUrl, { accept: PAGE_ACCEPT, timeoutMs: BRIEFING.BODY_FETCH_TIMEOUT_MS, maxBytes: BRIEFING.BODY_FETCH_MAX_BYTES, outer });
+}
+
+async function fetchText(rawUrl: string, opts: { accept: string; timeoutMs: number; maxBytes: number; outer?: AbortSignal }): Promise<string> {
   let url = new URL(rawUrl);
-  const signal = AbortSignal.any([AbortSignal.timeout(BRIEFING.FETCH_TIMEOUT_MS), ...(outer ? [outer] : [])]);
+  const signal = AbortSignal.any([AbortSignal.timeout(opts.timeoutMs), ...(opts.outer ? [opts.outer] : [])]);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     await assertPublicUrl(url);
     const res = await fetch(url, {
       redirect: 'manual', // 넘어가는 곳도 매번 검사하려고 직접 따라간다
       signal,
-      headers: { 'user-agent': 'docvault-briefing/1 (+personal RSS reader)', accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5' },
+      headers: { 'user-agent': 'docvault-briefing/1 (+personal RSS reader)', accept: opts.accept },
     });
     if (res.status >= 300 && res.status < 400) {
       const loc = res.headers.get('location');
@@ -83,7 +96,7 @@ export async function fetchFeedText(rawUrl: string, outer?: AbortSignal): Promis
       continue;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const bytes = await readCapped(res, BRIEFING.FETCH_MAX_BYTES);
+    const bytes = await readCapped(res, opts.maxBytes);
     const charset = detectCharset(res.headers.get('content-type'), bytes);
     try {
       return new TextDecoder(charset).decode(bytes);

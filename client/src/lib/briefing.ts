@@ -23,6 +23,8 @@ export type EditionItem = {
   storyId: string;
   status: 'new' | 'updated';
   related: { source: string; url: string }[];
+  /** 요약의 근거 — body(원문 앞부분) · lede(발췌) · title(제목뿐). 옛 회차에는 없다 */
+  basis?: 'body' | 'lede' | 'title';
 };
 
 export type Edition = {
@@ -79,7 +81,7 @@ export type BriefingRun = {
   slot: Edition['edition']['slot'];
   editionDate: string;
   status: 'running' | 'ok' | 'error' | 'skipped';
-  stage: 'collect' | 'classify' | 'select' | 'summarize' | 'save' | null;
+  stage: 'collect' | 'classify' | 'select' | 'read' | 'summarize' | 'save' | null;
   progressDone: number;
   progressTotal: number;
   sinceAt: number;
@@ -111,6 +113,7 @@ export const STAGE_LABEL: Record<NonNullable<BriefingRun['stage']>, string> = {
   collect: '수집',
   classify: '분류',
   select: '선별',
+  read: '원문 읽기',
   summarize: '요약',
   save: '저장',
 };

@@ -573,7 +573,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "costUsd": 0.18, "message": null, "startedAt": 1790847000000, "finishedAt": null
 }
 ```
-`status`: running | ok | error | skipped. `stage`: collect | classify | select | summarize | save. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
+`status`: running | ok | error | skipped. `stage`: collect | classify | select | read(핵심 기사 원문 읽기, v0.43) | summarize | save. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
 
 ### API-131 Response — GET /briefing/status
 ```json

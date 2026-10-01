@@ -246,6 +246,17 @@ export const BRIEFING = {
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
   SUMMARY_MAX_OUTPUT_TOKENS: 8000,
+  /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수 */
+  BODY_FETCH_MIN_IMPORTANCE: 3,
+  BODY_MAX_CHARS: 2000,
+  BODY_FETCH_TIMEOUT_MS: 8000,
+  BODY_FETCH_MAX_BYTES: 1536 * 1024,
+  BODY_FETCH_CONCURRENCY: 6,
+  BODY_FETCH_TRIES: 2,
+  /** 본문 문단으로 칠 최소 길이 — 메뉴·저작권 표시 같은 짧은 줄을 거른다 */
+  BODY_MIN_PARAGRAPH_CHARS: 30,
+  /** 발췌가 제목을 되풀이할 뿐인지 볼 때, 제목을 빼고 남아야 하는 글자 수 */
+  SNIPPET_MIN_EXTRA_CHARS: 20,
   /** 기사 하나에 붙이는 "같은 사건 다른 보도" 링크 수 상한 */
   MAX_RELATED: 5,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */

@@ -178,7 +178,7 @@ erDiagram
         text slot "morning|noon|evening|adhoc"
         text edition_date "YYYY-MM-DD (한국시간) — 자동 회차 중복 방지 기준"
         text status "running|ok|error|skipped"
-        text stage "collect|classify|select|summarize|save — 진행 표시용"
+        text stage "collect|classify|select|read|summarize|save — 진행 표시용 (read는 v0.43)"
         integer progress_done
         integer progress_total
         integer since_at "다룬 기사 범위 시작 (unix ms)"

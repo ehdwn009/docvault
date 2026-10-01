@@ -231,7 +231,7 @@ export const briefingRuns = sqliteTable(
     /** 한국시간 날짜 YYYY-MM-DD — 자동 회차가 하루에 한 번만 돌게 하는 기준 */
     editionDate: text('edition_date').notNull(),
     status: text('status', { enum: ['running', 'ok', 'error', 'skipped'] }).notNull(),
-    stage: text('stage', { enum: ['collect', 'classify', 'select', 'summarize', 'save'] }),
+    stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'summarize', 'save'] }),
     progressDone: integer('progress_done').notNull().default(0),
     progressTotal: integer('progress_total').notNull().default(0),
     sinceAt: integer('since_at').notNull(),

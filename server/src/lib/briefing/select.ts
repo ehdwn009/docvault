@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { BRIEFING } from '../../constants.js';
 import { callAndCount, SYSTEM_BASE, type AiCaller, type Usage } from './ai.js';
-import type { Candidate } from './collect.js';
+import { isAggregator, type Candidate } from './collect.js';
 import { errorText, mapLimit } from './limit.js';
 import { subPath, type BriefingSub } from './taxonomy.js';
 
@@ -49,7 +49,7 @@ const IMPORTANCE_RULES = [
 async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[], ai: AiCaller, usage: Usage, signal?: AbortSignal): Promise<Picked[]> {
   const input = [...cands].sort((a, b) => b.publishedAt - a.publishedAt).slice(0, MAX_INPUT_PER_SUB);
   const max = sub.wide ? BRIEFING.MAX_ITEMS_WIDE : BRIEFING.MAX_ITEMS_NARROW;
-  const lines = input.map((c, i) => `${i + 1}. (${c.source}) ${c.title}${c.snippet ? ` — ${c.snippet}` : ''}`).join('\n');
+  const lines = input.map((c, i) => `${i + 1}. (${c.source}) ${c.title}${c.snippet ? ` — ${c.snippet}` : ' (발췌 없음 — 제목뿐)'}`).join('\n');
   const prevLines = prev.length ? prev.map((p) => `${p.storyId}: ${p.title}`).join('\n') : '(없음)';
   const out = await callAndCount(ai, usage, {
     model: BRIEFING.SELECT_MODEL,
@@ -60,6 +60,7 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
       '- 이 분야에 맞지 않는 기사, 스포츠·연예·광고·홍보성 기사는 고르지 않는다.',
       '- 직전 회차에 같은 이슈가 있었으면 prevStoryId에 그 id를 적는다(새 국면이 있을 때만 고른다).',
       '- 참고(1) 이슈만 title·summary·why를 한국어로 새로 쓴다. 해외 기사도 한국어로.',
+      '- 발췌 없이 제목뿐인 기사는 summary를 제목을 풀어 쓴 한 문장으로만 쓰고 사실을 덧붙이지 않는다. why는 주어진 글에서 근거를 댈 수 있을 때만 쓰고, 일반론이면 빈 문자열.',
       IMPORTANCE_RULES,
       `\n직전 회차의 이 분야 이슈:\n${prevLines}`,
       `\n<기사>\n${lines}\n</기사>`,
@@ -85,10 +86,14 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
       }
     }
     const importance = Math.min(3, Math.max(1, Math.round(s.importance))) as 1 | 2 | 3;
+    // 발췌가 있고 포털 재게재 주소가 아닌 기사를 대표로 — 요약의 근거와 화면의 출처가 둘 다 나아진다 (설계 "③-1 근거 보강")
+    const pool = [main, ...related];
+    const score = (c: Candidate) => (c.snippet ? 2 : 0) + (isAggregator(c.source) ? 0 : 1);
+    const lead = pool.reduce((a, b) => (score(b) > score(a) ? b : a));
     picked.push({
       sub,
-      main,
-      related,
+      main: lead,
+      related: pool.filter((c) => c !== lead),
       importance,
       prevStoryId: s.prevStoryId && prevIds.has(s.prevStoryId) ? s.prevStoryId : null,
       // 참고인데 글을 안 썼으면 원문 제목으로라도 싣는다 — 요약 칸은 비워 둔다
