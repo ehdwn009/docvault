@@ -94,6 +94,8 @@ export const DEFAULT_USER_SETTINGS = {
   termHighlight: 1,
   askWithCards: 1,
   briefingAuto: 0,
+  /** 회차별 켜기·시각 JSON — null이면 AUTO_SLOTS 기본값 (lib/briefing/autoSchedule.ts) */
+  briefingSchedule: null as string | null,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -204,7 +206,7 @@ export const BRIEFING = {
     'claude-haiku-4-5': { inputPerMtok: 1, outputPerMtok: 5 },
     'claude-sonnet-5-5': { inputPerMtok: 2, outputPerMtok: 10 },
   },
-  /** 자동 생성 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전 */
+  /** 자동 생성 기본 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전. 사람마다 바꿀 수 있다(v0.43, autoSchedule.ts) */
   AUTO_SLOTS: [
     { slot: 'morning', label: '아침', hour: 6, minute: 30 },
     { slot: 'noon', label: '점심', hour: 11, minute: 30 },
@@ -212,6 +214,8 @@ export const BRIEFING = {
   ],
   /** 서버가 꺼져 있다 켜졌을 때 그 회차를 늦게라도 시작해 주는 시간 */
   AUTO_CATCHUP_MS: 2 * 60 * 60 * 1000,
+  /** 사람이 고를 수 있는 가장 늦은 시작 시각(하루의 분) — 늦게라도 시작하는 2시간이 자정을 넘지 않게 21:59까지 */
+  AUTO_LATEST_MINUTE: 21 * 60 + 59,
   /** 자동 생성 시계를 들여다보는 주기 */
   SCHEDULER_TICK_MS: 60 * 1000,
   /** 한국은 일광절약시간이 없다 — UTC+9 고정 */
@@ -229,8 +233,8 @@ export const BRIEFING = {
   MAX_ITEMS_NARROW: 5,
   /** 분류 한 번에 보내는 기사 수 */
   CLASSIFY_CHUNK: 80,
-  /** 요약 한 번에 보내는 기사 수 */
-  SUMMARY_CHUNK: 15,
+  /** 요약 한 번에 보내는 기사 수 — 기사마다 원문 앞부분이 붙고 답도 칸 구성으로 길어져 15 → 8 (v0.43) */
+  SUMMARY_CHUNK: 8,
   /** 동시 실행 수 — 1GB e2-micro와 API 속도 제한 사이 */
   FETCH_CONCURRENCY: 8,
   SELECT_CONCURRENCY: 5,
@@ -245,12 +249,13 @@ export const BRIEFING = {
   /** 실행 시간 한도 — 30분 안에 끝낸다는 목표의 안전 여유 */
   RUN_TIMEOUT_MS: 20 * 60 * 1000,
   /** 이번 달(한국시간) 추정 비용 한도 — 넘으면 자동 생성 정지, 버튼은 확인 후 진행 */
-  MONTHLY_BUDGET_USD: 50,
+  MONTHLY_BUDGET_USD: 80,
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
   SUMMARY_MAX_OUTPUT_TOKENS: 8000,
-  /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수 */
-  BODY_FETCH_MIN_IMPORTANCE: 3,
+  /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수.
+      주요(2)까지 읽는다 — 펼침을 칸 구성으로 길게 쓰려면 재료가 있어야 한다. 발췌만으로는 제목을 되풀이했다 (v0.43) */
+  BODY_FETCH_MIN_IMPORTANCE: 2,
   BODY_MAX_CHARS: 2000,
   BODY_FETCH_TIMEOUT_MS: 8000,
   BODY_FETCH_MAX_BYTES: 1536 * 1024,
@@ -262,6 +267,9 @@ export const BRIEFING = {
   SNIPPET_MIN_EXTRA_CHARS: 20,
   /** 기사 하나에 붙이는 "같은 사건 다른 보도" 링크 수 상한 */
   MAX_RELATED: 5,
+  /** 핵심·주요 펼침(무슨 일·배경·숫자로 보면·앞으로)을 합친 목표 길이 (글자, 사용자 결정 v0.43) */
+  DETAIL_MIN_CHARS: 200,
+  DETAIL_MAX_CHARS: 300,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
   TITLE_MAX_CHARS: 40,
   /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */

@@ -110,7 +110,7 @@
 | API-131 | GET | /briefing/status | 뉴스 브리핑 상태 — 키 설정 여부·자동 생성 여부와 다음 시각·지금 실행·최근 결과·이번 달 비용/한도·최근 회차 10개 | 관리자 |
 | API-132 | POST | /briefing/runs | 브리핑 만들기 시작 (직전 회차 이후 기사로 수시판). 곧바로 202 + 실행, 만드는 일은 뒤에서 | 관리자 |
 | API-133 | GET | /briefing/runs | 실행 기록 (최근순, 상태·건수·비용·걸린 시간·실패 이유·실패 출처) | 관리자 |
-| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기 `{ autoEnabled }` | 관리자 |
+| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기와 회차별 켜기·시각 `{ autoEnabled?, schedule? }` | 관리자 |
 | API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43) | 관리자 |
 | API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
@@ -582,16 +582,18 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ```json
 {
   "configured": true,
-  "autoEnabled": false,
-  "nextAutoAt": null,
+  "autoEnabled": true,
+  "schedule": { "morning": { "on": true, "at": "06:30" }, "noon": { "on": false, "at": "11:30" }, "evening": { "on": true, "at": "19:00" } },
+  "nextAutoAt": 1790845200000,
+  "nextAutoSlot": "evening",
   "running": null,
   "last": { "...": "실행 객체 — 가장 최근에 끝난 것" },
   "monthCostUsd": 12.4,
-  "monthBudgetUsd": 50,
+  "monthBudgetUsd": 80,
   "nextSinceAt": 1790837540572
 }
 ```
-`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`은 자동이 켜져 있을 때 다음 시작 시각(unix ms), 꺼져 있으면 null. `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
+`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`·`nextAutoSlot`은 자동이 켜져 있을 때 다음으로 켜진 회차의 시작 시각(unix ms)과 그 회차, 꺼져 있거나 켜진 회차가 없으면 null — 화면은 시각으로 회차를 짐작하지 않는다(사람마다 시각이 다르다). `schedule`은 회차별 켜기·시작 시각(한국시간 "HH:MM"), 저장된 것이 없으면 기본값(v0.43). `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
 
 ### API-132 — POST /briefing/runs
 **Body** `{ "force"?: boolean }` — 월 한도를 넘었을 때 사용자가 확인했다는 표시.
@@ -608,7 +610,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 **200** `{ "runs": [ 실행 객체 ] }` — 최근 시작순, limit 최대 100. 자동 실행이 한도로 건너뛴 기록(`skipped`)도 여기 보인다.
 
 ### API-134 — PUT /briefing/settings
-**Body** `{ "autoEnabled": boolean }` → **200** `{ "autoEnabled", "nextAutoAt" }`. USER_SETTINGS.briefing_auto에 저장한다. 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
+**Body** `{ "autoEnabled"?: boolean, "schedule"?: { "morning"|"noon"|"evening": { "on": boolean, "at": "HH:MM" } } }` — 보낸 것만 바꾼다 → **200** `{ "autoEnabled", "schedule", "nextAutoAt", "nextAutoSlot" }`. USER_SETTINGS.briefing_auto·briefing_schedule에 저장한다. `schedule`은 세 회차를 다 보내야 하고, 시각은 아침 < 점심 < 저녁 순서이며 21:59까지 — 어기면 400 VALIDATION_ERROR(v0.43). 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
 
 ### API-135 — GET /briefing/editions?before=YYYY-MM-DD&days=7 (v0.43)
 **200** `{ "editions": [ { "fileId", "editionDate", "slot", "label", "createdAt", "itemCount", "leadCount", "leadRead", "readCount", "state": "unread"|"partial"|"done" } ], "nextBefore": "YYYY-MM-DD" | null }`

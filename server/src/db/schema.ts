@@ -157,8 +157,10 @@ export const userSettings = sqliteTable('user_settings', {
   termHighlight: integer('term_highlight').notNull().default(1),
   /** 질문할 때 관련 배움 카드를 문맥으로 함께 보낼지 (활용 ④). 1=켬 */
   askWithCards: integer('ask_with_cards').notNull().default(1),
-  /** 뉴스 브리핑 자동 생성 (06:30·11:30·17:30 KST). 관리자에게만 의미가 있다. 기본 꺼짐 — 켜야 돈이 나간다 */
+  /** 뉴스 브리핑 자동 생성 전체 스위치. 관리자에게만 의미가 있다. 기본 꺼짐 — 켜야 돈이 나간다 */
   briefingAuto: integer('briefing_auto').notNull().default(0),
+  /** 자동 생성 회차별 켜기·시작 시각 JSON {"morning":{"on":true,"at":"06:30"},…}. null이면 기본(06:30·11:30·17:30 모두 켬) (v0.43) */
+  briefingSchedule: text('briefing_schedule'),
   updatedAt: integer('updated_at').notNull(),
 });
 

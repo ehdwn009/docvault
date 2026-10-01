@@ -111,6 +111,7 @@ erDiagram
         integer term_highlight "0|1 문서 속 카드 용어 밑줄 (기본 1, 2026-09-20)"
         integer ask_with_cards "0|1 질문 때 관련 카드 함께 보내기 (기본 1, 2026-09-20)"
         integer briefing_auto "0|1 뉴스 브리핑 자동 생성 (기본 0, 관리자만 의미, 2026-10-01)"
+        text briefing_schedule "nullable, 자동 생성 회차별 켜기·시각 JSON (v0.43)"
         integer updated_at
     }
     GOOGLE_ACCOUNTS {
@@ -249,7 +250,7 @@ erDiagram
   - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
   - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.
   - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.
-  - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다.
+  - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다. USER_SETTINGS.briefing_schedule은 그 사용자의 회차별 켜기·시작 시각 JSON(`{"morning":{"on":true,"at":"06:30"},…}`, v0.43)이고, null이면 기본(06:30·11:30·17:30 모두 켬) — 스케줄러가 사용자마다 이 값으로 지금 돌 회차를 고른다.
   - 인덱스 `briefing_runs_owner_started_idx (owner_id, started_at)` — 패널의 최근 실행·실행 기록·이번 달 비용 합계가 전부 "이 사람의 최근 실행부터" 읽는다.
   - `running` 행은 기동 시 `error`("서버 재시작으로 중단")로 정리한다 — 한 번에 하나만 돈다는 잠금이 DB 행에도 걸려 있어, 남겨 두면 영원히 실행 중으로 보인다.
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.

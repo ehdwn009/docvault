@@ -120,6 +120,13 @@
       "when": 1790837540572,
       "tag": "0016_previous_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790858464319,
+      "tag": "0017_mean_puff_adder",
+      "breakpoints": true
     }
   ]
 }
