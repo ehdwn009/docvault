@@ -39,6 +39,8 @@ type Props = {
 type Section = '국내' | '세계';
 type Filter = 'all' | 'major' | 'core';
 const FILTER_LABEL: Record<Filter, string> = { all: '전체', major: '주요 이상', core: '핵심만' };
+const NEXT_FILTER: Record<Filter, Filter> = { all: 'major', major: 'core', core: 'all' };
+const FILTER_MIN: Record<Filter, Importance> = { all: 1, major: 2, core: 3 };
 /** 두 칸으로 나누는 보이는 폭 (설계 — PC 두 칸) */
 const WIDE_MIN_PX = 880;
 /** 읽음을 모아 보내는 간격 — 연달아 펼쳐도 요청 하나로 */
@@ -277,7 +279,11 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
         setOpen((prev) => {
           const next = new Set(prev);
           if (next.has(key)) next.delete(key);
-          else next.add(key);
+          else {
+            // 핵심 상자는 한 번에 하나만 — 여러 개 펼치면 "1분 훑기" 상자가 화면 몇 장으로 늘어났다 (사용성 평가 2026-10-01)
+            if (key.startsWith('lead:')) for (const k of prev) if (k.startsWith('lead:')) next.delete(k);
+            next.add(key);
+          }
           return next;
         });
     },
@@ -413,6 +419,11 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   const hasOther = edition.sections.some((s) => s.section === other);
   const leadRead = lead.filter((l) => read.has(l.item.id)).length;
   const sel = selected ? located.get(selected) : undefined;
+  const countOf = (section: Section) =>
+    (edition.sections.find((s) => s.section === section)?.categories ?? []).reduce(
+      (n, c) => n + c.subs.reduce((m, sub) => m + sub.items.filter((i) => i.importance >= FILTER_MIN[filter]).length, 0),
+      0,
+    );
 
   const row = (l: Located, opts: { lead?: number } = {}) => {
     const id = l.item.id;
@@ -440,11 +451,16 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
           {opts.lead ? (
             <span className={`mt-[0.1em] w-6 shrink-0 text-center text-[0.95em] font-bold ${isRead ? 'opacity-40' : p.accent}`}>{opts.lead}</span>
           ) : (
-            <span className={`mt-[0.15em] shrink-0 rounded px-1.5 py-0.5 text-[0.7em] font-bold ${badge.className} ${isRead ? 'opacity-50' : ''}`}>{badge.label}</span>
+            <span className={`mt-[0.15em] shrink-0 rounded px-1.5 py-0.5 text-[0.7em] font-bold ${badge.className} ${isRead ? 'opacity-60' : ''}`}>{badge.label}</span>
           )}
-          <span className={`flex min-w-0 flex-1 flex-col gap-0.5 ${isRead ? 'opacity-55' : ''}`}>
+          {/* 읽은 줄은 제목 색만 낮춘다 — 줄 전체를 흐리게 하면 둘째 줄(분야·언론사·시각) 대비가 2:1까지 떨어졌다 (사용성 평가 2026-10-01) */}
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             {opts.lead && <span className={`text-[0.72em] font-semibold ${p.muted}`}>{`${l.section} · ${l.sub}`}</span>}
-            <span className={`text-[1em] leading-snug ${l.item.importance === 3 ? 'font-semibold' : ''}`}>{l.item.title}</span>
+            <span className={`text-[1em] leading-snug ${isRead ? p.muted : l.item.importance === 3 ? 'font-semibold' : ''}`}>{l.item.title}</span>
+            {/* 핵심 상자는 펼치지 않아도 무슨 일인지 한 줄 — 제목만으로는 고르기 어려웠다 */}
+            {opts.lead && !isOpen && !(wide && selected === id) && l.item.summary && (
+              <span className={`line-clamp-1 text-[0.82em] ${p.muted}`}>{l.item.summary}</span>
+            )}
             {!opts.lead && (
               <span className={`text-[0.78em] ${p.muted}`}>
                 {metaLine(l).replace(/ · 갱신됨$/, '')}
@@ -487,9 +503,11 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
               key={s}
               onClick={() => setTab(s)}
               aria-pressed={tab === s}
-              className={`h-8 rounded-md px-3.5 text-[0.88em] font-semibold transition ${tab === s ? p.segOn : 'opacity-60'}`}
+              className={`h-8 whitespace-nowrap rounded-md px-3 text-[0.88em] font-semibold transition ${tab === s ? p.segOn : 'opacity-60'}`}
             >
               {s}
+              {/* 건수 — 국내 100 대 세계 37처럼 기울어 있어도 세계가 있다는 걸 탭에서 바로 알게 (지금 보기 조건 기준) */}
+              <span className="ml-1 text-[0.85em] font-normal opacity-70">{countOf(s)}</span>
             </button>
           ))}
         </div>
@@ -504,9 +522,20 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
             </button>
           ))}
         </div>
+        {/* 한 칸(폰)에서는 보기 고르기를 막대 안에 — 아래 칸은 스크롤하면 사라져 맨 위까지 올라가야 했다 (사용성 평가 2026-10-01).
+            세 버튼을 다 넣을 자리가 없어 누를 때마다 다음 보기로 돈다 */}
+        {!wide && (
+          <button
+            onClick={() => setFilter(NEXT_FILTER[filter])}
+            title="보기 바꾸기: 전체 → 주요 이상 → 핵심만"
+            className={`ml-auto h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-[0.82em] transition ${filter === 'all' ? `border ${p.line}` : p.chipOn}`}
+          >
+            {FILTER_LABEL[filter]}
+          </button>
+        )}
       </nav>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className={`mt-3 flex-wrap gap-1.5 ${wide ? 'flex' : 'hidden'}`}>
         {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
           <button
             key={f}
