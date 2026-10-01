@@ -188,10 +188,17 @@ export type BriefingRun = {
   finishedAt: number | null;
 };
 
+export type AutoSlot = 'morning' | 'noon' | 'evening';
+/** 자동 생성 회차별 켜기·시작 시각("06:30", 한국시간) — v0.43 */
+export type AutoSchedule = Record<AutoSlot, { on: boolean; at: string }>;
+
 export type BriefingStatus = {
   configured: boolean;
   autoEnabled: boolean;
+  schedule: AutoSchedule;
   nextAutoAt: number | null;
+  /** 다음 자동 회차 — 시각으로 짐작하지 않는다(사람마다 시각이 다르다) */
+  nextAutoSlot: AutoSlot | null;
   running: BriefingRun | null;
   last: BriefingRun | null;
   monthCostUsd: number;

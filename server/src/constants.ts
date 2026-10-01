@@ -94,6 +94,8 @@ export const DEFAULT_USER_SETTINGS = {
   termHighlight: 1,
   askWithCards: 1,
   briefingAuto: 0,
+  /** 회차별 켜기·시각 JSON — null이면 AUTO_SLOTS 기본값 (lib/briefing/autoSchedule.ts) */
+  briefingSchedule: null as string | null,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -204,7 +206,7 @@ export const BRIEFING = {
     'claude-haiku-4-5': { inputPerMtok: 1, outputPerMtok: 5 },
     'claude-sonnet-5-5': { inputPerMtok: 2, outputPerMtok: 10 },
   },
-  /** 자동 생성 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전 */
+  /** 자동 생성 기본 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전. 사람마다 바꿀 수 있다(v0.43, autoSchedule.ts) */
   AUTO_SLOTS: [
     { slot: 'morning', label: '아침', hour: 6, minute: 30 },
     { slot: 'noon', label: '점심', hour: 11, minute: 30 },
@@ -212,6 +214,8 @@ export const BRIEFING = {
   ],
   /** 서버가 꺼져 있다 켜졌을 때 그 회차를 늦게라도 시작해 주는 시간 */
   AUTO_CATCHUP_MS: 2 * 60 * 60 * 1000,
+  /** 사람이 고를 수 있는 가장 늦은 시작 시각(하루의 분) — 늦게라도 시작하는 2시간이 자정을 넘지 않게 21:59까지 */
+  AUTO_LATEST_MINUTE: 21 * 60 + 59,
   /** 자동 생성 시계를 들여다보는 주기 */
   SCHEDULER_TICK_MS: 60 * 1000,
   /** 한국은 일광절약시간이 없다 — UTC+9 고정 */

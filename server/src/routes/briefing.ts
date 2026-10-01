@@ -17,7 +17,7 @@ import {
   toRunDto,
 } from '../lib/briefing/run.js';
 import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
-import { nextSlotStart } from '../lib/briefing/time.js';
+import { nextAuto, readSchedule, scheduleSchema, type AutoSchedule } from '../lib/briefing/autoSchedule.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
@@ -42,6 +42,8 @@ export const briefingRoutes = new Hono<AppEnv>()
   .get('/status', (c) => {
     const user = c.get('user');
     const auto = autoEnabled(user.id);
+    const schedule = readSchedule(user.id);
+    const next = auto ? nextAuto(schedule, Date.now()) : null;
     const running = runningRun();
     const last = db
       .select()
@@ -54,7 +56,9 @@ export const briefingRoutes = new Hono<AppEnv>()
     return c.json({
       configured: isConfigured(),
       autoEnabled: auto,
-      nextAutoAt: auto ? nextSlotStart(Date.now()) : null,
+      schedule,
+      nextAutoAt: next?.at ?? null,
+      nextAutoSlot: next?.slot ?? null,
       running: running ? toRunDto(running) : null,
       last: last ? toRunDto(last) : null,
       monthCostUsd: monthCostUsd(user.id),
@@ -104,15 +108,24 @@ export const briefingRoutes = new Hono<AppEnv>()
     return c.json({ runs: listRuns(c.get('user').id, limit).map(toRunDto) });
   })
 
-  // API-134: 자동 생성 켜기/끄기 — 키 없이 켜 두면 매번 조용히 실패하므로 막는다 (자동 백업과 같은 이유)
-  .put('/settings', jsonBody(z.object({ autoEnabled: z.boolean() })), (c) => {
-    const { autoEnabled: on } = c.req.valid('json');
-    if (on && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
+  // API-134: 자동 생성 설정 — 전체 켜기/끄기와 회차별 켜기·시각(v0.43). 둘 중 보낸 것만 바꾼다.
+  // 키 없이 켜 두면 매번 조용히 실패하므로 켜기는 막는다 (자동 백업과 같은 이유)
+  .put('/settings', jsonBody(z.object({ autoEnabled: z.boolean().optional(), schedule: scheduleSchema.optional() })), (c) => {
+    const body = c.req.valid('json');
+    if (body.autoEnabled && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
     const userId = c.get('user').id;
     const now = Date.now();
+    const set = {
+      ...(body.autoEnabled !== undefined ? { briefingAuto: body.autoEnabled ? 1 : 0 } : {}),
+      ...(body.schedule ? { briefingSchedule: JSON.stringify(body.schedule) } : {}),
+      updatedAt: now,
+    };
     db.insert(userSettings)
-      .values({ ...DEFAULT_USER_SETTINGS, userId, briefingAuto: on ? 1 : 0, updatedAt: now })
-      .onConflictDoUpdate({ target: userSettings.userId, set: { briefingAuto: on ? 1 : 0, updatedAt: now } })
+      .values({ ...DEFAULT_USER_SETTINGS, userId, ...set })
+      .onConflictDoUpdate({ target: userSettings.userId, set })
       .run();
-    return c.json({ autoEnabled: on, nextAutoAt: on ? nextSlotStart(now) : null });
+    const auto = autoEnabled(userId);
+    const schedule: AutoSchedule = readSchedule(userId);
+    const next = auto ? nextAuto(schedule, now) : null;
+    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null });
   });

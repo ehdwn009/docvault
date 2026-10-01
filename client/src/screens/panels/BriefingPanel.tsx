@@ -4,7 +4,6 @@ import { api, ApiError } from '../../lib/api';
 import {
   BRIEFING_READ_EVENT,
   BRIEFING_STATUS_POLL_MS,
-  kstHour,
   kstTime,
   kstToday,
   longDate,
@@ -269,9 +268,9 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
           <div className="space-y-1.5">
             {nextAutoToday && status.nextAutoAt !== null && (
               <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2">
-                <SlotChip label={SLOT_SHORT[slotOf(status.nextAutoAt)]} />
+                <SlotChip label={SLOT_SHORT[status.nextAutoSlot ?? 'adhoc']} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[slotOf(status.nextAutoAt)]} (자동)</span>
+                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[status.nextAutoSlot ?? 'adhoc']} (자동)</span>
                   <span className="text-xs text-slate-500">{kstTime(status.nextAutoAt, false)}에 만들기 시작</span>
                 </span>
                 <span className="shrink-0 text-xs font-semibold text-slate-500">예정</span>
@@ -360,8 +359,10 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
           <button onClick={onOpenSettings} className="block text-left hover:text-slate-300">
             {status.autoEnabled && status.nextAutoAt !== null ? (
               <>
-                자동 생성 켜짐 · 다음 <b className="text-slate-300">{kstTime(status.nextAutoAt, kstToday(status.nextAutoAt) !== today)} {SLOT_FULL[slotOf(status.nextAutoAt)]}</b>
+                자동 생성 켜짐 · 다음 <b className="text-slate-300">{kstTime(status.nextAutoAt, kstToday(status.nextAutoAt) !== today)} {SLOT_FULL[status.nextAutoSlot ?? 'adhoc']}</b>
               </>
+            ) : status.autoEnabled ? (
+              '자동 생성 켜짐 · 켜 둔 회차가 없어요'
             ) : (
               '자동 생성 꺼짐 · 설정에서 켜기'
             )}
@@ -376,11 +377,6 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
 }
 
 /** 자동 회차 시작 시각 → 칸. 06·11·17시 — 서버 BRIEFING.AUTO_SLOTS와 같은 순서 */
-function slotOf(at: number): BriefingRun['slot'] {
-  const h = kstHour(at);
-  return h < 11 ? 'morning' : h < 17 ? 'noon' : 'evening';
-}
-
 function SlotChip({ label, accent = false }: { label: string; accent?: boolean }) {
   return (
     <span className={`w-10 shrink-0 rounded-lg py-1 text-center text-xs font-bold ${accent ? 'bg-sky-950/60 text-sky-300' : 'bg-slate-900 text-slate-500'}`}>
