@@ -21,7 +21,21 @@ const ClassifySchema = z.object({
   ),
 });
 
-const SUB_LIST = SUBS.map((s) => `${s.id} = ${subPath(s)}`).join('\n');
+export const SUB_LIST = SUBS.map((s) => `${s.id} = ${subPath(s)}`).join('\n');
+
+// 국내/세계와 세부 분야를 가르는 기준 — 분류와 선별(분야 옮기기)이 같은 말을 쓴다.
+// 실제 회차에서 대통령의 LNG 발언·한국 가상자산 시장이 세계로, 미국 기업 마이크론이 국내 실적으로,
+// 지역 행정 소식이 과학·바이오로 갔다 (사용성 평가 2026-10-01)
+export const REGION_RULE = [
+  '- 국내(kr.*) / 세계(w.*)는 출처가 아니라 "누가 주인공인가"로 가른다.',
+  '  · 한국 정부·국회·대통령·한국 기업·한국 시장·한국 사람이 주체이거나, 한국에 미치는 영향이 기사의 중심이면 국내. 해외에서 한 발언·투자라도 한국이 주체면 국내 (예: 대통령의 해외 LNG 발언, 한국 가상자산 시장 규모, 삼성의 미국 공장).',
+  '  · 해외에서 일어났고 한국이 주인공이 아니면 세계 (예: 미국 기업 마이크론의 실적, 일본 금리, 중동 분쟁). 한국 언론이 썼어도 세계.',
+].join('\n');
+export const SUB_RULE = [
+  '- 세부 분야는 기사의 중심 주제로 고른다. 낱말 하나에 끌려가지 않는다.',
+  '  · 증시 흐름 기사는 증시, 유가·원자재는 원자재 값이 중심일 때만. 실적·공시는 그 지역 기업의 것만.',
+  '  · 지자체 행정·기부·행사·학교 입지 같은 지역 소식은 사회(노동·교육·복지 / 생활·안전)로. 과학·바이오에는 연구·기술 자체가 중심인 기사만.',
+].join('\n');
 
 export async function classify(
   candidates: Candidate[],
@@ -41,7 +55,7 @@ export async function classify(
     const out = await callAndCount(ai, usage, {
       model: BRIEFING.SELECT_MODEL,
       system: SYSTEM_BASE,
-      user: `아래 기사마다 가장 맞는 세부 분야 id 하나를 골라라. [국내]는 국내 분야(kr.*), [세계]는 세계 분야(w.*)를 우선하되, 해외 사건을 다룬 국내 기사는 세계 분야가 맞으면 그쪽으로.\n\n분야 목록:\n${SUB_LIST}\n\n<기사>\n${lines}\n</기사>`,
+      user: `아래 기사마다 가장 맞는 세부 분야 id 하나를 골라라.\n${REGION_RULE}\n${SUB_RULE}\n\n분야 목록:\n${SUB_LIST}\n\n<기사>\n${lines}\n</기사>`,
       schema: ClassifySchema,
       maxTokens: BRIEFING.SELECT_MAX_OUTPUT_TOKENS,
       signal: opts.signal,

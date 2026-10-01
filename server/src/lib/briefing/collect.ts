@@ -2,6 +2,7 @@ import { BRIEFING } from '../../constants.js';
 import { fetchFeedText } from './fetch.js';
 import { errorText, mapLimit } from './limit.js';
 import { parseFeed, type FeedItem } from './rss.js';
+import { outletName } from './outlets.js';
 import type { Source } from './sources.js';
 import type { BriefingSection, BriefingSub } from './taxonomy.js';
 
@@ -69,7 +70,8 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
       title,
       url: it.link,
       publishedAt: it.publishedAt,
-      source: it.source ?? src.publisher,
+      // 주소로 온 언론사는 이름으로 — 화면의 출처와 "다른 보도" 세기가 둘 다 이름 기준이 된다
+      source: outletName(it.source ?? src.publisher),
       snippet: usefulSnippet(title, it.snippet),
       region: src.region,
       sub: src.sub,
