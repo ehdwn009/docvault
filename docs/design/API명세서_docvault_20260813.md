@@ -45,7 +45,7 @@
 | API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
-| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드는 빠지고 브리핑 회차는 들어간다 — 파일 행의 `kind`는 doc이 아닐 때만 실린다 | 로그인 |
+| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드와 브리핑 회차는 빠진다(v0.43 — 회차의 보관함은 브리핑 패널) | 로그인 |
 | API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -76,7 +76,7 @@
 | API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용) | 로그인 |
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
 | API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비·용어 밑줄 termHighlight·질문 때 카드 askWithCards, 0/1) | 로그인 |
-| API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장 | 로그인 |
+| API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장, 브리핑 읽음 `markRead` | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-075 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
 | API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5) | 로그인 |
@@ -111,6 +111,8 @@
 | API-132 | POST | /briefing/runs | 브리핑 만들기 시작 (직전 회차 이후 기사로 수시판). 곧바로 202 + 실행, 만드는 일은 뒤에서 | 관리자 |
 | API-133 | GET | /briefing/runs | 실행 기록 (최근순, 상태·건수·비용·걸린 시간·실패 이유·실패 출처) | 관리자 |
 | API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기 `{ autoEnabled }` | 관리자 |
+| API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43) | 관리자 |
+| API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -336,6 +338,7 @@
 | touch | boolean | true면 last_opened_at을 현재 시각으로 (열람 기록) |
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
 | fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 10~300). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
+| markRead | string[] | 브리핑 회차에서 읽은 기사 id(≤200개, 각 ≤80자). 기존 목록에 **더하기만** 한다(중복 무시, 회차당 최대 1000개). 다른 기기에서 동시에 읽어도 서로 지우지 않게 교체가 아니라 더하기다 (v0.43) |
 
 ### Response
 **200 OK** — 갱신된 state 객체
@@ -347,7 +350,7 @@
 | 항목 | 내용 |
 |---|---|
 | 메서드 / 경로 | GET /me/files/{id}/state |
-| 설명 | 이 파일에 대한 내 최신 열람 상태(읽던 위치·배율·맞춤·즐겨찾기) 조회. 뷰어가 문서를 열 때마다 호출 — 트리(API-021)의 state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의 복원 기준은 이 조회다 |
+| 설명 | 이 파일에 대한 내 최신 열람 상태(읽던 위치·배율·맞춤·즐겨찾기, 브리핑이면 읽은 기사 `readItems`) 조회. 뷰어가 문서를 열 때마다 호출 — 트리(API-021)의 state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의 복원 기준은 이 조회다 |
 | 인증 필요 | 예 (열람 가능한 파일만) |
 
 ### Response
@@ -584,11 +587,10 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "running": null,
   "last": { "...": "실행 객체 — 가장 최근에 끝난 것" },
   "monthCostUsd": 12.4,
-  "monthBudgetUsd": 50,
-  "recent": [ { "fileId": 901, "name": "뉴스 브리핑 2026-10-01 저녁.json", "slot": "evening", "editionDate": "2026-10-01", "itemCount": 164, "costUsd": 0.41 } ]
+  "monthBudgetUsd": 50
 }
 ```
-`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`은 자동이 켜져 있을 때 다음 시작 시각(unix ms), 꺼져 있으면 null. `recent`는 지워지지 않은 회차 문서만.
+`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`은 자동이 켜져 있을 때 다음 시작 시각(unix ms), 꺼져 있으면 null. 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
 
 ### API-132 — POST /briefing/runs
 **Body** `{ "force"?: boolean }` — 월 한도를 넘었을 때 사용자가 확인했다는 표시.
@@ -606,3 +608,13 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-134 — PUT /briefing/settings
 **Body** `{ "autoEnabled": boolean }` → **200** `{ "autoEnabled", "nextAutoAt" }`. USER_SETTINGS.briefing_auto에 저장한다. 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
+
+### API-135 — GET /briefing/editions?before=YYYY-MM-DD&days=7 (v0.43)
+**200** `{ "editions": [ { "fileId", "editionDate", "slot", "label", "createdAt", "itemCount", "leadCount", "leadRead", "readCount", "state": "unread"|"partial"|"done" } ], "nextBefore": "YYYY-MM-DD" | null }`
+- 최신순. `before`(그날은 빼고 그 전) 없이 부르면 오늘부터, 회차가 있는 날을 `days`일치(기본 7, 최대 31) 돌려준다. `nextBefore`로 [더 보기]를 이어 부른다.
+- 성공한 실행(ok)의 회차 문서 중 휴지통에 없는 것만. `state`: 읽은 기사 0 = unread, 핵심(lead)이 다 읽혔으면 done, 그 사이 partial. 핵심은 BRIEFING_RUNS.lead_ids로 센다(없는 옛 회차는 이때 JSON에서 채운다).
+- `label`은 화면용 이름("저녁", "14시 53분").
+
+### API-136 — GET /briefing/editions/{fileId}/nav (v0.43)
+**200** `{ "prevId": number | null, "nextId": number | null, "sameDay": [ { "fileId", "slot", "label" } ] }` — 생성 순서로 바로 앞·뒤 회차와, 같은 날(한국시간) 회차들(이른 순). 회차 문서가 아니면 404.
+
