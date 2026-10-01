@@ -27,9 +27,10 @@ export type Picked = {
 const SelectSchema = z.object({
   stories: z.array(
     z.object({
-      main: z.number().int().describe('대표 기사 번호'),
-      related: z.array(z.number().int()).describe('같은 사건을 다룬 나머지 기사 번호'),
-      importance: z.number().int().min(1).max(3).describe('3=핵심 2=주요 1=참고'),
+      main: z.number().describe('대표 기사 번호'),
+      related: z.array(z.number()).describe('같은 사건을 다룬 나머지 기사 번호'),
+      // 범위 제약을 스키마에 두지 않는다 — 벗어난 값 하나로 응답 전체가 거부된다. 아래에서 1~3으로 자른다
+      importance: z.number().describe('3=핵심 2=주요 1=참고'),
       prevStoryId: z.string().nullable().describe('직전 회차 이슈 목록에 같은 이슈가 있으면 그 id, 없으면 null'),
       title: z.string().describe(`참고(1)만: ${BRIEFING.TITLE_MAX_CHARS}자 이내 한국어 제목, 원문 제목을 베끼지 말고 새로 쓴다. 핵심·주요는 빈 문자열`),
       summary: z.string().describe('참고(1)만: 무슨 일인지 1~2문장, 새로 쓴다. 핵심·주요는 빈 문자열'),
@@ -83,7 +84,7 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
         related.push(r);
       }
     }
-    const importance = (Math.min(3, Math.max(1, s.importance)) as 1 | 2 | 3);
+    const importance = Math.min(3, Math.max(1, Math.round(s.importance))) as 1 | 2 | 3;
     picked.push({
       sub,
       main,

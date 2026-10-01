@@ -9,13 +9,14 @@ import { findSubById, SUBS, subPath } from './taxonomy.js';
 // (뉴스 브리핑 설계 "② 분류"). 스포츠·연예·날씨·광고성은 여기서 뺀다
 
 const EXCLUDE = 'exclude';
-const SUB_IDS = SUBS.map((s) => s.id) as [string, ...string[]];
 
 const ClassifySchema = z.object({
   items: z.array(
     z.object({
-      n: z.number().int().describe('기사 번호'),
-      sub: z.enum([...SUB_IDS, EXCLUDE]).describe(`세부 분야 id. 스포츠·연예·문화·날씨·광고·홍보성이면 "${EXCLUDE}"`),
+      n: z.number().describe('기사 번호'),
+      // enum으로 묶지 않는다 — 모델이 목록에 없는 값을 하나만 내도 SDK가 응답 전체를 거부한다(v0.42.0 첫 실행에서 실측).
+      // 문자열로 받고 목록에 없는 값은 아래에서 그 기사만 버린다
+      sub: z.string().describe(`세부 분야 id(아래 목록 중 하나). 스포츠·연예·문화·날씨·광고·홍보성이면 "${EXCLUDE}"`),
     }),
   ),
 });

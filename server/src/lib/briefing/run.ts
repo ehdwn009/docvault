@@ -13,6 +13,9 @@ import { kstMonthStart, kstParts } from './time.js';
 
 type RunRow = typeof briefingRuns.$inferSelect;
 
+/** 실행 기록에 남기는 실패 이유 길이 상한 — 화면 한두 줄 */
+const MESSAGE_MAX = 200;
+
 export class BriefingBusyError extends Error {
   constructor(readonly run: RunRow) {
     super('이미 만드는 중이에요');
@@ -159,12 +162,14 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Pr
     );
   } catch (e) {
     const usage = e instanceof BriefingFailure ? e.usage : null;
-    const message = e instanceof Error ? e.message : String(e);
+    // SDK 오류는 검증 내역 전체를 메시지에 싣는다(수천 자) — 패널 한 줄로 읽히게 자른다. 전문은 서버 로그에
+    const full = e instanceof Error ? e.message : String(e);
+    const message = full.length > MESSAGE_MAX ? `${full.slice(0, MESSAGE_MAX)}…` : full;
     db.update(briefingRuns)
       .set({ status: 'error', message, finishedAt: Date.now(), ...(usage ? usageColumns(usage) : {}) })
       .where(eq(briefingRuns.id, run.id))
       .run();
-    console.log(`[briefing] run ${run.id} error: ${message}`);
+    console.log(`[briefing] run ${run.id} error: ${full}`);
   } finally {
     clearTimeout(timer);
   }
