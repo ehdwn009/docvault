@@ -150,7 +150,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Pr
     const saved = db.transaction((tx) => {
       const s = saveEdition(tx, run.ownerId, result.edition);
       tx.update(briefingRuns)
-        .set({ status: 'ok', stage: 'save', progressDone: 1, progressTotal: 1, fileId: s.fileId, itemCount: result.edition.stats.items, finishedAt: Date.now(), ...usageColumns(result.usage) })
+        .set({ status: 'ok', stage: 'save', progressDone: 1, progressTotal: 1, fileId: s.fileId, itemCount: result.edition.stats.items, leadIds: JSON.stringify(result.edition.lead ?? []), finishedAt: Date.now(), ...usageColumns(result.usage) })
         .where(eq(briefingRuns.id, run.id))
         .run();
       return s;

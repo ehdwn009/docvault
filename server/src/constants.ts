@@ -266,8 +266,16 @@ export const BRIEFING = {
   /** 내 파일 최상위의 브리핑 폴더와 그 안의 수집 목록 문서 이름 */
   FOLDER_NAME: '뉴스 브리핑',
   SOURCES_FILE_NAME: '수집 목록.json',
-  /** 패널의 최근 회차 수, 실행 기록 기본·최대 개수 */
-  RECENT_EDITIONS: 10,
+  /** 오늘의 핵심 기사 수 — 한 화면 안에서 1분에 훑는 양 (v0.43) */
+  LEAD_COUNT: 6,
+  /** 회차 하나에서 기억하는 읽은 기사 id 상한, 한 번에 보내는 상한, id 길이 상한 (API-073 markRead) */
+  READ_ITEMS_MAX: 1000,
+  MARK_READ_BATCH_MAX: 200,
+  ITEM_ID_MAX_CHARS: 80,
+  /** 패널의 회차 목록 — 한 번에 받는 날 수 기본·최대 (API-135) */
+  EDITIONS_DAYS_DEFAULT: 7,
+  EDITIONS_DAYS_MAX: 31,
+  /** 실행 기록 기본·최대 개수 */
   RUNS_LIST_DEFAULT: 30,
   RUNS_LIST_MAX: 100,
   /** 실행 중 진행 표시를 다시 읽는 주기 (클라이언트도 같은 값) */

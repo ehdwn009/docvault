@@ -79,7 +79,7 @@
 | API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장, 브리핑 읽음 `markRead` | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-075 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
-| API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5) | 로그인 |
+| API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5). doc이 아닌 결과는 `kind`·`createdAt`을 싣는다 — 브리핑 회차는 화면 이름으로 바꿔 보이고, 조각에서 JSON 열쇠·따옴표를 걷어 낸다 (v0.43) | 로그인 |
 | API-091 | GET | /google/status | 내 구글 계정 연결 상태 (이메일·연결 시각) | 로그인 |
 | API-092 | POST | /google/connect | 구글 동의 화면 URL 발급 (state 발급) | 로그인 |
 | API-093 | GET | /google/callback | 구글 리디렉트 수신 → 토큰 교환·저장 | 로그인 |

@@ -7,7 +7,6 @@ import { basisOf } from './body.js';
 import { costOf, type Usage } from './ai.js';
 import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
-import { briefingFolderId, findOrCreateFolder } from './sources.js';
 import type { Written } from './summarize.js';
 import { categoriesOf, SECTIONS, type BriefingSection } from './taxonomy.js';
 import { kstParts } from './time.js';
@@ -38,6 +37,8 @@ export type Edition = {
   edition: { date: string; slot: Slot; label: string; since: number; until: number; createdAt: number };
   stats: { sources: number; sourcesFailed: number; candidates: number; items: number };
   cost: { usd: number; haiku: { input: number; output: number }; sonnet: { input: number; output: number } };
+  /** 오늘의 핵심 기사 id (최대 LEAD_COUNT). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
+  lead?: string[];
   sections: {
     section: BriefingSection;
     categories: { name: string; subs: { id: string; name: string; items: EditionItem[] }[] }[];
@@ -121,6 +122,7 @@ export function assembleEdition(args: {
 
   return {
     version: BRIEFING.EDITION_VERSION,
+    lead: leadIdsOf(sections),
     edition: { date, slot: args.slot, label: slotLabel(args.slot, args.createdAt), since: args.since, until: args.until, createdAt: args.createdAt },
     stats: { ...args.stats, items: total },
     cost: {
@@ -130,6 +132,17 @@ export function assembleEdition(args: {
     },
     sections,
   };
+}
+
+/** 오늘의 핵심 — 핵심(3) 기사를 다룬 언론사 수(대표 1 + 다른 보도) 많은 순, 같으면 최신순.
+    AI를 부르지 않는다: 여러 언론이 다룬 사건일수록 큰 뉴스라는 신호다 (설계 "lead"). 클라이언트에도 같은 규칙이 있다(옛 회차용) */
+export function leadIdsOf(sections: Edition['sections']): string[] {
+  const top: EditionItem[] = [];
+  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push(it);
+  return top
+    .sort((a, b) => (b.related?.length ?? 0) - (a.related?.length ?? 0) || b.publishedAt - a.publishedAt)
+    .slice(0, BRIEFING.LEAD_COUNT)
+    .map((it) => it.id);
 }
 
 /** 직전 회차에서 다음 회차가 쓰는 것 — 분야별 이슈 목록(updated 판정)과 이미 실린 링크(중복 제외).
@@ -159,16 +172,14 @@ export function readPrevious(fileId: number | null): { storiesBySub: Map<string,
   return { storiesBySub, urls };
 }
 
-/** 회차를 "뉴스 브리핑/YYYY-MM/"에 문서 하나로 저장한다. 폴더는 없으면 만든다. 이름이 겹치면 (2).
+/** 회차를 내 파일 최상위에 문서 하나로 저장한다 — 트리에는 안 나오고 브리핑 패널이 보관함이다(v0.43). 이름이 겹치면 (2).
     tx를 받는 이유: 실행 기록을 ok로 바꾸는 일과 한 트랜잭션이어야 한다 — 파일만 생기고 기록이 running으로 남으면 안 된다 */
 export function saveEdition(tx: DbOrTx, ownerId: number, edition: Edition): { fileId: number; name: string } {
-  const root = briefingFolderId(tx, ownerId);
-  const monthFolder = findOrCreateFolder(tx, ownerId, root, edition.edition.date.slice(0, 7));
   const taken = new Set(
     tx
       .select({ name: files.name })
       .from(files)
-      .where(and(eq(files.ownerId, ownerId), eq(files.folderId, monthFolder), isNull(files.deletedAt)))
+      .where(and(eq(files.ownerId, ownerId), isNull(files.folderId), isNull(files.deletedAt)))
       .all()
       .map((r) => r.name),
   );
@@ -179,7 +190,7 @@ export function saveEdition(tx: DbOrTx, ownerId: number, edition: Edition): { fi
     .insert(files)
     .values({
       ownerId,
-      folderId: monthFolder,
+      folderId: null,
       name,
       fileType: 'code',
       mimeType: 'text/plain',

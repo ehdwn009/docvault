@@ -83,7 +83,7 @@ export const folderRoutes = new Hono<AppEnv>()
     const rows = db
       .select({ id: files.id, name: files.name, fileType: files.fileType, sizeBytes: files.sizeBytes, updatedAt: files.updatedAt })
       .from(files)
-      .where(and(inArray(files.folderId, ids), isNull(files.deletedAt), inArray(files.kind, ['doc', 'briefing'])))
+      .where(and(inArray(files.folderId, ids), isNull(files.deletedAt), eq(files.kind, 'doc')))
       .all();
     const byType: Record<string, number> = {};
     let bytes = 0;
