@@ -234,7 +234,8 @@ export const briefingRuns = sqliteTable(
     slot: text('slot', { enum: ['morning', 'noon', 'evening', 'adhoc'] }).notNull(),
     /** 한국시간 날짜 YYYY-MM-DD — 자동 회차가 하루에 한 번만 돌게 하는 기준 */
     editionDate: text('edition_date').notNull(),
-    status: text('status', { enum: ['running', 'ok', 'error', 'skipped'] }).notNull(),
+    /** cancelled = 사람이 [중지]로 멈춤 (2026-10-02). 실패(error)와 나눠 화면이 빨갛게 보이지 않게 */
+    status: text('status', { enum: ['running', 'ok', 'error', 'skipped', 'cancelled'] }).notNull(),
     stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'summarize', 'save'] }),
     progressDone: integer('progress_done').notNull().default(0),
     progressTotal: integer('progress_total').notNull().default(0),

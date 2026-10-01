@@ -136,15 +136,25 @@ export function dedupe(list: Candidate[]): Candidate[] {
 
 export async function collect(
   sources: Source[],
-  opts: { since: number; until: number; excludeUrls: Set<string>; signal?: AbortSignal; onProgress?: (done: number, total: number) => void },
+  opts: {
+    since: number;
+    until: number;
+    excludeUrls: Set<string>;
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+    /** 받는 중인 출처를 알린다 — 오래 걸리는 출처를 화면이 "기다리는 중"으로 보여 준다. 돌려받은 함수로 끝을 알린다 */
+    track?: (name: string) => () => void;
+  },
 ): Promise<CollectResult> {
   let done = 0;
   opts.onProgress?.(0, sources.length);
   const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (src) => {
+    const finish = opts.track?.(src.name);
     try {
       const xml = await fetchFeedText(src.url, opts.signal);
       return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls);
     } finally {
+      finish?.();
       opts.onProgress?.(++done, sources.length);
     }
   });

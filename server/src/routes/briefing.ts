@@ -8,6 +8,7 @@ import { briefingRuns, userSettings } from '../db/schema.js';
 import {
   BriefingBudgetError,
   BriefingBusyError,
+  cancelRun,
   isConfigured,
   listRuns,
   monthCostUsd,
@@ -99,6 +100,18 @@ export const briefingRoutes = new Hono<AppEnv>()
       }
       throw e;
     }
+  })
+
+  // API-137: 도는 실행 중지 — 받는 곳이 응답하지 않아 몇 분째 멈춘 실행을 사람이 끝낼 수 있게 (2026-10-02)
+  .post('/runs/:id/cancel', (c) => {
+    const id = parseId(c.req.param('id'));
+    if (id === null) return fail(c, 400, 'VALIDATION_ERROR', 'id: 올바르지 않은 값');
+    const run = db.select().from(briefingRuns).where(and(eq(briefingRuns.id, id), eq(briefingRuns.ownerId, c.get('user').id))).get();
+    if (!run) return fail(c, 404, 'NOT_FOUND', '실행 기록이 없습니다');
+    // 이미 끝난 실행이면 아무것도 하지 않고 지금 상태를 돌려준다 — 두 번 눌러도 같다
+    if (run.status === 'running') cancelRun(id);
+    const now = db.select().from(briefingRuns).where(eq(briefingRuns.id, id)).get() ?? run;
+    return c.json({ run: toRunDto(now) });
   })
 
   // API-133: 실행 기록

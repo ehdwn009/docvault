@@ -26,10 +26,21 @@ export function isPrivateAddress(ip: string): boolean {
   return v6 === '::' || v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe8') || v6.startsWith('fe9') || v6.startsWith('fea') || v6.startsWith('feb');
 }
 
-async function assertPublicUrl(url: URL): Promise<void> {
+/** 신호가 오면 기다리기를 그만둔다 — dns.lookup은 신호를 받지 않아, 응답 없는 이름 하나가 실행 전체를 붙잡았다
+    (수집 63/67에서 몇 분째 멈춤, 2026-10-02). 조회 자체는 뒤에서 끝나게 두고 우리만 손을 뗀다 */
+function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Error('시간 초과'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error('시간 초과'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+async function assertPublicUrl(url: URL, signal: AbortSignal): Promise<void> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('http(s) 주소가 아닙니다');
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+  const addrs = isIP(host) ? [{ address: host }] : await untilAborted(lookup(host, { all: true }), signal);
   if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) throw new Error('내부망 주소는 받을 수 없습니다');
 }
 
@@ -83,7 +94,7 @@ async function fetchText(rawUrl: string, opts: { accept: string; timeoutMs: numb
   let url = new URL(rawUrl);
   const signal = AbortSignal.any([AbortSignal.timeout(opts.timeoutMs), ...(opts.outer ? [opts.outer] : [])]);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    await assertPublicUrl(url);
+    await assertPublicUrl(url, signal);
     const res = await fetch(url, {
       redirect: 'manual', // 넘어가는 곳도 매번 검사하려고 직접 따라간다
       signal,

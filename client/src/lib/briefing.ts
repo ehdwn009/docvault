@@ -170,7 +170,7 @@ export type BriefingRun = {
   trigger: 'manual' | 'auto';
   slot: Edition['edition']['slot'];
   editionDate: string;
-  status: 'running' | 'ok' | 'error' | 'skipped';
+  status: 'running' | 'ok' | 'error' | 'skipped' | 'cancelled';
   stage: 'collect' | 'classify' | 'select' | 'read' | 'summarize' | 'save' | null;
   progressDone: number;
   progressTotal: number;
@@ -186,6 +186,8 @@ export type BriefingRun = {
   message: string | null;
   startedAt: number;
   finishedAt: number | null;
+  /** 도는 중일 때만 — 진행 기록과 오래 기다리는 출처(8초 이상). 끝난 실행은 null (API-131, 2026-10-02) */
+  live?: { log: { at: number; text: string }[]; waiting: { name: string; seconds: number }[] } | null;
 };
 
 export type AutoSlot = 'morning' | 'noon' | 'evening';
