@@ -246,6 +246,8 @@ export const BRIEFING = {
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
   SUMMARY_MAX_OUTPUT_TOKENS: 8000,
+  /** 기사 하나에 붙이는 "같은 사건 다른 보도" 링크 수 상한 */
+  MAX_RELATED: 5,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
   TITLE_MAX_CHARS: 40,
   /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */
