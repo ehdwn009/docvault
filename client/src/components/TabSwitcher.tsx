@@ -1,4 +1,5 @@
 import type { TreeFile } from '../lib/api';
+import { fileLabel } from '../lib/briefing';
 import { useSheetDrag } from '../lib/sheetDrag';
 
 type Props = {
@@ -44,7 +45,7 @@ export default function TabSwitcher({ tabs, activeId, paneIds, onPick, onSplit, 
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2.5 text-left"
               >
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? 'bg-sky-400' : visible ? 'bg-slate-500' : 'bg-transparent'}`} />
-                <span className={`truncate text-sm ${active ? 'text-slate-100' : 'text-slate-300'}`}>{f.name}</span>
+                <span className={`truncate text-sm ${active ? 'text-slate-100' : 'text-slate-300'}`}>{fileLabel(f)}</span>
               </button>
               {!visible && (
                 <button

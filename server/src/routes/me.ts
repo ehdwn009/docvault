@@ -2,6 +2,7 @@ import { desc, eq, isNotNull, and } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
+  BRIEFING,
   DEFAULT_USER_SETTINGS,
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
@@ -11,6 +12,7 @@ import {
 import { db } from '../db/index.js';
 import { files, userFileState, userSettings } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
+import { mergeReadItems, parseIdList } from '../lib/briefing/readItems.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
@@ -43,10 +45,13 @@ const stateSchema = z
     viewerFit: z.boolean().optional(),
     // null = 이 파일만의 배율을 지우고 전역 기본값을 따르게 (설계 — 전역 기본 + 파일별 덮어쓰기)
     fontScale: z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).nullable().optional(),
+    // 브리핑에서 읽은 기사 id — 기존 목록에 더한다 (v0.43)
+    markRead: z.array(z.string().min(1).max(BRIEFING.ITEM_ID_MAX_CHARS)).min(1).max(BRIEFING.MARK_READ_BATCH_MAX).optional(),
   })
   .refine(
     (v) =>
       v.isFavorite !== undefined ||
+      v.markRead !== undefined ||
       v.readingPosition !== undefined ||
       v.viewerFit !== undefined ||
       v.fontScale !== undefined ||
@@ -115,8 +120,9 @@ export const meRoutes = new Hono<AppEnv>()
             lastOpenedAt: row.lastOpenedAt,
             viewerFit: row.viewerFit,
             fontScale: row.fontScale,
+            readItems: parseIdList(row.readItems),
           }
-        : { isFavorite: 0, readingPosition: null, lastOpenedAt: null, viewerFit: 1, fontScale: null },
+        : { isFavorite: 0, readingPosition: null, lastOpenedAt: null, viewerFit: 1, fontScale: null, readItems: [] },
     });
   })
 
@@ -151,6 +157,7 @@ export const meRoutes = new Hono<AppEnv>()
       viewerFit:
         patch.viewerFit !== undefined ? (patch.viewerFit ? 1 : 0) : (existing?.viewerFit ?? 1),
       fontScale: patch.fontScale !== undefined ? patch.fontScale : (existing?.fontScale ?? null),
+      readItems: patch.markRead ? mergeReadItems(existing?.readItems, patch.markRead) : (existing?.readItems ?? null),
     };
 
     const row = db
@@ -170,6 +177,7 @@ export const meRoutes = new Hono<AppEnv>()
         lastOpenedAt: row.lastOpenedAt,
         viewerFit: row.viewerFit,
         fontScale: row.fontScale,
+        readItems: parseIdList(row.readItems),
       },
     });
   })

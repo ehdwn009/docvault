@@ -63,7 +63,7 @@ erDiagram
         text storage_path "바이너리만, 텍스트는 null"
         integer is_shared "0|1"
         integer sort_order
-        text kind "doc|card|briefing — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 나오고 전용 뷰어로, 2026-10-01)"
+        text kind "doc|card|briefing — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 안 나오고 브리핑 패널에서만, v0.43)"
         integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15). 목록용 커버링 인덱스 files_owner_kind_idx — 비고 참조"
         integer created_at
         integer updated_at
@@ -97,6 +97,7 @@ erDiagram
         integer font_scale "이 파일만의 글자 배율(%), NULL이면 전역"
         integer next_review_at "카드 복습 예정 시각, NULL=아직 (2026-09-20)"
         integer review_interval_days "마지막 채점의 간격(일), 기본 0"
+        text read_items "브리핑 회차에서 읽은 기사 id JSON 배열, NULL=안 읽음 (v0.43)"
     }
     USER_SETTINGS {
         integer user_id PK, FK
@@ -178,7 +179,7 @@ erDiagram
         text slot "morning|noon|evening|adhoc"
         text edition_date "YYYY-MM-DD (한국시간) — 자동 회차 중복 방지 기준"
         text status "running|ok|error|skipped"
-        text stage "collect|classify|select|summarize|save — 진행 표시용"
+        text stage "collect|classify|select|read|summarize|save — 진행 표시용 (read는 v0.43)"
         integer progress_done
         integer progress_total
         integer since_at "다룬 기사 범위 시작 (unix ms)"
@@ -194,6 +195,7 @@ erDiagram
         integer sonnet_output_tokens
         real cost_usd "끝날 때의 단가로 계산한 추정 비용"
         text message "실패·건너뜀 이유 (사람이 읽는 글)"
+        text lead_ids "오늘의 핵심 기사 id JSON 배열 — 패널이 회차 JSON을 열지 않고 핵심 읽음을 세려고 (v0.43)"
         integer started_at
         integer finished_at
     }
@@ -242,7 +244,8 @@ erDiagram
 - **질문 대화 (2026-09-18, 배움 카드 1판)**: ASK_THREADS.file_id는 **SET NULL**이다 — 문서를 지워도 대화는 남는다(설계 흐름 D: 카드는 문서보다 오래 산다). 대화는 저장 버튼 없이 자동 보관되고, updated_at이 30일 지나면 서버가 정리한다(휴지통과 같은 주기). 2판부터 카드가 참조하는 대화는 정리 대상에서 뺀다. context 컬럼은 "LLM에 무엇을 보냈나"의 기록이기도 하다 — 문서 전체가 아니라 이 컬럼의 내용만 나간다. 소유자 삭제 시 CASCADE.
 - **배움 카드 (2026-09-18, v0.26)**: 카드는 FILES의 md 행이다(`kind='card'`). 별도 테이블을 만들지 않은 이유 — 편집·버전·태그·검색·공유·백업이 전부 FILES에 걸려 있어, 카드를 따로 두면 그 모든 기능을 다시 만들어야 한다. 대신 `kind`로 **파일 트리에서만 뺀다**(문서와 섞이면 구분이 안 된다). 카드의 머리말(한 줄·별칭·종류·주제·태그·연결·출처)은 컬럼이 아니라 **본문 맨 위의 frontmatter**에 있다 — 사람이 편집기에서 고칠 수 있어야 하고, 목록은 수백 장까지 매번 파싱해도 싸다. 제목은 파일 이름이다(두 군데 두지 않는다). CARD_THREADS는 카드가 어느 대화에서 왔는지 — 대화 정리 예외와 "원 대화 보기"의 근거.
 - **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
-  - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 보관함(트리)·검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. 카드와 다른 점은 **파일 트리에 나온다**는 것(보관함이 곧 트리). `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
+  - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다. v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
+  - **읽음 기록 (v0.43)**: USER_FILE_STATE.read_items는 그 회차에서 읽은 기사 id 목록이다. 즐겨찾기·읽던 위치와 같은 "이 사람 × 이 파일" 사실이라 같은 표에 둔다 — 폰에서 읽은 것이 PC에서도 흐리게 보인다. 더하기만 한다(API-073 `markRead`). BRIEFING_RUNS.lead_ids는 그 회차의 "오늘의 핵심" 목록 사본이다 — 회차 JSON에도 `lead`로 있지만, 패널이 회차 수십 개의 "핵심 n 남음"을 세려고 JSON을 매번 여는 것은 무겁다. 같은 사실이 두 군데라 저장할 때 한 번에 같이 쓰고 고치지 않는다(회차는 편집 불가). v0.43 이전 회차는 처음 패널에 나올 때 JSON에서 읽어 채운다.
   - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
   - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.
   - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.

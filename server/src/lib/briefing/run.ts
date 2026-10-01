@@ -56,6 +56,11 @@ function lastOkRun(ownerId: number): RunRow | null {
   );
 }
 
+/** 다음 실행이 모을 기사의 시작 시각 — 직전 ok 실행이 끝을 잡은 시각부터, 최대 24시간 전까지 */
+export function nextSinceAt(ownerId: number, now = Date.now(), prev = lastOkRun(ownerId)): number {
+  return Math.max(prev?.untilAt ?? 0, now - BRIEFING.MAX_RANGE_MS);
+}
+
 function usageColumns(u: Usage) {
   return {
     haikuInputTokens: u.haikuInput,
@@ -87,7 +92,7 @@ export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; sl
   if (spent >= BRIEFING.MONTHLY_BUDGET_USD && !args.force) throw new BriefingBudgetError(spent);
 
   const prev = lastOkRun(args.ownerId);
-  const since = Math.max(prev?.untilAt ?? 0, now - BRIEFING.MAX_RANGE_MS);
+  const since = nextSinceAt(args.ownerId, now, prev);
   const run = db
     .insert(briefingRuns)
     .values({
@@ -150,7 +155,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Pr
     const saved = db.transaction((tx) => {
       const s = saveEdition(tx, run.ownerId, result.edition);
       tx.update(briefingRuns)
-        .set({ status: 'ok', stage: 'save', progressDone: 1, progressTotal: 1, fileId: s.fileId, itemCount: result.edition.stats.items, finishedAt: Date.now(), ...usageColumns(result.usage) })
+        .set({ status: 'ok', stage: 'save', progressDone: 1, progressTotal: 1, fileId: s.fileId, itemCount: result.edition.stats.items, leadIds: JSON.stringify(result.edition.lead ?? []), finishedAt: Date.now(), ...usageColumns(result.usage) })
         .where(eq(briefingRuns.id, run.id))
         .run();
       return s;

@@ -130,6 +130,8 @@ export const userFileState = sqliteTable(
     nextReviewAt: integer('next_review_at'),
     /** 마지막 채점으로 정해진 간격(일). 알았다 → 두 배, 몰랐다 → 1 */
     reviewIntervalDays: integer('review_interval_days').notNull().default(0),
+    /** 브리핑 회차에서 읽은 기사 id JSON 배열. NULL=안 읽음. 더하기만 한다 — 두 기기에서 동시에 읽어도 서로 지우지 않게 (v0.43) */
+    readItems: text('read_items'),
   },
   (t) => [primaryKey({ columns: [t.userId, t.fileId] })],
 );
@@ -231,7 +233,7 @@ export const briefingRuns = sqliteTable(
     /** 한국시간 날짜 YYYY-MM-DD — 자동 회차가 하루에 한 번만 돌게 하는 기준 */
     editionDate: text('edition_date').notNull(),
     status: text('status', { enum: ['running', 'ok', 'error', 'skipped'] }).notNull(),
-    stage: text('stage', { enum: ['collect', 'classify', 'select', 'summarize', 'save'] }),
+    stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'summarize', 'save'] }),
     progressDone: integer('progress_done').notNull().default(0),
     progressTotal: integer('progress_total').notNull().default(0),
     sinceAt: integer('since_at').notNull(),
@@ -251,6 +253,8 @@ export const briefingRuns = sqliteTable(
     costUsd: real('cost_usd').notNull().default(0),
     /** 실패·건너뜀 이유 (사람이 읽는 글) */
     message: text('message'),
+    /** 오늘의 핵심 기사 id JSON 배열 — 회차 JSON의 lead 사본. 패널이 회차마다 JSON을 열지 않고 핵심 읽음을 세려고 (v0.43) */
+    leadIds: text('lead_ids'),
     startedAt: integer('started_at').notNull(),
     finishedAt: integer('finished_at'),
   },

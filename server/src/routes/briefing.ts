@@ -1,26 +1,28 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 import { BRIEFING, DEFAULT_USER_SETTINGS } from '../constants.js';
 import { db } from '../db/index.js';
-import { briefingRuns, files, userSettings } from '../db/schema.js';
+import { briefingRuns, userSettings } from '../db/schema.js';
 import {
   BriefingBudgetError,
   BriefingBusyError,
   isConfigured,
   listRuns,
   monthCostUsd,
+  nextSinceAt,
   runningRun,
   startRun,
   toRunDto,
 } from '../lib/briefing/run.js';
+import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
 import { nextSlotStart } from '../lib/briefing/time.js';
 import { fail } from '../lib/errors.js';
-import { jsonBody } from '../lib/validate.js';
+import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-// API-131~134 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
+// API-131~136 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
 // 설계: docs/design/뉴스브리핑_docvault_20261001.md
 
 const adminGuard = createMiddleware<AppEnv>(async (c, next) => {
@@ -49,14 +51,6 @@ export const briefingRoutes = new Hono<AppEnv>()
       .limit(5)
       .all()
       .find((r) => r.status !== 'running');
-    const recent = db
-      .select({ fileId: files.id, name: files.name, slot: briefingRuns.slot, editionDate: briefingRuns.editionDate, itemCount: briefingRuns.itemCount, costUsd: briefingRuns.costUsd })
-      .from(briefingRuns)
-      .innerJoin(files, eq(files.id, briefingRuns.fileId))
-      .where(and(eq(briefingRuns.ownerId, user.id), eq(briefingRuns.status, 'ok'), isNull(files.deletedAt)))
-      .orderBy(desc(briefingRuns.startedAt))
-      .limit(BRIEFING.RECENT_EDITIONS)
-      .all();
     return c.json({
       configured: isConfigured(),
       autoEnabled: auto,
@@ -65,8 +59,26 @@ export const briefingRoutes = new Hono<AppEnv>()
       last: last ? toRunDto(last) : null,
       monthCostUsd: monthCostUsd(user.id),
       monthBudgetUsd: BRIEFING.MONTHLY_BUDGET_USD,
-      recent,
+      nextSinceAt: nextSinceAt(user.id),
     });
+  })
+
+  // API-135: 회차 목록 — 패널의 오늘·지난 브리핑 (v0.43)
+  .get('/editions', (c) => {
+    const before = c.req.query('before') ?? null;
+    if (before !== null && !/^\d{4}-\d{2}-\d{2}$/.test(before)) return fail(c, 400, 'VALIDATION_ERROR', 'before: YYYY-MM-DD 형식이어야 합니다');
+    const user = c.get('user');
+    return c.json(listEditions(user.id, user.id, before, clampDays(c.req.query('days'))));
+  })
+
+  // API-136: 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43)
+  .get('/editions/:fileId/nav', (c) => {
+    const fileId = parseId(c.req.param('fileId'));
+    if (fileId === null) return fail(c, 400, 'VALIDATION_ERROR', 'fileId: 올바르지 않은 값');
+    const user = c.get('user');
+    const nav = editionNav(user.id, user.id, fileId);
+    if (!nav) return fail(c, 404, 'NOT_FOUND', '회차가 없습니다');
+    return c.json(nav);
   })
 
   // API-132: 만들기 시작 — 202로 곧바로 답하고 만드는 일은 뒤에서

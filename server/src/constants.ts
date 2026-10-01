@@ -246,6 +246,17 @@ export const BRIEFING = {
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
   SUMMARY_MAX_OUTPUT_TOKENS: 8000,
+  /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수 */
+  BODY_FETCH_MIN_IMPORTANCE: 3,
+  BODY_MAX_CHARS: 2000,
+  BODY_FETCH_TIMEOUT_MS: 8000,
+  BODY_FETCH_MAX_BYTES: 1536 * 1024,
+  BODY_FETCH_CONCURRENCY: 6,
+  BODY_FETCH_TRIES: 2,
+  /** 본문 문단으로 칠 최소 길이 — 메뉴·저작권 표시 같은 짧은 줄을 거른다 */
+  BODY_MIN_PARAGRAPH_CHARS: 30,
+  /** 발췌가 제목을 되풀이할 뿐인지 볼 때, 제목을 빼고 남아야 하는 글자 수 */
+  SNIPPET_MIN_EXTRA_CHARS: 20,
   /** 기사 하나에 붙이는 "같은 사건 다른 보도" 링크 수 상한 */
   MAX_RELATED: 5,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
@@ -255,8 +266,16 @@ export const BRIEFING = {
   /** 내 파일 최상위의 브리핑 폴더와 그 안의 수집 목록 문서 이름 */
   FOLDER_NAME: '뉴스 브리핑',
   SOURCES_FILE_NAME: '수집 목록.json',
-  /** 패널의 최근 회차 수, 실행 기록 기본·최대 개수 */
-  RECENT_EDITIONS: 10,
+  /** 오늘의 핵심 기사 수 — 한 화면 안에서 1분에 훑는 양 (v0.43) */
+  LEAD_COUNT: 6,
+  /** 회차 하나에서 기억하는 읽은 기사 id 상한, 한 번에 보내는 상한, id 길이 상한 (API-073 markRead) */
+  READ_ITEMS_MAX: 1000,
+  MARK_READ_BATCH_MAX: 200,
+  ITEM_ID_MAX_CHARS: 80,
+  /** 패널의 회차 목록 — 한 번에 받는 날 수 기본·최대 (API-135) */
+  EDITIONS_DAYS_DEFAULT: 7,
+  EDITIONS_DAYS_MAX: 31,
+  /** 실행 기록 기본·최대 개수 */
   RUNS_LIST_DEFAULT: 30,
   RUNS_LIST_MAX: 100,
   /** 실행 중 진행 표시를 다시 읽는 주기 (클라이언트도 같은 값) */

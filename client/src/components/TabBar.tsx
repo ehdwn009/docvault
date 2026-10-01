@@ -1,5 +1,6 @@
 import { useState, type DragEvent } from 'react';
 import type { TreeFile } from '../lib/api';
+import { fileLabel } from '../lib/briefing';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 
 /** 탭 드래그의 dataTransfer 타입 — OS 파일 드롭(Files)과 구분하는 표식 */
@@ -72,7 +73,7 @@ export default function TabBar({ tabs, activeId, paneIds, onPick, onClose, onSpl
             {dropHint === f.id && <div className="h-6 w-0.5 shrink-0 rounded bg-sky-400" />}
             <div
               role="tab"
-              title={f.name}
+              title={fileLabel(f)}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(TAB_DRAG_TYPE, String(f.id));
@@ -110,7 +111,7 @@ export default function TabBar({ tabs, activeId, paneIds, onPick, onClose, onSpl
                     : 'border-transparent text-slate-500 hover:bg-slate-900 hover:text-slate-300'
               }`}
             >
-              <span className="truncate">{f.name}</span>
+              <span className="truncate">{fileLabel(f)}</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();

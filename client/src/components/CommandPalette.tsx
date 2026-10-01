@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, toTreeFile, type TreeFile } from '../lib/api';
+import { fileLabel } from '../lib/briefing';
 
 type SearchResult = {
   id: number;
@@ -8,6 +9,8 @@ type SearchResult = {
   folderId: number | null;
   isShared: number;
   snippet: string;
+  /** doc이 아닐 때만 온다 — 브리핑 회차는 전용 뷰어로 열고 화면 이름으로 보인다 */
+  kind?: TreeFile['kind'];
 };
 
 type Props = {
@@ -62,6 +65,7 @@ export default function CommandPalette({ files, onPick, onClose }: Props) {
             fileType: r.fileType,
             folderId: r.folderId,
             isShared: r.isShared,
+            ...(r.kind ? { kind: r.kind } : {}),
           }),
         snippet: r.snippet,
       }));
@@ -121,7 +125,7 @@ export default function CommandPalette({ files, onPick, onClose }: Props) {
                 i === cursor ? 'bg-slate-800' : ''
               }`}
             >
-              <span className="text-sm text-slate-100">{item.file.name}</span>
+              <span className="text-sm text-slate-100">{fileLabel(item.file)}</span>
               {item.snippet && (
                 <span className="mt-0.5 block truncate text-xs text-slate-500">{item.snippet}</span>
               )}
