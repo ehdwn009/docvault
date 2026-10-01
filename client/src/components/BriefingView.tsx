@@ -36,11 +36,13 @@ function writeFilter(f: Filter) {
   }
 }
 
-/** 테마별 색 — Tailwind의 dark 변형은 OS 설정을 따라 뷰어 테마와 어긋나므로 쓰지 않는다 */
+/** 테마별 색 — Tailwind의 dark 변형은 OS 설정을 따라 뷰어 테마와 어긋나므로 쓰지 않는다.
+    slate·sky는 고정 색(hex)으로 쓴다: 앱 테마(페이퍼·아이보리 등)가 그 두 램프를 뒤집어 정의해서,
+    text-slate-900을 쓰면 밝은 앱 테마에서 밝은 글자가 된다 (본문 배경 THEME_BG와 같은 이유) */
 function palette(dark: boolean) {
   return {
-    text: dark ? 'text-slate-100' : 'text-slate-900',
-    accent: dark ? 'text-sky-300' : 'text-sky-700',
+    text: dark ? 'text-[#f1f5f9]' : 'text-[#0f172a]',
+    accent: dark ? 'text-[#7dd3fc]' : 'text-[#0369a1]',
     updated: dark ? 'text-violet-300' : 'text-violet-700',
     major: dark ? 'bg-amber-400/20 text-amber-200' : 'bg-amber-500/20 text-amber-800',
     chip: dark ? 'bg-white/10' : 'bg-black/5',
@@ -100,7 +102,7 @@ export default function BriefingView({ content, theme, fallback }: Props) {
       return next;
     });
   const pill = (active: boolean) =>
-    `whitespace-nowrap rounded-full px-3 py-1 text-[0.85em] transition ${active ? 'bg-sky-600 text-white' : 'border border-current/20 opacity-80 hover:opacity-100'}`;
+    `whitespace-nowrap rounded-full px-3 py-1 text-[0.85em] transition ${active ? 'bg-[#0284c7] text-white' : 'border border-current/20 opacity-80 hover:opacity-100'}`;
 
   return (
     <div className={`flex flex-col gap-4 ${p.text}`}>
@@ -117,7 +119,7 @@ export default function BriefingView({ content, theme, fallback }: Props) {
           <button
             key={s}
             onClick={() => setTab(s)}
-            className={`-mb-px border-b-2 px-3 py-2 text-[1em] font-semibold ${tab === s ? 'border-sky-500' : 'border-transparent opacity-50 hover:opacity-80'}`}
+            className={`-mb-px border-b-2 px-3 py-2 text-[1em] font-semibold ${tab === s ? 'border-[#0ea5e9]' : 'border-transparent opacity-50 hover:opacity-80'}`}
           >
             {s} <span className="text-[0.8em] font-normal opacity-70">{countIn(edition, s, min)}</span>
           </button>
@@ -161,7 +163,7 @@ export default function BriefingView({ content, theme, fallback }: Props) {
             }}
             className="scroll-mt-16 flex flex-col gap-3"
           >
-            <h2 className="m-0 border-l-4 border-sky-500 pl-2 text-[1.25em] font-bold">{c.name}</h2>
+            <h2 className="m-0 border-l-4 border-[#0ea5e9] pl-2 text-[1.25em] font-bold">{c.name}</h2>
             {c.subs.map((sub) => (
               <div key={sub.id} className="flex flex-col">
                 <h3 className="m-0 mb-1 text-[0.85em] font-semibold opacity-60">{sub.name}</h3>
@@ -198,7 +200,7 @@ function ItemRow({ item, p, open, onToggle }: { item: EditionItem; p: Palette; o
       {open && (
         <div className="mb-3 ml-[2.6em] flex flex-col gap-2 text-[0.95em]">
           {item.summary && <p className="m-0 leading-relaxed">{item.summary}</p>}
-          {item.why && <p className="m-0 rounded-r-md border-l-4 border-sky-500 bg-sky-500/10 px-3 py-2 leading-relaxed">{item.why}</p>}
+          {item.why && <p className="m-0 rounded-r-md border-l-4 border-[#0ea5e9] bg-[#0ea5e9]/10 px-3 py-2 leading-relaxed">{item.why}</p>}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.85em]">
             <span className="opacity-60">
               {item.source} · {kstTime(item.publishedAt)}

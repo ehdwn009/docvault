@@ -12,7 +12,7 @@ export type Written = { title: string; summary: string; why: string };
 const SummarySchema = z.object({
   items: z.array(
     z.object({
-      k: z.number().int().describe('기사 번호'),
+      k: z.number().describe('기사 번호'),
       title: z.string().describe(`${BRIEFING.TITLE_MAX_CHARS}자 이내 한국어 제목. 원문 제목을 베끼지 말고 새로 쓴다`),
       summary: z.string().describe('무슨 일인지 1~2문장. 원문 문장을 베끼지 말고 새로 쓴다'),
       why: z.string().describe('왜 중요한지, 독자에게 어떤 영향인지 한 줄'),
