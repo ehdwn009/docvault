@@ -3,6 +3,7 @@ import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import FileName from './FileName';
 import SwipeRow, { type SwipeConfig } from './SwipeRow';
+import { splitExt } from '../lib/fileName';
 
 const TYPE_BADGE: Record<string, string> = {
   md: 'text-sky-400',
@@ -373,7 +374,11 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     <input
       value={r.value}
       autoFocus
-      onFocus={(e) => e.target.select()}
+      // 파일은 확장자를 빼고 이름만 고른다 — 통째로 고르면 새 이름을 치는 순간 ".md"가 지워진다
+      onFocus={(e) => {
+        const end = r.kind === 'file' ? splitExt(r.value).stem.length : r.value.length;
+        e.target.setSelectionRange(0, end);
+      }}
       onChange={(e) => setRenaming({ ...r, value: e.target.value })}
       onBlur={commitRename}
       onKeyDown={(e) => {

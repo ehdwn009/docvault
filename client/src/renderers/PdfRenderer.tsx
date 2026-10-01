@@ -5,9 +5,11 @@ import {
   RenderingCancelledException,
   type PDFDocumentProxy,
   type RenderTask,
-} from 'pdfjs-dist';
-// 워커는 별도 파일로 떼어 배포하고 URL만 알려준다 — pdf.js는 파싱을 워커 스레드에서 한다
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+} from 'pdfjs-dist/legacy/build/pdf.mjs';
+// 워커는 별도 파일로 떼어 배포하고 URL만 알려준다 — pdf.js는 파싱을 워커 스레드에서 한다.
+// legacy 빌드를 쓴다: 기본 빌드는 Map.getOrInsertComputed 같은 갓 나온 기능을 그대로 써서
+// 그 기능이 없는 브라우저(Chromium 141, 아직 대부분의 폰)에서 페이지가 흰 화면으로만 나왔다 (사용성 평가 2026-10-01)
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -112,8 +114,9 @@ export default function PdfRenderer({ fileId, scale, onReady }: Props) {
 
   if (error) {
     return (
-      <div className="flex min-h-full items-center justify-center p-6">
+      <div className="flex min-h-full flex-col items-center justify-center gap-3 p-6">
         <p className="text-sm text-red-400">{error}</p>
+        <DownloadLink fileId={fileId} />
       </div>
     );
   }
@@ -155,6 +158,7 @@ export default function PdfRenderer({ fileId, scale, onReady }: Props) {
               size={size}
               cssWidth={cssWidth}
               trackRef={trackPage}
+              fileId={fileId}
             />
           ))}
         </div>
@@ -169,18 +173,22 @@ function PdfPage({
   size,
   cssWidth,
   trackRef,
+  fileId,
 }: {
   doc: PDFDocumentProxy;
   pageNum: number;
   size: PageSize;
   cssWidth: number;
   trackRef: (el: HTMLDivElement | null) => void;
+  fileId: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const taskRef = useRef<RenderTask | null>(null);
   // 화면 근처에 온 페이지만 canvas를 만든다 — 수백 페이지 PDF를 폰에서 열어도 메모리가 남게
   const [near, setNear] = useState(false);
+  // 그리기 실패 — 흰 페이지만 남기면 "로딩 중"인지 "고장"인지 알 수 없다
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -213,7 +221,10 @@ function PdfPage({
         await task.promise;
       } catch (e: unknown) {
         // 스크롤로 지나쳐서 취소된 것은 정상 흐름
-        if (!(e instanceof RenderingCancelledException)) console.error('PDF page render:', e);
+        if (!(e instanceof RenderingCancelledException)) {
+          console.error('PDF page render:', e);
+          if (!cancelled) setFailed(true);
+        }
       }
     })();
     return () => {
@@ -232,7 +243,22 @@ function PdfPage({
       style={{ width: cssWidth, height: (cssWidth * size.height) / size.width }}
       className="mx-auto shrink-0 bg-white shadow-md"
     >
-      {near && <canvas ref={canvasRef} className="block h-full w-full" />}
+      {failed ? (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
+          <p className="text-sm text-[#475569]">이 기기에서 {pageNum}쪽을 그리지 못했어요</p>
+          <DownloadLink fileId={fileId} />
+        </div>
+      ) : (
+        near && <canvas ref={canvasRef} className="block h-full w-full" />
+      )}
     </div>
+  );
+}
+
+function DownloadLink({ fileId }: { fileId: number }) {
+  return (
+    <a href={`/api/v1/files/${fileId}/raw`} download className="rounded-md border border-[#94a3b8] bg-white px-4 py-2 text-sm text-[#0f172a] no-underline">
+      PDF 내려받아 보기
+    </a>
   );
 }

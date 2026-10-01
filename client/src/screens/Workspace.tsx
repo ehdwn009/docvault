@@ -49,6 +49,7 @@ import AskPanel from '../components/AskPanel';
 import Icon, { type IconName } from '../components/Icon';
 import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
+import { keepExt, splitExt } from '../lib/fileName';
 
 type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
@@ -676,9 +677,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             used.add(f.name);
             return f;
           }
-          const dot = f.name.lastIndexOf('.');
-          const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
-          const ext = dot > 0 ? f.name.slice(dot) : '';
+          const { stem, ext } = splitExt(f.name);
           let n = 2;
           while (used.has(`${stem} (${n})${ext}`)) n++;
           const name = `${stem} (${n})${ext}`;
@@ -1009,8 +1008,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         if (ok) void guard(() => api(`/folders/${id}`, { method: 'DELETE' }));
       });
     },
-    renameFile: (id, name) =>
-      void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })),
+    renameFile: (id, name) => {
+      const old = treeRef.current.files.find((f) => f.id === id)?.name;
+      const next = old ? keepExt(old, name) : name;
+      void guard(() => api(`/files/${id}`, { method: 'PUT', body: JSON.stringify({ name: next }) }));
+    },
     moveFile: (id, folderId) => {
       const prev = treeRef.current.files.find((f) => f.id === id)?.folderId ?? null;
       if (prev === folderId) return;
@@ -1096,7 +1098,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             ]
           : []),
       ],
-      fullSwipe: del,
+      // 끝까지 밀기 = 바로 삭제는 걸지 않는다 — 한 손으로 스크롤하다 살짝 옆으로 밀리거나, 목록이
+      // 밀려 내려온 순간 엉뚱한 줄이 지워졌다(사용성 평가 2026-10-01). 삭제는 트레이 버튼을 눌러야 한다
     };
   }
 

@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { api, ApiError, type FileContent } from '../lib/api';
 import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
@@ -21,6 +21,15 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
   const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit');
 
   const dirty = draft !== file.content;
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 들어오자마자 입력칸에 커서를 둔다 — 안 그러면 포커스가 파일 목록에 남아, E 다음에 친 글자가
+  // 목록 단축키(스페이스 = 선택, Delete = 삭제)로 처리됐다 (사용성 평가 2026-10-01).
+  // 터치 기기는 건드리지 않는다 — 키보드가 저절로 올라와 화면 절반을 가린다
+  useEffect(() => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    areaRef.current?.focus({ preventScroll: true });
+  }, []);
 
   // 부모(Workspace)가 파일 전환을 막을 수 있도록 dirty 상태를 올려보낸다
   useEffect(() => {
@@ -123,6 +132,7 @@ export default function Editor({ file, onSaved, onCancel, onDirtyChange }: Props
 
       <div className="flex min-h-0 flex-1">
         <textarea
+          ref={areaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}

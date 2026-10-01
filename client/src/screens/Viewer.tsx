@@ -951,6 +951,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                 <CardView
                   title={cardTitle(file.name)}
                   content={data.content}
+                  theme={settings.viewerTheme}
                   onAsk={() => openAsk(false)}
                   onOpenSource={onOpenSource}
                   onOpenLink={onOpenCard}
