@@ -360,6 +360,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
     { label: '삭제', danger: true, action: () => actions.deleteFile(file.id) },
   ];
 
+  // 터치는 줄 높이·⋯ 버튼을 손가락 크기(44px 안팎)로 — 28px 줄에서는 옆 파일이 자꾸 열렸다 (사용성 평가 2026-10-01)
   const moreButton = (items: () => MenuItem[]) => (
     <button
       onClick={(e) => {
@@ -367,7 +368,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
         openMenu(e, items());
       }}
       title="메뉴"
-      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
+      className="shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block touch:-my-2 touch:flex touch:h-10 touch:w-10 touch:items-center touch:justify-center touch:px-0"
     >
       ⋯
     </button>
@@ -421,7 +422,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   setFocus({ kind: 'folder', id: folder.id });
                 }}
                 onContextMenu={(e) => openMenu(e, folderMenu(folder))}
-                className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-sm transition ${
+                className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 touch:py-3 text-sm transition ${
                   dropTarget === folder.id
                     ? 'bg-sky-900/50 outline outline-1 outline-sky-600'
                     : folder.id === selectedFolderId
@@ -478,7 +479,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   else onSelect(file);
                 }}
                 onContextMenu={(e) => openMenu(e, fileMenu(file))}
-                className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
+                className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 touch:py-3 text-left text-sm transition ${
                   isChecked
                     ? 'bg-sky-950/60 text-slate-100 outline outline-1 outline-sky-800'
                     : file.id === selectedId

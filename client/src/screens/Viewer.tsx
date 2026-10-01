@@ -597,7 +597,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const isPc = isPcDevice();
   const actionButton = (active: boolean) =>
     // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
-    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'w-full px-4 py-2'} ${
+    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'min-h-11 w-full px-4 py-2'} ${
       active
         ? 'border-slate-500 bg-slate-800 text-slate-100'
         : 'border-slate-700 text-slate-300 hover:bg-slate-900'
@@ -642,7 +642,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           // 터치: 떠 있는 바 대신 도구막대의 이 버튼이 "고른 문장으로 묻기"가 된다 — 엄지 자리라 iOS 메뉴와 안 겹친다
           <button
             onClick={() => openAsk(true)}
-            className="w-full min-w-0 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+            className="min-h-11 w-full min-w-0 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
           >
             💬 「{selection.quote.length > 12 ? `${selection.quote.slice(0, 12)}…` : selection.quote}」 물어보기
           </button>
@@ -796,13 +796,14 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
-          className={`text-lg leading-none ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
+          // 터치는 손가락 크기(40px 이상)만큼 누를 자리를 넓힌다 — 글자 하나 크기라 자꾸 빗나갔다 (사용성 평가 2026-10-01)
+          className={`-mx-1 flex shrink-0 items-center justify-center text-lg leading-none touch:h-10 touch:w-10 ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
         >
           ★
         </button>
         {onOpenSwitcher ? (
           // 터치: 파일명이 곧 문서 스위처 버튼 — 탭 바 대신 시트로 오간다 (IA — 문서 스위처)
-          <button onClick={onOpenSwitcher} className="flex min-w-0 items-center gap-1.5 text-left">
+          <button onClick={onOpenSwitcher} className="flex min-h-10 min-w-0 items-center gap-1.5 text-left">
             <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
             <span className="shrink-0 text-xs text-slate-500">▾</span>
           </button>
@@ -848,7 +849,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                       h.jump();
                       if (!isPcDevice()) setShowToc(false); // 터치에선 선택 즉시 드로어를 닫아 본문을 보여준다
                     }}
-                    className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
+                    className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200 touch:py-2.5 touch:text-sm"
                     style={{ paddingLeft: `${12 + (h.level - 1) * 12}px` }}
                   >
                     {h.text}

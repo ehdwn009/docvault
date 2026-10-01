@@ -40,7 +40,7 @@ export default function TrashPanel({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="flex max-h-[70vh] w-96 flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+      <div className="flex max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-slate-100">🗑 휴지통</h3>
           <span className="text-[11px] text-slate-600">30일 뒤 자동으로 비워집니다</span>
@@ -52,7 +52,7 @@ export default function TrashPanel({
                   danger: true,
                 }).then((ok) => ok && run(() => api('/files/trash', { method: 'DELETE' })));
               }}
-              className="ml-auto rounded border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
+              className="ml-auto rounded border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950 touch:min-h-10 touch:px-3"
             >
               비우기
             </button>
@@ -68,7 +68,7 @@ export default function TrashPanel({
             items.map((f) => (
               <div
                 key={f.id}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 touch:gap-3"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{f.name}</span>
@@ -78,7 +78,7 @@ export default function TrashPanel({
                 </span>
                 <button
                   onClick={() => run(() => api(`/files/${f.id}/restore`, { method: 'POST' }))}
-                  className="shrink-0 rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                  className="shrink-0 rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 touch:min-h-10 touch:px-3"
                 >
                   복원
                 </button>
@@ -89,9 +89,10 @@ export default function TrashPanel({
                       danger: true,
                     }).then((ok) => ok && run(() => api(`/files/${f.id}/purge`, { method: 'DELETE' })));
                   }}
-                  className="shrink-0 rounded border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
+                  // 복원 바로 옆이라 이름으로 구분한다 — 되돌릴 수 없는 쪽이 "삭제" 두 글자뿐이었다 (사용성 평가 2026-10-01)
+                  className="shrink-0 rounded border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950 touch:min-h-10 touch:px-3"
                 >
-                  삭제
+                  영구 삭제
                 </button>
               </div>
             ))

@@ -1250,6 +1250,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }
 
   async function handleLogout() {
+    // 터치 서랍에서는 레일 맨 아래라 엄지가 잘못 닿기 쉽고, 저장 안 한 편집은 기기를 가리지 않고 사라진다 — 한 번 묻는다
+    const dirty = [...dirtyMapRef.current.values()].some(Boolean);
+    if (IS_TOUCH || dirty) {
+      const ok = await confirmDialog('로그아웃할까요?', {
+        message: dirty ? '저장하지 않은 변경이 사라집니다.' : undefined,
+        confirmLabel: '로그아웃',
+        danger: dirty,
+      });
+      if (!ok) return;
+    }
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
     onLogout();
   }
@@ -1275,6 +1285,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
   const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings', admin: 'admin' };
+  // 터치 서랍에서는 아이콘 밑에 이름을 붙인다 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
+  const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정', admin: '관리자' };
+  const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition touch:h-auto touch:min-h-11 touch:w-14 touch:flex-col touch:gap-0.5 touch:py-1.5';
+  const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
@@ -1286,13 +1300,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         }
       }}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-lg transition ${
+      className={`${railClass} ${
         panel === target && !panelCollapsed
           ? 'bg-slate-800 text-slate-100'
           : 'text-slate-500 hover:text-slate-200'
       }`}
     >
       <Icon name={RAIL_ICONS[target]} />
+      {railLabel(RAIL_SHORT[target])}
     </button>
   );
 
@@ -1332,7 +1347,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         aria-hidden={chromeHidden}
         // 크롬이 접히면 이 버튼도 같이 비킨다 — 크롬이 숨으면 문서가 화면 맨 위까지 올라오는데,
         // 우리 버튼만 남아 있으면 문서 자신의 좌상단 고정 버튼(정독본의 목차 ☰ 등)을 정확히 덮는다
-        className={`fixed left-3 top-2 z-30 rounded-md border border-slate-800 bg-slate-900/90 px-2.5 py-1 text-slate-300 pc:hidden ${
+        aria-label="메뉴"
+        className={`fixed left-3 top-2 z-30 flex h-10 w-10 items-center justify-center rounded-md border border-slate-800 bg-slate-900/90 text-slate-300 pc:hidden ${
           immersive ? 'hidden' : ''
         } ${chromeHidden ? 'pointer-events-none' : ''}`}
       >
@@ -1348,7 +1364,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃) */}
-      <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-800 py-3">
+      <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:w-16">
         {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01) */}
         <button
           onClick={() => {
@@ -1356,9 +1372,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             setPaletteOpen(true);
           }}
           title="검색 (Ctrl+K)"
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:text-slate-200"
+          className={`${railClass} text-slate-500 hover:text-slate-200`}
         >
           <Icon name="search" />
+          {railLabel('검색')}
         </button>
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
@@ -1373,9 +1390,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:text-slate-300"
+          className={`${railClass} text-slate-600 hover:text-slate-300`}
         >
           <Icon name="logout" />
+          {railLabel('나가기')}
         </button>
       </div>
 
