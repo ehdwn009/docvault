@@ -30,6 +30,7 @@ const PATHS = {
   more: 'M5 12h.01|M12 12h.01|M19 12h.01',
   upload: 'M12 16V4|M6 10l6-6 6 6|M4 20h16',
   plus: 'M12 5v14|M5 12h14',
+  chevron: 'M9 6l6 6-6 6',
 } as const;
 
 export type IconName = keyof typeof PATHS;
