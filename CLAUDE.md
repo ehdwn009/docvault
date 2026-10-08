@@ -92,3 +92,4 @@
 - `better-sqlite3`는 동기 드라이버 — Drizzle에서 `.returning()`은 `.get()`/`.all()`로 실행해야 한다.
 - admin 초기 비밀번호는 `admin1234` (env `ADMIN_INITIAL_PASSWORD`). 배포 시 `JWT_SECRET` 필수.
 - 커밋은 사용자가 요청할 때만 한다.
+- 배포는 **PR 없이 `main`에 바로 push**한다(사용자 결정 2026-10-08). push하면 Actions가 이미지를 굽고, 서버의 cron(`scripts/update.sh`, 10분마다)이 알아서 받아 교체한다 — 사람이 SSH로 들어갈 필요가 없다. 그래서 `main`에 올리기 전에 타입체크·빌드를 반드시 통과시킨다.
