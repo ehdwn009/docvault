@@ -1,6 +1,6 @@
 import fs from 'node:fs';
+import { fetchSource } from '../lib/briefing/collect.js';
 import { parseFeed } from '../lib/briefing/rss.js';
-import { fetchFeedText } from '../lib/briefing/fetch.js';
 import { errorText, mapLimit } from '../lib/briefing/limit.js';
 import { defaultSourcesDoc, parseSourcesDoc, toSources } from '../lib/briefing/sources.js';
 import { BRIEFING } from '../constants.js';
@@ -14,7 +14,7 @@ const file = process.argv[2];
 const doc = file ? parseSourcesDoc(fs.readFileSync(file, 'utf8')) : defaultSourcesDoc();
 const sources = toSources(doc);
 
-const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (s) => parseFeed(await fetchFeedText(s.url)));
+const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (s) => parseFeed(await fetchSource(s)));
 let ok = 0;
 results.forEach((r, i) => {
   const s = sources[i];

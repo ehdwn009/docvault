@@ -1,5 +1,5 @@
 import { BRIEFING } from '../../constants.js';
-import { fetchFeedText } from './fetch.js';
+import { fetchGuarded } from './fetch.js';
 import { errorText, mapLimit } from './limit.js';
 import { parseFeed, type FeedItem } from './rss.js';
 import { outletName } from './outlets.js';
@@ -134,6 +134,12 @@ export function dedupe(list: Candidate[]): Candidate[] {
   return [...byKey.values()];
 }
 
+/** 출처 하나의 피드 — 국내 출처는 더 기다린다(설계 "멈춤 대책 2차"). 점검 스크립트도 같은 길로 받는다 */
+export function fetchSource(src: Source, signal?: AbortSignal): Promise<string> {
+  const timeoutMs = src.region === '국내' ? BRIEFING.FETCH_TIMEOUT_DOMESTIC_MS : BRIEFING.FETCH_TIMEOUT_MS;
+  return fetchGuarded('feed', src.url, { label: src.name, timeoutMs, signal });
+}
+
 export async function collect(
   sources: Source[],
   opts: {
@@ -151,7 +157,7 @@ export async function collect(
   const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (src) => {
     const finish = opts.track?.(src.name);
     try {
-      const xml = await fetchFeedText(src.url, opts.signal);
+      const xml = await fetchSource(src, opts.signal);
       return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls);
     } finally {
       finish?.();

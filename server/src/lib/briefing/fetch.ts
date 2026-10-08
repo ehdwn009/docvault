@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { BRIEFING } from '../../constants.js';
+import { errorText, withDeadline } from './limit.js';
 
 // 서버가 밖으로 나가는 요청 — 주소는 관리자가 쓴 수집 목록에서만 오지만, 그래도 사설망은 막는다.
 // 클라우드 VM의 메타데이터 주소(169.254.169.254)가 대표적 표적이다 (뉴스 브리핑 설계 — 보안 SSRF)
@@ -80,21 +81,69 @@ async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> 
 const FEED_ACCEPT = 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5';
 const PAGE_ACCEPT = 'text/html, application/xhtml+xml;q=0.9, */*;q=0.5';
 
+/** 받는 일이 지금 어디까지 왔나 — 시간 초과·강제 포기의 이유에 붙여 멈춘 지점을 좁힌다 (설계 "멈춤 대책 2차") */
+export type FetchPhase = '주소 찾는 중' | '연결 중' | '본문 받는 중';
+
+export type FetchOptions = {
+  outer?: AbortSignal;
+  /** 없으면 종류별 기본값 (피드 FETCH_TIMEOUT_MS, 원문 BODY_FETCH_TIMEOUT_MS) */
+  timeoutMs?: number;
+  onPhase?: (phase: FetchPhase, url: URL) => void;
+};
+
 /** 피드 하나를 글자로 받는다. 실패는 사람이 읽을 이유와 함께 던진다 */
-export function fetchFeedText(rawUrl: string, outer?: AbortSignal): Promise<string> {
-  return fetchText(rawUrl, { accept: FEED_ACCEPT, timeoutMs: BRIEFING.FETCH_TIMEOUT_MS, maxBytes: BRIEFING.FETCH_MAX_BYTES, outer });
+export function fetchFeedText(rawUrl: string, opts: FetchOptions = {}): Promise<string> {
+  return fetchText(rawUrl, { ...opts, accept: FEED_ACCEPT, timeoutMs: opts.timeoutMs ?? BRIEFING.FETCH_TIMEOUT_MS, maxBytes: BRIEFING.FETCH_MAX_BYTES });
 }
 
 /** 기사 원문 페이지(HTML)를 받는다 — 핵심 기사 원문 읽기(설계 "③-1 근거 보강"). 같은 안전 장치, 더 짧은 시간 */
-export function fetchPageText(rawUrl: string, outer?: AbortSignal): Promise<string> {
-  return fetchText(rawUrl, { accept: PAGE_ACCEPT, timeoutMs: BRIEFING.BODY_FETCH_TIMEOUT_MS, maxBytes: BRIEFING.BODY_FETCH_MAX_BYTES, outer });
+export function fetchPageText(rawUrl: string, opts: FetchOptions = {}): Promise<string> {
+  return fetchText(rawUrl, { ...opts, accept: PAGE_ACCEPT, timeoutMs: opts.timeoutMs ?? BRIEFING.BODY_FETCH_TIMEOUT_MS, maxBytes: BRIEFING.BODY_FETCH_MAX_BYTES });
 }
 
-async function fetchText(rawUrl: string, opts: { accept: string; timeoutMs: number; maxBytes: number; outer?: AbortSignal }): Promise<string> {
+/**
+ * 안쪽 시간 제한 + 바깥 마감 + 단계 기록을 한 번에 — 수집·원문 읽기·점검 스크립트가 같은 방식으로 받는다 (설계 "멈춤 대책 2차").
+ * 실패 이유에 멈춘 단계를 붙인다("시간 초과 · 연결 중"). 바깥 마감이 걸리면 안쪽 제한이 또 뚫린 것이라 로그에 남긴다
+ */
+export async function fetchGuarded(
+  kind: 'feed' | 'page',
+  rawUrl: string,
+  opts: { label: string; timeoutMs: number; signal?: AbortSignal },
+): Promise<string> {
+  // 클로저 안에서 바뀌는 값이라 객체 칸으로 둔다
+  const at: { phase: FetchPhase | '시작 전'; url: string } = { phase: '시작 전', url: rawUrl };
+  const get = kind === 'feed' ? fetchFeedText : fetchPageText;
+  const inner = get(rawUrl, {
+    outer: opts.signal,
+    timeoutMs: opts.timeoutMs,
+    onPhase: (phase, url) => {
+      at.phase = phase;
+      at.url = url.href;
+    },
+  });
+  try {
+    return await withDeadline(
+      inner,
+      opts.timeoutMs + BRIEFING.FETCH_DEADLINE_GRACE_MS,
+      () => {
+        console.log(`[briefing] 강제 포기: ${opts.label} — ${at.phase}에서 ${opts.timeoutMs / 1000}초 제한을 넘겨 멈춤 (${at.url})`);
+        return new Error(`응답 없음 · ${at.phase}`);
+      },
+      opts.signal,
+    );
+  } catch (e) {
+    if (errorText(e) === '시간 초과') throw new Error(`시간 초과 · ${at.phase}`);
+    throw e;
+  }
+}
+
+async function fetchText(rawUrl: string, opts: FetchOptions & { accept: string; timeoutMs: number; maxBytes: number }): Promise<string> {
   let url = new URL(rawUrl);
   const signal = AbortSignal.any([AbortSignal.timeout(opts.timeoutMs), ...(opts.outer ? [opts.outer] : [])]);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    opts.onPhase?.('주소 찾는 중', url);
     await assertPublicUrl(url, signal);
+    opts.onPhase?.('연결 중', url);
     const res = await fetch(url, {
       redirect: 'manual', // 넘어가는 곳도 매번 검사하려고 직접 따라간다
       signal,
@@ -107,6 +156,7 @@ async function fetchText(rawUrl: string, opts: { accept: string; timeoutMs: numb
       continue;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    opts.onPhase?.('본문 받는 중', url);
     const bytes = await readCapped(res, opts.maxBytes);
     const charset = detectCharset(res.headers.get('content-type'), bytes);
     try {

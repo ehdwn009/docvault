@@ -241,6 +241,10 @@ export const BRIEFING = {
   SUMMARY_CONCURRENCY: 4,
   /** 피드 하나의 요청 시간·크기 상한 — 느린 피드 하나가 전체를 붙잡지 않게 */
   FETCH_TIMEOUT_MS: 10_000,
+  /** 국내 출처는 더 기다린다 — 10초 시간 초과가 국내 언론에만 몰렸다. 서버(GCP 미국 리전)에서 멀어서로 본다 (2026-10-08) */
+  FETCH_TIMEOUT_DOMESTIC_MS: 20_000,
+  /** 안쪽 시간 제한을 이만큼 넘겨도 안 끝나면 바깥에서 포기한다 — 안쪽 제한이 뚫려 실행이 멈춘 일이 있었다 (2026-10-06) */
+  FETCH_DEADLINE_GRACE_MS: 5_000,
   FETCH_MAX_BYTES: 2 * 1024 * 1024,
   /** 발췌는 AI에게 보여 주는 데만 쓰고 저장하지 않는다 */
   SNIPPET_MAX_CHARS: 300,

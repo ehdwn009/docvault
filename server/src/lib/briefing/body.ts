@@ -1,6 +1,6 @@
 import { BRIEFING } from '../../constants.js';
 import { isAggregator, type Candidate } from './collect.js';
-import { fetchPageText } from './fetch.js';
+import { fetchGuarded } from './fetch.js';
 import { mapLimit } from './limit.js';
 import { plainText } from './rss.js';
 import type { Picked } from './select.js';
@@ -66,7 +66,8 @@ export async function readBodies(
     try {
       for (const url of bodyUrls(p)) {
         try {
-          const text = extractArticleText(await fetchPageText(url, opts.signal));
+          const html = await fetchGuarded('page', url, { label: `원문 ${p.main.source}`, timeoutMs: BRIEFING.BODY_FETCH_TIMEOUT_MS, signal: opts.signal });
+          const text = extractArticleText(html);
           if (text.length >= 100) {
             bodies.set(i, text);
             return;
