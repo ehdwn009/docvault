@@ -1,0 +1,1378 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>뉴스 앱 비교 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Gaegu:wght@400;700&display=swap">
+<style>
+/* 레이아웃: 위는 읽는 조사 문서(수집 방식), 아래는 만져 보는 시안 작업대(탭 + 폰/PC 프레임) */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #2f47c4; --accent-soft: #e5e9fb; --accent-ink: #ffffff;
+  --core: #cf2f2f; --major: #c9741c; --ref: #737c8c;
+  --lean-l: #2f6fd6; --lean-c: #a3abb6; --lean-r: #d24343;
+  --gold: #a87a1c; --gold-soft: #fbf3e0; --ok: #1d8556;
+  --ch1: #d94040; --ch2: #26915a; --ch3: #3567d1; --ch4: #c97c12; --ch5: #8350c9;
+  --why: #e7f1fb; --why-ink: #0b5a91;
+  --frame: #20242b; --ad: #fde9c8; --ad-ink: #8a5a12;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --f-hand: "Gaegu", "IBM Plex Sans KR", cursive;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #95a6ff; --accent-soft: #232a4a; --accent-ink: #10131a;
+    --core: #f06262; --major: #eb9c4c; --ref: #8f98a7;
+    --lean-l: #5d95ef; --lean-c: #6f7783; --lean-r: #ef6d6d;
+    --gold: #dcae52; --gold-soft: #3a3020; --ok: #45bb84;
+    --ch1: #f06a6a; --ch2: #49b97c; --ch3: #6c96f0; --ch4: #e8a043; --ch5: #a881ea;
+    --why: #14304a; --why-ink: #93cdf7;
+    --frame: #3b414b; --ad: #4a3a1f; --ad-ink: #f3cf8f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #95a6ff; --accent-soft: #232a4a; --accent-ink: #10131a;
+  --core: #f06262; --major: #eb9c4c; --ref: #8f98a7;
+  --lean-l: #5d95ef; --lean-c: #6f7783; --lean-r: #ef6d6d;
+  --gold: #dcae52; --gold-soft: #3a3020; --ok: #45bb84;
+  --ch1: #f06a6a; --ch2: #49b97c; --ch3: #6c96f0; --ch4: #e8a043; --ch5: #a881ea;
+  --why: #14304a; --why-ink: #93cdf7;
+  --frame: #3b414b; --ad: #4a3a1f; --ad-ink: #f3cf8f;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.65; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+a { color: var(--accent); }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.unv { font-family: var(--f-mono); font-size: 11px; color: var(--major); white-space: nowrap; }
+
+/* 머리 */
+.hero { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.hero h1 { font-size: clamp(28px, 4.4vw, 40px); font-weight: 700; letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; color: var(--fg); }
+.notice { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--major); background: var(--surface); padding: 12px 16px; border-radius: 0 10px 10px 0; font-size: 14px; }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.toc a { text-decoration: none; font-size: 14px; font-weight: 600; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); }
+.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+section { display: flex; flex-direction: column; gap: 22px; scroll-margin-top: 16px; }
+.sec-head { display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+.sec-head h2 { font-size: 26px; letter-spacing: -0.01em; }
+
+/* 수집 단계 띠 */
+.stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stage b { font-size: 15px; }
+.stage .n { font-family: var(--f-mono); font-size: 12px; color: var(--accent); }
+.stage p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+@media (max-width: 760px) { .stages { grid-template-columns: 1fr 1fr; } }
+
+/* 위치 지도 (3x3 범주표) */
+.map-box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.map-scroll { overflow-x: auto; }
+.map { display: grid; grid-template-columns: 120px repeat(3, minmax(170px, 1fr)); gap: 6px; min-width: 660px; font-size: 13px; }
+.map .ax { font-weight: 700; font-size: 12.5px; color: var(--muted); padding: 6px 8px; display: flex; align-items: center; }
+.map .ax.top { justify-content: center; text-align: center; }
+.map .cell { background: var(--sunk); border-radius: 10px; padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; min-height: 74px; }
+.pin { display: inline-flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-weight: 600; font-size: 12.5px; }
+.pin.us { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.pin small { font-weight: 400; color: var(--muted); }
+
+/* 비교표 */
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 980px; font-size: 13.5px; line-height: 1.5; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; background: var(--sunk); position: sticky; top: 0; }
+tbody th { font-weight: 700; white-space: nowrap; }
+tbody tr.us { background: var(--accent-soft); }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+
+/* 서비스별 상세 */
+.svc-list { display: flex; flex-direction: column; gap: 8px; }
+details.svc { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+details.svc summary { cursor: pointer; list-style: none; padding: 14px 16px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+details.svc summary::-webkit-details-marker { display: none; }
+details.svc summary::before { content: "+"; font-family: var(--f-mono); color: var(--accent); width: 12px; }
+details.svc[open] summary::before { content: "–"; }
+details.svc summary b { font-size: 16px; }
+details.svc summary span { font-size: 13.5px; color: var(--muted); }
+.svc-body { padding: 0 16px 16px 38px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; font-size: 14px; }
+.svc-body h4 { margin: 0 0 4px; font-size: 13px; color: var(--accent); letter-spacing: .02em; }
+.svc-body ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.svc-body .wide { grid-column: 1 / -1; }
+.svc-body .src { font-size: 12.5px; color: var(--muted); word-break: break-all; }
+@media (max-width: 760px) { .svc-body { grid-template-columns: 1fr; padding-left: 16px; } }
+
+/* 작업대 */
+.bench-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.tab { flex: none; font: inherit; font-size: 14px; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tab.prop { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+.tab.prop[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-style: solid; }
+.tab:focus-visible, .seg button:focus-visible, .scr button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--sunk); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { font: inherit; font-size: 13px; font-weight: 600; border: 0; background: transparent; color: var(--muted); padding: 5px 14px; border-radius: 8px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.hint { font-size: 13px; color: var(--muted); }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
+.bench.pc { grid-template-columns: 1fr; }
+@media (max-width: 980px) { .bench { grid-template-columns: 1fr; } }
+.stage-area { min-width: 0; }
+.phones { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+.phone-col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.phone-label { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.phone { width: 340px; max-width: 100%; height: 660px; border: 9px solid var(--frame); border-radius: 34px; background: var(--surface); overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.phone::before { content: ""; display: block; height: 22px; flex: none; background: var(--surface); }
+.phone .scr { flex: 1; overflow-y: auto; }
+.browser-scroll { overflow-x: auto; }
+.browser { min-width: 820px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; box-shadow: 0 6px 24px rgba(10,15,30,.08); }
+.browser-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.browser-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+.browser-bar span { margin-left: 10px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); background: var(--surface); border-radius: 6px; padding: 3px 10px; flex: 1; }
+.browser-body { display: grid; grid-template-columns: 1fr 1.15fr; height: 640px; }
+.browser-body > .scr { overflow-y: auto; min-width: 0; }
+.browser-body > .scr + .scr { border-left: 1px solid var(--line); }
+
+.notes { display: flex; flex-direction: column; gap: 16px; font-size: 14px; position: sticky; top: 120px; }
+.bench.pc .notes { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 28px; }
+.notes h3 { font-size: 20px; }
+.notes h4 { margin: 0 0 4px; font-size: 12.5px; color: var(--accent); letter-spacing: .02em; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.notes .try { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
+.notes .take { border-left: 3px solid var(--ok); padding-left: 12px; }
+
+/* ===== 시안 공통 ===== */
+.scr { font-size: 13px; line-height: 1.5; color: var(--fg); background: var(--surface); }
+.scr button { font: inherit; color: inherit; cursor: pointer; }
+.scr .pad { padding: 12px 14px; }
+.scr .col { display: flex; flex-direction: column; }
+.scr .g4 { gap: 4px; } .scr .g6 { gap: 6px; } .scr .g8 { gap: 8px; } .scr .g10 { gap: 10px; } .scr .g12 { gap: 12px; } .scr .g16 { gap: 16px; }
+.scr .rowx { display: flex; align-items: center; gap: 8px; }
+.scr .wrapx { flex-wrap: wrap; }
+.scr .sm { font-size: 11.5px; } .scr .xs { font-size: 10.5px; }
+.scr .mt { color: var(--muted); }
+.scr .b { font-weight: 700; } .scr .sb { font-weight: 600; }
+.scr .h1 { font-size: 18px; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; }
+.scr .h2 { font-size: 15px; font-weight: 700; line-height: 1.4; }
+.scr .hr { height: 1px; background: var(--line); }
+.scr .ph { background: repeating-linear-gradient(135deg, var(--sunk) 0 9px, var(--line) 9px 10px); border-radius: 8px; }
+.scr .ph.wide { aspect-ratio: 16 / 9; width: 100%; }
+.scr .ph.sq { width: 64px; height: 64px; flex: none; }
+.scr .av { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--sunk); border: 2px solid var(--surface); color: var(--fg); flex: none; }
+.scr .avs { display: flex; } .scr .avs .av + .av { margin-left: -7px; }
+.scr .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: 12px; white-space: nowrap; }
+.scr .chip[aria-pressed="true"] { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.scr .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.scr .lnk { color: var(--accent); font-weight: 600; }
+.scr .bigbtn { display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--sunk); font-weight: 600; }
+.scr .card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.scr .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.scr [data-panel][hidden], .scr [data-target][hidden] { display: none !important; }
+.scr .sticky { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.scr .note { font-size: 10.5px; color: var(--major); font-family: var(--f-mono); }
+
+/* 우리 */
+.o-badge { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; color: #fff; flex: none; margin-top: 2px; }
+.o-core { background: var(--core); } .o-major { background: var(--major); } .o-ref { background: var(--ref); }
+.o-lead { background: var(--sunk); border-radius: 14px; padding: 10px 12px; }
+.o-row { display: flex; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.o-row:last-child { border-bottom: 0; }
+.o-num { width: 18px; text-align: center; font-weight: 700; color: var(--why-ink); flex: none; }
+.o-dl dt { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.o-dl dd { margin: 0 0 8px; }
+.o-why { background: var(--why); border-radius: 10px; padding: 8px 10px; }
+.o-why b { color: var(--why-ink); font-size: 10.5px; display: block; }
+.o-seg { display: inline-flex; background: var(--sunk); border-radius: 8px; padding: 2px; }
+.o-seg span { padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; }
+.o-seg span.on { background: var(--surface); }
+.o-open { padding-left: 26px; padding-bottom: 10px; }
+.o-empty { color: var(--muted); font-size: 12px; background: var(--sunk); border-radius: 8px; padding: 6px 8px; }
+
+/* Particle 식 */
+.p-modes { display: flex; gap: 6px; overflow-x: auto; }
+.p-modes .chip { font-weight: 600; }
+.p-eli5 { font-family: var(--f-hand); font-size: 18px; line-height: 1.45; background: var(--gold-soft); border-radius: 14px; padding: 12px 14px; transform: rotate(-0.6deg); }
+.p-5w { display: grid; grid-template-columns: 54px 1fr; gap: 6px 8px; }
+.p-5w b { color: var(--accent); }
+.p-src { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.p-src.partner { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.p-spec { position: relative; height: 46px; background: linear-gradient(90deg, color-mix(in srgb, var(--lean-l) 22%, transparent), var(--sunk), color-mix(in srgb, var(--lean-r) 22%, transparent)); border-radius: 10px; }
+.p-spec .av { position: absolute; top: 12px; }
+.p-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.p-sides > div { border-radius: 10px; padding: 8px 10px; background: var(--sunk); }
+.p-ask { display: flex; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 6px 6px 12px; align-items: center; color: var(--muted); }
+.p-ask span:last-child { margin-left: auto; background: var(--fg); color: var(--surface); border-radius: 999px; padding: 2px 10px; font-weight: 600; }
+
+/* Kagi 식 */
+.k-top { border-bottom: 1px solid var(--line); }
+.k-tabs { display: flex; gap: 14px; overflow-x: auto; font-weight: 600; }
+.k-tabs span.on { color: var(--ch5); box-shadow: inset 0 -2px 0 var(--ch5); padding-bottom: 6px; }
+.k-row { padding: 10px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.k-row.read .h2 { color: var(--muted); font-weight: 600; }
+.k-cat { font-size: 10.5px; color: var(--muted); font-weight: 600; }
+.k-cite { font-size: 9.5px; vertical-align: super; color: var(--ch5); font-weight: 700; margin-left: 1px; }
+.k-src { display: flex; gap: 6px; overflow-x: auto; }
+.k-src .chip { display: inline-flex; gap: 4px; align-items: center; }
+.k-pay { font-size: 9.5px; color: var(--major); border: 1px solid currentColor; border-radius: 4px; padding: 0 3px; }
+.k-hl { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.k-quote { border-left: 3px solid var(--ch5); padding-left: 10px; font-size: 15px; line-height: 1.45; }
+.k-persp { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+.k-persp > div { flex: none; width: 210px; scroll-snap-align: start; background: var(--sunk); border-radius: 12px; padding: 10px; }
+.k-tl { border-left: 2px solid var(--line); margin-left: 4px; padding-left: 12px; display: flex; flex-direction: column; gap: 8px; }
+.k-tl div { position: relative; }
+.k-tl div::before { content: ""; position: absolute; left: -17px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--ch5); }
+.k-lab { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: none; letter-spacing: .02em; }
+.k-set div { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.k-set i { font-style: normal; color: var(--muted); font-family: var(--f-mono); }
+.k-sw { margin-left: auto; width: 30px; height: 18px; border-radius: 9px; background: var(--ch5); position: relative; }
+.k-sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); }
+.k-sw.off { background: var(--line); } .k-sw.off::after { left: 2px; right: auto; }
+.k-sw.lock { opacity: .5; }
+
+/* Ground 식 */
+.g-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; }
+.g-bar.big { height: 22px; border-radius: 6px; font-size: 10.5px; font-weight: 700; color: #fff; }
+.g-bar > i { display: flex; align-items: center; justify-content: center; font-style: normal; }
+.g-l { background: var(--lean-l); } .g-c { background: var(--lean-c); } .g-r { background: var(--lean-r); }
+.g-blind { background: var(--fg); color: var(--surface); }
+.g-lean { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 5px; color: #fff; }
+.g-fact { font-size: 10px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+.g-stat { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 12px; }
+.g-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.g-tabs button { border: 0; background: none; padding: 7px 10px; font-weight: 600; color: var(--muted); font-size: 12.5px; }
+.g-tabs button[aria-pressed="true"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--fg); }
+
+/* Google 전체 콘텐츠 식 */
+.gg-card { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.gg-card .lead { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.gg-more { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.gg-more div { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.gg-fc { display: inline-flex; gap: 6px; align-items: center; margin: 8px 12px 10px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-weight: 600; color: var(--accent); }
+.gg-hscroll { display: flex; gap: 8px; overflow-x: auto; }
+.gg-hscroll > div { flex: none; width: 170px; border: 1px solid var(--line); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.gg-sec { font-size: 14px; font-weight: 700; }
+.gg-tl div { display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+
+/* SmartNews 식 */
+.s-tabs { display: flex; overflow-x: auto; }
+.s-tabs span { flex: none; padding: 6px 12px 5px; font-weight: 700; color: #fff; font-size: 12px; border-radius: 8px 8px 0 0; margin-right: 2px; opacity: .55; }
+.s-tabs span.on { opacity: 1; }
+.s-line { height: 3px; background: var(--ch1); }
+.s-row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.s-row .t { font-weight: 700; font-size: 13.5px; line-height: 1.4; }
+.s-ai { border: 1.5px solid var(--ch1); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.s-3q { display: flex; flex-direction: column; gap: 8px; }
+.s-3q > div { background: var(--sunk); border-radius: 10px; padding: 8px 10px; }
+.s-3q b { display: block; font-size: 11px; color: var(--ch1); }
+.s-blk { border-left: 3px solid var(--line); padding-left: 10px; display: flex; flex-direction: column; gap: 2px; }
+.s-web { background: var(--sunk); }
+.s-ad { background: var(--ad); color: var(--ad-ink); font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+.s-pop { position: sticky; bottom: 8px; margin: 0 10px; background: var(--fg); color: var(--surface); border-radius: 10px; padding: 8px 10px; font-size: 11.5px; display: flex; gap: 8px; align-items: center; }
+
+/* 네이버 식 */
+.n-tabs { display: flex; gap: 14px; overflow-x: auto; font-weight: 600; font-size: 13px; padding: 10px 14px 0; border-bottom: 1px solid var(--line); }
+.n-tabs span { padding-bottom: 8px; color: var(--muted); flex: none; }
+.n-tabs span.on { color: var(--fg); box-shadow: inset 0 -2px 0 var(--ok); }
+.n-sub { border: 1px solid var(--ok); color: var(--ok); border-radius: 999px; padding: 1px 10px; font-weight: 700; font-size: 11.5px; }
+.n-icons { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); border-block: 1px solid var(--line); padding: 8px 0; }
+.n-icons button { border: 0; background: none; padding: 0; color: inherit; }
+.n-icons button[aria-expanded="true"] { color: var(--ok); font-weight: 700; }
+.n-sum { background: var(--sunk); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.n-stk { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; text-align: center; font-size: 10.5px; }
+.n-stk div { border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px; }
+.n-body p { margin-bottom: 10px; font-size: 13.5px; line-height: 1.7; }
+
+/* Axios 식 */
+.a-wrap { font-size: 13.5px; }
+.a-ax b { font-weight: 800; }
+.a-ax { margin-bottom: 10px; line-height: 1.55; }
+.a-ax ul { margin: 4px 0 0; padding-left: 18px; }
+.a-count { font-family: var(--f-mono); font-size: 11px; background: var(--sunk); border-radius: 6px; padding: 6px 8px; }
+.a-num { font-family: var(--f-mono); font-weight: 700; color: var(--accent); }
+.a-1big { border-top: 3px solid var(--fg); padding-top: 8px; }
+
+/* 뉴닉 식 */
+.nn-hello { background: var(--sunk); border-radius: 16px; padding: 12px; display: flex; gap: 10px; align-items: flex-start; }
+.nn-char { width: 40px; height: 40px; border-radius: 50%; border: 2px dashed var(--muted); display: grid; place-items: center; font-size: 9px; color: var(--muted); flex: none; text-align: center; line-height: 1.1; }
+.nn-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--sunk); border: 1.5px dashed var(--muted); flex: none; }
+.nn-q { font-size: 15px; font-weight: 800; margin: 14px 0 4px; }
+.nn-body p { margin-bottom: 8px; line-height: 1.7; }
+.nn-body ul { margin: 0 0 8px; padding-left: 18px; }
+
+/* 제안 */
+.x-lead { font-size: 14px; line-height: 1.65; }
+.x-inline b { font-weight: 700; }
+.x-blk { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.x-blk:last-child { border-bottom: 0; }
+.x-act { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.x-act div { border: 1px solid var(--line); border-radius: 10px; padding: 8px; text-align: center; font-weight: 600; font-size: 12px; }
+.x-nav { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 10px; font-weight: 600; }
+.x-reader p { margin-bottom: 10px; font-size: 14px; line-height: 1.75; }
+.x-flag { font-size: 10.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 4px; padding: 0 5px; }
+
+/* 정리 */
+.borrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.borrow > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.borrow b { font-size: 15px; }
+.borrow .from { font-size: 12.5px; color: var(--muted); }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <span class="eyebrow">docvault 뉴스 브리핑 · 시장조사 2편 · 2026-10-10</span>
+    <h1>다른 뉴스 앱은 기사를 어떻게 모으고, 어떻게 보여 주나</h1>
+    <p class="lead">8개 서비스의 기사 수집 방식을 정리하고, 같은 기사 하나를 각 서비스 방식대로 다시 그려 봤습니다. 우리 화면과 나란히 놓고 눌러 보며 비교할 수 있습니다.</p>
+    <div class="notice">
+      <b>먼저 알아 두실 것</b>
+      <span>시안 속 기사(한국은행 금리 동결), 언론사 이름, 수치, 언론사 성향 분류는 모두 <b>비교용으로 만든 가상 내용</b>입니다. 각 서비스의 로고와 브랜드 색은 쓰지 않고 화면 구조만 옮겼습니다.</span>
+      <span>조사 환경에서 서비스 사이트에 직접 접속하지 못해, 화면은 공개 자료(보도·도움말·앱스토어 설명·공개 코드)로 다시 만들었습니다. 확인하지 못한 부분은 <span class="unv">[미확인]</span>으로 표시했습니다. Kagi News만 공개된 소스 코드로 섹션 이름과 순서를 직접 확인했습니다.</span>
+    </div>
+    <nav class="toc" aria-label="목차">
+      <a href="#collect">1. 기사를 모으는 방식</a>
+      <a href="#screens">2. 화면 시안</a>
+      <a href="#borrow">3. 가져올 것</a>
+    </nav>
+  </header>
+
+  <!-- ============ 1. 수집 ============ -->
+  <section id="collect">
+    <div class="sec-head">
+      <span class="eyebrow">Part 1</span>
+      <h2>기사를 어디서, 어떻게 모으나</h2>
+      <p class="muted">뉴스 앱이 하는 일은 크게 다섯 단계입니다. 서비스마다 다른 점은 주로 1단계에서 기사를 어떤 조건으로 가져오는지, 4단계에서 글을 누가 쓰는지입니다.</p>
+    </div>
+
+    <div class="stages" role="list">
+      <div class="stage" role="listitem"><span class="n">1 모으기</span><b>기사 확보</b><p>공개 RSS·크롤링, 언론사 제휴·구매, 직접 취재</p></div>
+      <div class="stage" role="listitem"><span class="n">2 묶기</span><b>같은 사건 합치기</b><p>제목 비교, 의미 유사도, 등장 인물·장소 추적</p></div>
+      <div class="stage" role="listitem"><span class="n">3 고르기</span><b>무엇을 위에</b><p>다룬 언론사 수, 최신성, 개인화, 편집자</p></div>
+      <div class="stage" role="listitem"><span class="n">4 쓰기</span><b>누가 쓰나</b><p>원문 그대로, AI가 다시 씀, 사람이 새로 씀</p></div>
+      <div class="stage" role="listitem"><span class="n">5 보여주기</span><b>읽는 화면</b><p>원문으로 보냄, 앱 안에서 보여 줌, 요약만</p></div>
+    </div>
+
+    <div class="map-box">
+      <div class="col" style="display:flex;flex-direction:column;gap:4px">
+        <b>한눈에 보는 위치</b>
+        <span class="muted" style="font-size:14px">가로는 4단계(누가 쓰나), 세로는 1단계(기사를 어떤 조건으로 가져오나)입니다. 한 서비스가 기능에 따라 두 칸에 걸치기도 합니다.</span>
+      </div>
+      <div class="map-scroll">
+        <div class="map">
+          <div></div>
+          <div class="ax top">원문 그대로 보여 줌</div>
+          <div class="ax top">AI가 다시 씀</div>
+          <div class="ax top">사람이 새로 씀</div>
+
+          <div class="ax">공개 RSS·크롤링<br>(계약 없음)</div>
+          <div class="cell"><span class="pin">Google 뉴스 <small>목록·전체 콘텐츠</small></span><span class="pin">Ground News <small>기사 목록</small></span></div>
+          <div class="cell"><span class="pin us">우리 docvault</span><span class="pin">Kagi News</span><span class="pin">Ground News <small>요약</small></span><span class="pin">Google Discover <small>AI 요약</small></span></div>
+          <div class="cell"><span class="pin">뉴닉 <small>공개 기사·SNS를 읽고 씀</small></span></div>
+
+          <div class="ax">언론사 제휴·구매<br>(돈이 오감)</div>
+          <div class="cell"><span class="pin">네이버 뉴스 <small>인링크 본문</small></span><span class="pin">SmartNews <small>스마트 보기</small></span></div>
+          <div class="cell"><span class="pin">Particle</span><span class="pin">SmartNews <small>AI 정리</small></span><span class="pin">네이버 <small>요약</small></span><span class="pin">Google <small>AI 개요 시범</small></span></div>
+          <div class="cell"><span class="muted" style="font-size:12.5px;padding:4px">해당 없음</span></div>
+
+          <div class="ax">직접 취재</div>
+          <div class="cell"><span class="muted" style="font-size:12.5px;padding:4px">해당 없음</span></div>
+          <div class="cell"><span class="muted" style="font-size:12.5px;padding:4px">해당 없음</span></div>
+          <div class="cell"><span class="pin">Axios</span></div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:13.5px">우리는 Kagi News와 같은 칸에 있습니다. 공개 피드를 쓰고, 계약은 없고, 글은 AI가 다시 씁니다. Kagi는 실제로 Google 뉴스 RSS까지 섞어 쓰는 등 수집 구조가 우리와 가장 가깝습니다. 언론사 본문을 앱 안에서 보여 주는 서비스는 모두 아래 줄(제휴·구매)에 있습니다.</p>
+    </div>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>서비스</th><th>1 모으기</th><th>돈·계약</th><th>2 묶기</th><th>3 고르기</th><th>4 쓰기</th><th>주기</th></tr>
+        </thead>
+        <tbody>
+          <tr class="us"><th>우리</th><td>공개 RSS 27개 + Google 뉴스 검색 RSS 40개</td><td>없음. 본문은 저장하지 않음</td><td>제목 정규화로 중복 제거 → Haiku가 같은 사건 묶기 → 분야를 넘는 사건 합치기</td><td>Haiku가 중요도 3단계, 핵심 순서는 다룬 언론사 수</td><td>AI(Haiku·Sonnet)가 제목·요약 새로 씀</td><td>하루 3회 + 버튼</td></tr>
+          <tr><th>Kagi News</th><td>공개 RSS만. 팀 관리 약 1,000개 + 커뮤니티 1만여 개(Google 뉴스 RSS 포함)</td><td>언론사에 돈 안 냄. 결과 데이터는 비상업 라이선스로 공개</td><td>같은 시간대 기사를 의미 유사도로 묶음. 기준값 비공개</td><td>많은 피드가 다룬 사건일수록 강한 신호. 사람이 고르지 않음</td><td>LLM이 칸별로 생성(요약·하이라이트·관점·타임라인 등)</td><td>하루 1회 (한국 21시)</td></tr>
+          <tr><th>Particle</th><td>Reuters·AFP 등 제휴사 API·통신 + 그 밖의 수집 <span class="unv">[방식 미확인]</span></td><td>제휴사 링크를 금색으로 강조. 수익 배분 조건 비공개</td><td>그날 같은 이야기 기사 묶음. 팟캐스트는 임베딩으로 연결</td><td>개인 맞춤 + 카테고리별 인기</td><td>LLM이 글머리표 요약·모드 변환·질문 답변</td><td>계속 갱신</td></tr>
+          <tr><th>Ground News</th><td>하루 3만~6만 건, 5만여 출처 <span class="unv">[RSS/크롤링 미확인]</span></td><td>언론사에 돈 낸다는 정보 없음. 구독으로 운영</td><td>어휘가 달라도 같은 사건이면 묶는 알고리즘</td><td>출처 수·시의성 <span class="unv">[미확인]</span>. 한쪽만 다룬 이야기는 Blindspot으로 따로</td><td>AI 요약 + 진영별 비교 요약(보도가 충분할 때만)</td><td>실시간</td></tr>
+          <tr><th>Google 뉴스</th><td>웹 크롤링. 정책을 지키면 자동 후보</td><td>일반 노출은 무료. News Showcase·AI 개요 시범은 유료 계약</td><td>실시간 스토리라인. 인물·장소가 시간에 따라 함께 나오는 패턴 추적</td><td>관련성·권위·최신성 등. 전체 콘텐츠는 개인화 안 함</td><td>원문 제목 그대로. AI 요약은 Discover·시범만</td><td>실시간</td></tr>
+          <tr><th>SmartNews</th><td>제휴 매체 3,000여 곳의 RSS·전용 포맷</td><td>스마트 보기 광고 수익은 매체 100%. AI 정리는 광고 수익 배분</td><td>비공개</td><td>머신러닝 + 편집팀. 개인화는 일부러 약하게</td><td>원문 그대로. AI 정리(2025, 일본)만 매체별로 요약</td><td>실시간</td></tr>
+          <tr><th>네이버 뉴스</th><td>제휴 3종: 콘텐츠 제휴(기사 구매·인링크), 뉴스스탠드, 검색 제휴</td><td>2020년 기사값 → 광고 수익 배분 공식으로 전환</td><td>언론사들이 비중 있게 다루는 기사를 주제별 클러스터로</td><td>AiRS 추천(비슷한 사용자 + 품질 모델) + 언론사 편집판</td><td>원문 그대로. 요약은 언론사가 동의한 기사에만 생성형</td><td>실시간</td></tr>
+          <tr><th>Axios</th><td>자체 기자(핵심 약 120명 + 지역 100여 명)</td><td>스폰서 광고·유료 구독</td><td>편집자 판단</td><td>편집자 판단</td><td>사람이 Smart Brevity 형식으로</td><td>웹 실시간 + 아침 뉴스레터</td></tr>
+          <tr><th>뉴닉</th><td>에디터가 국내외 매체·SNS·커뮤니티를 모니터링</td><td>기사를 사지 않음. 광고·제휴</td><td>에디터가 매체별 보도를 비교</td><td>매일 아침 에디터 토론 + 이슈 선정 기준표</td><td>사람이 SBAC 구조, 대화체로</td><td>평일 아침</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="svc-list">
+      <details class="svc" open>
+        <summary><b>Kagi News</b><span>우리와 가장 닮은 구조. 공개 소스 코드로 확인</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>README에 "웹사이트를 긁지 않고 공개 RSS만 쓴다"고 명시</li>
+            <li>팀이 관리하는 핵심 피드: 24개 카테고리, 약 1,000개 주소</li>
+            <li>커뮤니티 피드: 누구나 추가, 199개 카테고리, 10,364개 주소. "South Korea" 카테고리도 있음</li>
+            <li>Google 뉴스 RSS 주소가 핵심 32개, 커뮤니티 682개. Reddit·Substack 피드도 섞음</li>
+            <li>언어 제한 없음. 전부 자동 번역</li>
+          </ul></div>
+          <div><h4>묶기·고르기</h4><ul>
+            <li>여러 피드가 같은 주제를 다루면 하나의 이야기로 묶음. "많은 피드가 다룰수록 강한 신호"</li>
+            <li>겹치는 기사가 모자라면 이야기를 아예 만들지 않음("오늘은 이야기가 없습니다")</li>
+            <li>커뮤니티 카테고리는 피드가 25개 이상 모여야 앱에 나옴</li>
+            <li>카테고리당 기본 12개. "아무도 고르지 않는다, 전부 자동"</li>
+          </ul></div>
+          <div><h4>쓰기</h4><ul>
+            <li>LLM이 제목·요약·하이라이트·인용·관점·타임라인·배경·질의응답 등을 채움</li>
+            <li>카테고리에 따라 칸이 더 생김(비즈니스 관점, 리그 순위 등)</li>
+            <li>독자 신고로 정정하면 정정 이력을 공개</li>
+            <li>모델 이름은 비공개</li>
+          </ul></div>
+          <div><h4>돈</h4><ul>
+            <li>언론사에 돈을 내지 않음. 공개 RSS라 계약도 없음</li>
+            <li>Kagi가 만든 판 데이터는 비상업 조건(CC BY-NC)으로 공개</li>
+            <li>하루 1판, 매일 12:00 UTC(한국 21:00)</li>
+          </ul></div>
+          <p class="wide src">출처: github.com/kagisearch/kite-public (README, core_feeds.py, kite_feeds.json, sections.ts), niemanlab.org 2025-10</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>Particle</b><span>제휴 매체와 AI 요약을 섞는 앱</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>2024년 6월부터 Reuters 기사를 구독해 받음. 이후 AFP, Fortune, TIME, The Atlantic 등과 제휴(API·통신 방식)</li>
+            <li>제휴 밖의 대량 수집 방식은 <span class="unv">[미확인]</span></li>
+            <li>한 이야기에 기사가 100개 넘게 붙기도 함. X 게시물·팟캐스트 구간도 붙임</li>
+          </ul></div>
+          <div><h4>묶기·고르기</h4><ul>
+            <li>"그날 같은 이야기를 다룬 기사들의 묶음", 새 보도가 오면 묶음과 요약을 갱신</li>
+            <li>팟캐스트 구간 연결은 생성형이 아닌 임베딩 모델로</li>
+            <li>인물·장소를 알아보는 층이 있어 인물 페이지를 만듦</li>
+          </ul></div>
+          <div><h4>쓰기</h4><ul>
+            <li>LLM이 글머리표 요약, 요약 모드 바꾸기, 질문 답변, 양쪽 시각 정리</li>
+            <li>문장마다 출처가 붙지 않는다는 비판이 있었음</li>
+          </ul></div>
+          <div><h4>돈</h4><ul>
+            <li>"언론사를 돕는 AI 리더"를 표방. 원문 링크를 크게, 제휴사는 금색 강조</li>
+            <li>수입은 유료 구독. 수익 배분 조건은 비공개</li>
+          </ul></div>
+          <p class="wide src">출처: TechCrunch 2024-06, 2024-11, 2025-05, 2026-02 · twipemobile.com · ixd.prattsi.org 디자인 비평(2026-09)</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>Ground News</b><span>언론 성향 데이터를 얹은 묶음형</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>"하루 약 6만 건, 5만여 출처"(페이지마다 3만 건으로도 적혀 있음)</li>
+            <li>새 언론사는 과거 보도·창간 시점·SNS 활동 등으로 걸러 받음</li>
+            <li>RSS인지 크롤링인지는 <span class="unv">[미확인]</span></li>
+          </ul></div>
+          <div><h4>묶기·고르기</h4><ul>
+            <li>쓰는 낱말이 달라도 같은 사건이면 묶음. 묶음이 불완전하다는 리뷰 있음</li>
+            <li>좌우 한쪽이 거의 안 다룬 이야기는 Blindspot 피드로 따로 모음</li>
+          </ul></div>
+          <div><h4>성향 데이터</h4><ul>
+            <li>정치 성향 = AllSides, Ad Fontes Media, Media Bias/Fact Check 세 곳 평가의 평균. 7단계</li>
+            <li>사실성도 같은 세 곳 기반, 언론사 단위 평가</li>
+            <li>소유 구조는 자체 분류</li>
+            <li>"막대가 쏠렸다고 그 이야기가 편향됐다는 뜻은 아니다"라고 안내</li>
+          </ul></div>
+          <div><h4>쓰기·돈</h4><ul>
+            <li>AI가 중립 문장으로 요약. 진영별 비교 요약은 진영마다 보도가 충분할 때만 생성</li>
+            <li>언론사에 돈을 낸다는 정보 없음. 구독 등급과 유튜버 스폰서십으로 운영</li>
+          </ul></div>
+          <p class="wide src">출처: ground.news/about, /rating-system, /bias-bar · help.ground.news 3189505 · CJR "The business of balance"</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>Google 뉴스 (전체 콘텐츠)</b><span>크롤링 + 묶음, 제목은 원문 그대로</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>웹 크롤링. 콘텐츠 정책을 지키면 신청 없이 후보가 됨</li>
+            <li>거의 모든 언어·국가판</li>
+          </ul></div>
+          <div><h4>묶기·고르기</h4><ul>
+            <li>"들어오는 웹 콘텐츠를 실시간 분석해 스토리라인으로 조직"(2018)</li>
+            <li>인물·장소·사물이 시간에 따라 함께 나오는 패턴을 추적. 여러 날 이어지는 이야기도 탐지(2021)</li>
+            <li>신호: 관련성, 눈에 띄는 정도, 최신성, 권위, 사용성, 위치, 언어</li>
+            <li>전체 콘텐츠는 개인화하지 않아 모두에게 같은 화면, 사람 편집자 없음</li>
+          </ul></div>
+          <div><h4>쓰기</h4><ul>
+            <li>원문 제목을 그대로 씀</li>
+            <li>예외: Discover AI 요약(2025-07, 미국), 기사 개요 시범(2025-12, 참여 매체에 돈 지급)</li>
+          </ul></div>
+          <div><h4>돈</h4><ul>
+            <li>일반 노출은 무료</li>
+            <li>News Showcase 라이선스: 2020년 3년간 10억 달러 발표, 국가별로 구글이 매체 선정</li>
+          </ul></div>
+          <p class="wide src">출처: google.com/search/howsearchworks/how-news-works · blog.google 2018 · PCWorld · 9to5Google 2021-03 · TechCrunch 2025-07, 2025-12</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>SmartNews</b><span>제휴 피드 + 앱 안 가벼운 보기</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>기자 없음. 검증한 제휴 매체만 모으는 큐레이션</li>
+            <li>제휴는 사실상 "RSS 피드만 주면 되는" 수준. 제휴 매체 3,000여 곳</li>
+            <li>앱 안 가벼운 화면(스마트 보기)용 전용 피드 규격(SmartFormat)이 따로 있음</li>
+          </ul></div>
+          <div><h4>고르기</h4><ul>
+            <li>서버가 하루 수백만 URL을 분석해 거의 실시간으로 주요 기사 선정</li>
+            <li>머신러닝 + 편집팀. "과한 개인화가 아니라 발견에 맞췄다"</li>
+            <li>중복을 묶는 방식은 비공개</li>
+          </ul></div>
+          <div><h4>돈</h4><ul>
+            <li>첫 클릭은 매체 사이트로 보냄</li>
+            <li>스마트 보기 안 광고 수익은 매체가 100%</li>
+            <li>SmartView First(미국, 2017년경): 앱 안에서 읽힌 양만큼 라이선스료</li>
+          </ul></div>
+          <div><h4>AI 정리 (2025-07, 일본)</h4><ul>
+            <li>같은 주제 여러 매체 기사를 매체별로 따로 요약해 한 화면에</li>
+            <li>맨 위에 "무슨 일 / 왜 / 앞으로" 3칸</li>
+            <li>요약 덩어리 하나에 매체 하나, 매체 이름과 원문 링크</li>
+            <li>시작 시 제휴 53곳, 채택된 기사에 광고 수익 배분, 학습에 안 씀</li>
+          </ul></div>
+          <p class="wide src">출처: Digiday 2017 · Nieman Lab 2019 · digiday.jp 2025-07-25 · internet.watch.impress.co.jp</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>네이버 뉴스</b><span>기사를 사서 안에 싣는 포털</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기 (제휴 3종)</h4><ul>
+            <li>콘텐츠 제휴: 기사를 사서 네이버 안(인링크)에 실음</li>
+            <li>뉴스스탠드 제휴: PC 첫 화면에서 매체를 골라 봄, 언론사 사이트로 이동</li>
+            <li>검색 제휴: 검색 결과에만, 언론사 사이트로 이동, 돈 없음</li>
+            <li>심사: 제평위가 2023년 멈추고, 2025년 네이버 단독 뉴스제휴위원회 출범</li>
+          </ul></div>
+          <div><h4>돈</h4><ul>
+            <li>2020-04 기사값(전재료) 폐지 → 광고 수익 배분</li>
+            <li>배분 공식: 순방문자 20%, 조회수 20%, 충성도 15%, 유효 소비 기사 15%, 누적 구독자 15%, 순증 구독자 15%</li>
+          </ul></div>
+          <div><h4>묶기·고르기</h4><ul>
+            <li>AiRS(2017): 비슷한 사용자가 본 기사 + 기사 품질 모델</li>
+            <li>2019년 첫 화면 사람 편집 중단</li>
+            <li>클러스터: 언론사들이 비중 있게 다루는 기사를 주제별로 묶고, 대표 기사는 사람마다 다름</li>
+            <li>언론사 편집판(구독형)</li>
+          </ul></div>
+          <div><h4>요약</h4><ul>
+            <li>2017 요약봇: 원문에서 3문장을 그대로 뽑는 추출형</li>
+            <li>2025-11 생성형으로 개선, 언론사가 원할 때만 노출(당시 약 31곳)</li>
+            <li>언론계는 사전 협의 부족·맥락 훼손을 비판</li>
+          </ul></div>
+          <p class="wide src">출처: 기자협회보 39527, 46841, 48058, 43159, 52542 · 에너지경제/이투데이 AiRS 안내 · byline.network 2019-04</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>Axios</b><span>기자가 직접 쓰는 짧은 형식</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>자체 기자가 취재. 핵심 뉴스룸 약 120명(2021), 지역판 35개 도시 기자 100명 이상(2026-05)</li>
+            <li>다른 매체 보도도 짧게 요약해 링크 <span class="unv">[관찰]</span></li>
+          </ul></div>
+          <div><h4>쓰기</h4><ul>
+            <li>Smart Brevity: 짧은 제목 → 한 문장 리드 → 굵은 머리말 단락</li>
+            <li>매번 들어가는 건 "새로운 사실 + Why it matters". 나머지 머리말(약 50개)은 기사마다 고름</li>
+            <li>책은 머리말을 "규칙이 아니라 가이드레일"이라고 설명</li>
+          </ul></div>
+          <div><h4>AI·돈</h4><ul>
+            <li>OpenAI와 3년 계약(지역 뉴스레터 비용 지원, 공개 기사 학습 허용). 편집 통제권은 기자</li>
+            <li>스폰서 광고, Axios Pro 유료 구독, 지역 회원제</li>
+          </ul></div>
+          <div><h4>주기</h4><ul>
+            <li>웹 실시간, 주제별 뉴스레터 22종 이상</li>
+            <li>뉴스레터 머리에 "N분 · N단어" 표시(2019~), "1 big thing"으로 시작</li>
+          </ul></div>
+          <p class="wide src">출처: journalism.co.uk · Press Gazette 2026 · thenextweb.com · Fast Company 2019</p>
+        </div>
+      </details>
+
+      <details class="svc">
+        <summary><b>뉴닉</b><span>에디터가 읽고 대화체로 다시 쓰는 뉴스레터</span></summary>
+        <div class="svc-body">
+          <div><h4>모으기</h4><ul>
+            <li>국내 매체는 거의 다, 외신도 많이 봄. 같은 사안을 매체마다 어떻게 다루는지 비교</li>
+            <li>맥락을 잡으려고 책·다큐까지 찾아봄</li>
+            <li>언론 보도와 SNS·커뮤니티 언급 이슈를 모음</li>
+          </ul></div>
+          <div><h4>고르기</h4><ul>
+            <li>매일 아침 에디터 토론 + "이슈 선정 기준표"</li>
+            <li>기준: 독자와의 관련성, 뉴닉이 다뤄야 할 당위성</li>
+          </ul></div>
+          <div><h4>쓰기</h4><ul>
+            <li>SBAC: 요약(S) → 배경(B) → 지금 일어난 일(A) → 전망·쟁점(C)</li>
+            <li>캐릭터가 화자인 대화체, 질문형 소제목</li>
+            <li>반말·존댓말, 이모지 개수까지 독자에게 물어 정함</li>
+          </ul></div>
+          <div><h4>돈·주기</h4><ul>
+            <li>무료 뉴스레터 + 광고·제휴, 앱</li>
+            <li>평일 아침 발송</li>
+          </ul></div>
+          <p class="wide src">출처: newneek.co/@newneek/article/414 (SBAC) · 스티비 인터뷰 · 기자협회보 46242</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ============ 2. 화면 시안 ============ -->
+  <section id="screens">
+    <div class="sec-head">
+      <span class="eyebrow">Part 2</span>
+      <h2>같은 기사, 아홉 가지 화면</h2>
+      <p class="muted">탭을 골라 보세요. 왼쪽은 목록, 오른쪽은 기사를 눌렀을 때 화면입니다. 시안 안의 버튼(요약 방식 바꾸기, 요약 펼치기, 스마트·웹 보기 등)은 실제로 눌러집니다. 마지막 탭은 이번 조사를 합쳐 본 우리 쪽 제안입니다.</p>
+    </div>
+
+    <div class="bench-bar">
+      <div class="tabs" role="tablist" aria-label="서비스" id="tabs"></div>
+      <div class="bar-row">
+        <div class="seg" role="group" aria-label="기기">
+          <button type="button" id="dev-phone" aria-pressed="true">폰</button>
+          <button type="button" id="dev-pc" aria-pressed="false">PC</button>
+        </div>
+        <span class="hint" id="hint"></span>
+      </div>
+    </div>
+
+    <div class="bench" id="bench">
+      <div class="stage-area" id="stage"></div>
+      <aside class="notes" id="notes" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <!-- ============ 3. 정리 ============ -->
+  <section id="borrow">
+    <div class="sec-head">
+      <span class="eyebrow">Part 3</span>
+      <h2>우리 브리핑에 가져올 것</h2>
+      <p class="muted">지난 보고서(docs/시장조사보고서_뉴스브리핑_20261010.md)의 개선 묶음과 연결했습니다.</p>
+    </div>
+    <div class="borrow">
+      <div><b>필수 2칸 + 골라 쓰는 칸</b><span class="from">Axios · Kagi · 뉴닉</span><span>"무슨 일"과 "왜 중요한가"만 고정하고, 배경·숫자·앞으로·관점·타임라인은 재료가 있을 때만. Kagi는 사용자가 칸 순서와 표시를 고칩니다.</span><span class="from">개선 묶음 B1</span></div>
+      <div><b>언론사마다 무엇을 강조했나</b><span class="from">SmartNews AI 정리 · Ground 비교</span><span>요약 덩어리 하나에 매체 하나와 원문 링크. 이미 모으는 "다른 보도"를 그대로 살릴 수 있고, 제목뿐인 기사도 다른 매체 재료로 채워집니다.</span><span class="from">개선 묶음 A1 · C2</span></div>
+      <div><b>출처는 항상 보이게</b><span class="from">Kagi · Particle · Google</span><span>"9개 언론사 · 31개 기사" 같은 출처 줄과 언론사 칩. Kagi는 출처 칸만은 끌 수 없게 했습니다. 오류 신고와 "AI가 틀릴 수 있음" 고지도 공통입니다.</span><span class="from">개선 묶음 B4</span></div>
+      <div><b>원문은 앱 안에서</b><span class="from">SmartNews 스마트 보기 · 네이버 인링크</span><span>둘 다 언론사 계약이 전제입니다. 우리는 개인 도구 방식(누를 때만 받고, 저장하지 않고, 관리자만)으로만 가능합니다.</span><span class="from">개선 묶음 D (저작권 결정 필요)</span></div>
+      <div><b>필요할 때 더 깊게</b><span class="from">Particle · Kagi 질문창</span><span>상세 화면 아래 "이 기사에 대해 묻기". 앱에 이미 있는 AI 질문 기능에 기사 정보를 넘기면 됩니다.</span><span class="from">개선 묶음 C1</span></div>
+      <div><b>쉽게 보기 같은 모드</b><span class="from">Particle · Kagi 읽기 수준</span><span>같은 내용을 "쉽게 / 보통"으로 바꿔 보기. 판을 만들 때 같이 쓰면 비용이 늘고, 누를 때 만들면 기다림이 생깁니다.</span><span class="from">새 제안 · 우선순위 낮음</span></div>
+    </div>
+  </section>
+
+  <footer>
+    작성 2026-10-10 · 조사: Claude 에이전트 2개(공개 보도·도움말·앱스토어 설명, Kagi 공개 코드) · 시안의 기사·언론사·수치·성향은 모두 가상입니다. 실제 서비스 화면과 세부가 다를 수 있습니다.
+  </footer>
+</div>
+
+<!-- ================= 시안 템플릿 ================= -->
+
+<!-- 우리 (지금) -->
+<template id="t-ours-list">
+  <div class="pad col g10">
+    <div class="rowx" style="justify-content:space-between"><span class="mt">‹</span><div class="col" style="text-align:center"><span class="h2">10월 9일 (목) 점심판</span><span class="xs mt">06:30–11:30 기사 · 112건</span></div><span class="mt">›</span></div>
+    <div class="o-lead col g4">
+      <div class="rowx"><span class="h2">오늘의 핵심</span><span class="xs mt">6건 · 약 1분</span><span class="xs sb" style="margin-left:auto;color:var(--why-ink)">1/6 읽음</span></div>
+      <div class="o-row"><span class="o-num">1</span><div class="col"><span class="xs mt sb">국내 · 환율·금리</span><span class="sb">기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'</span><span class="xs mt">위원 6명 중 5명이 동결, 1명이 0.25%p 인하를…</span></div></div>
+      <div class="o-row"><span class="o-num">2</span><div class="col"><span class="xs mt sb">국내 · 수출·무역</span><span class="sb">9월 반도체 수출 역대 최대…전체 수출 7% 증가</span></div></div>
+      <div class="o-row"><span class="o-num">3</span><div class="col"><span class="xs mt sb">세계 · 금리·중앙은행</span><span class="sb">미 연준 의사록 "연내 한 번 더 인하" 다수</span></div></div>
+    </div>
+    <div class="rowx"><span class="o-seg"><span class="on">국내 74</span><span>세계 38</span></span><span class="chip">경제</span><span class="chip">정치</span></div>
+    <div class="col">
+      <div class="o-row"><span class="o-badge o-core">핵심</span><div class="col"><span class="sb">기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'</span><span class="xs mt">환율·금리 · 누리경제 외 11곳 · 11:42</span></div></div>
+      <div class="o-row"><span class="o-badge o-major">주요</span><div class="col"><span>시중은행 주담대 금리 하단 3%대 중반 유지</span><span class="xs mt">환율·금리 · 미래경제 · 11:10</span></div></div>
+      <div class="o-row"><span class="o-badge o-major">주요</span><div class="col"><span>"11월엔 내린다" 채권 금리 일제히 하락</span><span class="xs mt">증시 · 새벽통신 외 2곳 · 11:58</span></div></div>
+      <div class="o-row"><span class="o-badge o-major">주요</span><div class="col"><span>소상공인 단체 "이자 부담 한계" 성명</span><span class="xs mt">노동·교육·복지 · 온누리방송 · 10:20</span></div></div>
+    </div>
+  </div>
+</template>
+<template id="t-ours-detail">
+  <div class="pad col g10">
+    <span class="xs mt sb">국내 · 경제 · 환율·금리</span>
+    <span class="h1">기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'</span>
+    <dl class="o-dl" style="margin:0">
+      <dt>무슨 일</dt><dd>위원 6명 중 5명이 동결, 1명이 0.25%p 인하를 주장했다.</dd>
+      <dt>배경</dt><dd>9월 가계대출이 4조 원 넘게 늘고 수도권 집값 오름세가 이어졌다.</dd>
+      <dt>숫자로 보면</dt><dd>기준금리 2.50% · 가계대출 +4.1조 원 · 환율 1,423원</dd>
+      <dt>앞으로</dt><dd>다음 회의는 11월 27일이다.</dd>
+    </dl>
+    <div class="o-why"><b>왜 중요한가</b>대출 금리 인하가 늦어지고 11월 인하 기대가 시장을 움직인다.</div>
+    <div class="rowx xs mt"><span>누리경제 · 10/9 11:42</span><span style="margin-left:auto">AI 요약 · 발췌 기준</span></div>
+    <div class="bigbtn">원문 보기 ↗</div>
+    <div class="rowx wrapx sm"><span class="mt">다른 보도</span><span class="lnk">새벽통신</span><span class="lnk">한빛일보</span><span class="lnk">바른신문</span><span class="lnk">Global Wire</span></div>
+    <div class="hr"></div>
+    <span class="xs mt sb">같은 목록의 다른 기사를 펼치면</span>
+    <div class="o-row" style="border:0;padding:0"><span class="o-badge o-major">주요</span><span>"11월엔 내린다" 채권 금리 일제히 하락</span></div>
+    <div class="o-empty">요약이 없는 기사예요 · 원문을 확인하세요</div>
+    <span class="note">Google 뉴스로만 들어와 제목밖에 없던 기사. 핵심·주요의 약 15~20% 추정</span>
+  </div>
+</template>
+
+<!-- Particle 식 -->
+<template id="t-particle-list">
+  <div class="pad col g12">
+    <div class="rowx"><span class="h1">For You</span><span class="chip" style="margin-left:auto">세계</span><span class="chip">경제</span></div>
+    <div class="col g6">
+      <div class="ph wide"></div>
+      <span class="h2">한국은행, 금리 또 묶었다…11월엔 내릴까</span>
+      <ul style="margin:0;padding-left:16px" class="sm"><li>세 번 연속 동결, 위원 1명은 인하 의견</li><li>가계대출 급증·집값 오름세가 이유</li></ul>
+      <div class="rowx"><span class="avs"><span class="av">새</span><span class="av">누</span><span class="av">한</span><span class="av">바</span><span class="av">G</span></span><span class="xs mt">12개 매체 · 38개 기사 · 2시간 전</span></div>
+    </div>
+    <div class="hr"></div>
+    <div class="col g6">
+      <div class="ph wide" style="aspect-ratio:21/9"></div>
+      <span class="h2">반도체가 끌어올린 9월 수출</span>
+      <div class="rowx"><span class="avs"><span class="av">미</span><span class="av">다</span><span class="av">A</span></span><span class="xs mt">8개 매체 · 21개 기사 · 4시간 전</span></div>
+    </div>
+  </div>
+</template>
+<template id="t-particle-detail">
+  <div class="col g12 pad" data-switch>
+    <div class="ph wide" style="aspect-ratio:2/1"></div>
+    <span class="h1">한국은행, 금리 또 묶었다…11월엔 내릴까</span>
+    <div class="rowx"><span class="avs"><span class="av">새</span><span class="av">누</span><span class="av">한</span><span class="av">바</span><span class="av">G</span></span><span class="xs mt">12개 매체 · 38개 기사</span></div>
+    <div class="p-modes" role="group" aria-label="요약 방식">
+      <button class="chip" data-show="sum" aria-pressed="true">핵심 요약</button>
+      <button class="chip" data-show="eli5" aria-pressed="false">아이에게 설명하듯</button>
+      <button class="chip" data-show="w5" aria-pressed="false">5W</button>
+      <button class="chip" data-show="sides" aria-pressed="false">양쪽 시각</button>
+      <button class="chip" data-show="en" aria-pressed="false">English</button>
+    </div>
+    <div data-panel="sum"><ul style="margin:0;padding-left:16px" class="col g6">
+      <li>금통위가 기준금리를 연 2.50%로 세 번 연속 동결했다.</li>
+      <li>위원 1명이 0.25%p 인하 소수의견을 냈다. 시장은 11월 인하 신호로 읽는다.</li>
+      <li>9월 가계대출이 4.1조 원 늘고 수도권 집값이 계속 오른 것이 동결 이유로 꼽혔다.</li>
+      <li>총재는 "11월 인하 가능성을 닫지 않았다"고 말했다.</li>
+    </ul></div>
+    <div data-panel="eli5" hidden><div class="p-eli5">은행에서 돈을 빌리면 이자를 내죠? 그 이자의 기준을 정하는 곳이 한국은행이에요. 이번에도 기준을 그대로 뒀어요. 지금 내리면 사람들이 돈을 더 빌려서 집값이 더 오를까 봐 걱정됐거든요. 그래도 다음엔 내릴 수도 있다는 힌트를 남겼어요.</div></div>
+    <div data-panel="w5" hidden><div class="p-5w">
+      <b>누가</b><span>한국은행 금융통화위원회</span>
+      <b>무엇을</b><span>기준금리 연 2.50% 동결 (3회 연속)</span>
+      <b>언제</b><span>10월 9일 정례회의</span>
+      <b>어디서</b><span>서울 한국은행 본관</span>
+      <b>왜</b><span>가계대출 급증, 집값 오름세, 높은 환율</span>
+    </div></div>
+    <div data-panel="sides" hidden class="col g8">
+      <div class="p-spec" aria-label="언론사 위치 (가상)"><span class="av" style="left:8%">한</span><span class="av" style="left:20%">가</span><span class="av" style="left:42%">새</span><span class="av" style="left:50%">누</span><span class="av" style="left:57%">G</span><span class="av" style="left:76%">바</span><span class="av" style="left:86%">하</span></div>
+      <div class="rowx xs mt" style="justify-content:space-between"><span>진보</span><span>보수</span></div>
+      <div class="p-sides">
+        <div><span class="xs b">빨리 내려야</span><p class="sm">자영업자·청년 대출자의 이자 부담이 한계에 왔다.</p></div>
+        <div><span class="xs b">아직 이르다</span><p class="sm">지금 내리면 집값과 가계부채를 다시 키운다.</p></div>
+      </div>
+    </div>
+    <div data-panel="en" hidden><ul style="margin:0;padding-left:16px" class="col g6"><li>The Bank of Korea held its policy rate at 2.50% for a third straight meeting.</li><li>One board member dissented in favor of a 25bp cut.</li></ul></div>
+    <div class="col g4" style="border-left:3px solid var(--line);padding-left:10px"><span style="font-size:15px">"물가보다 금융안정이 더 급한 과제였다."</span><span class="xs mt">한국은행 총재 · 새벽통신</span></div>
+    <span class="h2">원문 기사</span>
+    <div class="p-src partner"><span class="av">새</span><div class="col"><span class="xs"><b>새벽통신</b> · 김OO 기자 · <span style="color:var(--gold)" class="b">제휴</span></span><span class="sb">한은, 기준금리 연 2.50% 동결…3회 연속</span></div></div>
+    <div class="p-src"><span class="av">누</span><div class="col"><span class="xs"><b>누리경제</b> · 박OO 기자</span><span class="sb">소수의견 1명…"11월 인하 문 열렸다"</span></div></div>
+    <span class="h2">물어보기</span>
+    <div class="rowx wrapx"><span class="chip">내 대출 이자는 언제 내려가?</span><span class="chip">소수의견이 왜 중요해?</span></div>
+    <div class="p-ask"><span>이 이야기에 대해 물어보세요</span><span>묻기</span></div>
+    <span class="xs mt">다른 사람들의 질문 14개 보기</span>
+  </div>
+</template>
+
+<!-- Kagi 식 -->
+<template id="t-kagi-list">
+  <div class="col">
+    <div class="pad col g8 k-top">
+      <div class="rowx"><span class="h2">10월 9일 (목)</span><span class="xs mt" style="margin-left:auto">하루 한 판 · 21:00</span></div>
+      <div class="k-tabs"><span>세계</span><span class="on">한국</span><span>비즈니스</span><span>기술</span><span>과학</span></div>
+    </div>
+    <div class="pad col" style="padding-top:2px">
+      <div class="k-row"><span class="k-cat">한국 · 경제</span><span class="h2">한국은행, 기준금리 2.50% 세 번째 동결</span></div>
+      <div class="k-row read"><span class="k-cat">한국 · 산업</span><span class="h2">9월 수출, 반도체 힘입어 7% 증가</span></div>
+      <div class="k-row"><span class="k-cat">한국 · 정치</span><span class="h2">국정감사 첫날, 금리·환율 질의 집중</span></div>
+      <div class="k-row"><span class="k-cat">한국 · 사회</span><span class="h2">수도권 아파트 거래량 석 달째 증가</span></div>
+      <div class="k-row" style="border:0"><span class="k-cat">한국 · 기술</span><span class="h2">통신 3사, 위성 문자 서비스 공동 추진</span></div>
+      <div class="card col g4" style="margin-top:8px"><span class="xs b mt">On This Day</span><span class="sm">이날의 지난 사건 몇 줄이 목록 끝에 붙습니다.</span></div>
+    </div>
+  </div>
+</template>
+<template id="t-kagi-detail">
+  <div class="pad col g12">
+    <div class="rowx"><span class="k-cat">한국 · 경제</span><button class="chip" style="margin-left:auto" data-toggle="kset" aria-expanded="false">섹션 설정</button></div>
+    <div class="card col g4" data-target="kset" hidden>
+      <span class="xs b">기사 섹션 — 끌어서 순서 바꾸기</span>
+      <div class="k-set">
+        <div><i>≡</i>요약<span class="k-sw"></span></div>
+        <div><i>≡</i>출처 <span class="xs mt">항상 표시</span><span class="k-sw lock"></span></div>
+        <div><i>≡</i>하이라이트<span class="k-sw"></span></div>
+        <div><i>≡</i>인용<span class="k-sw off"></span></div>
+        <div><i>≡</i>관점<span class="k-sw"></span></div>
+        <div><i>≡</i>타임라인<span class="k-sw"></span></div>
+      </div>
+    </div>
+    <span class="h1">한국은행, 기준금리 2.50% 세 번째 동결</span>
+    <div class="rowx"><span class="chip" aria-pressed="false">아주 쉽게</span><span class="chip">쉽게</span><span class="chip" aria-pressed="true">보통</span></div>
+    <p>금융통화위원회가 기준금리를 연 2.50%로 묶었다<span class="k-cite">1</span>. 가계대출이 9월에만 4조 원 넘게 늘고 수도권 집값이 오르면서 인하를 미뤘다<span class="k-cite">2</span>. 위원 1명이 인하 의견을 내 11월 인하 가능성이 커졌다는 해석이 나온다<span class="k-cite">3</span>.</p>
+    <div class="col g6"><span class="k-lab">출처 · 9개 언론사, 31개 기사</span>
+      <div class="k-src"><span class="chip">새벽통신 6</span><span class="chip">누리경제 5</span><span class="chip">Global Wire 3 <span class="k-pay">유료</span></span><span class="chip">한빛일보 4</span><span class="chip">바른신문 3</span></div>
+    </div>
+    <div class="col g6"><span class="k-lab">하이라이트</span>
+      <ol class="k-hl"><li><b>세 번째 동결:</b> 7월·8월에 이어 연 2.50%를 유지했다.</li><li><b>소수의견:</b> 위원 1명이 0.25%p 인하를 주장했다.</li><li><b>가계대출:</b> 9월 증가 폭이 4.1조 원으로 올해 최대다.</li></ol>
+    </div>
+    <div class="k-quote">"물가보다 금융안정이 더 급한 과제였다."<div class="xs mt" style="margin-top:4px">한국은행 총재 · 새벽통신</div></div>
+    <div class="col g6"><span class="k-lab">관점</span>
+      <div class="k-persp">
+        <div><b class="sm">증권가:</b> <span class="sm">소수의견을 11월 인하 예고로 본다.</span><div class="xs mt">누리경제 • 미래경제</div></div>
+        <div><b class="sm">부동산 업계:</b> <span class="sm">동결로 대출 수요가 잠시 식을 것으로 본다.</span><div class="xs mt">바른신문</div></div>
+        <div><b class="sm">소상공인 단체:</b> <span class="sm">이자 부담이 한계라며 인하를 요구했다.</span><div class="xs mt">한빛일보</div></div>
+      </div>
+    </div>
+    <div class="col g6"><span class="k-lab">타임라인</span>
+      <div class="k-tl"><div><b class="sm">7월 10일</b><br><span class="sm">기준금리 동결</span></div><div><b class="sm">8월 28일</b><br><span class="sm">두 번째 동결</span></div><div><b class="sm">10월 2일</b><br><span class="sm">9월 가계대출 +4.1조 원 발표</span></div><div><b class="sm">10월 9일</b><br><span class="sm">세 번째 동결, 소수의견 1명</span></div></div>
+    </div>
+    <div class="col g4"><span class="k-lab">짧은 질문</span><span class="sm"><b>대출 금리는 바로 바뀌나?</b> 은행 대출 금리는 시장 금리를 따라 움직여, 이미 일부는 내려가고 있다.</span></div>
+    <div class="rowx wrapx"><span class="chip">공유</span><span class="chip">오류 신고</span><span class="chip">닫기</span></div>
+    <div class="p-ask"><span>이 이야기에 대해 묻기…</span><span>묻기</span></div>
+    <span class="xs mt">요약은 AI가 만들었고 틀릴 수 있습니다.</span>
+  </div>
+</template>
+
+<!-- Ground 식 -->
+<template id="t-ground-list">
+  <div class="pad col g12">
+    <div class="rowx"><span class="h1">Top News</span><span class="chip" style="margin-left:auto">Blindspot</span></div>
+    <div class="card col g6">
+      <div class="rowx"><div class="ph sq"></div><div class="col g4" style="min-width:0"><span class="xs mt">경제 · 한국</span><span class="h2">한국은행, 기준금리 2.50% 세 번째 동결</span></div></div>
+      <div class="g-bar"><i class="g-l" style="width:25%"></i><i class="g-c" style="width:50%"></i><i class="g-r" style="width:25%"></i></div>
+      <span class="xs mt">중도 50% · 12개 출처</span>
+    </div>
+    <div class="card col g6">
+      <div class="rowx"><span class="tag g-blind">Blindspot</span><span class="xs mt">진보 쪽 보도가 거의 없음</span></div>
+      <span class="h2">공공기관 지방 이전 2차 명단 초안 유출</span>
+      <div class="g-bar"><i class="g-l" style="width:6%"></i><i class="g-c" style="width:24%"></i><i class="g-r" style="width:70%"></i></div>
+      <span class="xs mt">보수 70% · 10개 출처</span>
+    </div>
+    <span class="note">성향 분류는 모두 가상입니다</span>
+  </div>
+</template>
+<template id="t-ground-detail">
+  <div class="pad col g12">
+    <div class="rowx"><span class="chip">경제</span><span class="chip">한국은행</span><span class="chip">금리</span></div>
+    <span class="h1">한국은행, 기준금리 2.50% 세 번째 동결</span>
+    <div data-switch class="col g10">
+      <div class="g-tabs" role="group"><button data-show="gs" aria-pressed="true">요약</button><button data-show="gc" aria-pressed="false">진영별 비교</button></div>
+      <div data-panel="gs"><ul style="margin:0;padding-left:16px" class="col g4"><li>금통위가 기준금리를 연 2.50%로 동결했다.</li><li>위원 1명이 0.25%p 인하 의견을 냈다.</li><li>가계대출 증가와 집값이 동결 이유로 꼽혔다.</li></ul></div>
+      <div data-panel="gc" hidden class="col g8">
+        <div class="col g4"><span class="g-lean g-l" style="align-self:flex-start">진보 쪽</span><span class="sm">자영업자 이자 부담과 내수 부진을 앞세우며 "인하가 늦었다"는 비판을 강조.</span></div>
+        <div class="col g4"><span class="g-lean g-c" style="align-self:flex-start">중도</span><span class="sm">소수의견과 11월 인하 가능성, 채권 시장 반응에 초점.</span></div>
+        <div class="col g4"><span class="g-lean g-r" style="align-self:flex-start">보수 쪽</span><span class="sm">집값·가계부채를 근거로 "동결은 불가피"했다는 평가를 강조.</span></div>
+      </div>
+    </div>
+    <div class="card col g6">
+      <span class="xs b">보도 현황</span>
+      <div class="g-bar big"><i class="g-l" style="width:25%">25%</i><i class="g-c" style="width:50%">중도 50%</i><i class="g-r" style="width:25%">25%</i></div>
+      <div class="g-stat"><span>전체 출처</span><b>12</b><span>진보 쪽</span><b>3</b><span>중도</span><b>6</b><span>보수 쪽</span><b>3</b><span>마지막 갱신</span><b>12분 전</b></div>
+    </div>
+    <div data-switch class="col g6">
+      <div class="g-tabs" role="group"><button data-show="aa" aria-pressed="true">전체 12</button><button data-show="al" aria-pressed="false">진보 3</button><button data-show="ac" aria-pressed="false">중도 6</button><button data-show="ar" aria-pressed="false">보수 3</button></div>
+      <div data-panel="aa" class="col g8">
+        <div class="col g4"><div class="rowx"><span class="av">새</span><b class="sm">새벽통신</b><span class="g-lean g-c">중도</span><span class="g-fact">사실성 높음</span></div><span class="sb">한은, 기준금리 연 2.50% 동결…3회 연속</span><span class="xs mt">11:42 · 기사 전체 읽기</span></div>
+        <div class="col g4"><div class="rowx"><span class="av">한</span><b class="sm">한빛일보</b><span class="g-lean g-l">진보 쪽</span><span class="g-fact">사실성 높음</span></div><span class="sb">"또 동결"…자영업자 이자 고통 외면했나</span><span class="xs mt">12:05 · 기사 전체 읽기</span></div>
+        <div class="col g4"><div class="rowx"><span class="av">바</span><b class="sm">바른신문</b><span class="g-lean g-r">보수 쪽</span><span class="g-fact">사실성 보통</span></div><span class="sb">집값 불씨 남아…한은 동결은 불가피</span><span class="xs mt">12:20 · 기사 전체 읽기</span></div>
+      </div>
+      <div data-panel="al" hidden class="col g4"><div class="rowx"><span class="av">한</span><b class="sm">한빛일보</b><span class="g-lean g-l">진보 쪽</span></div><span class="sb">"또 동결"…자영업자 이자 고통 외면했나</span></div>
+      <div data-panel="ac" hidden class="col g4"><div class="rowx"><span class="av">새</span><b class="sm">새벽통신</b><span class="g-lean g-c">중도</span></div><span class="sb">한은, 기준금리 연 2.50% 동결…3회 연속</span></div>
+      <div data-panel="ar" hidden class="col g4"><div class="rowx"><span class="av">바</span><b class="sm">바른신문</b><span class="g-lean g-r">보수 쪽</span></div><span class="sb">집값 불씨 남아…한은 동결은 불가피</span></div>
+    </div>
+  </div>
+</template>
+
+<!-- Google 전체 콘텐츠 식 -->
+<template id="t-google-list">
+  <div class="pad col g12">
+    <div class="col"><span class="h1">브리핑</span><span class="xs mt">10월 9일 목요일 · 서울 18°</span></div>
+    <span class="h2">주요 뉴스 ›</span>
+    <div class="gg-card">
+      <div class="ph wide" style="border-radius:0"></div>
+      <div class="lead"><span class="xs b">새벽통신</span><span class="h2">[속보] 한은, 기준금리 연 2.50% 동결…3회 연속</span><span class="xs mt">1시간 전 · 김OO</span></div>
+      <div class="gg-more">
+        <div><span class="xs b">누리경제</span><br><span class="sm sb">소수의견 1명…"11월 인하 문 열렸다"</span></div>
+        <div><span class="xs b">한빛일보</span><br><span class="sm sb">"또 동결"…자영업자 이자 고통 외면했나</span></div>
+      </div>
+      <span class="gg-fc">전체 콘텐츠 보기</span>
+    </div>
+    <span class="note">제목은 언론사 원문 그대로 (AI가 다시 쓰지 않음)</span>
+  </div>
+</template>
+<template id="t-google-detail">
+  <div class="pad col g12">
+    <span class="h1">한국은행 기준금리</span>
+    <span class="xs mt">모든 사람에게 같은 화면 · 개인화 없음</span>
+    <span class="gg-sec">주요 보도</span>
+    <div class="gg-hscroll">
+      <div><div class="ph" style="height:70px"></div><span class="xs b">새벽통신</span><span class="sm sb">한은, 기준금리 연 2.50% 동결…3회 연속</span></div>
+      <div><div class="ph" style="height:70px"></div><span class="xs b">누리경제</span><span class="sm sb">소수의견 1명…"11월 인하 문 열렸다"</span></div>
+      <div><div class="ph" style="height:70px"></div><span class="xs b">Global Wire</span><span class="sm sb">Bank of Korea holds rates, one dissent</span></div>
+    </div>
+    <span class="gg-sec">타임라인</span>
+    <div class="gg-tl col">
+      <div><span class="xs mt">10월 9일</span><span class="sm">한은, 기준금리 2.50% 동결 <span class="mt">· 새벽통신</span></span></div>
+      <div><span class="xs mt">10월 2일</span><span class="sm">9월 가계대출 4.1조 증가…올해 최대 <span class="mt">· 미래경제</span></span></div>
+      <div><span class="xs mt">8월 28일</span><span class="sm">금통위, 두 번째 동결 <span class="mt">· 온누리방송</span></span></div>
+    </div>
+    <span class="gg-sec">자주 묻는 질문 <span class="unv">[미확인]</span></span>
+    <div class="card sm"><b>기준금리가 무엇인가요?</b><br><span class="mt">답 대신 그 질문에 답하는 기사 링크가 붙습니다.</span></div>
+    <span class="gg-sec">의견·분석</span>
+    <div class="gg-hscroll"><div><span class="xs b">하늘신문 · 칼럼</span><span class="sm sb">한은의 동결, 시간을 번 것인가</span></div><div><span class="xs b">가람일보 · 분석</span><span class="sm sb">소수의견 1명이 말해 주는 것</span></div></div>
+    <span class="gg-sec">모든 보도</span>
+    <div class="col sm"><span>• 바른신문 — 집값 불씨 남아…한은 동결은 불가피</span><span>• 다온경제 — 동결에도 주담대 금리는 하락세</span><span class="lnk">더 보기</span></div>
+    <span class="note">섹션 이름과 순서는 공개 자료와 2018년 보도 기준</span>
+  </div>
+</template>
+
+<!-- SmartNews 식 -->
+<template id="t-smart-list">
+  <div class="col">
+    <div class="s-tabs" style="padding:8px 10px 0"><span class="on" style="background:var(--ch1)">톱</span><span style="background:var(--ch2)">경제</span><span style="background:var(--ch3)">정치</span><span style="background:var(--ch4)">국제</span><span style="background:var(--ch5)">테크</span></div>
+    <div class="s-line"></div>
+    <div class="pad col g10">
+      <div class="rowx sm mt"><span>서울 맑음 18° / 9°</span></div>
+      <div class="col g6"><div class="ph wide"></div><span class="h2">한은, 기준금리 연 2.50% 동결…3회 연속</span><span class="xs mt">새벽통신 · 1시간 전</span></div>
+      <div class="s-ai"><span class="xs b" style="color:var(--ch1)">AI 정리 · 6개 매체</span><span class="sb">금리 동결, 무슨 일이고 앞으로 어떻게 되나</span></div>
+      <div class="col">
+        <div class="s-row"><div class="col g4" style="flex:1"><span class="t">소수의견 1명…"11월 인하 문 열렸다"</span><span class="xs mt">누리경제 · 2시간 전</span></div><div class="ph sq"></div></div>
+        <div class="s-row"><div class="col g4" style="flex:1"><span class="t">9월 반도체 수출 역대 최대</span><span class="xs mt">미래경제 · 3시간 전</span></div><div class="ph sq"></div></div>
+        <div class="s-row" style="border:0"><div class="col g4" style="flex:1"><span class="t">통신 3사, 위성 문자 공동 추진</span><span class="xs mt">온누리방송 · 3시간 전</span></div><div class="ph sq"></div></div>
+      </div>
+    </div>
+  </div>
+</template>
+<template id="t-smart-detail">
+  <div class="col" data-switch style="min-height:100%">
+    <div class="pad sticky" style="padding-bottom:8px;border-bottom:1px solid var(--line)">
+      <div class="seg" role="group" style="display:flex"><button data-show="ai" aria-pressed="true" style="flex:1">AI 정리</button><button data-show="sv" aria-pressed="false" style="flex:1">스마트 보기</button><button data-show="web" aria-pressed="false" style="flex:1">웹 보기</button></div>
+    </div>
+    <div data-panel="ai" class="pad col g10">
+      <span class="h1">금리 동결, 무슨 일이고 앞으로 어떻게 되나</span>
+      <div class="s-3q">
+        <div><b>무슨 일이 있었나</b>한국은행이 기준금리를 연 2.50%로 세 번 연속 동결했다.</div>
+        <div><b>왜 일어났나</b>가계대출이 크게 늘고 집값이 오르는 가운데 내리기 어려웠다.</div>
+        <div><b>앞으로 어떻게 되나</b>소수의견 1명이 나와 11월 인하 가능성이 거론된다.</div>
+      </div>
+      <span class="xs b mt">매체별 정리</span>
+      <div class="s-blk"><span class="xs b">새벽통신에 따르면</span><span class="sm">위원 6명 중 5명이 동결에 찬성했다.</span><span class="xs lnk">원문 기사 ›</span></div>
+      <div class="s-blk"><span class="xs b">누리경제에 따르면</span><span class="sm">채권 시장은 11월 인하를 70% 확률로 반영했다.</span><span class="xs lnk">원문 기사 ›</span></div>
+      <div class="s-blk"><span class="xs b">온누리방송에 따르면</span><span class="sm">소상공인 단체는 이자 부담 완화를 요구했다.</span><span class="xs lnk">원문 기사 ›</span></div>
+      <span class="xs mt">요약 덩어리 하나에 매체 하나 · 채택된 매체에 광고 수익 배분</span>
+    </div>
+    <div data-panel="sv" hidden class="pad col g10">
+      <span class="xs b">새벽통신</span>
+      <span class="h1">한은, 기준금리 연 2.50% 동결…3회 연속</span>
+      <span class="xs mt">2026.10.09 11:42</span>
+      <div class="ph wide"></div>
+      <p class="sm" style="line-height:1.75">한국은행 금융통화위원회는 9일 정례회의를 열고 기준금리를 연 2.50%로 유지했다. 7월과 8월에 이어 세 번째 동결이다.</p>
+      <p class="sm" style="line-height:1.75">이번 회의에서는 위원 1명이 0.25%포인트 인하 의견을 냈다. 시장에서는 이를 다음 회의 인하 신호로 받아들이는 분위기다.</p>
+      <span class="lnk sm">원문 기사 읽기 ›</span>
+      <span class="xs mt">사진·본문만 남긴 가벼운 화면 · 미리 받아 두어 바로 열리고 오프라인에서도 읽힘</span>
+    </div>
+    <div data-panel="web" hidden class="s-web col" style="flex:1">
+      <div class="s-ad" style="height:46px;margin:8px">광고 배너</div>
+      <div class="pad col g8" style="background:var(--surface)">
+        <span class="xs mt">홈 › 경제 › 금융</span>
+        <span class="h2">한은, 기준금리 연 2.50% 동결…3회 연속</span>
+        <span class="xs mt">입력 2026.10.09 11:42 · 글자 크기 · 공유</span>
+        <p class="xs">한국은행 금융통화위원회는 9일 정례회의를 열고 기준금리를…</p>
+        <div class="s-ad" style="height:120px">광고</div>
+        <p class="xs">이번 회의에서는 위원 1명이…</p>
+        <div class="s-ad" style="height:60px">추천 기사 광고</div>
+      </div>
+      <div class="s-pop"><span>앱에서 더 편하게 보세요</span><span style="margin-left:auto;font-weight:700">설치</span></div>
+    </div>
+  </div>
+</template>
+
+<!-- 네이버 식 -->
+<template id="t-naver-list">
+  <div class="col">
+    <div class="n-tabs"><span>언론사편집</span><span class="on">경제</span><span>정치</span><span>사회</span><span>세계</span><span>IT</span></div>
+    <div class="pad col g12">
+      <span class="h2">헤드라인 뉴스</span>
+      <div class="col g6">
+        <div class="rowx" style="align-items:flex-start"><div class="col g4" style="flex:1"><span class="sb">한은, 기준금리 연 2.50% 동결…3회 연속</span><span class="xs mt">새벽통신 · 1시간 전</span></div><div class="ph sq"></div></div>
+        <div class="sm" style="border-left:2px solid var(--line);padding-left:8px">소수의견 1명…"11월 인하 문 열렸다" <span class="xs mt">누리경제</span></div>
+        <div class="sm" style="border-left:2px solid var(--line);padding-left:8px">"또 동결"…자영업자 이자 고통 외면했나 <span class="xs mt">한빛일보</span></div>
+        <span class="xs sb" style="color:var(--ok)">관련뉴스 12건 전체보기 ›</span>
+      </div>
+      <div class="hr"></div>
+      <div class="card col g6">
+        <div class="rowx"><span class="av">미</span><b class="sm">미래경제</b><span class="n-sub" style="margin-left:auto">구독</span></div>
+        <div class="ph wide" style="aspect-ratio:2/1"></div>
+        <span class="sb sm">언론사가 직접 고른 주요 기사 판</span>
+      </div>
+    </div>
+  </div>
+</template>
+<template id="t-naver-detail">
+  <div class="pad col g10">
+    <div class="rowx"><span class="av">새</span><b>새벽통신</b><span class="n-sub" style="margin-left:auto">+ 구독</span></div>
+    <span class="xs mt">경제</span>
+    <span class="h1">한은, 기준금리 연 2.50% 동결…3회 연속</span>
+    <div class="rowx xs mt wrapx"><span>입력 2026.10.09. 오전 11:42</span><span>기사원문</span><span>김OO 기자</span></div>
+    <div class="n-icons"><span>댓글 38</span><button data-toggle="nsum" aria-expanded="false">요약</button><span>본문 듣기</span><span>가가</span><span>공유</span></div>
+    <div class="n-sum" data-target="nsum" hidden>
+      <span class="xs b">자동 요약</span>
+      <span class="sm">한국은행이 기준금리를 연 2.50%로 세 번 연속 동결했다. 위원 1명은 0.25%p 인하 의견을 냈다. 가계대출 증가와 집값 오름세가 동결 이유로 꼽혔다.</span>
+      <span class="xs mt">기사 제목과 주요 문장을 기반으로 자동 요약한 결과입니다. 전체 맥락을 이해하려면 기사 본문 전체보기를 권장합니다.</span>
+      <span class="note">2017 추출형 3문장 → 2025-11 생성형, 언론사가 동의한 기사만</span>
+    </div>
+    <div class="ph wide"></div>
+    <span class="xs mt">한국은행 본관 (사진 설명)</span>
+    <div class="n-body">
+      <p>한국은행 금융통화위원회는 9일 정례회의를 열고 기준금리를 연 2.50%로 유지했다. 7월과 8월에 이어 세 번째 동결이다.</p>
+      <p>이번 회의에서는 위원 1명이 0.25%포인트 인하 의견을 냈다. 시장에서는 이를 11월 인하 신호로 받아들이는 분위기다.</p>
+    </div>
+    <div class="card rowx"><span class="av">김</span><div class="col"><b class="sm">김OO 기자</b><span class="xs mt">기자 구독 · 응원</span></div></div>
+    <div class="n-stk"><div>쏠쏠정보<br><b>12</b></div><div>흥미진진<br><b>3</b></div><div>공감백배<br><b>8</b></div><div>분석탁월<br><b>21</b></div><div>후속강추<br><b>30</b></div></div>
+    <span class="h2">새벽통신 랭킹 뉴스</span>
+    <div class="col sm"><span>1 한은, 기준금리 동결…3회 연속</span><span>2 9월 반도체 수출 역대 최대</span></div>
+    <span class="note">원문이 포털 안에 그대로(인링크) — 기사를 사 오는 계약이 전제</span>
+  </div>
+</template>
+
+<!-- Axios 식 -->
+<template id="t-axios-list">
+  <div class="pad col g12 a-wrap">
+    <span class="eyebrow" style="font-size:11px">AM 뉴스레터 · 10월 9일</span>
+    <div class="a-count">Smart Brevity count: 4분 · 980단어</div>
+    <div class="a-1big col g4"><span class="xs b">1 big thing</span><span class="h2">한은, 금리 또 묶었다 — 문은 열어 뒀다</span><span class="sm">기준금리가 세 번 연속 2.50%에 머물렀다. 하지만 위원 1명이 처음으로 인하 쪽에 섰다.</span></div>
+    <div class="col g4"><span class="rowx"><span class="a-num">2.</span><b class="sm">반도체가 끌어올린 9월 수출</b></span><span class="sm mt">수출이 7% 늘었다. 증가분의 대부분이 반도체다.</span></div>
+    <div class="col g4"><span class="rowx"><span class="a-num">3.</span><b class="sm">연준 의사록: "한 번 더"</b></span><span class="sm mt">위원 다수가 연내 추가 인하를 지지했다.</span></div>
+    <div class="col g4"><span class="rowx"><span class="a-num">4.</span><b class="sm">위성 문자, 통신 3사가 같이 한다</b></span></div>
+  </div>
+</template>
+<template id="t-axios-detail">
+  <div class="pad col g10 a-wrap">
+    <span class="xs b" style="color:var(--accent)">경제</span>
+    <span class="h1">한은, 금리 또 묶었다 — 문은 열어 뒀다</span>
+    <div class="rowx"><span class="av">박</span><span class="xs mt">박OO · 10월 9일 오후 12:10</span></div>
+    <div class="ph wide"></div>
+    <p class="a-ax"><b>기준금리가 세 번 연속 연 2.50%에 머물렀다.</b> 하지만 금통위원 1명이 처음으로 인하 쪽에 섰다.</p>
+    <p class="a-ax"><b>Why it matters:</b> 대출자에게 금리 인하는 빨라야 11월이다. 채권 시장은 이미 그 쪽에 돈을 걸었다.</p>
+    <p class="a-ax"><b>Driving the news:</b> 위원 6명 중 5명이 동결, 1명이 0.25%p 인하에 표를 던졌다.</p>
+    <div class="a-ax"><b>By the numbers:</b><ul><li>기준금리 2.50%</li><li>9월 가계대출 +4.1조 원, 올해 최대</li><li>원/달러 환율 1,423원</li></ul></div>
+    <p class="a-ax"><b>Yes, but:</b> 집값이 다시 뛰면 11월도 장담할 수 없다.</p>
+    <p class="a-ax"><b>What's next:</b> 다음 회의는 11월 27일.</p>
+    <p class="a-ax"><b>Go deeper:</b> <span class="lnk">가계대출은 왜 다시 늘었나 →</span></p>
+    <span class="note">머리말은 기사마다 골라 씀 · 이 기사에는 "Zoom in", "The big picture"가 없음</span>
+  </div>
+</template>
+
+<!-- 뉴닉 식 -->
+<template id="t-newneek-list">
+  <div class="pad col g12">
+    <div class="nn-hello"><span class="nn-char">캐릭터<br>자리</span><span class="sm">뉴니커, 좋은 아침! 오늘은 금리 이야기부터 해 볼게. 대출 있는 뉴니커라면 꼭 읽어 줘.</span></div>
+    <span class="h2">오늘의 뉴닉</span>
+    <div class="col g8">
+      <div class="rowx"><span class="nn-dot"></span><span class="sm sb">금리, 이번에도 안 내렸다고?</span></div>
+      <div class="rowx"><span class="nn-dot"></span><span class="sm sb">수출이 늘었다는데 왜 체감이 안 될까</span></div>
+      <div class="rowx"><span class="nn-dot"></span><span class="sm sb">위성으로 문자를 보낸다고?</span></div>
+    </div>
+    <span class="note">원래는 꼭지마다 이모지가 붙는 자리 (점으로 대신)</span>
+    <div class="card col g6"><span class="chip" style="align-self:flex-start">경제</span><div class="ph wide" style="aspect-ratio:2/1"></div><span class="sb">금리, 이번에도 안 내렸다고?</span><span class="xs mt">10월 9일</span></div>
+  </div>
+</template>
+<template id="t-newneek-detail">
+  <div class="pad col nn-body">
+    <span class="chip" style="align-self:flex-start">경제</span>
+    <span class="h1" style="margin-top:8px">금리, 이번에도 안 내렸다고?</span>
+    <span class="xs mt">2026.10.09</span>
+    <div class="nn-hello" style="margin-top:10px"><span class="nn-char">캐릭터<br>자리</span><span class="sm">대출 이자 때문에 한숨 쉬던 뉴니커, 아직 조금 더 기다려야 할 것 같아.</span></div>
+    <p class="nn-q">무슨 일이야?</p>
+    <p class="sm">한국은행이 기준금리를 연 2.50%로 또 그대로 뒀어. 벌써 세 번째야. 그런데 이번엔 위원 한 명이 "내리자"고 손을 들었대.</p>
+    <p class="nn-q">왜 안 내렸는데?</p>
+    <ul class="sm"><li><b>집값:</b> 수도권 아파트값이 계속 오르는 중이야.</li><li><b>대출:</b> 9월에만 가계대출이 4조 원 넘게 늘었어.</li></ul>
+    <p class="nn-q">지금은 어떤데?</p>
+    <p class="sm">채권 시장은 벌써 "11월엔 내린다"에 무게를 싣고 있어. 은행 대출 금리도 조금씩 내려가는 중이야.</p>
+    <p class="nn-q">그래서 앞으로는?</p>
+    <p class="sm">다음 결정은 11월 27일. 집값이 진정되면 내릴 가능성이 커져. 반대로 집값이 또 뛰면? 그땐 또 모르는 일이야.</p>
+    <div class="rowx" style="margin-top:6px"><span class="chip">좋아요 128</span><span class="chip">공유</span></div>
+    <span class="note" style="margin-top:8px">SBAC: 요약 → 배경 → 지금 → 전망 · 질문형 소제목 · 반말 대화체</span>
+  </div>
+</template>
+
+<!-- 합쳐 본 제안 -->
+<template id="t-prop-list">
+  <div class="pad col g10">
+    <div class="rowx" style="justify-content:space-between"><span class="mt">‹</span><div class="col" style="text-align:center"><span class="h2">10월 9일 (목) 점심판</span><span class="xs mt">06:30–11:30 기사 · 104건</span></div><span class="mt">›</span></div>
+    <div class="o-lead col g4">
+      <div class="rowx"><span class="h2">오늘의 핵심</span><span class="xs mt">6건 · 약 1분</span></div>
+      <div class="o-row"><span class="o-num">1</span><div class="col"><span class="xs mt sb">국내 · 환율·금리</span><span class="sb">기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'</span><div class="rowx"><span class="avs"><span class="av">새</span><span class="av">누</span><span class="av">한</span></span><span class="xs mt">12곳 보도</span></div></div></div>
+      <div class="o-row"><span class="o-num">2</span><div class="col"><span class="xs mt sb">국내 · 수출·무역</span><span class="sb">9월 반도체 수출 역대 최대…전체 수출 7% 증가</span></div></div>
+    </div>
+    <div class="col">
+      <div class="o-row"><span class="o-badge o-core">핵심</span><div class="col"><span class="sb">기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'</span><span class="xs mt">환율·금리 · 12곳 보도 · 11:42</span></div></div>
+      <div class="o-row"><span class="o-badge o-major">주요</span><div class="col"><span>"11월엔 내린다" 채권 금리 일제히 하락</span><span class="xs mt">증시 · 새벽통신 외 2곳 · 11:58</span></div></div>
+      <div class="o-row"><span class="o-badge o-ref">참고</span><div class="col"><span>지방은행 예금 금리 줄줄이 인하</span><span class="xs mt">환율·금리 · 다온경제 · 09:30 <span class="x-flag">제목만 확인 · 원문으로</span></span></div></div>
+    </div>
+    <span class="note">요약을 못 쓴 기사는 참고로 내리고, 누르면 바로 원문(앱 안 읽기)으로</span>
+  </div>
+</template>
+<template id="t-prop-detail">
+  <div class="col" data-switch style="min-height:100%">
+    <div class="pad sticky" style="padding-bottom:8px;border-bottom:1px solid var(--line)">
+      <div class="seg" role="group" style="display:flex"><button data-show="xs" aria-pressed="true" style="flex:1">요약</button><button data-show="xr" aria-pressed="false" style="flex:1">원문 읽기</button></div>
+    </div>
+    <div data-panel="xs" class="pad col g12">
+      <span class="xs mt sb">국내 · 경제 · 환율·금리</span>
+      <span class="h1">기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'</span>
+      <div class="rowx"><span class="avs"><span class="av">새</span><span class="av">누</span><span class="av">한</span><span class="av">바</span></span><span class="xs mt">12개 언론사 기사를 종합한 AI 요약</span></div>
+      <p class="x-lead">한국은행이 기준금리를 연 2.50%로 묶었다. 7월과 8월에 이어 세 번째 동결이다. 다만 이번에는 위원 6명 중 1명이 0.25%p 인하를 주장해, 다음 회의에서 내릴 수 있다는 신호로 읽힌다.</p>
+      <div class="o-why"><b>왜 중요한가</b>대출 금리 인하는 빨라야 11월이다. 채권 시장은 이미 인하를 반영해 움직이기 시작했다.</div>
+      <p class="x-inline sm"><b>배경 · </b>9월 가계대출이 4.1조 원 늘어 올해 가장 많았고, 수도권 집값 오름세도 이어졌다. 내리면 대출과 집값을 다시 자극할 수 있다는 판단이다.</p>
+      <p class="x-inline sm"><b>앞으로 · </b>다음 회의는 11월 27일. 총재는 "인하 가능성을 닫지 않았다"고 말했다.</p>
+      <span class="xs mt">이 기사는 숫자 칸 없이 배경·앞으로만 골라 씀</span>
+      <div class="col">
+        <span class="xs b mt">언론사마다 강조한 점</span>
+        <div class="x-blk"><span class="av">누</span><div class="col"><span class="sm">채권 시장이 11월 인하를 70% 확률로 반영했다.</span><span class="xs lnk">누리경제 · 원문 읽기</span></div></div>
+        <div class="x-blk"><span class="av">한</span><div class="col"><span class="sm">자영업자 이자 부담을 들어 인하가 늦었다고 비판했다.</span><span class="xs lnk">한빛일보 · 원문 읽기</span></div></div>
+        <div class="x-blk"><span class="av">바</span><div class="col"><span class="sm">집값 불씨를 근거로 동결이 불가피했다고 봤다.</span><span class="xs lnk">바른신문 · 원문 읽기</span></div></div>
+      </div>
+      <div class="x-act"><div>이 기사에 대해 묻기</div><div>더 깊게 (언론사 3곳 종합)</div></div>
+      <div class="x-nav"><span>‹ 이전 기사</span><span class="xs mt">1 / 6</span><span>다음 기사 ›</span></div>
+    </div>
+    <div data-panel="xr" hidden class="pad col g10 x-reader">
+      <span class="xs b">누리경제 · 2026.10.09 11:42</span>
+      <span class="h1">소수의견 1명…"11월 인하 문 열렸다"</span>
+      <p>한국은행이 9일 기준금리를 연 2.50%로 동결했다. 세 번 연속이다. 눈에 띄는 대목은 소수의견이다.</p>
+      <p>위원 1명이 0.25%포인트 인하를 주장하면서, 시장은 다음 회의에서 금리를 내릴 가능성을 높게 보기 시작했다.</p>
+      <p>채권 시장에서는 3년물 국고채 금리가 장중 0.05%포인트 떨어졌다.</p>
+      <span class="xs mt">누를 때만 받아 와서 문단만 보여 주고, 저장하지 않습니다 · 유료 기사나 추출 실패 때는</span>
+      <div class="bigbtn">언론사 사이트에서 보기 ↗</div>
+    </div>
+  </div>
+</template>
+
+<script>
+(function () {
+  var SERVICES = [
+    { id: 'ours', name: '우리 (지금)', url: 'docvault › 뉴스 브리핑',
+      collect: '공개 RSS 27개 + Google 뉴스 검색 RSS 40개 → Haiku가 묶고 고르고 → Sonnet이 핵심·주요를 다시 씀. 하루 3회.',
+      traits: ['고정 4칸(무슨 일·배경·숫자로 보면·앞으로) + 왜 중요한가', '네 칸 합쳐 200~300자, 칸마다 회색 소제목', '원문은 새 탭', '제목만 있던 핵심·주요는 "요약이 없는 기사예요"'],
+      try: '오른쪽 화면 아래에서 요약이 빈 기사를 펼친 모습을 볼 수 있습니다.',
+      take: '목록(오늘의 핵심, 중요도 배지, 분야 칩)은 다른 서비스와 견줘도 좋습니다. 손볼 곳은 상세 화면입니다.' },
+    { id: 'particle', name: 'Particle 식', url: '이야기 상세 (모바일 우선)',
+      collect: 'Reuters·AFP 등 제휴사 기사 + 그 밖의 수집. 그날 같은 이야기 기사를 묶고, 새 보도가 오면 요약을 갱신.',
+      traits: ['같은 요약을 여러 방식으로: 핵심 요약 / 아이에게 설명하듯 / 5W / 양쪽 시각 / 번역', '언론사 로고 줄 + "N개 매체 · N개 기사"', '원문 목록은 기자 이름까지 크게, 제휴사는 금색', '이야기 안에서 AI에게 질문, 남들이 한 질문도 보임'],
+      try: '요약 방식 칩(아이에게 설명하듯, 5W, 양쪽 시각)을 눌러 보세요.',
+      take: '"양쪽 시각"과 "5W"는 우리 펼침의 고정 4칸보다 기사에 맞춰 고르기 좋은 형식입니다. 질문창은 앱의 AI 질문 기능으로 바로 만들 수 있습니다.' },
+    { id: 'kagi', name: 'Kagi News 식', url: 'kite · 하루 한 판',
+      collect: '공개 RSS만(핵심 약 1,000개 + 커뮤니티 1만여 개, Google 뉴스 RSS 포함). 의미 유사도로 묶고, 하루 한 번 21시(한국)에 판을 냄. 사람이 고르지 않음.',
+      traits: ['이미지 없는 텍스트 목록, 누르면 그 자리에서 펼침', '섹션은 고정이 아니라 목록에서 해당하는 것만: 요약 → 출처 → 하이라이트 → 인용 → 관점 → 배경 → 타임라인 → 질문…', '요약 문장마다 출처 번호', '출처 칸은 끌 수 없음, 나머지는 사용자가 순서·표시 변경', '읽기 수준(아주 쉽게/쉽게/보통), 오류 신고, 질문창'],
+      try: '"섹션 설정"을 눌러 칸을 켜고 끄는 화면을 보세요. 관점 카드는 옆으로 넘어갑니다.',
+      take: '수집 구조가 우리와 거의 같아 가장 직접 참고할 만합니다. 칸 이름(하이라이트·관점·타임라인)을 우리 JSON에 그대로 들여올 수 있습니다.' },
+    { id: 'ground', name: 'Ground News 식', url: '이야기 상세 + 성향 데이터',
+      collect: '하루 3만~6만 건을 묶음. 언론사 성향은 외부 평가 3곳(AllSides·Ad Fontes·MBFC)의 평균.',
+      traits: ['목록 카드마다 진보·중도·보수 비율 막대', '한쪽만 다룬 이야기는 Blindspot 배지', '상세: 요약 / 진영별 비교 탭', '기사 목록을 성향별 탭으로, 행마다 성향·사실성 칩', '"보도 현황" 상자: 출처 수, 성향별 수, 마지막 갱신'],
+      try: '"진영별 비교" 탭과 기사 목록의 성향 탭을 눌러 보세요.',
+      take: '한국 언론 성향을 우리가 직접 매기면 논쟁거리가 됩니다. 가져온다면 "언론사마다 강조한 점"처럼 성향 표시 없이 내용 차이만 보여 주는 쪽이 안전합니다.' },
+    { id: 'google', name: 'Google 전체 콘텐츠 식', url: '전체 콘텐츠 (Full Coverage)',
+      collect: '웹 크롤링. 실시간으로 스토리라인을 만들고 인물·장소가 함께 나오는 패턴을 추적. 전체 콘텐츠는 개인화 없음.',
+      traits: ['목록: 대표 기사 1 + 다른 언론사 제목 2~4줄 + "전체 콘텐츠" 버튼', '제목을 AI가 다시 쓰지 않고 원문 그대로', '전체 콘텐츠: 주요 보도 → 타임라인 → 질문 → 의견·분석 → 모든 보도', '요약 글은 없고, 기사들을 종류별로 정리해 주는 방식'],
+      try: '주요 보도와 의견·분석 줄은 옆으로 넘어갑니다.',
+      take: '여러 판에 걸친 같은 이슈를 타임라인으로 잇는 것은 우리 storyId로 할 수 있습니다(설계 문서의 "이슈 타임라인" 확장).' },
+    { id: 'smart', name: 'SmartNews 식', url: '스마트 보기 · AI 정리',
+      collect: '제휴 매체 3,000여 곳의 RSS·전용 포맷. 머신러닝 + 편집팀. 2025년 일본에서 매체별로 요약해 모으는 AI 정리 시작.',
+      traits: ['색깔 채널 탭, 고른 탭 색이 아래로 이어짐', 'AI 정리: 무슨 일 / 왜 / 앞으로 3칸 + 매체별 요약 덩어리(매체 하나에 원문 링크 하나)', '스마트 보기: 사진·본문만 남긴 앱 안 화면, 미리 받아 둠', '웹 보기: 언론사 원래 페이지'],
+      try: '위쪽의 AI 정리 / 스마트 보기 / 웹 보기를 바꿔 보세요. 웹 보기는 우리가 지금 새 탭으로 보내는 그 화면입니다.',
+      take: '"매체별 요약 덩어리"는 제목만 있던 기사를 다른 매체 재료로 채우는 방법이기도 합니다. 스마트 보기는 언론사 계약이 전제라 우리는 개인 도구 방식으로만 가능합니다.' },
+    { id: 'naver', name: '네이버 뉴스 식', url: 'n.news 기사 (인링크)',
+      collect: '언론사 기사를 사 와서(콘텐츠 제휴) 포털 안에 그대로 실음. AiRS 추천 + 주제별 클러스터 + 언론사 편집판.',
+      traits: ['목록: 대표 기사 + 같은 이슈 다른 제목 + "관련뉴스 N건"', '상세는 원문 본문 그대로, 위에 구독 버튼', '아이콘 줄의 "요약"을 누르면 본문 위에 요약이 펼쳐짐', '추천 스티커, 기자 구독, 언론사별 랭킹'],
+      try: '아이콘 줄의 "요약"을 눌러 보세요.',
+      take: '요약을 본문 위에 접었다 펴는 방식이라 원문과 요약이 한 화면에 있습니다. 우리가 앱 안 원문 읽기를 하게 되면 그대로 쓸 수 있는 배치입니다.' },
+    { id: 'axios', name: 'Axios 식', url: '뉴스레터 + 기사',
+      collect: '자체 기자가 취재하고 씀. 사람 편집자가 고름. 아침 뉴스레터는 "1 big thing"부터.',
+      traits: ['머리에 "N분 · N단어"', '굵은 리드 한 문장 → 굵은 머리말 단락', '머리말은 약 50개 중 기사마다 골라 씀(Why it matters는 거의 항상)', '더 읽을 사람은 Go deeper로'],
+      try: '머리말이 우리 4칸과 비슷하지만, 기사마다 다르게 고른다는 점을 보세요.',
+      take: '우리 4칸의 원형입니다. 차이는 고정이냐 고르냐 하나입니다. 소제목을 문단 첫머리 굵은 글씨로 넣는 방식도 회색 라벨보다 덜 딱딱합니다.' },
+    { id: 'newneek', name: '뉴닉 식', url: '뉴스레터 · 웹',
+      collect: '에디터가 국내외 매체와 SNS를 직접 읽고, 아침 토론으로 이슈를 고르고, 사람이 씀.',
+      traits: ['캐릭터가 인사하는 대화체', '질문형 소제목: 무슨 일이야? → 왜? → 지금은? → 앞으로는?', 'SBAC: 요약 → 배경 → 지금 → 전망', '정보 밀도는 낮고 읽는 맛을 우선'],
+      try: '같은 내용인데 소제목을 질문으로 바꾸면 읽는 느낌이 어떻게 달라지는지 보세요.',
+      take: '반말·캐릭터까지는 과하지만, 질문형 소제목은 AI가 기사마다 다르게 쓰게 하기 쉬워 고정 라벨의 딱딱함을 줄입니다(개선 묶음 B5).' },
+    { id: 'prop', name: '합쳐 본 제안', url: 'docvault › 뉴스 브리핑 (제안)', prop: true,
+      collect: '수집은 지금과 같음. 같은 사건의 다른 보도 재료를 요약에 함께 넣음.',
+      traits: ['리드 2~3문장 + 왜 중요한가만 고정', '배경·앞으로 같은 칸은 재료가 있을 때만, 굵은 첫머리로', '언론사마다 강조한 점(매체 하나에 원문 하나)', '앱 안 원문 읽기 토글, 묻기·더 깊게, 이전·다음 기사', '요약 못 쓴 기사는 참고로 내리고 "제목만 확인" 표시'],
+      try: '위쪽의 요약 / 원문 읽기를 바꿔 보세요.',
+      take: '지난 보고서의 개선 묶음 A·B·C·D를 한 화면에 모은 모습입니다. 원문 읽기는 저작권 결정이 먼저입니다.' }
+  ];
+
+  var tabsEl = document.getElementById('tabs');
+  var stage = document.getElementById('stage');
+  var notes = document.getElementById('notes');
+  var bench = document.getElementById('bench');
+  var hint = document.getElementById('hint');
+  var devPhone = document.getElementById('dev-phone');
+  var devPc = document.getElementById('dev-pc');
+
+  function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  var current = load('nm-tab', 'ours');
+  var device = load('nm-dev', 'phone');
+  var fromHash = (location.hash || '').replace('#', '');
+  if (SERVICES.some(function (s) { return s.id === fromHash; })) current = fromHash;
+  if (!SERVICES.some(function (s) { return s.id === current; })) current = 'ours';
+
+  SERVICES.forEach(function (s) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tab' + (s.prop ? ' prop' : '');
+    b.setAttribute('role', 'tab');
+    b.id = 'tab-' + s.id;
+    b.textContent = s.name;
+    b.addEventListener('click', function () { select(s.id, true); });
+    tabsEl.appendChild(b);
+  });
+  tabsEl.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    var i = SERVICES.findIndex(function (s) { return s.id === current; });
+    i = (i + (e.key === 'ArrowRight' ? 1 : -1) + SERVICES.length) % SERVICES.length;
+    select(SERVICES[i].id, true);
+    document.getElementById('tab-' + current).focus();
+  });
+
+  function screen(id) {
+    var t = document.getElementById('t-' + id);
+    var d = document.createElement('div');
+    d.className = 'scr';
+    if (t) d.appendChild(t.content.cloneNode(true));
+    return d;
+  }
+
+  function render() {
+    var s = SERVICES.find(function (x) { return x.id === current; });
+    stage.innerHTML = '';
+    if (device === 'phone') {
+      var wrap = document.createElement('div');
+      wrap.className = 'phones';
+      [['목록', '-list'], ['기사를 눌렀을 때', '-detail']].forEach(function (p) {
+        var col = document.createElement('div');
+        col.className = 'phone-col';
+        var lab = document.createElement('span');
+        lab.className = 'phone-label';
+        lab.textContent = p[0];
+        var ph = document.createElement('div');
+        ph.className = 'phone';
+        ph.appendChild(screen(s.id + p[1]));
+        col.appendChild(lab);
+        col.appendChild(ph);
+        wrap.appendChild(col);
+      });
+      stage.appendChild(wrap);
+    } else {
+      var sc = document.createElement('div');
+      sc.className = 'browser-scroll';
+      var br = document.createElement('div');
+      br.className = 'browser';
+      br.innerHTML = '<div class="browser-bar"><i></i><i></i><i></i><span></span></div>';
+      br.querySelector('span').textContent = s.url + ' · 구조 재현';
+      var body = document.createElement('div');
+      body.className = 'browser-body';
+      body.appendChild(screen(s.id + '-list'));
+      body.appendChild(screen(s.id + '-detail'));
+      br.appendChild(body);
+      sc.appendChild(br);
+      stage.appendChild(sc);
+    }
+    bench.classList.toggle('pc', device === 'pc');
+
+    notes.innerHTML = '';
+    var h = document.createElement('h3'); h.textContent = s.name; notes.appendChild(h);
+    notes.appendChild(block('기사를 모으는 법', s.collect));
+    notes.appendChild(list('이 화면의 특징', s.traits));
+    var tr = block('눌러 볼 것', s.try); tr.classList.add('try'); notes.appendChild(tr);
+    var tk = block('우리에게', s.take); tk.classList.add('take'); notes.appendChild(tk);
+
+    hint.textContent = device === 'phone' ? '폰 화면 두 장: 목록과 기사 상세' : 'PC: 왼쪽 목록, 오른쪽 상세 (좁은 화면에서는 옆으로 밀어 보세요)';
+  }
+  function block(title, text) {
+    var d = document.createElement('div');
+    var h = document.createElement('h4'); h.textContent = title;
+    var p = document.createElement('p'); p.textContent = text;
+    d.appendChild(h); d.appendChild(p);
+    return d;
+  }
+  function list(title, items) {
+    var d = document.createElement('div');
+    var h = document.createElement('h4'); h.textContent = title;
+    var ul = document.createElement('ul');
+    items.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+    d.appendChild(h); d.appendChild(ul);
+    return d;
+  }
+
+  function select(id, scroll) {
+    current = id;
+    save('nm-tab', id);
+    SERVICES.forEach(function (s) {
+      var b = document.getElementById('tab-' + s.id);
+      b.setAttribute('aria-selected', s.id === id ? 'true' : 'false');
+      b.tabIndex = s.id === id ? 0 : -1;
+    });
+    var tb = document.getElementById('tab-' + id);
+    if (scroll && tb && tb.scrollIntoView) tb.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    render();
+  }
+  function setDevice(d) {
+    device = d;
+    save('nm-dev', d);
+    devPhone.setAttribute('aria-pressed', d === 'phone' ? 'true' : 'false');
+    devPc.setAttribute('aria-pressed', d === 'pc' ? 'true' : 'false');
+    render();
+  }
+  devPhone.addEventListener('click', function () { setDevice('phone'); });
+  devPc.addEventListener('click', function () { setDevice('pc'); });
+
+  // 시안 안의 버튼: data-show는 같은 묶음(data-switch) 안의 패널을 바꾸고, data-toggle은 같은 화면 안의 대상을 접었다 편다
+  stage.addEventListener('click', function (e) {
+    var sw = e.target.closest('[data-show]');
+    if (sw) {
+      var root = sw.closest('[data-switch]');
+      if (!root) return;
+      var key = sw.getAttribute('data-show');
+      root.querySelectorAll('[data-show]').forEach(function (b) {
+        if (b.closest('[data-switch]') === root) b.setAttribute('aria-pressed', b === sw ? 'true' : 'false');
+      });
+      root.querySelectorAll('[data-panel]').forEach(function (p) {
+        if (p.closest('[data-switch]') === root) p.hidden = p.getAttribute('data-panel') !== key;
+      });
+      return;
+    }
+    var tg = e.target.closest('[data-toggle]');
+    if (tg) {
+      var scr = tg.closest('.scr');
+      var target = scr && scr.querySelector('[data-target="' + tg.getAttribute('data-toggle') + '"]');
+      if (!target) return;
+      target.hidden = !target.hidden;
+      tg.setAttribute('aria-expanded', target.hidden ? 'false' : 'true');
+    }
+  });
+
+  devPhone.setAttribute('aria-pressed', device === 'phone' ? 'true' : 'false');
+  devPc.setAttribute('aria-pressed', device === 'pc' ? 'true' : 'false');
+  select(current);
+})();
+</script>
+
+</body>
+</html>
