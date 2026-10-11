@@ -199,14 +199,17 @@ export const CARD = {
  * 비용을 조절하는 손잡이(후보 상한·분야당 건수·월 한도)는 전부 여기 — 첫 주 실측을 보고 고친다
  */
 export const BRIEFING = {
-  /** 분류·선별·참고 기사 요약 — 판단은 단순하고 양이 많다 */
-  SELECT_MODEL: 'claude-haiku-4-5',
+  /** 분류·선별·합치기·참고·글머리표·웹 보강 — 판단은 단순하고 양이 많다. v0.47부터 Haiku 5.5(단가 1/10, 수집 재설계 토론·사용자 결정 2026-10-11).
+      5.5가 400·거절을 돌려주면 그 호출만 4.5로 다시 부른다(SELECT_MODEL_FALLBACK) — 분류·선별은 폴백이 없으면 회차가 통째로 실패한다 */
+  SELECT_MODEL: 'claude-haiku-5-5',
+  SELECT_MODEL_FALLBACK: 'claude-haiku-4-5',
   /** 주요 기사 요약 — 양이 적고 품질이 보이는 자리 */
   SUMMARY_MODEL: 'claude-sonnet-5-5',
   /** 핵심 기사 요약 — 가장 많이 읽히는 20건은 상위 모델로(사용자 결정 2026-10-11, 수집 재설계 토론). 회차당 약 +$0.4 */
   SUMMARY_MODEL_CORE: 'claude-opus-5-5',
   /** 모델별 단가 (USD/백만 토큰) — 실행 기록의 추정 비용 계산용. 청구서가 아니라 감 잡기용 */
   PRICES: {
+    'claude-haiku-5-5': { inputPerMtok: 0.1, outputPerMtok: 0.5 },
     'claude-haiku-4-5': { inputPerMtok: 1, outputPerMtok: 5 },
     'claude-sonnet-5-5': { inputPerMtok: 2, outputPerMtok: 10 },
     'claude-opus-5-5': { inputPerMtok: 4, outputPerMtok: 20 },
@@ -319,7 +322,8 @@ export const BRIEFING = {
   WEB_FILL_MAX: 15,
   WEB_FILL_SEARCHES: 2,
   WEB_FILL_MAX_OUTPUT_TOKENS: 1500,
-  WEB_FILL_MODEL: 'claude-haiku-4-5',
+  WEB_FILL_MODEL: 'claude-haiku-5-5',
+  WEB_FILL_MODEL_FALLBACK: 'claude-haiku-4-5',
   /** 웹 검색 도구 버전 — Haiku용 (ASK_MODELS와 같은 값) */
   WEB_FILL_TOOL: 'web_search_20250305',
   WEB_FILL_WIRES: ['reuters.com', 'apnews.com', 'bloomberg.com', 'afp.com'],
