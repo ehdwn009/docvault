@@ -98,7 +98,7 @@ erDiagram
         integer next_review_at "카드 복습 예정 시각, NULL=아직 (2026-09-20)"
         integer review_interval_days "마지막 채점의 간격(일), 기본 0"
         text read_items "브리핑 회차에서 읽은 기사 id JSON 배열, NULL=안 읽음 (v0.43)"
-        text flag_items "브리핑 기사 틀린 곳 알리기 JSON 배열 [{id,reason,note,at}], NULL=없음 (v0.45)"
+        text flag_items "브리핑 기사 틀린 곳 알리기 JSON 배열 [{id,reason,note,at}], reason은 number|mixed|overstated|impact|other, NULL=없음 (v0.45, impact는 v0.46)"
     }
     USER_SETTINGS {
         integer user_id PK, FK
@@ -196,8 +196,11 @@ erDiagram
         integer haiku_output_tokens
         integer sonnet_input_tokens
         integer sonnet_output_tokens
+        integer opus_input_tokens "핵심 요약(Opus 5.5) 토큰 (기본 0, v0.46)"
+        integer opus_output_tokens "(v0.46)"
         real cost_usd "끝날 때의 단가로 계산한 추정 비용"
         integer web_searches "웹 검색 보강에 쓴 검색 수 (기본 0, v0.45)"
+        text stage_usage "nullable, 단계별 비용 분해 JSON {단계:{model,calls,input,output,webSearches,usd}} (v0.46)"
         text message "실패·건너뜀 이유 (사람이 읽는 글)"
         text lead_ids "오늘의 핵심 기사 id JSON 배열 — 패널이 회차 JSON을 열지 않고 핵심 읽음을 세려고 (v0.43)"
         integer started_at
@@ -253,6 +256,7 @@ erDiagram
   - **읽음 기록 (v0.43)**: USER_FILE_STATE.read_items는 그 회차에서 읽은 기사 id 목록이다. 즐겨찾기·읽던 위치와 같은 "이 사람 × 이 파일" 사실이라 같은 표에 둔다 — 폰에서 읽은 것이 PC에서도 흐리게 보인다. 더하기만 한다(API-073 `markRead`). BRIEFING_RUNS.lead_ids는 그 회차의 "오늘의 핵심" 목록 사본이다 — 회차 JSON에도 `lead`로 있지만, 패널이 회차 수십 개의 "핵심 n 남음"을 세려고 JSON을 매번 여는 것은 무겁다. 같은 사실이 두 군데라 저장할 때 한 번에 같이 쓰고 고치지 않는다(회차는 편집 불가). v0.43 이전 회차는 처음 패널에 나올 때 JSON에서 읽어 채운다.
   - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
   - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.
+  - BRIEFING_RUNS.opus_input_tokens·opus_output_tokens(v0.46)는 핵심 요약에 쓰는 Opus 5.5의 토큰이다 — 단가가 Sonnet의 2배라 따로 센다. stage_usage(v0.46)는 단계별 분해(분류·선별·합치기·웹 보강·요약·핵심 요약·글머리표)의 JSON 사본이다 — 회차 JSON `stats.byStage`에도 같은 값이 있지만 회차를 지워도 비용 근거가 남아야 하고, 2주 실측이 "어느 단계가 돈을 먹나"를 실행 기록만 읽어 셀 수 있어야 해서 둘 다 둔다.
   - BRIEFING_RUNS.web_searches(v0.45)는 웹 검색 보강(설계 ③-3)에 쓴 검색 수다. 토큰이 아니라 검색 횟수로 과금(1,000회당 $10)되는 비용이라 토큰 칸과 따로 두고, cost_usd에는 합쳐 넣는다. stage의 `fill`(웹 검색 보강)·`lens`(요약 보기 다시 쓰기)도 v0.45.
   - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.
   - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다. USER_SETTINGS.briefing_schedule은 그 사용자의 회차별 켜기·시작 시각 JSON(`{"morning":{"on":true,"at":"06:30"},…}`, v0.43)이고, null이면 기본(06:30·11:30·17:30 모두 켬) — 스케줄러가 사용자마다 이 값으로 지금 돌 회차를 고른다.

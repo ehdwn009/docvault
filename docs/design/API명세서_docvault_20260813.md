@@ -346,7 +346,7 @@
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
 | fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 10~300). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
 | markRead | string[] | 브리핑 회차에서 읽은 기사 id(≤200개, 각 ≤80자). 기존 목록에 **더하기만** 한다(중복 무시, 회차당 최대 1000개). 다른 기기에서 동시에 읽어도 서로 지우지 않게 교체가 아니라 더하기다 (v0.43) |
-| flag | object | 브리핑 기사의 "틀린 곳 알리기"(v0.45) `{ id: 기사 id(≤80자), reason: "number"(숫자가 틀림) \| "mixed"(다른 기사가 섞임) \| "overstated"(과장됨) \| "other", note?: ≤200자 }`. 회차당 200건까지 기억하고, 같은 기사를 다시 알리면 마지막 것으로 덮어쓴다. 어디에도 보내지 않고 저장만 — 실측 2주 뒤 숫자 대조 전환의 근거 |
+| flag | object | 브리핑 기사의 "틀린 곳 알리기"(v0.45) `{ id: 기사 id(≤80자), reason: "number"(숫자가 틀림) \| "mixed"(다른 기사가 섞임) \| "overstated"(과장됨) \| "impact"(영향 판단이 이상함, v0.46) \| "other", note?: ≤200자 }`. 회차당 200건까지 기억하고, 같은 기사를 다시 알리면 마지막 것으로 덮어쓴다. 어디에도 보내지 않고 저장만 — 실측 2주 뒤 숫자 대조 전환의 근거 |
 
 ### Response
 **200 OK** — 갱신된 state 객체 (브리핑이면 `readItems`·`flagItems` 포함)
@@ -581,11 +581,13 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "sinceAt": 1790830800000, "untilAt": 1790847000000,
   "fileId": null, "fileName": null,
   "sourceCount": 48, "failedSources": ["한겨레 경제"], "candidateCount": 512, "itemCount": null,
-  "costUsd": 0.18, "webSearches": 4, "message": null, "startedAt": 1790847000000, "finishedAt": null,
+  "costUsd": 0.18, "webSearches": 4, "opusInputTokens": 90000, "opusOutputTokens": 18000,
+  "stageUsage": { "summarize-core": { "model": "claude-opus-5-5", "calls": 7, "input": 90000, "output": 18000, "webSearches": 0, "usd": 0.72 } },
+  "message": null, "startedAt": 1790847000000, "finishedAt": null,
   "live": { "log": [ { "at": 1790847001000, "text": "수집 시작 — 출처 67곳" } ], "waiting": [ { "name": "한겨레 경제", "seconds": 12 } ] }
 }
 ```
-`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | fill(웹 검색 보강, v0.45) | summarize | lens(요약 보기 다시 쓰기, v0.45) | save. `webSearches`는 웹 검색 보강에 쓴 검색 수(v0.45) — 토큰과 따로 과금(1,000회당 $10)되어 따로 센다. `costUsd`에는 이미 들어 있다. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
+`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | fill(웹 검색 보강, v0.45) | summarize | lens(글머리표 다시 쓰기, v0.45) | save. `opusInputTokens`·`opusOutputTokens`는 핵심 요약(Opus 5.5, v0.46) 토큰, `stageUsage`는 단계별 비용 분해(`{단계: {model, calls, input, output, webSearches, usd}}`, 끝난 실행만, 없으면 null) — "어느 단계가 돈을 먹나"의 실측. `webSearches`는 웹 검색 보강에 쓴 검색 수(v0.45) — 토큰과 따로 과금(1,000회당 $10)되어 따로 센다. `costUsd`에는 이미 들어 있다. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
 
 ### API-131 Response — GET /briefing/status
 ```json
