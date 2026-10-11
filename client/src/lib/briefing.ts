@@ -21,7 +21,16 @@ export type Importance = 1 | 2 | 3;
 export type BlockKind = 'background' | 'numbers' | 'timeline' | 'reactions' | 'next' | 'terms';
 export type Block = { kind: BlockKind; text?: string; pairs?: { label: string; value: string }[]; items?: { date: string; text: string }[]; from: string[] };
 export type Sides = { kind: 'dispute' | 'emphasis'; items: { label: string; text: string; from: string }[] };
+/** 글머리표. easy·w5는 v0.45 회차에만 남아 있다 — "쉽게"는 v0.46에서 내렸고(화면에 안 보인다), 옛 w5는 근거 없는 글자 모양 */
 export type Lenses = { bullets?: string[]; easy?: string; w5?: { who: string; what: string; when: string; where: string; why: string } };
+/** 5W(v0.46) — 원문을 읽은 요약 호출이 쓴 것, 칸마다 근거 기호. 없는 칸은 "기사에 없음" */
+export type W5Field = { text: string; from: string[] };
+export type W5 = { who?: W5Field; what?: W5Field; when?: W5Field; where?: W5Field; why?: W5Field };
+export const W5_KEYS = ['who', 'what', 'when', 'where', 'why'] as const;
+export const W5_LABEL: Record<(typeof W5_KEYS)[number], string> = { who: '누가', what: '무엇을', when: '언제', where: '어디서', why: '왜' };
+/** 영향 줄(v0.46) — stated: 기사가 말한 것(낱말 붙음) · inferred: AI가 짚은 것("AI 추론") */
+export type ImpactLine = { target: string; direction: 'up' | 'down' | 'mixed' | 'unclear'; kind: 'stated' | 'inferred'; text: string; from: string };
+export const IMPACT_WORD: Record<ImpactLine['direction'], string> = { up: '기회', down: '부담', mixed: '갈림', unclear: '' };
 export type ItemSource = { id: string; source: string; url: string; via: 'body' | 'feed' | 'lede' | 'web' };
 
 export type EditionItem = {
@@ -50,6 +59,9 @@ export type EditionItem = {
   blocks?: Block[];
   sides?: Sides;
   lenses?: Lenses;
+  // ---- v0.46 ----
+  w5?: W5;
+  impact?: ImpactLine[];
   /** 앱 안 원문으로 받을 주소가 있다 — 회차를 만들 때 본문 받기에 성공한 기사 */
   readUrl?: string;
   changed?: string;
@@ -57,21 +69,23 @@ export type EditionItem = {
   titleOnly?: boolean;
 };
 
-/** 요약 보기 — 기본·글머리표·쉽게·5W·양쪽 시각 (v0.45). 기기가 마지막 선택을 기억한다 */
-export type LensKey = 'base' | 'bullets' | 'easy' | 'w5' | 'sides';
-export const LENS_LABEL: Record<LensKey, string> = { base: '기본', bullets: '글머리표', easy: '쉽게', w5: '5W', sides: '양쪽 시각' };
+/** 요약 보기 — 기본·글머리표·5W·양쪽 시각 (v0.45, v0.46에서 "쉽게" 제거). 기기가 마지막 선택을 기억한다 */
+export type LensKey = 'base' | 'bullets' | 'w5' | 'sides';
+export const LENS_LABEL: Record<LensKey, string> = { base: '기본', bullets: '글머리표', w5: '5W', sides: '양쪽 시각' };
 export const BLOCK_LABEL: Record<BlockKind, string> = { background: '배경', numbers: '숫자', timeline: '경과', reactions: '반응', next: '앞으로', terms: '용어' };
 
 /** API-138 앱 안 원문 */
 export type ReaderResult = { title: string; byline: string | null; source: string; url: string; paragraphs: string[] };
-export type FlagReason = 'number' | 'mixed' | 'overstated' | 'other';
-export const FLAG_LABEL: Record<FlagReason, string> = { number: '숫자가 틀림', mixed: '다른 사건이 섞임', overstated: '제목이 과장됨', other: '기타' };
+export type FlagReason = 'number' | 'mixed' | 'overstated' | 'impact' | 'other';
+export const FLAG_LABEL: Record<FlagReason, string> = { number: '숫자가 틀림', mixed: '다른 사건이 섞임', overstated: '제목이 과장됨', impact: '영향 판단이 이상함', other: '기타' };
 
 export type Edition = {
   version: number;
   edition: { date: string; slot: 'morning' | 'noon' | 'evening' | 'adhoc'; label: string; since: number; until: number; createdAt: number };
   stats: { sources: number; sourcesFailed: number; candidates: number; items: number; basis?: { body: number; lede: number; title: number; web: number }; webFilled?: number; demoted?: number };
   cost: { usd: number };
+  /** 영향 칸을 그리나 (v0.46). 없으면(옛 회차) 그리지 않는다 */
+  impactVisible?: boolean;
   /** 오늘의 핵심 기사 id. v0.43부터 — 없으면 leadIdsOf로 계산한다 */
   lead?: string[];
   sections: { section: '국내' | '세계'; categories: { name: string; subs: { id: string; name: string; items: EditionItem[] }[] }[] }[];

@@ -4,6 +4,7 @@ import {
   BLOCK_LABEL,
   BRIEFING_READ_EVENT,
   FLAG_LABEL,
+  IMPACT_WORD,
   isSafeUrl,
   kstTime,
   kstToday,
@@ -22,6 +23,8 @@ import {
   type Importance,
   type LensKey,
   type ReaderResult,
+  W5_KEYS,
+  W5_LABEL,
 } from '../lib/briefing';
 import Icon from './Icon';
 
@@ -68,7 +71,7 @@ const FILTER_KEY = 'dv_briefing_filter';
 const TAB_KEY = 'dv_briefing_tabs';
 const LENS_KEY = 'dv_briefing_lens';
 const RETURN_KEY = 'dv_briefing_return';
-const LENS_KEYS: LensKey[] = ['base', 'bullets', 'easy', 'w5', 'sides'];
+const LENS_KEYS: LensKey[] = ['base', 'bullets', 'w5', 'sides'];
 
 // 보는 취향은 기기에 둔다 — 사생활 모드 등에서 저장소가 막혀도 화면은 기본값으로 그린다
 function readFilter(): Filter {
@@ -213,8 +216,8 @@ function blocksOf(it: EditionItem): Block[] {
 function lensesOf(it: EditionItem): LensKey[] {
   const out: LensKey[] = ['base'];
   if (it.lenses?.bullets) out.push('bullets');
-  if (it.lenses?.easy) out.push('easy');
-  if (it.lenses?.w5) out.push('w5');
+  // v0.46의 w5(근거 있음)가 먼저, 옛 회차는 lenses.w5. "쉽게"(lenses.easy)는 옛 회차에 남아 있어도 보이지 않는다
+  if (it.w5 || it.lenses?.w5) out.push('w5');
   if (it.sides) out.push('sides');
   return out;
 }
@@ -701,6 +704,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     flagged: flagged.has(l.item.id),
     onFlag: (reason: FlagReason) => flag(l.item.id, reason),
     onAsk: onAsk ? () => ask(l.item.id) : undefined,
+    // 영향 칸은 회차가 켜 둔 경우에만(v0.46). 옛 회차에는 impactVisible이 없다
+    impactOn: edition?.impactVisible === true,
   });
 
   const row = (l: Located, opts: { lead?: number } = {}) => {
@@ -1097,6 +1102,8 @@ type DetailProps = {
   flagged: boolean;
   onFlag: (reason: FlagReason) => void;
   onAsk?: () => void;
+  /** 영향 칸을 그리나 — 회차의 impactVisible */
+  impactOn: boolean;
   /** 목록 안 펼침(참고) — 제목·배지는 줄에 이미 있으니 뺀다 */
   compact?: boolean;
 };
@@ -1154,26 +1161,8 @@ function ItemDetail(props: DetailProps) {
             </li>
           ))}
         </ul>
-      ) : lens === 'easy' && item.lenses?.easy ? (
-        <div className="flex flex-col gap-2">
-          <p className="m-0 text-[1.02em] leading-[1.8]">{item.lenses.easy}</p>
-          <span className={`self-start rounded-full border px-2 text-[0.72em] ${p.line} ${p.muted}`}>쉽게 풀어 쓴 글 · 비유가 들어 있어요</span>
-        </div>
-      ) : lens === 'w5' && item.lenses?.w5 ? (
-        <dl className={`m-0 grid grid-cols-[4.6em_1fr] overflow-hidden rounded-xl border text-[0.95em] ${p.line}`}>
-          {(['who', 'what', 'when', 'where', 'why'] as const).map((k) => {
-            const label = { who: '누가', what: '무엇을', when: '언제', where: '어디서', why: '왜' }[k];
-            const v = item.lenses!.w5![k];
-            return [
-              <dt key={`${k}-t`} className={`border-b px-2.5 py-2 font-bold ${p.line} ${p.soft} ${p.accent}`}>
-                {label}
-              </dt>,
-              <dd key={`${k}-d`} className={`m-0 border-b px-2.5 py-2 ${p.line} ${v ? '' : `italic ${p.muted}`}`}>
-                {v || '기사에 없음'}
-              </dd>,
-            ];
-          })}
-        </dl>
+      ) : lens === 'w5' && (item.w5 || item.lenses?.w5) ? (
+        <W5Table item={item} p={p} />
       ) : lens === 'sides' && item.sides ? (
         <div className="flex flex-col gap-2">
           <span className={`text-[0.75em] font-semibold ${p.muted}`}>{item.sides.kind === 'dispute' ? '찬반이 갈리는 쟁점' : '언론사마다 강조한 점'}</span>
@@ -1189,9 +1178,10 @@ function ItemDetail(props: DetailProps) {
           <span className={`text-[0.72em] ${p.muted}`}>언론사 원문에서 쓴 것 · 한쪽 주장만 있으면 이 보기는 나오지 않아요</span>
         </div>
       ) : (
-        <BaseBody item={item} p={p} />
+        <BaseBody item={item} p={p} impactOn={props.impactOn} />
       )}
-      {lens !== 'base' && lens !== 'sides' && <span className={`text-[0.72em] ${p.muted}`}>기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않아요</span>}
+      {lens === 'bullets' && <span className={`text-[0.72em] ${p.muted}`}>기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않아요</span>}
+      {lens === 'w5' && <span className={`text-[0.72em] ${p.muted}`}>{item.w5 ? '원문을 읽은 요약이 같이 쓴 것 · 기사에 없는 칸은 비워 둬요' : '기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않아요'}</span>}
 
       {(item.summary || item.titleOnly) && (
         <div className={`flex items-baseline gap-2 border-t pt-2.5 text-[0.78em] ${p.line} ${basis.warn ? p.warn : p.muted}`}>
@@ -1235,8 +1225,62 @@ function ItemDetail(props: DetailProps) {
   );
 }
 
-/** 기본 보기 — 리드(첫 문장 굵게) → 왜 중요한가(왼쪽 선) → 칸(문단 첫머리 굵은 라벨, 숫자는 칩, 경과는 날짜 열) */
-function BaseBody({ item, p }: { item: EditionItem; p: Palette }) {
+/** 5W(v0.46) — 칸마다 근거 언론사, 없는 칸은 "기사에 없음". 옛 회차(lenses.w5)는 글자만 */
+function W5Table({ item, p }: { item: EditionItem; p: Palette }) {
+  const old = item.lenses?.w5;
+  return (
+    <dl className={`m-0 grid grid-cols-[4.6em_1fr] overflow-hidden rounded-xl border text-[0.95em] ${p.line}`}>
+      {W5_KEYS.map((k) => {
+        const field = item.w5?.[k];
+        const text = field?.text ?? old?.[k] ?? '';
+        return [
+          <dt key={`${k}-t`} className={`border-b px-2.5 py-2 font-bold ${p.line} ${p.soft} ${p.accent}`}>
+            {W5_LABEL[k]}
+          </dt>,
+          <dd key={`${k}-d`} className={`m-0 flex items-baseline justify-between gap-2 border-b px-2.5 py-2 ${p.line} ${text ? '' : p.muted}`}>
+            <span>{text || '기사에 없음'}</span>
+            {field && <From item={item} from={field.from} p={p} />}
+          </dd>,
+        ];
+      })}
+    </dl>
+  );
+}
+
+/** 영향 칸(v0.46, 영향 칸 토론) — 점선 상자(보조·추론의 기호), 색 없음. 기사가 말한 줄은 낱말(부담/기회/갈림)과 근거 언론사,
+    AI가 짚은 줄은 낱말 없이 "AI 추론"으로 따로 표시한다(사용자 결정 2026-10-11). 성립하지 않으면 상자 자체가 없다 */
+function ImpactBox({ item, p }: { item: EditionItem; p: Palette }) {
+  const lines = item.impact ?? [];
+  if (lines.length === 0) return null;
+  return (
+    <div className={`flex flex-col gap-2 rounded-xl border border-dashed px-3 py-2.5 ${p.line}`}>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <b className="text-[0.92em]">영향</b>
+        <span className={`text-[0.72em] ${p.muted}`}>기사가 말한 영향은 언론사, AI가 짚은 것은 "AI 추론"으로 표시해요 · 전망이 아니에요</span>
+      </div>
+      {lines.map((line, i) => {
+        const word = line.kind === 'stated' ? IMPACT_WORD[line.direction] : '';
+        const src = line.kind === 'stated' ? fromNames(item, [line.from]) || item.sources?.find((x) => x.id === line.from)?.source || '' : 'AI 추론';
+        return (
+          <div key={i} className="flex flex-col gap-0.5">
+            <span className="text-[0.9em] font-bold">
+              {line.target}
+              {word && <span className={`font-normal ${p.muted}`}> · </span>}
+              {word}
+            </span>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="m-0 flex-1 text-[0.92em] leading-relaxed">{line.text}</p>
+              <span className={`shrink-0 text-[0.75em] ${line.kind === 'inferred' ? `rounded-full border px-1.5 ${p.line}` : ''} ${p.muted}`}>{src}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 기본 보기 — 리드(첫 문장 굵게) → 왜 중요한가(왼쪽 선) → 영향(점선 상자, v0.46) → 칸(문단 첫머리 굵은 라벨, 숫자는 칩, 경과는 날짜 열) */
+function BaseBody({ item, p, impactOn }: { item: EditionItem; p: Palette; impactOn: boolean }) {
   const blocks = blocksOf(item);
   if (!item.summary && !item.why && blocks.length === 0) {
     return <p className={`m-0 text-[0.9em] ${p.muted}`}>{item.titleOnly ? '재료가 없어 제목만 실었어요 · 원문에서 확인하세요' : '요약이 없는 기사예요 · 원문을 확인하세요'}</p>;
@@ -1257,6 +1301,7 @@ function BaseBody({ item, p }: { item: EditionItem; p: Palette }) {
           <From item={item} from={item.whyFrom ?? []} p={p} />
         </p>
       )}
+      {impactOn && <ImpactBox item={item} p={p} />}
       {blocks.map((b, i) => (
         <div key={i} className="leading-relaxed">
           {b.pairs ? (
