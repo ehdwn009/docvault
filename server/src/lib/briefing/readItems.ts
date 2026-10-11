@@ -18,3 +18,24 @@ export function mergeReadItems(existing: string | null | undefined, add: string[
   const merged = [...new Set([...parseIdList(existing), ...add])];
   return JSON.stringify(merged.slice(-BRIEFING.READ_ITEMS_MAX));
 }
+
+// ---- 틀린 곳 알리기 (v0.45, 개선 합의안 6.2) ----
+
+export type FlagItem = { id: string; at: number; reason: 'number' | 'mixed' | 'overstated' | 'other'; note?: string };
+
+export function parseFlagItems(raw: string | null | undefined): FlagItem[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? (v as FlagItem[]).filter((x) => x && typeof x.id === 'string' && typeof x.at === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 더하기만 — 같은 기사를 두 번 알리면 뒤의 것이 앞을 대신한다. 상한을 넘으면 오래된 것부터 버린다 */
+export function mergeFlagItems(existing: string | null | undefined, add: Omit<FlagItem, 'at'>): string {
+  const rest = parseFlagItems(existing).filter((f) => f.id !== add.id);
+  const item: FlagItem = { id: add.id, at: Date.now(), reason: add.reason, ...(add.note ? { note: add.note } : {}) };
+  return JSON.stringify([...rest, item].slice(-BRIEFING.FLAG_ITEMS_MAX));
+}

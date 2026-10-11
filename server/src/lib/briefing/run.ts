@@ -3,7 +3,7 @@ import { config } from '../../config.js';
 import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, files } from '../../db/schema.js';
-import { callClaude, costOf, type AiCaller, type Usage } from './ai.js';
+import { callClaude, callWebSearch, costOf, type AiCaller, type Usage, type WebCaller } from './ai.js';
 import { saveEdition, type Slot } from './edition.js';
 import { abortLive, addLog, closeLive, liveView, openLive, track } from './live.js';
 import { BriefingFailure, generateEdition, type Stage } from './pipeline.js';
@@ -68,6 +68,7 @@ function usageColumns(u: Usage) {
     haikuOutputTokens: u.haikuOutput,
     sonnetInputTokens: u.sonnetInput,
     sonnetOutputTokens: u.sonnetOutput,
+    webSearches: u.webSearches,
     costUsd: costOf(u),
   };
 }
@@ -105,7 +106,7 @@ export function recoverStaleRuns(): void {
  * 실행 하나를 시작하고 곧바로 돌려준다 — 만드는 일은 뒤에서. 범위는 직전 ok 실행의 until부터 지금까지(최대 24시간).
  * 자동 실행(스케줄러)과 버튼(API-132)이 같은 입구를 쓴다
  */
-export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; slot: Slot; force?: boolean; ai?: AiCaller; now?: number }): RunRow {
+export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; slot: Slot; force?: boolean; ai?: AiCaller; web?: WebCaller | null; now?: number }): RunRow {
   const now = args.now ?? Date.now();
   // 잠금은 DB의 running 행 하나 — better-sqlite3는 동기라 이 검사와 아래 insert 사이에 다른 요청이 끼어들 수 없다
   const busy = runningRun();
@@ -130,7 +131,7 @@ export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; sl
     })
     .returning()
     .get();
-  void execute(run, prev?.fileId ?? null, args.ai ?? callClaude);
+  void execute(run, prev?.fileId ?? null, args.ai ?? callClaude, args.web === undefined ? callWebSearch : args.web ?? undefined);
   return run;
 }
 
@@ -141,7 +142,7 @@ export function recordSkipped(ownerId: number, slot: Slot, message: string, now 
     .run();
 }
 
-async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Promise<void> {
+async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller, web?: WebCaller): Promise<void> {
   const controller = new AbortController();
   const live = openLive(run.id, controller);
   // 신호만 보내면 신호를 안 듣는 곳에 걸린 실행은 영영 "만드는 중"이다 — 시간이 되면 기록부터 닫는다
@@ -151,7 +152,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Pr
   const stillRunning = and(eq(briefingRuns.id, run.id), eq(briefingRuns.status, 'running'));
   const setProgress = (stage: Stage, done: number, total: number) =>
     db.update(briefingRuns).set({ stage, progressDone: done, progressTotal: total }).where(stillRunning).run();
-  const STAGE_START: Partial<Record<Stage, string>> = { classify: '분류 시작', select: '선별 시작', read: '원문 읽기 시작', summarize: '요약 시작', save: '저장' };
+  const STAGE_START: Partial<Record<Stage, string>> = { classify: '분류 시작', select: '선별 시작', read: '원문 읽기 시작', fill: '웹 검색 보강', summarize: '요약 시작', lens: '요약 보기 쓰기', save: '저장' };
   let lastStage: Stage | null = null;
   try {
     const result = await generateEdition({
@@ -161,13 +162,14 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Pr
       until: run.untilAt,
       prevFileId,
       ai,
+      web,
       signal: controller.signal,
       progress: {
         onStage: (stage, done, total) => {
           if (stage !== lastStage) {
             lastStage = stage;
             const text = STAGE_START[stage];
-            if (text) addLog(live, total > 0 ? `${text} — ${total}${stage === 'read' ? '건' : '묶음'}` : text);
+            if (text) addLog(live, total > 0 ? `${text} — ${total}${stage === 'read' || stage === 'fill' ? '건' : '묶음'}` : text);
           }
           setProgress(stage, done, total);
         },
@@ -206,7 +208,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller): Pr
     const u = result.usage;
     console.log(
       `[briefing] ${result.edition.edition.date} ${result.edition.edition.label} ok ${result.edition.stats.items}건 ${Math.round((Date.now() - started) / 1000)}s ` +
-        `haiku ${u.haikuInput}/${u.haikuOutput} sonnet ${u.sonnetInput}/${u.sonnetOutput} ≈ $${costOf(u)} → ${saved.name}`,
+        `haiku ${u.haikuInput}/${u.haikuOutput} sonnet ${u.sonnetInput}/${u.sonnetOutput} 검색 ${u.webSearches} ≈ $${costOf(u)} → ${saved.name}`,
     );
   } catch (e) {
     const usage = e instanceof BriefingFailure ? e.usage : null;
@@ -250,6 +252,7 @@ export function toRunDto(r: RunRow) {
     candidateCount: r.candidateCount,
     itemCount: r.status === 'ok' ? r.itemCount : null,
     costUsd: r.costUsd,
+    webSearches: r.webSearches,
     message: r.message,
     startedAt: r.startedAt,
     finishedAt: r.finishedAt,

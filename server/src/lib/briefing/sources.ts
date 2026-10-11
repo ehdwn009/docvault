@@ -167,11 +167,64 @@ const DEFAULT_QUERIES: Record<string, string> = {
   '세계/사회·재난/사회·인권·보건': 'human rights OR WHO OR public health',
 };
 
+// ---- 후보 출처 (개선 합의안 S5, 2026-10-11) — 직접 RSS를 약 70곳으로 넓히기 위한 후보. 이 코드를 쓴 환경에서는 주소를 열어 보지 못했다.
+// 그래서 기본 목록에 넣되 **꺼진 상태(disabled)**로 둔다. 서버에서 `npm run briefing:check -w server`로 살아 있는 것을 확인한 뒤
+// 수집 목록 문서의 disabled에서 이름을 지우면 켜진다. 이미 수집 목록 문서가 있는 사람은 이 후보가 저절로 들어가지 않는다 —
+// 문서를 지우면 다음 생성 때 기본값(후보 포함)으로 다시 생긴다. 기본 목록 27곳 + 후보 43곳 = 70곳
+
+export const CANDIDATE_FEEDS: SourcesDoc['feeds'] = [
+  { name: '연합뉴스 전체', url: 'https://www.yna.co.kr/rss/news.xml', publisher: '연합뉴스', region: '국내' },
+  { name: '한국경제 정치', url: 'https://www.hankyung.com/feed/politics', publisher: '한국경제', region: '국내' },
+  { name: '한국경제 국제', url: 'https://www.hankyung.com/feed/international', publisher: '한국경제', region: '세계' },
+  { name: '한국경제 부동산', url: 'https://www.hankyung.com/feed/realestate', publisher: '한국경제', region: '국내' },
+  { name: '매일경제 경제', url: 'https://www.mk.co.kr/rss/30100041/', publisher: '매일경제', region: '국내' },
+  { name: '매일경제 증권', url: 'https://www.mk.co.kr/rss/50200011/', publisher: '매일경제', region: '국내' },
+  { name: '매일경제 기업', url: 'https://www.mk.co.kr/rss/50100032/', publisher: '매일경제', region: '국내' },
+  { name: '매일경제 IT', url: 'https://www.mk.co.kr/rss/50300009/', publisher: '매일경제', region: '국내' },
+  { name: '머니투데이', url: 'https://rss.mt.co.kr/mt_news.xml', publisher: '머니투데이', region: '국내' },
+  { name: '이데일리 경제', url: 'https://www.edaily.co.kr/rss/economy.xml', publisher: '이데일리', region: '국내' },
+  { name: '서울경제', url: 'https://www.sedaily.com/RSS/S1N1.xml', publisher: '서울경제', region: '국내' },
+  { name: '아시아경제', url: 'https://www.asiae.co.kr/rss/economy.htm', publisher: '아시아경제', region: '국내' },
+  { name: '조선일보', url: 'https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml', publisher: '조선일보', region: '국내' },
+  { name: '조선비즈', url: 'https://biz.chosun.com/arc/outboundfeeds/rss/?outputType=xml', publisher: '조선비즈', region: '국내' },
+  { name: '중앙일보', url: 'https://rss.joins.com/joins_news_list.xml', publisher: '중앙일보', region: '국내' },
+  { name: '한겨레', url: 'https://www.hani.co.kr/rss/', publisher: '한겨레', region: '국내' },
+  { name: '경향신문 경제', url: 'https://www.khan.co.kr/rss/rssdata/economy_news.xml', publisher: '경향신문', region: '국내' },
+  { name: '동아일보 국제', url: 'https://rss.donga.com/international.xml', publisher: '동아일보', region: '세계' },
+  { name: 'SBS 뉴스', url: 'https://news.sbs.co.kr/news/newsflashRssFeed.do?plink=RSSREADER', publisher: 'SBS', region: '국내' },
+  { name: 'KBS 뉴스', url: 'https://news.kbs.co.kr/rss/news.xml', publisher: 'KBS', region: '국내' },
+  { name: 'MBC 뉴스', url: 'https://imnews.imbc.com/rss/news/news_00.xml', publisher: 'MBC', region: '국내' },
+  { name: 'YTN', url: 'https://www.ytn.co.kr/_comm/rss.php?mcd=0102', publisher: 'YTN', region: '국내' },
+  { name: '뉴시스 경제', url: 'https://newsis.com/RSS/economy.xml', publisher: '뉴시스', region: '국내' },
+  { name: '뉴스1 경제', url: 'https://www.news1.kr/rss/economy.xml', publisher: '뉴스1', region: '국내' },
+  { name: '디지털데일리', url: 'https://www.ddaily.co.kr/rss/S1N1.xml', publisher: '디지털데일리', region: '국내' },
+  { name: '아이뉴스24', url: 'https://www.inews24.com/rss/news.xml', publisher: '아이뉴스24', region: '국내' },
+  { name: '블로터', url: 'https://www.bloter.net/rss/allArticle.xml', publisher: '블로터', region: '국내' },
+  { name: 'Guardian Business', url: 'https://www.theguardian.com/uk/business/rss', publisher: 'The Guardian', region: '세계' },
+  { name: 'Guardian Technology', url: 'https://www.theguardian.com/uk/technology/rss', publisher: 'The Guardian', region: '세계' },
+  { name: 'NPR News', url: 'https://feeds.npr.org/1001/rss.xml', publisher: 'NPR', region: '세계' },
+  { name: 'DW', url: 'https://rss.dw.com/rdf/rss-en-all', publisher: 'DW', region: '세계' },
+  { name: 'France 24', url: 'https://www.france24.com/en/rss', publisher: 'France 24', region: '세계' },
+  { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed', publisher: 'South China Morning Post', region: '세계' },
+  { name: 'Japan Times', url: 'https://www.japantimes.co.jp/feed/', publisher: 'The Japan Times', region: '세계' },
+  { name: 'Nikkei Asia', url: 'https://asia.nikkei.com/rss/feed/nar', publisher: 'Nikkei Asia', region: '세계' },
+  { name: 'Axios', url: 'https://api.axios.com/feed/', publisher: 'Axios', region: '세계' },
+  { name: 'Politico', url: 'https://rss.politico.com/politics-news.xml', publisher: 'Politico', region: '세계' },
+  { name: 'CNBC World', url: 'https://www.cnbc.com/id/100727362/device/rss/rss.html', publisher: 'CNBC', region: '세계' },
+  { name: 'CNBC Technology', url: 'https://www.cnbc.com/id/19854910/device/rss/rss.html', publisher: 'CNBC', region: '세계' },
+  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', publisher: 'BBC', region: '세계' },
+  { name: 'NYT Science', url: 'https://rss.nytimes.com/services/xml/rss/nyt/Science.xml', publisher: 'New York Times', region: '세계' },
+  { name: 'The Register', url: 'https://www.theregister.com/headlines.atom', publisher: 'The Register', region: '세계' },
+  { name: 'Wired', url: 'https://www.wired.com/feed/rss', publisher: 'Wired', region: '세계' },
+  { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', publisher: 'MIT Technology Review', region: '세계' },
+];
+
 export function defaultSourcesDoc(): SourcesDoc {
   return {
-    feeds: DEFAULT_FEEDS,
+    feeds: [...DEFAULT_FEEDS, ...CANDIDATE_FEEDS],
     searches: SUBS.map((s) => ({ sub: subPath(s), query: DEFAULT_QUERIES[subPath(s)] ?? s.name })),
-    disabled: [],
+    // 후보는 꺼진 채로 — 점검 명령으로 확인한 뒤 켠다
+    disabled: CANDIDATE_FEEDS.map((f) => f.name),
   };
 }
 

@@ -16,6 +16,8 @@ export type Candidate = {
   /** 언론사 이름 */
   source: string;
   snippet: string;
+  /** 피드가 통째로 준 본문 앞부분 — 원문을 받지 않아도 되는 재료. 메모리에서만 (S2) */
+  feedText: string;
   region: BriefingSection;
   /** 검색으로 온 기사만 분야를 안다 — 나머지는 ② 분류가 정한다 */
   sub: BriefingSub | null;
@@ -27,6 +29,8 @@ export type CollectResult = {
   candidates: Candidate[];
   sourceCount: number;
   failed: { name: string; reason: string }[];
+  /** Google 기사를 직접 기사에 붙인 수 — 실행 기록의 건강 숫자 (S3) */
+  attached: number;
 };
 
 /** 중복 판정용 제목 열쇠 — 말머리([속보]·[단독]), 공백, 문장부호를 지운다 */
@@ -73,13 +77,75 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
       // 주소로 온 언론사는 이름으로 — 화면의 출처와 "다른 보도" 세기가 둘 다 이름 기준이 된다
       source: outletName(it.source ?? src.publisher),
       snippet: usefulSnippet(title, it.snippet),
+      feedText: it.fullText,
       region: src.region,
       sub: src.sub,
       related: [],
     });
   }
-  // 출처 하나가 후보를 독차지하지 않게 — 상한까지, 범위 전체에서 고르게
-  return spreadPick(out, BRIEFING.MAX_PER_SOURCE, since, until);
+  // 출처 하나가 후보를 독차지하지 않게 — 상한까지, 범위 전체에서 고르게. 검색은 신호용이라 더 적게 (S6)
+  return spreadPick(out, src.sub ? BRIEFING.MAX_PER_SEARCH : BRIEFING.MAX_PER_SOURCE, since, until);
+}
+
+/** 원문 주소로 바로 쓸 수 있는 곳 — Google 뉴스 링크는 스크립트로 넘어가 원문 주소로 풀리지 않는다 */
+export function isDirectUrl(url: string): boolean {
+  return !/^https?:\/\/news\.google\.com\//i.test(url);
+}
+
+/** 글자 2개씩 겹치는 비율(0~1) — 제목 유사도. 짧은 쪽 기준이라 말줄임·부제가 붙어도 같은 기사를 알아본다 */
+export function bigramSimilarity(a: string, b: string): number {
+  const grams = (s: string) => {
+    const set = new Set<string>();
+    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+    return set;
+  };
+  const ga = grams(a);
+  const gb = grams(b);
+  if (ga.size === 0 || gb.size === 0) return 0;
+  let hit = 0;
+  for (const g of ga) if (gb.has(g)) hit++;
+  return hit / Math.min(ga.size, gb.size);
+}
+
+const NUMBERS = /\d+(?:[.,]\d+)*/g;
+function numberSet(s: string): string[] {
+  return [...new Set((s.match(NUMBERS) ?? []).map((n) => n.replace(/,/g, '')))].sort();
+}
+
+/**
+ * Google 검색으로 온 기사를 같은 언론사의 직접 피드 기사에 붙인다 (개선 합의안 S3) — Google 링크는 원문을 읽을 수 없고,
+ * 제목이 조금만 달라도(말줄임·부제) 같은 기사로 안 묶였다. 같은 언론사 + 제목 유사 + 6시간 안이면 직접 기사가 대표가 되고
+ * Google 기사는 분야(sub)만 넘겨 준다. 두 제목에 숫자가 있으면 같아야 한다 — 같은 언론사가 비슷한 제목의 후속 기사를 연달아 낸다
+ * ("코스피 2% 하락" → "코스피 3% 하락 마감"). 네트워크·AI 비용 0
+ */
+export function attachToDirect(list: Candidate[]): { list: Candidate[]; attached: number } {
+  const isGoogle = (c: Candidate) => !isDirectUrl(c.url);
+  const direct = new Map<string, Candidate[]>();
+  for (const c of list) if (!isGoogle(c)) direct.set(c.source, [...(direct.get(c.source) ?? []), c]);
+  let attached = 0;
+  const out: Candidate[] = [];
+  for (const c of list) {
+    if (!isGoogle(c)) {
+      out.push(c);
+      continue;
+    }
+    const key = titleKey(c.title);
+    const host = (direct.get(c.source) ?? []).find((d) => {
+      if (Math.abs(d.publishedAt - c.publishedAt) > BRIEFING.ATTACH_MAX_GAP_MS) return false;
+      if (bigramSimilarity(key, titleKey(d.title)) < BRIEFING.ATTACH_TITLE_SIMILARITY) return false;
+      const na = numberSet(c.title);
+      const nb = numberSet(d.title);
+      return na.length === 0 || nb.length === 0 || na.join('|') === nb.join('|');
+    });
+    if (!host) {
+      out.push(c);
+      continue;
+    }
+    host.sub ??= c.sub;
+    for (const r of c.related) if (r.source !== host.source && !host.related.some((x) => x.url === r.url)) host.related.push(r);
+    attached++;
+  }
+  return { list: out, attached };
 }
 
 /**
@@ -128,6 +194,7 @@ export function dedupe(list: Candidate[]): Candidate[] {
     }
     prev.sub ??= c.sub;
     if (c.snippet.length > prev.snippet.length) prev.snippet = c.snippet;
+    if (c.feedText.length > prev.feedText.length) prev.feedText = c.feedText;
     // 같은 언론사의 같은 기사(피드·검색 양쪽에서 온 것)는 "다른 보도"가 아니다
     if (c.source !== prev.source && !prev.related.some((r) => r.url === c.url)) prev.related.push({ source: c.source, url: c.url });
   }
@@ -171,6 +238,7 @@ export async function collect(
     if (r.ok) all.push(...r.value);
     else failed.push({ name: sources[i]?.name ?? '?', reason: errorText(r.error) });
   });
-  const candidates = spreadPick(dedupe(all), BRIEFING.MAX_CANDIDATES, opts.since, opts.until);
-  return { candidates, sourceCount: sources.length, failed };
+  const joined = attachToDirect(dedupe(all));
+  const candidates = spreadPick(joined.list, BRIEFING.MAX_CANDIDATES, opts.since, opts.until);
+  return { candidates, sourceCount: sources.length, failed, attached: joined.attached };
 }

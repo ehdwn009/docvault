@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { BRIEFING } from '../../constants.js';
 import { callAndCount, SYSTEM_BASE, type AiCaller, type Usage } from './ai.js';
-import { isAggregator, spreadPick, type Candidate } from './collect.js';
+import { isAggregator, isDirectUrl, spreadPick, type Candidate } from './collect.js';
 import { NO_META_RULE, stripMeta } from './clean.js';
 import { errorText, mapLimit } from './limit.js';
 import { findSubById, subPath, type BriefingSub } from './taxonomy.js';
@@ -15,7 +15,8 @@ const MAX_INPUT_PER_SUB = 60;
 
 const HANGUL = /[가-힣]/;
 
-export type PrevStory = { storyId: string; title: string };
+/** 직전 회차의 이슈 — summary는 ④ 요약이 "바뀐 점 한 줄"을 쓸 때 쓴다(선별에는 제목만 보여 준다) */
+export type PrevStory = { storyId: string; title: string; summary: string };
 
 export type Picked = {
   sub: BriefingSub;
@@ -58,7 +59,7 @@ const IMPORTANCE_RULES = [
 async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[], range: { since: number; until: number }, ai: AiCaller, usage: Usage, signal?: AbortSignal): Promise<Picked[]> {
   const input = spreadPick(cands, MAX_INPUT_PER_SUB, range.since, range.until);
   const max = sub.wide ? BRIEFING.MAX_ITEMS_WIDE : BRIEFING.MAX_ITEMS_NARROW;
-  const lines = input.map((c, i) => `${i + 1}. (${c.source}) ${c.title}${c.snippet ? ` — ${c.snippet}` : ' (발췌 없음 — 제목뿐)'}`).join('\n');
+  const lines = input.map((c, i) => `${i + 1}. (${c.source}) ${c.title}${c.snippet ? ` — ${c.snippet}` : c.feedText ? ` — ${c.feedText.slice(0, BRIEFING.SNIPPET_MAX_CHARS)}` : ' (발췌 없음 — 제목뿐)'}`).join('\n');
   const prevLines = prev.length ? prev.map((p) => `${p.storyId}: ${p.title}`).join('\n') : '(없음)';
   const out = await callAndCount(ai, usage, {
     model: BRIEFING.SELECT_MODEL,
@@ -72,7 +73,7 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
       '- 이 분야보다 확실히 맞는 분야가 있는 기사는 그래도 고르되 moveTo에 그 분야 id를 적는다. 애매하면 빈 문자열.',
       REGION_RULE,
       SUB_RULE,
-      '- 발췌 없이 제목뿐인 기사는 summary를 제목을 풀어 쓴 한 문장으로만 쓰고 사실을 덧붙이지 않는다. why는 주어진 글에서 근거를 댈 수 있을 때만 쓰고, 일반론이면 빈 문자열.',
+      '- 발췌 없이 제목뿐인 기사는 summary를 빈 문자열로 둔다 — 제목에 없는 사실을 알 수 없다(제목 번역만 title에). why는 주어진 글에서 근거를 댈 수 있을 때만 쓰고, 일반론이면 빈 문자열.',
       NO_META_RULE,
       IMPORTANCE_RULES,
       `\n분야 목록:\n${SUB_LIST}`,
@@ -101,16 +102,19 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
     }
     const importance = Math.min(3, Math.max(1, Math.round(s.importance))) as 1 | 2 | 3;
     const briefSummary = stripMeta(s.summary);
-    // 참고 기사인데 요약이 없으면 싣지 않는다 — 원문 제목(영어 그대로일 때도)만 덩그러니 실리던 것 (사용성 평가 2026-10-01)
-    if (importance === 1 && !briefSummary) continue;
+    // 참고 기사인데 발췌가 있는데도 요약을 안 썼으면 싣지 않는다. 제목뿐인 기사는 요약 없이 "제목만"으로 싣는다 —
+    // 화면이 펼치지 않고 바로 원문으로 보낸다 (개선 합의안 4.4)
+    const hasSnippet = [main, ...related].some((c) => c.snippet || c.feedText);
+    if (importance === 1 && !briefSummary && hasSnippet) continue;
     // 참고는 제목을 안 썼으면 원문 제목으로 싣는데, 그게 한글이 없는 외국어 제목이면 싣지 않는다 (설계 "해외 기사도 한국어로")
     const briefTitle = s.title.trim() || main.title;
     if (importance === 1 && !HANGUL.test(briefTitle)) continue;
     // 검색 결과가 엉뚱한 분야로 들어온 기사는 맞는 분야로 옮긴다 — 같은 사건이 옮긴 분야에 또 있으면 ③-2 합치기가 하나로 만든다
     const target = s.moveTo ? findSubById(s.moveTo.trim()) : undefined;
-    // 발췌가 있고 포털 재게재 주소가 아닌 기사를 대표로 — 요약의 근거와 화면의 출처가 둘 다 나아진다 (설계 "③-1 근거 보강")
+    // 발췌가 있고 포털 재게재 주소가 아닌 기사를 대표로 — 요약의 근거와 화면의 출처가 둘 다 나아진다 (설계 "③-1 근거 보강").
+    // 받을 수 있는 주소(Google 아님)에 +2 — 대표 기사가 곧 원문 읽기·앱 안 원문의 대상이다 (개선 합의안 S4)
     const pool = [main, ...related];
-    const score = (c: Candidate) => (c.snippet ? 2 : 0) + (isAggregator(c.source) ? 0 : 1);
+    const score = (c: Candidate) => (c.snippet ? 2 : 0) + (isAggregator(c.source) ? 0 : 1) + (isDirectUrl(c.url) ? 2 : 0) + (c.feedText ? 1 : 0);
     const lead = pool.reduce((a, b) => (score(b) > score(a) ? b : a));
     picked.push({
       sub: target ?? sub,

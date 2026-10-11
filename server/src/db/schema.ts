@@ -132,6 +132,8 @@ export const userFileState = sqliteTable(
     reviewIntervalDays: integer('review_interval_days').notNull().default(0),
     /** 브리핑 회차에서 읽은 기사 id JSON 배열. NULL=안 읽음. 더하기만 한다 — 두 기기에서 동시에 읽어도 서로 지우지 않게 (v0.43) */
     readItems: text('read_items'),
+    /** 틀린 곳 알리기 — [{ id, at, reason, note? }] JSON. 회차 파일이 아니라 여기 두는 이유: 회차 파일에 쓰면 저장할 때마다 버전이 쌓인다 (v0.45) */
+    flagItems: text('flag_items'),
   },
   (t) => [primaryKey({ columns: [t.userId, t.fileId] })],
 );
@@ -159,6 +161,8 @@ export const userSettings = sqliteTable('user_settings', {
   askWithCards: integer('ask_with_cards').notNull().default(1),
   /** 뉴스 브리핑 자동 생성 전체 스위치. 관리자에게만 의미가 있다. 기본 꺼짐 — 켜야 돈이 나간다 */
   briefingAuto: integer('briefing_auto').notNull().default(0),
+  /** 앱 안 원문 보기 스위치(기본 0) — 서버에서 추출 품질을 잰 뒤 관리자가 켠다 (v0.45, 개선 합의안 7장) */
+  briefingReader: integer('briefing_reader').notNull().default(0),
   /** 자동 생성 회차별 켜기·시작 시각 JSON {"morning":{"on":true,"at":"06:30"},…}. null이면 기본(06:30·11:30·17:30 모두 켬) (v0.43) */
   briefingSchedule: text('briefing_schedule'),
   updatedAt: integer('updated_at').notNull(),
@@ -236,7 +240,7 @@ export const briefingRuns = sqliteTable(
     editionDate: text('edition_date').notNull(),
     /** cancelled = 사람이 [중지]로 멈춤 (2026-10-02). 실패(error)와 나눠 화면이 빨갛게 보이지 않게 */
     status: text('status', { enum: ['running', 'ok', 'error', 'skipped', 'cancelled'] }).notNull(),
-    stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'summarize', 'save'] }),
+    stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'fill', 'summarize', 'lens', 'save'] }),
     progressDone: integer('progress_done').notNull().default(0),
     progressTotal: integer('progress_total').notNull().default(0),
     sinceAt: integer('since_at').notNull(),
@@ -252,6 +256,8 @@ export const briefingRuns = sqliteTable(
     haikuOutputTokens: integer('haiku_output_tokens').notNull().default(0),
     sonnetInputTokens: integer('sonnet_input_tokens').notNull().default(0),
     sonnetOutputTokens: integer('sonnet_output_tokens').notNull().default(0),
+    /** 웹 검색 보강(S8)에서 쓴 검색 횟수 — 비용 근거 (v0.45) */
+    webSearches: integer('web_searches').notNull().default(0),
     /** 그때의 단가로 계산해 둔 추정 비용 — 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남는다 */
     costUsd: real('cost_usd').notNull().default(0),
     /** 실패·건너뜀 이유 (사람이 읽는 글) */

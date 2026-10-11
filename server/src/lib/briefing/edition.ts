@@ -3,12 +3,14 @@ import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { files } from '../../db/schema.js';
 import type { DbOrTx } from '../content.js';
-import { basisOf } from './body.js';
+import { basisOf, type Material } from './body.js';
 import { isAggregator } from './collect.js';
 import { costOf, type Usage } from './ai.js';
 import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
-import type { Detail, Written } from './summarize.js';
+import type { Demoted } from './fallback.js';
+import type { Lenses } from './lenses.js';
+import { evidenceOf, type Block, type Sides, type Written } from './summarize.js';
 import { categoriesOf, SECTIONS, type BriefingSection } from './taxonomy.js';
 import { kstParts } from './time.js';
 
@@ -17,9 +19,13 @@ import { kstParts } from './time.js';
 
 export type Slot = 'morning' | 'noon' | 'evening' | 'adhoc';
 
+/** v0.43의 고정 4칸 — 옛 회차에만 남아 있다. 화면은 blocks → detail → summary 순으로 찾아 그린다 */
+export type Detail = { background: string; numbers: string; next: string };
+
 export type EditionItem = {
   id: string;
   title: string;
+  /** 리드(무슨 일). 참고는 한 문장. 제목뿐인 참고(titleOnly)는 빈 문자열 */
   summary: string;
   why: string;
   importance: 1 | 2 | 3;
@@ -29,19 +35,54 @@ export type EditionItem = {
   storyId: string;
   status: 'new' | 'updated';
   related: { source: string; url: string }[];
-  /** 요약의 근거 — body(원문 앞부분) · lede(발췌) · title(제목뿐). v0.43부터, 옛 회차에는 없다 */
-  basis?: 'body' | 'lede' | 'title';
+  /** 요약의 근거 — body(원문·피드 본문) · lede(발췌) · title(제목뿐) · web(웹 검색으로 찾은 보도, v0.45). v0.43부터, 옛 회차에는 없다 */
+  basis?: 'body' | 'lede' | 'title' | 'web';
   /** 이 사건을 다룬 서로 다른 언론사 수(대표 포함, 상한 없음) — 오늘의 핵심 순위에 쓴다. v0.43부터, 없으면 related 수 + 1 */
   outlets?: number;
-  /** 핵심·주요의 펼침 칸(summary가 "무슨 일"). 쓸 칸이 하나도 없거나 참고·옛 회차면 없다 — v0.43부터 */
+  /** v0.43의 펼침 칸 — v0.45부터는 쓰지 않고 blocks로 쓴다. 옛 회차용 */
   detail?: Detail;
+  // ---- v0.45 (개선 합의안 5.1) — 모두 없어도 되는 칸. 형식 버전은 그대로 1 ----
+  /** 대표 기사의 원 제목 — 원문 카드의 글자. AI 제목이 과장됐는지 견주는 기준 */
+  originalTitle?: string;
+  /** 실제로 읽은 재료 — 본문(A·B·C), 발췌(S1·S2), 웹 검색 보도(W1·W2). 칸의 from이 가리키는 기호 */
+  sources?: { id: string; source: string; url: string; via: 'body' | 'feed' | 'lede' | 'web' }[];
+  summaryFrom?: string[];
+  whyFrom?: string[];
+  /** 골라 쓴 칸 0~3개 — 재료가 있는 것만 */
+  blocks?: Block[];
+  /** 양쪽 시각 — 쟁점(dispute)이나 언론사마다 다른 강조(emphasis). 핵심·재료 2곳 이상일 때만 */
+  sides?: Sides;
+  /** 요약 보기 — 글머리표·쉽게·5W. 우리 요약을 Haiku가 다시 쓴 것 */
+  lenses?: Lenses;
+  /** 앱 안 원문으로 받을 주소 — 회차를 만들 때 본문 받기에 성공한 언론사 주소(본문이 아니라 주소). 없으면 사이트로 보낸다 */
+  readUrl?: string;
+  /** 갱신된 이슈 — 직전 회차 이후 바뀐 점 한 줄 */
+  changed?: string;
+  /** 재료가 없어 제목만 실은 참고 — AI 문장 없음. 화면은 펼치지 않고 바로 원문으로 */
+  titleOnly?: boolean;
 };
 
 export type Edition = {
   version: number;
   edition: { date: string; slot: Slot; label: string; since: number; until: number; createdAt: number };
-  stats: { sources: number; sourcesFailed: number; candidates: number; items: number };
-  cost: { usd: number; haiku: { input: number; output: number }; sonnet: { input: number; output: number } };
+  stats: {
+    sources: number;
+    sourcesFailed: number;
+    candidates: number;
+    items: number;
+    /** v0.45 건강 숫자 — 근거 분포, 읽은 본문·검증·보강의 결과. "요약 없음 0건"을 회차마다 숫자로 확인한다 */
+    basis?: { body: number; lede: number; title: number; web: number };
+    bodiesRead?: number;
+    fromFeed?: number;
+    extractRejected?: number;
+    attached?: number;
+    webFilled?: number;
+    numberDrops?: number;
+    lensDrops?: number;
+    demoted?: number;
+    overruns?: number;
+  };
+  cost: { usd: number; haiku: { input: number; output: number }; sonnet: { input: number; output: number }; webSearches?: number };
   /** 오늘의 핵심 기사 id (최대 LEAD_COUNT). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
   lead?: string[];
   sections: {
@@ -67,43 +108,83 @@ export function editionFileName(date: string, label: string): string {
 export function assembleEdition(args: {
   picked: Picked[];
   written: Map<number, Written>;
-  bodies: Map<number, string>;
+  materials: Map<number, Material[]>;
+  lenses: Map<number, Lenses>;
+  /** 재료가 없어 참고로 내린 핵심·주요 — 열쇠는 picked 위치 */
+  demoted: Map<number, Demoted>;
   slot: Slot;
   since: number;
   until: number;
   createdAt: number;
-  stats: { sources: number; sourcesFailed: number; candidates: number };
+  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number };
   usage: Usage;
 }): Edition {
   const { date } = kstParts(args.createdAt);
   const counter = new Map<string, number>();
   const bySub = new Map<string, EditionItem[]>();
 
+  const basisCount = { body: 0, lede: 0, title: 0, web: 0 };
+  let numberDrops = 0;
+  let demotedCount = 0;
+  let overruns = 0;
+
   args.picked.forEach((p, i) => {
-    const text = p.importance >= 2 ? args.written.get(i) : p.brief;
-    const detail: Detail | undefined = p.importance >= 2 ? args.written.get(i)?.detail : undefined;
-    // 핵심·주요인데 요약을 못 받았으면 싣지 않는다 — 원문 제목만 덩그러니 두지 않는다
+    const w = p.importance >= 2 ? args.written.get(i) : undefined;
+    const fallback = p.importance >= 2 && !w?.summary ? args.demoted.get(i) : undefined;
+    // 핵심·주요인데 리드를 못 받았으면 참고로 내리거나(재료 없음) 싣지 않는다 — 빈 요약을 내보내지 않는다 (S0)
+    let importance: 1 | 2 | 3 = p.importance;
+    let text: { title: string; summary: string; why: string } | null = null;
+    if (w?.summary) {
+      text = { title: w.title, summary: w.summary, why: w.why };
+      // 왜 중요한가가 비면(근거 없음·일반론) 핵심 자격이 없다 — 주요로 (개선 합의안 4.4)
+      if (importance === 3 && !w.why) importance = 2;
+    } else if (fallback) {
+      text = { title: fallback.title, summary: fallback.summary, why: '' };
+      importance = 1;
+      demotedCount++;
+    } else if (p.importance === 1 && p.brief) {
+      text = p.brief;
+    }
     if (!text) return;
+    // 제목뿐인 참고 — AI 문장 없이 제목만 (재료 보장 규칙)
+    const titleOnly = fallback ? fallback.titleOnly : importance === 1 && !text.summary;
     const n = (counter.get(p.sub.id) ?? 0) + 1;
     counter.set(p.sub.id, n);
     const id = `${p.sub.id}.${String(n).padStart(3, '0')}`;
     const others = otherOutlets(p);
+    const materials = args.materials.get(i);
+    const basis = basisOf(p, materials);
+    basisCount[basis]++;
+    const evidence = w ? evidenceOf(p, materials) : [];
+    const readUrl = materials?.find((m) => m.via === 'body')?.url;
+    if (w) {
+      numberDrops += w.numberDrops;
+      if (w.overrun) overruns++;
+    }
+    const lenses = args.lenses.get(i);
     const item: EditionItem = {
       id,
       title: text.title,
       summary: text.summary,
       why: text.why,
-      importance: p.importance,
+      importance,
       source: p.main.source,
       url: p.main.url,
       publishedAt: p.main.publishedAt,
       // 이어받은 이슈는 직전 id 그대로 — 다음 회차·2차 이슈 타임라인이 같은 열쇠로 묶는다
       storyId: p.prevStoryId ?? `${p.sub.id}.${date}.${args.slot}.${n}`,
       status: p.prevStoryId ? 'updated' : 'new',
-      basis: basisOf(p, args.bodies.has(i)),
+      basis,
       related: others.slice(0, BRIEFING.MAX_RELATED),
       outlets: 1 + others.length,
-      ...(detail ? { detail } : {}),
+      originalTitle: p.main.title,
+      ...(evidence.length ? { sources: evidence.map((e) => ({ id: e.id, source: e.source, url: e.url, via: e.via })) } : {}),
+      ...(w ? { summaryFrom: w.summaryFrom, whyFrom: w.whyFrom, blocks: w.blocks } : {}),
+      ...(w?.sides ? { sides: w.sides } : {}),
+      ...(lenses ? { lenses } : {}),
+      ...(readUrl ? { readUrl } : {}),
+      ...(w?.changed ? { changed: w.changed } : {}),
+      ...(titleOnly ? { titleOnly: true } : {}),
     };
     bySub.set(p.sub.id, [...(bySub.get(p.sub.id) ?? []), item]);
   });
@@ -131,11 +212,12 @@ export function assembleEdition(args: {
     version: BRIEFING.EDITION_VERSION,
     lead: leadIdsOf(sections),
     edition: { date, slot: args.slot, label: slotLabel(args.slot, args.createdAt), since: args.since, until: args.until, createdAt: args.createdAt },
-    stats: { ...args.stats, items: total },
+    stats: { ...args.stats, items: total, basis: basisCount, numberDrops, demoted: demotedCount, overruns },
     cost: {
       usd: costOf(args.usage),
       haiku: { input: args.usage.haikuInput, output: args.usage.haikuOutput },
       sonnet: { input: args.usage.sonnetInput, output: args.usage.sonnetOutput },
+      webSearches: args.usage.webSearches,
     },
     sections,
   };
@@ -174,19 +256,22 @@ export function leadIdsOf(sections: Edition['sections']): string[] {
 
 /** 직전 회차에서 다음 회차가 쓰는 것 — 분야별 이슈 목록(updated 판정)과 이미 실린 링크(중복 제외).
     문서를 지웠거나 깨졌으면 빈 값 — 범위는 실행 기록에서 계산하므로 흔들리지 않는다 */
-export function readPrevious(fileId: number | null): { storiesBySub: Map<string, PrevStory[]>; urls: Set<string> } {
+export function readPrevious(fileId: number | null): { storiesBySub: Map<string, PrevStory[]>; urls: Set<string>; summaries: Map<string, string> } {
   const storiesBySub = new Map<string, PrevStory[]>();
   const urls = new Set<string>();
-  if (fileId === null) return { storiesBySub, urls };
+  /** storyId → 직전 요약 — "바뀐 점 한 줄"의 비교 대상 */
+  const summaries = new Map<string, string>();
+  if (fileId === null) return { storiesBySub, urls, summaries };
   const row = db.select({ contentText: files.contentText }).from(files).where(and(eq(files.id, fileId), isNull(files.deletedAt))).get();
-  if (!row?.contentText) return { storiesBySub, urls };
+  if (!row?.contentText) return { storiesBySub, urls, summaries };
   try {
     const prev = JSON.parse(row.contentText) as Edition;
     for (const s of prev.sections ?? []) {
       for (const c of s.categories ?? []) {
         for (const sub of c.subs ?? []) {
-          storiesBySub.set(sub.id, (sub.items ?? []).map((it) => ({ storyId: it.storyId, title: it.title })));
+          storiesBySub.set(sub.id, (sub.items ?? []).map((it) => ({ storyId: it.storyId, title: it.title, summary: it.summary ?? '' })));
           for (const it of sub.items ?? []) {
+            if (it.summary) summaries.set(it.storyId, it.summary);
             urls.add(it.url);
             for (const r of it.related ?? []) urls.add(r.url);
           }
@@ -196,7 +281,7 @@ export function readPrevious(fileId: number | null): { storiesBySub: Map<string,
   } catch {
     // 깨진 회차는 없는 것으로 친다
   }
-  return { storiesBySub, urls };
+  return { storiesBySub, urls, summaries };
 }
 
 /** 회차를 내 파일 최상위에 문서 하나로 저장한다 — 트리에는 안 나오고 브리핑 패널이 보관함이다(v0.43). 이름이 겹치면 (2).

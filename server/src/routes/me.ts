@@ -12,7 +12,7 @@ import {
 import { db } from '../db/index.js';
 import { files, userFileState, userSettings } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
-import { mergeReadItems, parseIdList } from '../lib/briefing/readItems.js';
+import { mergeFlagItems, mergeReadItems, parseFlagItems, parseIdList } from '../lib/briefing/readItems.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
@@ -47,11 +47,20 @@ const stateSchema = z
     fontScale: z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).nullable().optional(),
     // 브리핑에서 읽은 기사 id — 기존 목록에 더한다 (v0.43)
     markRead: z.array(z.string().min(1).max(BRIEFING.ITEM_ID_MAX_CHARS)).min(1).max(BRIEFING.MARK_READ_BATCH_MAX).optional(),
+    // 브리핑 기사의 "틀린 곳 알리기" — 기존 목록에 더한다. 회차 파일이 아니라 여기(사람 × 파일)에 둔다 (v0.45)
+    flag: z
+      .object({
+        id: z.string().min(1).max(BRIEFING.ITEM_ID_MAX_CHARS),
+        reason: z.enum(['number', 'mixed', 'overstated', 'other']),
+        note: z.string().trim().max(BRIEFING.FLAG_NOTE_MAX_CHARS).optional(),
+      })
+      .optional(),
   })
   .refine(
     (v) =>
       v.isFavorite !== undefined ||
       v.markRead !== undefined ||
+      v.flag !== undefined ||
       v.readingPosition !== undefined ||
       v.viewerFit !== undefined ||
       v.fontScale !== undefined ||
@@ -121,8 +130,9 @@ export const meRoutes = new Hono<AppEnv>()
             viewerFit: row.viewerFit,
             fontScale: row.fontScale,
             readItems: parseIdList(row.readItems),
+            flagItems: parseFlagItems(row.flagItems),
           }
-        : { isFavorite: 0, readingPosition: null, lastOpenedAt: null, viewerFit: 1, fontScale: null, readItems: [] },
+        : { isFavorite: 0, readingPosition: null, lastOpenedAt: null, viewerFit: 1, fontScale: null, readItems: [], flagItems: [] },
     });
   })
 
@@ -158,6 +168,7 @@ export const meRoutes = new Hono<AppEnv>()
         patch.viewerFit !== undefined ? (patch.viewerFit ? 1 : 0) : (existing?.viewerFit ?? 1),
       fontScale: patch.fontScale !== undefined ? patch.fontScale : (existing?.fontScale ?? null),
       readItems: patch.markRead ? mergeReadItems(existing?.readItems, patch.markRead) : (existing?.readItems ?? null),
+      flagItems: patch.flag ? mergeFlagItems(existing?.flagItems, patch.flag) : (existing?.flagItems ?? null),
     };
 
     const row = db
@@ -178,6 +189,7 @@ export const meRoutes = new Hono<AppEnv>()
         viewerFit: row.viewerFit,
         fontScale: row.fontScale,
         readItems: parseIdList(row.readItems),
+        flagItems: parseFlagItems(row.flagItems),
       },
     });
   })

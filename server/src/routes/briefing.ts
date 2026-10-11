@@ -4,7 +4,10 @@ import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 import { BRIEFING, DEFAULT_USER_SETTINGS } from '../constants.js';
 import { db } from '../db/index.js';
-import { briefingRuns, userSettings } from '../db/schema.js';
+import { briefingRuns, userFileState, userSettings } from '../db/schema.js';
+import { parseFlagItems } from '../lib/briefing/readItems.js';
+import { findEditionItem, readOriginal, ReaderError } from '../lib/briefing/reader.js';
+import { kstMonthStart } from '../lib/briefing/time.js';
 import {
   BriefingBudgetError,
   BriefingBusyError,
@@ -23,7 +26,7 @@ import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-// API-131~136 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
+// API-131~138 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
 // 설계: docs/design/뉴스브리핑_docvault_20261001.md
 
 const adminGuard = createMiddleware<AppEnv>(async (c, next) => {
@@ -34,6 +37,21 @@ const adminGuard = createMiddleware<AppEnv>(async (c, next) => {
 function autoEnabled(userId: number): boolean {
   const row = db.select({ v: userSettings.briefingAuto }).from(userSettings).where(eq(userSettings.userId, userId)).get();
   return (row?.v ?? DEFAULT_USER_SETTINGS.briefingAuto) === 1;
+}
+
+/** 앱 안 원문 보기 스위치 — 설정에서 켠 관리자만 (개선 합의안 7장) */
+function readerEnabled(userId: number): boolean {
+  const row = db.select({ v: userSettings.briefingReader }).from(userSettings).where(eq(userSettings.userId, userId)).get();
+  return (row?.v ?? DEFAULT_USER_SETTINGS.briefingReader) === 1;
+}
+
+/** 이번 달(한국시간) "틀린 곳 알리기" 수 — 회차 수십 개의 JSON 칸을 읽지만 관리자 한 명의 행뿐이라 가볍다 */
+function monthFlagCount(userId: number, now = Date.now()): number {
+  const since = kstMonthStart(now);
+  const rows = db.select({ flagItems: userFileState.flagItems }).from(userFileState).where(eq(userFileState.userId, userId)).all();
+  let n = 0;
+  for (const r of rows) for (const f of parseFlagItems(r.flagItems)) if (f.at >= since) n++;
+  return n;
 }
 
 export const briefingRoutes = new Hono<AppEnv>()
@@ -64,8 +82,33 @@ export const briefingRoutes = new Hono<AppEnv>()
       last: last ? toRunDto(last) : null,
       monthCostUsd: monthCostUsd(user.id),
       monthBudgetUsd: BRIEFING.MONTHLY_BUDGET_USD,
+      budgetWarnRatio: BRIEFING.BUDGET_WARN_RATIO,
       nextSinceAt: nextSinceAt(user.id),
+      readerEnabled: readerEnabled(user.id),
+      monthFlagCount: monthFlagCount(user.id),
     });
+  })
+
+  // API-138: 앱 안 원문 보기 — 기사 id만 받고 서버가 회차에서 readUrl을 찾는다(열린 프록시 금지). 받은 글은 저장하지 않는다 (v0.45)
+  .get('/editions/:fileId/items/:itemId/reader', async (c) => {
+    const user = c.get('user');
+    if (!readerEnabled(user.id)) return fail(c, 403, 'BRIEFING_READER_OFF', '앱 안 원문 보기가 꺼져 있어요 (설정 → 뉴스 브리핑)');
+    const fileId = parseId(c.req.param('fileId'));
+    const itemId = c.req.param('itemId');
+    if (fileId === null || !itemId || itemId.length > BRIEFING.ITEM_ID_MAX_CHARS) return fail(c, 400, 'VALIDATION_ERROR', '올바르지 않은 값');
+    const item = findEditionItem(user.id, fileId, itemId);
+    if (!item) return fail(c, 404, 'NOT_FOUND', '기사가 없습니다');
+    // 폰의 캐시에 남지 않게 — "저장하지 않는다"는 브라우저 쪽에도 적용된다
+    c.header('Cache-Control', 'no-store');
+    try {
+      return c.json(await readOriginal(item, c.req.raw.signal));
+    } catch (e) {
+      if (e instanceof ReaderError) {
+        const status = e.code === 'NO_URL' ? 404 : e.code === 'NOT_FOUND' ? 404 : 422;
+        return fail(c, status, `BRIEFING_READER_${e.code}`, e.message);
+      }
+      throw e;
+    }
   })
 
   // API-135: 회차 목록 — 패널의 오늘·지난 브리핑 (v0.43)
@@ -123,7 +166,7 @@ export const briefingRoutes = new Hono<AppEnv>()
 
   // API-134: 자동 생성 설정 — 전체 켜기/끄기와 회차별 켜기·시각(v0.43). 둘 중 보낸 것만 바꾼다.
   // 키 없이 켜 두면 매번 조용히 실패하므로 켜기는 막는다 (자동 백업과 같은 이유)
-  .put('/settings', jsonBody(z.object({ autoEnabled: z.boolean().optional(), schedule: scheduleSchema.optional() })), (c) => {
+  .put('/settings', jsonBody(z.object({ autoEnabled: z.boolean().optional(), schedule: scheduleSchema.optional(), readerEnabled: z.boolean().optional() })), (c) => {
     const body = c.req.valid('json');
     if (body.autoEnabled && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
     const userId = c.get('user').id;
@@ -131,6 +174,7 @@ export const briefingRoutes = new Hono<AppEnv>()
     const set = {
       ...(body.autoEnabled !== undefined ? { briefingAuto: body.autoEnabled ? 1 : 0 } : {}),
       ...(body.schedule ? { briefingSchedule: JSON.stringify(body.schedule) } : {}),
+      ...(body.readerEnabled !== undefined ? { briefingReader: body.readerEnabled ? 1 : 0 } : {}),
       updatedAt: now,
     };
     db.insert(userSettings)
@@ -140,5 +184,5 @@ export const briefingRoutes = new Hono<AppEnv>()
     const auto = autoEnabled(userId);
     const schedule: AutoSchedule = readSchedule(userId);
     const next = auto ? nextAuto(schedule, now) : null;
-    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null });
+    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId) });
   });

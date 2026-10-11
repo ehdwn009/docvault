@@ -8,18 +8,21 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "briefing:check": "tsx src/scripts/check-briefing-sources.ts"
+    "briefing:check": "tsx src/scripts/check-briefing-sources.ts",
+    "briefing:readcheck": "tsx src/scripts/check-briefing-reader.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
     "@hono/node-server": "^1.13.7",
     "@hono/zod-validator": "^0.4.2",
+    "@mozilla/readability": "^0.6.0",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "drizzle-orm": "^0.39.3",
     "fast-xml-parser": "^5.11.2",
     "hono": "^4.7.0",
     "jose": "^5.9.6",
+    "linkedom": "^0.18.13",
     "tsx": "^4.19.2",
     "yazl": "^3.3.1",
     "zod": "^3.25.76"

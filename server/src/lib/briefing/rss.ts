@@ -13,6 +13,9 @@ export type FeedItem = {
   source: string | null;
   /** HTML을 벗긴 발췌. AI에게 보여 주는 데만 쓰고 저장하지 않는다 */
   snippet: string;
+  /** 피드가 본문을 통째로 줄 때(content:encoded·긴 description) 그 앞부분 — 원문을 받기 전에 이미 재료가 된다.
+      메모리에서만 쓰고 회차·화면에는 싣지 않는다 (개선 합의안 S2). 짧으면 빈 문자열 */
+  fullText: string;
 };
 
 const parser = new XMLParser({
@@ -87,6 +90,16 @@ function snippetOf(...candidates: unknown[]): string {
   return '';
 }
 
+/** 피드 본문 — 300자에서 자르던 긴 글을 버리지 않고 재료로 남긴다. 발췌 수준(짧은 글)이면 빈 문자열 */
+function fullTextOf(...candidates: unknown[]): string {
+  let best = '';
+  for (const c of candidates) {
+    const s = plainText(text(c));
+    if (s.length > best.length) best = s;
+  }
+  return best.length >= BRIEFING.FEED_TEXT_MIN_CHARS ? best.slice(0, BRIEFING.FEED_TEXT_MAX_CHARS) : '';
+}
+
 /** 피드 글자 → 항목 목록. 피드로 읽을 수 없으면 던진다 */
 export function parseFeed(xml: string): FeedItem[] {
   let doc: Record<string, unknown>;
@@ -109,6 +122,7 @@ export function parseFeed(xml: string): FeedItem[] {
       publishedAt: parseDate(text(it.pubDate) || text(it['dc:date'])),
       source: plainText(text(it.source)) || null,
       snippet: snippetOf(it.description, it['content:encoded']),
+      fullText: fullTextOf(it['content:encoded'], it.description),
     }));
   }
   if (feed) {
@@ -119,6 +133,7 @@ export function parseFeed(xml: string): FeedItem[] {
       publishedAt: parseDate(text(e.published) || text(e.updated)),
       source: null,
       snippet: snippetOf(e.summary, e.content),
+      fullText: fullTextOf(e.content, e.summary),
     }));
   }
   throw new Error('RSS·Atom 형식이 아닙니다');

@@ -58,7 +58,10 @@ type MessageRow = typeof askMessages.$inferSelect;
 /** 첫 질문 앞에 붙는 문맥 — 문서 이름·드래그한 문장·앞뒤 문단. 문서 전체는 절대 들어오지 않는다 (설계 원칙) */
 function buildContextPrefix(thread: ThreadRow, fileName: string | null): string {
   if (!thread.quote && !thread.context) return '';
-  const parts = ['아래는 내가 읽던 문서에서 드래그한 부분이야. 이걸 근거로 답해 줘.', ''];
+  // 브리핑 기사(제목·요약·주소만 넘어온다)는 "드래그한 부분"이 아니다 — 뉴스용 안내로 바꾼다 (개선 합의안 6.6)
+  const parts = thread.context?.startsWith('[뉴스 브리핑 기사]')
+    ? ['아래는 내 뉴스 브리핑의 기사 하나야(AI가 여러 보도를 읽고 쓴 요약). 이 기사에 대해 물을 거야. 최신 사정이 필요하면 웹 검색으로 찾고 출처를 밝혀 줘. 요약에 없는 수치는 지어내지 말고 찾아서 답해.', '']
+    : ['아래는 내가 읽던 문서에서 드래그한 부분이야. 이걸 근거로 답해 줘.', ''];
   if (fileName) parts.push(`[문서] ${fileName}`);
   if (thread.quote) parts.push('[드래그한 문장]', thread.quote);
   if (thread.context) parts.push('[앞뒤 문맥]', thread.context);

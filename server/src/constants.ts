@@ -96,6 +96,8 @@ export const DEFAULT_USER_SETTINGS = {
   briefingAuto: 0,
   /** 회차별 켜기·시각 JSON — null이면 AUTO_SLOTS 기본값 (lib/briefing/autoSchedule.ts) */
   briefingSchedule: null as string | null,
+  /** 앱 안 원문 보기 스위치(기본 꺼짐) — 서버에서 추출 품질을 잰 뒤(briefing:readcheck) 관리자가 켠다 (개선 합의안 7장) */
+  briefingReader: 0,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -222,9 +224,11 @@ export const BRIEFING = {
   KST_OFFSET_MS: 9 * 60 * 60 * 1000,
   /** 한 회차가 다루는 최대 범위 — 첫 회차·오래 쉰 뒤 기사가 수천 건 쌓이는 것 방지 */
   MAX_RANGE_MS: 24 * 60 * 60 * 1000,
-  /** 후보 상한 — 이것이 곧 비용 상한이다 */
-  MAX_CANDIDATES: 600,
+  /** 후보 상한 — 이것이 곧 비용 상한이다. 검색 한 곳은 15건까지 — 검색은 "몇 곳이 다뤘나"를 세는 신호로만 쓰고,
+      요약 재료는 언론사 직접 RSS·원문에서 가져온다 (개선 합의안 S6, 2026-10-11) */
+  MAX_CANDIDATES: 800,
   MAX_PER_SOURCE: 40,
+  MAX_PER_SEARCH: 15,
   /** 상한으로 자를 때 범위를 이만큼의 칸으로 나눠 칸마다 고르게 남긴다 (24시간이면 2시간씩).
       최신순으로 자르면 24시간판에 마지막 90분 기사만 남았다 (설계 "① 수집") */
   SPREAD_SLOTS: 12,
@@ -233,8 +237,12 @@ export const BRIEFING = {
   MAX_ITEMS_NARROW: 5,
   /** 분류 한 번에 보내는 기사 수 */
   CLASSIFY_CHUNK: 80,
-  /** 요약 한 번에 보내는 기사 수 — 기사마다 원문 앞부분이 붙고 답도 칸 구성으로 길어져 15 → 8 (v0.43) */
+  /** 요약 한 번에 보내는 기사 수 — 기사마다 원문 앞부분이 붙고 답도 칸 구성으로 길어져 15 → 8 (v0.43).
+      핵심은 여러 언론 본문이 붙어 3건씩 (개선 합의안 4.6) */
   SUMMARY_CHUNK: 8,
+  SUMMARY_CHUNK_CORE: 3,
+  /** 요약 보기(글머리표·쉽게·5W) 다시 쓰기 한 번에 보내는 기사 수 — 재료는 우리 요약뿐이라 짧다 */
+  LENS_CHUNK: 10,
   /** 동시 실행 수 — 1GB e2-micro와 API 속도 제한 사이 */
   FETCH_CONCURRENCY: 8,
   SELECT_CONCURRENCY: 5,
@@ -257,8 +265,12 @@ export const BRIEFING = {
   LIVE_SLOW_MS: 8000,
   LIVE_WAITING_MAX: 5,
   LIVE_TITLE_CHARS: 20,
-  /** 이번 달(한국시간) 추정 비용 한도 — 넘으면 자동 생성 정지, 버튼은 확인 후 진행 */
-  MONTHLY_BUDGET_USD: 80,
+  /** 이번 달(한국시간) 추정 비용 한도 — 넘으면 자동 생성 정지, 버튼은 확인 후 진행. 80 → 110 (개선 합의안 8장: 하루 1회 약 $75 + 수시판 여유) */
+  MONTHLY_BUDGET_USD: 110,
+  /** 한도의 이 비율에 닿으면 패널이 미리 알린다 */
+  BUDGET_WARN_RATIO: 0.8,
+  /** 웹 검색 단가 (USD/1000회) — ASK.SEARCH_PER_1000_USD와 같은 값. 웹 검색 보강(S8)의 비용 근거 */
+  SEARCH_PER_1000_USD: 10,
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
   SUMMARY_MAX_OUTPUT_TOKENS: 8000,
@@ -267,18 +279,64 @@ export const BRIEFING = {
   BODY_FETCH_MIN_IMPORTANCE: 2,
   BODY_MAX_CHARS: 2000,
   BODY_FETCH_TIMEOUT_MS: 8000,
+  /** 국내 원문은 더 기다린다 — RSS를 20초로 늘린 것과 같은 이유(미국 리전 서버). 원문만 8초로 남아 국내 본문을 놓쳤다 (개선 합의안 S1) */
+  BODY_FETCH_TIMEOUT_DOMESTIC_MS: 20_000,
   BODY_FETCH_MAX_BYTES: 1536 * 1024,
   BODY_FETCH_CONCURRENCY: 6,
-  BODY_FETCH_TRIES: 2,
+  /** 기사당 시도할 주소 수 — 여러 언론 본문을 읽으려면 더 돌아야 한다 (S7) */
+  BODY_FETCH_TRIES: 4,
+  /** 여러 언론 본문 읽기(개선 합의안 S7) — 핵심은 서로 다른 언론사 3곳(대표 3,000자 + 나머지 1,500자), 주요는 2곳(2,000 + 1,000).
+      재료가 2곳 이상 모여야 핵심을 500~700자로 쓴다. 한 곳 본문은 자동으로 "대표"가 된다 */
+  BODY_OUTLETS_CORE: 3,
+  BODY_OUTLETS_MAJOR: 2,
+  BODY_MAIN_CHARS_CORE: 3000,
+  BODY_OTHER_CHARS_CORE: 1500,
+  BODY_MAIN_CHARS_MAJOR: 2000,
+  BODY_OTHER_CHARS_MAJOR: 1000,
+  /** 피드가 통째로 주는 본문(content:encoded)을 재료로 쓸 때의 길이 — 메모리에서만 쓰고 저장하지 않는다 (S2) */
+  FEED_TEXT_MAX_CHARS: 2000,
+  FEED_TEXT_MIN_CHARS: 400,
+  /** Google 기사를 같은 언론사의 직접 기사에 붙이는 기준 — 제목 글자 2개씩 겹침 비율, 발행 시각 차이 (S3).
+      두 제목에 숫자가 있으면 같아야 한다(후속 기사 오결합 방지) */
+  ATTACH_TITLE_SIMILARITY: 0.7,
+  ATTACH_MAX_GAP_MS: 6 * 60 * 60 * 1000,
+  /** 받아 온 본문이 그 기사인지 — 제목 핵심어(글자 2개씩)가 본문에 이만큼은 있어야 한다. 엉뚱한 페이지(목록·오류)와 잘못 붙은 기사를 거른다 (verify.ts) */
+  BODY_TITLE_OVERLAP_MIN: 0.3,
+  /** 숫자 대조 — 요약의 숫자가 근거 재료에 없으면 'log'는 세기만, 'drop'은 그 문장을 지운다.
+      처음 2주는 기록만 — 맞는 글을 지워 다시 얕아지는지 본 뒤 켠다 (개선 합의안 4.5). 켜기 전에는 여러 언론 종합도 켜지 않는다 */
+  NUMBER_CHECK_MODE: 'log' as 'log' | 'drop',
+  /** 웹 검색 보강(개선 합의안 S8) — 원문 읽기까지 다 하고도 제목뿐인 핵심·주요만, 회차당 이만큼, 기사당 검색 2회.
+      검색 범위는 수집 목록 언론사 + 통신사로 좁힌다. 끄면 그런 기사는 "제목만" 참고로 내려간다 */
+  WEB_FILL_ENABLED: true,
+  WEB_FILL_MAX: 15,
+  WEB_FILL_SEARCHES: 2,
+  WEB_FILL_MAX_OUTPUT_TOKENS: 1500,
+  WEB_FILL_MODEL: 'claude-haiku-4-5',
+  /** 웹 검색 도구 버전 — Haiku용 (ASK_MODELS와 같은 값) */
+  WEB_FILL_TOOL: 'web_search_20250305',
+  WEB_FILL_WIRES: ['reuters.com', 'apnews.com', 'bloomberg.com', 'afp.com'],
+  /** 찾은 보도의 날짜가 회차 범위에서 이만큼 벗어나면 다른 사건으로 본다 */
+  WEB_FILL_DATE_SLACK_MS: 24 * 60 * 60 * 1000,
   /** 본문 문단으로 칠 최소 길이 — 메뉴·저작권 표시 같은 짧은 줄을 거른다 */
   BODY_MIN_PARAGRAPH_CHARS: 30,
   /** 발췌가 제목을 되풀이할 뿐인지 볼 때, 제목을 빼고 남아야 하는 글자 수 */
   SNIPPET_MIN_EXTRA_CHARS: 20,
   /** 기사 하나에 붙이는 "같은 사건 다른 보도" 링크 수 상한 */
   MAX_RELATED: 5,
-  /** 핵심·주요 펼침(무슨 일·배경·숫자로 보면·앞으로)을 합친 목표 길이 (글자, 사용자 결정 v0.43) */
-  DETAIL_MIN_CHARS: 200,
-  DETAIL_MAX_CHARS: 300,
+  /** 펼침 길이(글자) — 등급과 재료에 따라 다르다 (개선 합의안 4.2). 핵심은 본문 2곳 이상(또는 1곳 2,000자 이상)일 때 500~700,
+      1곳이면 300~450, 주요 250~400. 목표는 기사마다 min(등급 상한, 재료 글자 ÷ 3)으로 계산해 지시문에 넣는다 */
+  LENGTH_CORE_DEEP: [500, 700] as readonly [number, number],
+  LENGTH_CORE: [300, 450] as readonly [number, number],
+  LENGTH_MAJOR: [250, 400] as readonly [number, number],
+  /** 재료 글자 수의 몇 분의 1까지 쓰나 — 재료보다 긴 요약은 지어낸 것이다 */
+  LENGTH_MATERIAL_RATIO: 3,
+  /** 핵심을 깊게(500~700자) 쓰는 조건 — 본문 2곳 이상이거나 한 곳 본문이 이만큼 이상 */
+  DEEP_SINGLE_BODY_CHARS: 2000,
+  /** 결과가 상한의 이 배수를 넘으면 실행 기록에 남긴다 */
+  LENGTH_OVERRUN_RATIO: 1.3,
+  /** 골라 쓰는 칸 수 상한과 언론사마다 다른 점(angles) 상한 */
+  BLOCKS_MAX: 3,
+  ANGLES_MAX: 3,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
   TITLE_MAX_CHARS: 40,
   /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */
@@ -302,4 +360,14 @@ export const BRIEFING = {
   RUNS_LIST_MAX: 100,
   /** 실행 중 진행 표시를 다시 읽는 주기 (클라이언트도 같은 값) */
   STATUS_POLL_MS: 2000,
+  /** 틀린 곳 알리기 — 회차 하나에 기억하는 신고 수 상한, 메모 길이 (API-073 flag) */
+  FLAG_ITEMS_MAX: 200,
+  FLAG_NOTE_MAX_CHARS: 200,
+  /** 앱 안 원문 보기(개선 합의안 7장) — 관리자가 설정에서 켰을 때만. 누를 때만 받고 저장하지 않는다.
+      동시 1건, 20초, 짧게 뽑히면(유료벽·추출 실패) 사이트로 보낸다. 메모리 캐시는 10분·20건까지 */
+  READER_TIMEOUT_MS: 20_000,
+  READER_MIN_CHARS: 600,
+  READER_CACHE_MS: 10 * 60 * 1000,
+  READER_CACHE_MAX: 20,
+  READER_MAX_PARAGRAPHS: 80,
 } as const;

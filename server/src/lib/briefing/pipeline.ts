@@ -1,19 +1,23 @@
 import { BRIEFING } from '../../constants.js';
-import { emptyUsage, type AiCaller, type Usage } from './ai.js';
-import { readBodies } from './body.js';
+import { emptyUsage, type AiCaller, type Usage, type WebCaller } from './ai.js';
+import { readBodies, type Material } from './body.js';
 import { classify } from './classify.js';
 import { collect, type Candidate } from './collect.js';
 import { assembleEdition, readPrevious, type Edition, type Slot } from './edition.js';
+import { needsDemotion, writeFallbacks } from './fallback.js';
+import { writeLenses } from './lenses.js';
 import { mergeSameStories } from './merge.js';
 import { select } from './select.js';
 import { loadSources } from './sources.js';
 import { summarize } from './summarize.js';
 import type { BriefingSub } from './taxonomy.js';
+import { allowedDomainsOf, webFill } from './webfill.js';
 
-// 회차 하나를 만드는 순서 — 수집 → 분류 → 선별 → 합치기 → 원문 읽기 → 요약 → 조립. 저장과 실행 기록은 run.ts가 한다
-// (뉴스 브리핑 설계 "만드는 과정"). 실패는 이유를 담아 던지고, 어느 단계에서 실패하든 파일은 생기지 않는다
+// 회차 하나를 만드는 순서 — 수집 → 분류 → 선별 → 합치기 → 원문 읽기 → 웹 검색 보강 → 요약 → 보기 쓰기 → 조립.
+// 저장과 실행 기록은 run.ts가 한다 (뉴스 브리핑 설계 "만드는 과정", 개선 합의안 2026-10-11).
+// 실패는 이유를 담아 던지고, 어느 단계에서 실패하든 파일은 생기지 않는다
 
-export type Stage = 'collect' | 'classify' | 'select' | 'read' | 'summarize' | 'save';
+export type Stage = 'collect' | 'classify' | 'select' | 'read' | 'fill' | 'summarize' | 'lens' | 'save';
 
 export type PipelineProgress = {
   onStage: (stage: Stage, done: number, total: number) => void;
@@ -43,6 +47,8 @@ export async function generateEdition(args: {
   until: number;
   prevFileId: number | null;
   ai: AiCaller;
+  /** 웹 검색 보강(S8). 없으면 보강을 건너뛴다(키 없는 시험 실행) */
+  web?: WebCaller;
   signal?: AbortSignal;
   progress: PipelineProgress;
 }): Promise<PipelineResult> {
@@ -64,7 +70,9 @@ export async function generateEdition(args: {
       onProgress: (d, t) => progress.onStage('collect', d, t),
       track: progress.track,
     });
-    log(`수집 끝 — 후보 ${got.candidates.length}건${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(${got.failed.slice(0, 3).map((f) => f.name).join(', ')}${got.failed.length > 3 ? ' 외' : ''})` : ''}`);
+    log(
+      `수집 끝 — 후보 ${got.candidates.length}건${got.attached ? `, Google 기사 ${got.attached}건을 직접 기사에 붙임` : ''}${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(${got.failed.slice(0, 3).map((f) => f.name).join(', ')}${got.failed.length > 3 ? ' 외' : ''})` : ''}`,
+    );
     progress.onCollected?.({ sourceCount: got.sourceCount, failed: got.failed, candidateCount: got.candidates.length });
     const okCount = got.sourceCount - got.failed.length;
     // 망가진 수집으로 만든 회차는 직전 회차보다 나쁘다
@@ -92,24 +100,66 @@ export async function generateEdition(args: {
     const picked = await mergeSameStories(selected, args.ai, usage, signal);
     log(`선별 끝 — ${picked.length}건${selected.length > picked.length ? ` (같은 사건 ${selected.length - picked.length}건 합침)` : ''}`);
 
-    // ③-1 핵심·주요 기사 원문 앞부분 읽기 — 실패한 기사는 발췌로 돌아간다 (설계 "③-1 근거 보강")
-    const bodies = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t), track: progress.track });
+    // ③-1 핵심·주요 기사의 재료 — 피드 본문·원문(핵심 3곳, 주요 2곳). 실패한 기사는 발췌로 돌아간다 (설계 "③-1", 합의안 S7)
+    const read = await readBodies(picked, { signal, onProgress: (d, t) => progress.onStage('read', d, t), track: progress.track });
     const readTargets = picked.filter((p) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE).length;
-    log(`원문 읽기 끝 — ${readTargets}건 중 ${bodies.size}건`);
+    const materials: Map<number, Material[]> = read.materials;
+    log(`원문 읽기 끝 — ${readTargets}건 중 ${materials.size}건${read.fromFeed ? ` (피드 본문 ${read.fromFeed})` : ''}${read.rejected ? `, 제목과 안 맞아 버림 ${read.rejected}` : ''}`);
 
-    // ④ 요약
-    const written = await summarize(picked, bodies, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('summarize', d, t) });
+    // ③-3 웹 검색 보강 — 그래도 제목뿐인 핵심·주요만 (합의안 S8)
+    let webFilled = 0;
+    if (args.web) {
+      const fill = await webFill(picked, materials, allowedDomainsOf(sources), args.web, usage, {
+        since: args.since,
+        until: args.until,
+        signal,
+        onProgress: (d, t) => progress.onStage('fill', d, t),
+      });
+      for (const [i, m] of fill.filled) materials.set(i, m);
+      webFilled = fill.filled.size;
+      if (fill.tried > 0) log(`웹 검색 보강 끝 — 제목뿐인 ${fill.tried}건 중 ${webFilled}건 채움`);
+    }
+
+    // 재료 보장 — 그래도 재료가 없는 핵심·주요는 참고로 내린다 (S0)
+    const demoteIdx = picked.map((p, i) => i).filter((i) => needsDemotion(picked[i]!, materials.get(i)));
+    const keptIdx = picked.map((p, i) => i).filter((i) => !demoteIdx.includes(i));
+    const demoted = await writeFallbacks(picked, demoteIdx, args.ai, usage, signal);
+    if (demoteIdx.length > 0) log(`재료 없는 핵심·주요 ${demoteIdx.length}건을 참고로 내림`);
+
+    // ④ 요약 — 재료가 있는 핵심·주요만
+    const forSummary = picked.map((p, i) => (keptIdx.includes(i) ? p : { ...p, importance: 1 as const }));
+    const written = await summarize(forSummary, materials, args.ai, usage, {
+      prevSummaries: prev.summaries,
+      signal,
+      onProgress: (d, t) => progress.onStage('summarize', d, t),
+    });
     log(`요약 끝 — ${written.size}건`);
+
+    // ④-2 요약 보기(글머리표·쉽게·5W) — 우리 요약만 재료로 Haiku가 다시 쓴다 (합의안 4.7)
+    const lens = await writeLenses(written, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('lens', d, t) });
+    log(`요약 보기 끝 — ${lens.lenses.size}건`);
 
     const edition = assembleEdition({
       picked,
       written,
-      bodies,
+      materials,
+      lenses: lens.lenses,
+      demoted,
       slot: args.slot,
       since: args.since,
       until: args.until,
       createdAt: Date.now(),
-      stats: { sources: got.sourceCount, sourcesFailed: got.failed.length, candidates: got.candidates.length },
+      stats: {
+        sources: got.sourceCount,
+        sourcesFailed: got.failed.length,
+        candidates: got.candidates.length,
+        attached: got.attached,
+        bodiesRead: materials.size,
+        fromFeed: read.fromFeed,
+        extractRejected: read.rejected,
+        webFilled,
+        lensDrops: lens.dropped,
+      },
       usage,
     });
     if (edition.stats.items === 0) return { kind: 'empty', usage, message: '브리핑에 실을 기사가 없어요' };
