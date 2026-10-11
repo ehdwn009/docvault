@@ -68,8 +68,12 @@ function usageColumns(u: Usage) {
     haikuOutputTokens: u.haikuOutput,
     sonnetInputTokens: u.sonnetInput,
     sonnetOutputTokens: u.sonnetOutput,
+    opusInputTokens: u.opusInput,
+    opusOutputTokens: u.opusOutput,
     webSearches: u.webSearches,
     costUsd: costOf(u),
+    // 단계별 분해 — "어느 단계가 돈을 먹나"의 실측 (v0.46)
+    stageUsage: JSON.stringify(u.byStage),
   };
 }
 
@@ -152,7 +156,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller, web
   const stillRunning = and(eq(briefingRuns.id, run.id), eq(briefingRuns.status, 'running'));
   const setProgress = (stage: Stage, done: number, total: number) =>
     db.update(briefingRuns).set({ stage, progressDone: done, progressTotal: total }).where(stillRunning).run();
-  const STAGE_START: Partial<Record<Stage, string>> = { classify: '분류 시작', select: '선별 시작', read: '원문 읽기 시작', fill: '웹 검색 보강', summarize: '요약 시작', lens: '요약 보기 쓰기', save: '저장' };
+  const STAGE_START: Partial<Record<Stage, string>> = { classify: '분류 시작', select: '선별 시작', read: '원문 읽기 시작', fill: '웹 검색 보강', summarize: '요약 시작', lens: '글머리표 쓰기', save: '저장' };
   let lastStage: Stage | null = null;
   try {
     const result = await generateEdition({
@@ -208,7 +212,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller, web
     const u = result.usage;
     console.log(
       `[briefing] ${result.edition.edition.date} ${result.edition.edition.label} ok ${result.edition.stats.items}건 ${Math.round((Date.now() - started) / 1000)}s ` +
-        `haiku ${u.haikuInput}/${u.haikuOutput} sonnet ${u.sonnetInput}/${u.sonnetOutput} 검색 ${u.webSearches} ≈ $${costOf(u)} → ${saved.name}`,
+        `haiku ${u.haikuInput}/${u.haikuOutput} sonnet ${u.sonnetInput}/${u.sonnetOutput} opus ${u.opusInput}/${u.opusOutput} 검색 ${u.webSearches} ≈ $${costOf(u)} → ${saved.name}`,
     );
   } catch (e) {
     const usage = e instanceof BriefingFailure ? e.usage : null;
@@ -253,12 +257,25 @@ export function toRunDto(r: RunRow) {
     itemCount: r.status === 'ok' ? r.itemCount : null,
     costUsd: r.costUsd,
     webSearches: r.webSearches,
+    opusInputTokens: r.opusInputTokens,
+    opusOutputTokens: r.opusOutputTokens,
+    stageUsage: parseStageUsage(r.stageUsage),
     message: r.message,
     startedAt: r.startedAt,
     finishedAt: r.finishedAt,
     // 도는 중일 때만 — 진행 기록과 오래 기다리는 출처 (설계 "실행 관리 — 진행 기록")
     live: r.status === 'running' ? liveView(r.id) : null,
   };
+}
+
+function parseStageUsage(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const v: unknown = JSON.parse(raw);
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function listRuns(ownerId: number, limit: number): RunRow[] {

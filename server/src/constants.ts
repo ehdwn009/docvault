@@ -201,12 +201,15 @@ export const CARD = {
 export const BRIEFING = {
   /** 분류·선별·참고 기사 요약 — 판단은 단순하고 양이 많다 */
   SELECT_MODEL: 'claude-haiku-4-5',
-  /** 핵심·주요 기사 요약 — 양이 적고 품질이 보이는 자리 */
+  /** 주요 기사 요약 — 양이 적고 품질이 보이는 자리 */
   SUMMARY_MODEL: 'claude-sonnet-5-5',
+  /** 핵심 기사 요약 — 가장 많이 읽히는 20건은 상위 모델로(사용자 결정 2026-10-11, 수집 재설계 토론). 회차당 약 +$0.4 */
+  SUMMARY_MODEL_CORE: 'claude-opus-5-5',
   /** 모델별 단가 (USD/백만 토큰) — 실행 기록의 추정 비용 계산용. 청구서가 아니라 감 잡기용 */
   PRICES: {
     'claude-haiku-4-5': { inputPerMtok: 1, outputPerMtok: 5 },
     'claude-sonnet-5-5': { inputPerMtok: 2, outputPerMtok: 10 },
+    'claude-opus-5-5': { inputPerMtok: 4, outputPerMtok: 20 },
   },
   /** 자동 생성 기본 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전. 사람마다 바꿀 수 있다(v0.43, autoSchedule.ts) */
   AUTO_SLOTS: [
@@ -237,11 +240,11 @@ export const BRIEFING = {
   MAX_ITEMS_NARROW: 5,
   /** 분류 한 번에 보내는 기사 수 */
   CLASSIFY_CHUNK: 80,
-  /** 요약 한 번에 보내는 기사 수 — 기사마다 원문 앞부분이 붙고 답도 칸 구성으로 길어져 15 → 8 (v0.43).
+  /** 요약 한 번에 보내는 기사 수 — 기사마다 원문 앞부분이 붙고 답도 칸 구성으로 길어져 15 → 8 (v0.43) → 6 (v0.46, 5W·영향이 더 붙어서).
       핵심은 여러 언론 본문이 붙어 3건씩 (개선 합의안 4.6) */
-  SUMMARY_CHUNK: 8,
+  SUMMARY_CHUNK: 6,
   SUMMARY_CHUNK_CORE: 3,
-  /** 요약 보기(글머리표·쉽게·5W) 다시 쓰기 한 번에 보내는 기사 수 — 재료는 우리 요약뿐이라 짧다 */
+  /** 글머리표 다시 쓰기 한 번에 보내는 기사 수 — 재료는 우리 요약뿐이라 짧다 */
   LENS_CHUNK: 10,
   /** 동시 실행 수 — 1GB e2-micro와 API 속도 제한 사이 */
   FETCH_CONCURRENCY: 8,
@@ -273,7 +276,8 @@ export const BRIEFING = {
   SEARCH_PER_1000_USD: 10,
   /** 분류·선별 답 길이 상한 (토큰) */
   SELECT_MAX_OUTPUT_TOKENS: 8000,
-  SUMMARY_MAX_OUTPUT_TOKENS: 8000,
+  /** Opus 5.5·Sonnet 5.5는 생각 토큰이 max_tokens에 포함된다(effort low라도) — 답이 잘리지 않게 넉넉히 (v0.46) */
+  SUMMARY_MAX_OUTPUT_TOKENS: 16000,
   /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수.
       주요(2)까지 읽는다 — 펼침을 칸 구성으로 길게 쓰려면 재료가 있어야 한다. 발췌만으로는 제목을 되풀이했다 (v0.43) */
   BODY_FETCH_MIN_IMPORTANCE: 2,
@@ -300,6 +304,10 @@ export const BRIEFING = {
       두 제목에 숫자가 있으면 같아야 한다(후속 기사 오결합 방지) */
   ATTACH_TITLE_SIMILARITY: 0.7,
   ATTACH_MAX_GAP_MS: 6 * 60 * 60 * 1000,
+  /** 수집 단계 사건 묶기(v0.46, 수집 재설계 토론) — 같은 region·6시간 안·제목 글자 묶음 겹침 이만큼·숫자 집합 같음이면 같은 사건.
+      첫 실측 5회차는 세기만 한다(stats.wouldMerge). 짧은 상투 제목([오늘의 증시] 등)은 묶지 않는다 */
+  STORY_GROUP_SIMILARITY: 0.7,
+  STORY_GROUP_MIN_KEY_CHARS: 10,
   /** 받아 온 본문이 그 기사인지 — 제목 핵심어(글자 2개씩)가 본문에 이만큼은 있어야 한다. 엉뚱한 페이지(목록·오류)와 잘못 붙은 기사를 거른다 (verify.ts) */
   BODY_TITLE_OVERLAP_MIN: 0.3,
   /** 숫자 대조 — 요약의 숫자가 근거 재료에 없으면 'log'는 세기만, 'drop'은 그 문장을 지운다.
@@ -315,6 +323,8 @@ export const BRIEFING = {
   /** 웹 검색 도구 버전 — Haiku용 (ASK_MODELS와 같은 값) */
   WEB_FILL_TOOL: 'web_search_20250305',
   WEB_FILL_WIRES: ['reuters.com', 'apnews.com', 'bloomberg.com', 'afp.com'],
+  /** 검색 허용 도메인 상한 — 통신사 + 수집 목록 앞쪽 언론사. 70개를 넘기면 검색 도구가 요청을 거부한다 (v0.46) */
+  WEB_FILL_DOMAINS_MAX: 20,
   /** 찾은 보도의 날짜가 회차 범위에서 이만큼 벗어나면 다른 사건으로 본다 */
   WEB_FILL_DATE_SLACK_MS: 24 * 60 * 60 * 1000,
   /** 본문 문단으로 칠 최소 길이 — 메뉴·저작권 표시 같은 짧은 줄을 거른다 */
@@ -337,6 +347,17 @@ export const BRIEFING = {
   /** 골라 쓰는 칸 수 상한과 언론사마다 다른 점(angles) 상한 */
   BLOCKS_MAX: 3,
   ANGLES_MAX: 3,
+  /** 영향 칸(v0.46, 영향 칸 토론 2026-10-11) — 'off'면 만들지 않는다. 경제·테크(wide) 분야의 핵심 2줄·주요 1줄, 문장 60자, 대상 6자.
+      기사가 말한 것(stated: 줄과 근거 재료에 같은 방향 어휘)만 낱말(부담/기회/갈림)이 붙고, AI가 짚은 것(inferred)은 "AI 추론"으로 따로 표시한다(사용자 결정).
+      "왜 중요한가"·양쪽 시각과 글자 묶음이 이만큼 겹치면 되풀이라 지운다 */
+  IMPACT_MODE: 'show' as 'off' | 'show',
+  IMPACT_MAX_CORE: 2,
+  IMPACT_MAX_MAJOR: 1,
+  IMPACT_TEXT_MAX_CHARS: 60,
+  IMPACT_TARGET_MAX_CHARS: 6,
+  IMPACT_DUP_OVERLAP: 0.5,
+  /** 5W 한 칸의 길이 상한 — 요약 호출이 원문을 보고 쓴다(v0.46). 없는 칸은 비워 두고 화면이 "기사에 없음"으로 보인다 */
+  W5_TEXT_MAX_CHARS: 60,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
   TITLE_MAX_CHARS: 40,
   /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */

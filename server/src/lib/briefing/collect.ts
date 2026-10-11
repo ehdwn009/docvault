@@ -28,9 +28,12 @@ export type Candidate = {
 export type CollectResult = {
   candidates: Candidate[];
   sourceCount: number;
-  failed: { name: string; reason: string }[];
+  /** kind: 검색 출처(Google 뉴스)는 실패율의 분모에서 뺀다 — 검색 40개가 한꺼번에 429를 받으면 회차가 통째로 실패했다 (v0.46) */
+  failed: { name: string; reason: string; kind: 'feed' | 'search' }[];
   /** Google 기사를 직접 기사에 붙인 수 — 실행 기록의 건강 숫자 (S3) */
   attached: number;
+  /** 수집 단계 사건 묶기를 켜면 묶일 후보 수 — 첫 실측 5회차는 세기만 한다 (v0.46) */
+  wouldMerge: number;
 };
 
 /** 중복 판정용 제목 열쇠 — 말머리([속보]·[단독]), 공백, 문장부호를 지운다 */
@@ -108,7 +111,7 @@ export function bigramSimilarity(a: string, b: string): number {
 }
 
 const NUMBERS = /\d+(?:[.,]\d+)*/g;
-function numberSet(s: string): string[] {
+export function numberSet(s: string): string[] {
   return [...new Set((s.match(NUMBERS) ?? []).map((n) => n.replace(/,/g, '')))].sort();
 }
 
@@ -201,6 +204,32 @@ export function dedupe(list: Candidate[]): Candidate[] {
   return [...byKey.values()];
 }
 
+/**
+ * 수집 단계 사건 묶기 세기 (v0.46, 수집 재설계 토론) — 같은 region·6시간 안·제목 글자 묶음 겹침 0.7 이상·숫자 집합 같음·분야를 둘 다 알면 같음.
+ * 지금은 켜지 않고 "묶였을 후보 수"만 센다(stats.wouldMerge) — 첫 5회차에서 묶음을 눈으로 보고 오결합 5% 이하면 켠다.
+ * 비교는 발행 시각순으로 6시간 창 안에서만 해 600건이라도 가볍다. 네트워크·AI 비용 0
+ */
+export function countStoryGroups(list: Candidate[]): number {
+  const sorted = [...list].map((c) => ({ c, key: titleKey(c.title), nums: numberSet(c.title) })).sort((a, b) => a.c.publishedAt - b.c.publishedAt);
+  let merged = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i]!;
+    if (a.key.length < BRIEFING.STORY_GROUP_MIN_KEY_CHARS) continue;
+    for (let j = i + 1; j < sorted.length; j++) {
+      const b = sorted[j]!;
+      if (b.c.publishedAt - a.c.publishedAt > BRIEFING.ATTACH_MAX_GAP_MS) break;
+      if (b.c.region !== a.c.region || b.key.length < BRIEFING.STORY_GROUP_MIN_KEY_CHARS) continue;
+      if (a.c.sub && b.c.sub && a.c.sub !== b.c.sub) continue;
+      if (a.nums.length && b.nums.length && a.nums.join('|') !== b.nums.join('|')) continue;
+      if (bigramSimilarity(a.key, b.key) >= BRIEFING.STORY_GROUP_SIMILARITY) {
+        merged++;
+        break; // 하나에만 묶인다
+      }
+    }
+  }
+  return merged;
+}
+
 /** 출처 하나의 피드 — 국내 출처는 더 기다린다(설계 "멈춤 대책 2차"). 점검 스크립트도 같은 길로 받는다 */
 export function fetchSource(src: Source, signal?: AbortSignal): Promise<string> {
   const timeoutMs = src.region === '국내' ? BRIEFING.FETCH_TIMEOUT_DOMESTIC_MS : BRIEFING.FETCH_TIMEOUT_MS;
@@ -236,9 +265,9 @@ export async function collect(
   const all: Candidate[] = [];
   results.forEach((r, i) => {
     if (r.ok) all.push(...r.value);
-    else failed.push({ name: sources[i]?.name ?? '?', reason: errorText(r.error) });
+    else failed.push({ name: sources[i]?.name ?? '?', reason: errorText(r.error), kind: sources[i]?.sub ? 'search' : 'feed' });
   });
   const joined = attachToDirect(dedupe(all));
   const candidates = spreadPick(joined.list, BRIEFING.MAX_CANDIDATES, opts.since, opts.until);
-  return { candidates, sourceCount: sources.length, failed, attached: joined.attached };
+  return { candidates, sourceCount: sources.length, failed, attached: joined.attached, wouldMerge: countStoryGroups(candidates) };
 }

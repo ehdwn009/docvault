@@ -4,14 +4,14 @@ import { db } from '../../db/index.js';
 import { files } from '../../db/schema.js';
 import type { DbOrTx } from '../content.js';
 import { basisOf, type Material } from './body.js';
-import { isAggregator } from './collect.js';
+import { isAggregator, numberSet } from './collect.js';
 import { costOf, type Usage } from './ai.js';
 import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
 import type { Demoted } from './fallback.js';
 import type { Lenses } from './lenses.js';
-import { evidenceOf, type Block, type Sides, type Written } from './summarize.js';
-import { categoriesOf, SECTIONS, type BriefingSection } from './taxonomy.js';
+import { evidenceOf, type Block, type ImpactLine, type Sides, type W5, type Written } from './summarize.js';
+import { categoriesOf, SECTIONS, SUBS, type BriefingSection } from './taxonomy.js';
 import { kstParts } from './time.js';
 
 // 회차 JSON — 회차 하나 = 문서 하나의 본문 (뉴스 브리핑 설계 "회차 JSON (version 1)").
@@ -52,8 +52,13 @@ export type EditionItem = {
   blocks?: Block[];
   /** 양쪽 시각 — 쟁점(dispute)이나 언론사마다 다른 강조(emphasis). 핵심·재료 2곳 이상일 때만 */
   sides?: Sides;
-  /** 요약 보기 — 글머리표·쉽게·5W. 우리 요약을 Haiku가 다시 쓴 것 */
+  /** 요약 보기 — 글머리표. 우리 요약을 Haiku가 다시 쓴 것 (v0.45의 쉽게·5W는 옛 회차에만 남아 있다) */
   lenses?: Lenses;
+  // ---- v0.46 (영향 칸 토론·수집 재설계 토론 2026-10-11) ----
+  /** 5W — 원문을 읽은 요약 호출이 쓴 것, 칸마다 근거 기호. 없는 칸은 없다(화면이 "기사에 없음") */
+  w5?: W5;
+  /** 영향 — 누구에게 어떤 영향인지, 경제·테크 핵심 2줄·주요 1줄. stated만 낱말이 붙고 inferred는 "AI 추론" */
+  impact?: ImpactLine[];
   /** 앱 안 원문으로 받을 주소 — 회차를 만들 때 본문 받기에 성공한 언론사 주소(본문이 아니라 주소). 없으면 사이트로 보낸다 */
   readUrl?: string;
   /** 갱신된 이슈 — 직전 회차 이후 바뀐 점 한 줄 */
@@ -81,8 +86,27 @@ export type Edition = {
     lensDrops?: number;
     demoted?: number;
     overruns?: number;
+    // ---- v0.46 실측 칸 (수집 재설계 토론) — 2주 10회차의 기준선. 되돌림 기준은 설계 문서 "④-3·실측" ----
+    /** 영향 줄 수(stated·inferred)와 검증에서 지운 줄 수 */
+    impact?: { stated: number; inferred: number; dropped: number };
+    /** 핵심 중 본문·웹 재료 2곳 이상 수 — 품질 병목 지표(목표 70% 이상) */
+    coreDeep?: { deep: number; core: number };
+    /** 실린 기사의 발행 시각 12칸 분포 — 빈 칸 수와 가장 큰 칸 비율(최신 쏠림 감시) */
+    slotGaps?: { empty: number; maxShare: number };
+    /** 세계 비율 — 실린 기사 중 세계, 오늘의 핵심 중 세계 */
+    worldShare?: { items: number; lead: number };
+    /** 기사가 0건인 세부 분야 수 (40개 중) */
+    emptySubs?: number;
+    /** 원 제목의 숫자와 AI 제목의 숫자가 다른 기사 수 — 과장·오기 감시 */
+    titleMismatch?: number;
+    /** 수집 단계 사건 묶기를 켰다면 묶였을 후보 수 */
+    wouldMerge?: number;
+    /** 단계별 비용 분해 (모델·호출 수·토큰·추정 비용) */
+    byStage?: Record<string, { model: string; calls: number; input: number; output: number; webSearches: number; usd: number }>;
   };
-  cost: { usd: number; haiku: { input: number; output: number }; sonnet: { input: number; output: number }; webSearches?: number };
+  cost: { usd: number; haiku: { input: number; output: number }; sonnet: { input: number; output: number }; opus?: { input: number; output: number }; webSearches?: number };
+  /** 영향 칸을 화면에 그리나 — IMPACT_MODE가 show일 때 true. 옛 회차(없음)는 그리지 않는다 */
+  impactVisible?: boolean;
   /** 오늘의 핵심 기사 id (최대 LEAD_COUNT). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
   lead?: string[];
   sections: {
@@ -116,7 +140,7 @@ export function assembleEdition(args: {
   since: number;
   until: number;
   createdAt: number;
-  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number };
+  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number };
   usage: Usage;
 }): Edition {
   const { date } = kstParts(args.createdAt);
@@ -127,6 +151,9 @@ export function assembleEdition(args: {
   let numberDrops = 0;
   let demotedCount = 0;
   let overruns = 0;
+  const impactCount = { stated: 0, inferred: 0, dropped: 0 };
+  const coreDeep = { deep: 0, core: 0 };
+  let titleMismatch = 0;
 
   args.picked.forEach((p, i) => {
     const w = p.importance >= 2 ? args.written.get(i) : undefined;
@@ -160,6 +187,15 @@ export function assembleEdition(args: {
     if (w) {
       numberDrops += w.numberDrops;
       if (w.overrun) overruns++;
+      impactCount.dropped += w.impactDrops;
+      for (const line of w.impact ?? []) impactCount[line.kind]++;
+      if (importance === 3) {
+        coreDeep.core++;
+        if (evidence.filter((e) => e.via !== 'lede').length >= 2) coreDeep.deep++;
+      }
+      // AI 제목에 원 제목에 없는 숫자가 들어오면 과장이거나 오기다 — 세기만 한다 (원 제목의 숫자를 덜 쓴 것은 괜찮다)
+      const orig = numberSet(p.main.title);
+      if (numberSet(w.title).some((n) => !orig.includes(n))) titleMismatch++;
     }
     const lenses = args.lenses.get(i);
     const item: EditionItem = {
@@ -182,6 +218,8 @@ export function assembleEdition(args: {
       ...(w ? { summaryFrom: w.summaryFrom, whyFrom: w.whyFrom, blocks: w.blocks } : {}),
       ...(w?.sides ? { sides: w.sides } : {}),
       ...(lenses ? { lenses } : {}),
+      ...(w?.w5 ? { w5: w.w5 } : {}),
+      ...(w?.impact ? { impact: w.impact } : {}),
       ...(readUrl ? { readUrl } : {}),
       ...(w?.changed ? { changed: w.changed } : {}),
       ...(titleOnly ? { titleOnly: true } : {}),
@@ -206,21 +244,51 @@ export function assembleEdition(args: {
       }))
       .filter((c) => c.subs.length > 0),
   })).filter((s) => s.categories.length > 0);
-  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) total += sub.items.length;
+  const allItems: { it: EditionItem; world: boolean }[] = [];
+  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) allItems.push({ it, world: s.section === '세계' });
+  total = allItems.length;
+  const lead = leadIdsOf(sections);
+  const leadSet = new Set(lead);
 
   return {
     version: BRIEFING.EDITION_VERSION,
-    lead: leadIdsOf(sections),
+    lead,
     edition: { date, slot: args.slot, label: slotLabel(args.slot, args.createdAt), since: args.since, until: args.until, createdAt: args.createdAt },
-    stats: { ...args.stats, items: total, basis: basisCount, numberDrops, demoted: demotedCount, overruns },
+    stats: {
+      ...args.stats,
+      items: total,
+      basis: basisCount,
+      numberDrops,
+      demoted: demotedCount,
+      overruns,
+      impact: impactCount,
+      coreDeep,
+      slotGaps: slotGapsOf(allItems.map((x) => x.it.publishedAt), args.since, args.until),
+      worldShare: { items: allItems.filter((x) => x.world).length, lead: allItems.filter((x) => x.world && leadSet.has(x.it.id)).length },
+      emptySubs: SUBS.length - bySub.size,
+      titleMismatch,
+      byStage: args.usage.byStage,
+    },
     cost: {
       usd: costOf(args.usage),
       haiku: { input: args.usage.haikuInput, output: args.usage.haikuOutput },
       sonnet: { input: args.usage.sonnetInput, output: args.usage.sonnetOutput },
+      opus: { input: args.usage.opusInput, output: args.usage.opusOutput },
       webSearches: args.usage.webSearches,
     },
+    ...(BRIEFING.IMPACT_MODE === 'show' ? { impactVisible: true } : {}),
     sections,
   };
+}
+
+/** 실린 기사의 발행 시각을 범위 12칸(SPREAD_SLOTS)에 놓았을 때 — 빈 칸 수와 가장 큰 칸의 비율. 최신 90분에 쏠리던 실패의 감시 지표 */
+function slotGapsOf(times: number[], since: number, until: number): { empty: number; maxShare: number } {
+  const n = BRIEFING.SPREAD_SLOTS;
+  const counts = Array.from({ length: n }, () => 0);
+  const width = Math.max(1, (until - since) / n);
+  for (const t of times) counts[Math.min(n - 1, Math.max(0, Math.floor((until - t) / width)))]!++;
+  const max = Math.max(0, ...counts);
+  return { empty: counts.filter((c) => c === 0).length, maxShare: times.length ? Math.round((max / times.length) * 100) / 100 : 0 };
 }
 
 /** 다른 보도 — 언론사마다 하나만. 대표 기사의 언론사와 포털 재게재 주소는 뺀다.

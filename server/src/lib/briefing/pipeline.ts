@@ -74,11 +74,14 @@ export async function generateEdition(args: {
       `수집 끝 — 후보 ${got.candidates.length}건${got.attached ? `, Google 기사 ${got.attached}건을 직접 기사에 붙임` : ''}${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(${got.failed.slice(0, 3).map((f) => f.name).join(', ')}${got.failed.length > 3 ? ' 외' : ''})` : ''}`,
     );
     progress.onCollected?.({ sourceCount: got.sourceCount, failed: got.failed, candidateCount: got.candidates.length });
-    const okCount = got.sourceCount - got.failed.length;
-    // 망가진 수집으로 만든 회차는 직전 회차보다 나쁘다
-    if (okCount < got.sourceCount * BRIEFING.MIN_SOURCE_OK_RATIO) {
-      throw new Error(`출처 ${got.sourceCount}곳 중 ${got.failed.length}곳을 받지 못했습니다`);
+    // 망가진 수집으로 만든 회차는 직전 회차보다 나쁘다. 성공 비율은 언론사 피드만 센다 — Google 검색 40개는 한 서버라
+    // 한꺼번에 429를 받으면 "절반 실패"가 되어 회차가 통째로 죽는 단일 장애점이었다 (수집 재설계 토론 2026-10-11)
+    const feedCount = sources.filter((s) => !s.sub).length;
+    const feedFailed = got.failed.filter((f) => f.kind === 'feed').length;
+    if (feedCount > 0 && feedCount - feedFailed < feedCount * BRIEFING.MIN_SOURCE_OK_RATIO) {
+      throw new Error(`언론사 피드 ${feedCount}곳 중 ${feedFailed}곳을 받지 못했습니다`);
     }
+    if (got.wouldMerge > 0) log(`같은 사건으로 묶일 후보 ${got.wouldMerge}건 (세기만, 아직 묶지 않음)`);
     if (got.candidates.length === 0) return { kind: 'empty', usage, message: '새 기사가 없어요' };
 
     // ② 분류
@@ -135,9 +138,10 @@ export async function generateEdition(args: {
     });
     log(`요약 끝 — ${written.size}건`);
 
-    // ④-2 요약 보기(글머리표·쉽게·5W) — 우리 요약만 재료로 Haiku가 다시 쓴다 (합의안 4.7)
+    // ④-2 글머리표 — 우리 요약만 재료로 Haiku가 다시 쓴다 (합의안 4.7). 5W·영향은 ④ 안에서 썼다 (v0.46)
     const lens = await writeLenses(written, args.ai, usage, { signal, onProgress: (d, t) => progress.onStage('lens', d, t) });
-    log(`요약 보기 끝 — ${lens.lenses.size}건`);
+    const impactLines = [...written.values()].reduce((n, w) => n + (w.impact?.length ?? 0), 0);
+    log(`글머리표 끝 — ${lens.lenses.size}건${impactLines ? ` · 영향 줄 ${impactLines}개` : ''}`);
 
     const edition = assembleEdition({
       picked,
@@ -159,6 +163,7 @@ export async function generateEdition(args: {
         extractRejected: read.rejected,
         webFilled,
         lensDrops: lens.dropped,
+        wouldMerge: got.wouldMerge,
       },
       usage,
     });

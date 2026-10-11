@@ -54,6 +54,7 @@ export async function classify(
     const lines = chunk.map((c, i) => `${i + 1}. [${c.region}] ${c.title}${c.snippet ? ` — ${c.snippet}` : ''}`).join('\n');
     const out = await callAndCount(ai, usage, {
       model: BRIEFING.SELECT_MODEL,
+      stage: 'classify',
       system: SYSTEM_BASE,
       user: `아래 기사마다 가장 맞는 세부 분야 id 하나를 골라라.\n${REGION_RULE}\n${SUB_RULE}\n\n분야 목록:\n${SUB_LIST}\n\n<기사>\n${lines}\n</기사>`,
       schema: ClassifySchema,

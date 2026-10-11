@@ -21,7 +21,8 @@ export function mergeReadItems(existing: string | null | undefined, add: string[
 
 // ---- 틀린 곳 알리기 (v0.45, 개선 합의안 6.2) ----
 
-export type FlagItem = { id: string; at: number; reason: 'number' | 'mixed' | 'overstated' | 'other'; note?: string };
+/** reason: number 숫자가 틀림 · mixed 다른 사건이 섞임 · overstated 과장 · impact 영향 판단이 이상함(v0.46) · other */
+export type FlagItem = { id: string; at: number; reason: 'number' | 'mixed' | 'overstated' | 'impact' | 'other'; note?: string };
 
 export function parseFlagItems(raw: string | null | undefined): FlagItem[] {
   if (!raw) return [];

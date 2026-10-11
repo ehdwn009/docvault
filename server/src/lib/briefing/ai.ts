@@ -6,27 +6,74 @@ import type { z } from 'zod/v4';
 import { config } from '../../config.js';
 import { BRIEFING } from '../../constants.js';
 
-// 브리핑의 AI 호출 한 통로 — 사용량을 모델별로 쌓아 실행 기록의 비용 근거로 쓴다.
+// 브리핑의 AI 호출 한 통로 — 사용량을 모델별·단계별로 쌓아 실행 기록의 비용 근거로 쓴다.
 // 호출을 이 인터페이스 뒤에 둔 이유: 키 없이도(가짜 호출로) 파이프라인 전체를 시험할 수 있게
 
-export type Usage = { haikuInput: number; haikuOutput: number; sonnetInput: number; sonnetOutput: number; webSearches: number };
+export type BriefingModel = keyof typeof BRIEFING.PRICES;
+
+/** 단계별 분해(v0.46) — "어느 단계가 돈을 먹나"를 실측하려고. 회차 stats와 실행 기록(stage_usage)에 그대로 남는다 */
+export type StageUsage = { model: string; calls: number; input: number; output: number; webSearches: number; usd: number };
+
+export type Usage = {
+  haikuInput: number;
+  haikuOutput: number;
+  sonnetInput: number;
+  sonnetOutput: number;
+  /** 핵심 요약(Opus 5.5, v0.46) */
+  opusInput: number;
+  opusOutput: number;
+  webSearches: number;
+  byStage: Record<string, StageUsage>;
+};
 
 export function emptyUsage(): Usage {
-  return { haikuInput: 0, haikuOutput: 0, sonnetInput: 0, sonnetOutput: 0, webSearches: 0 };
+  return { haikuInput: 0, haikuOutput: 0, sonnetInput: 0, sonnetOutput: 0, opusInput: 0, opusOutput: 0, webSearches: 0, byStage: {} };
+}
+
+function priceOf(model: string): { inputPerMtok: number; outputPerMtok: number } {
+  return (BRIEFING.PRICES as Record<string, { inputPerMtok: number; outputPerMtok: number }>)[model] ?? BRIEFING.PRICES[BRIEFING.SELECT_MODEL];
+}
+
+function tokenCost(model: string, input: number, output: number): number {
+  const p = priceOf(model);
+  return (input * p.inputPerMtok + output * p.outputPerMtok) / 1_000_000;
 }
 
 /** 그때의 단가로 계산한 추정 비용(USD) — 웹 검색 보강(S8)의 검색 횟수도 더한다 */
 export function costOf(u: Usage): number {
-  const h = BRIEFING.PRICES[BRIEFING.SELECT_MODEL];
-  const s = BRIEFING.PRICES[BRIEFING.SUMMARY_MODEL];
   const usd =
-    (u.haikuInput * h.inputPerMtok + u.haikuOutput * h.outputPerMtok + u.sonnetInput * s.inputPerMtok + u.sonnetOutput * s.outputPerMtok) / 1_000_000 +
+    tokenCost(BRIEFING.SELECT_MODEL, u.haikuInput, u.haikuOutput) +
+    tokenCost(BRIEFING.SUMMARY_MODEL, u.sonnetInput, u.sonnetOutput) +
+    tokenCost(BRIEFING.SUMMARY_MODEL_CORE, u.opusInput, u.opusOutput) +
     (u.webSearches * BRIEFING.SEARCH_PER_1000_USD) / 1000;
   return Math.round(usd * 10000) / 10000;
 }
 
+/** 모델별 합계와 단계별 분해를 한 번에 — 분해 쪽은 모델이 바뀌어도 같은 단계 이름 아래 쌓인다 */
+function addUsage(usage: Usage, stage: string, model: string, input: number, output: number, webSearches = 0): void {
+  if (model === BRIEFING.SUMMARY_MODEL_CORE) {
+    usage.opusInput += input;
+    usage.opusOutput += output;
+  } else if (model === BRIEFING.SUMMARY_MODEL) {
+    usage.sonnetInput += input;
+    usage.sonnetOutput += output;
+  } else {
+    usage.haikuInput += input;
+    usage.haikuOutput += output;
+  }
+  usage.webSearches += webSearches;
+  const s = (usage.byStage[stage] ??= { model, calls: 0, input: 0, output: 0, webSearches: 0, usd: 0 });
+  s.calls++;
+  s.input += input;
+  s.output += output;
+  s.webSearches += webSearches;
+  s.usd = Math.round((tokenCost(model, s.input, s.output) + (s.webSearches * BRIEFING.SEARCH_PER_1000_USD) / 1000) * 10000) / 10000;
+}
+
 export type AiRequest<S extends z.ZodType> = {
-  model: typeof BRIEFING.SELECT_MODEL | typeof BRIEFING.SUMMARY_MODEL;
+  model: BriefingModel;
+  /** 단계 이름 — 비용 분해의 열쇠 (classify·select·merge·fallback·summarize·lens) */
+  stage: string;
   system: string;
   user: string;
   schema: S;
@@ -48,8 +95,8 @@ function getClient(): Anthropic {
 /** 실제 호출 — 구조화 출력으로 모양을 강제하고, 받은 값을 스키마로 한 번 더 확인한다 */
 export const callClaude: AiCaller = async (req) => {
   const c = getClient();
-  if (req.model === BRIEFING.SUMMARY_MODEL) {
-    // 요약(Sonnet 5.5)은 깊은 추론보다 정확한 압축이라 effort low — 생각 토큰도 출력 요금이다.
+  if (req.model === BRIEFING.SUMMARY_MODEL || req.model === BRIEFING.SUMMARY_MODEL_CORE) {
+    // 요약(Sonnet 5.5·Opus 5.5)은 깊은 추론보다 정확한 압축이라 effort low — 생각 토큰도 출력 요금이고 max_tokens에 포함된다.
     // 안전 분류기가 기사(사건·사고 등)를 오인해 거절하면 서버가 다른 모델로 이어서 답하게 한다(fallbacks)
     const res = await c.beta.messages.parse(
       {
@@ -94,13 +141,7 @@ function finish<S extends z.ZodType>(
 /** 호출 + 사용량 누적 */
 export async function callAndCount<S extends z.ZodType>(ai: AiCaller, usage: Usage, req: AiRequest<S>): Promise<z.infer<S>> {
   const r = await ai(req);
-  if (req.model === BRIEFING.SUMMARY_MODEL) {
-    usage.sonnetInput += r.inputTokens;
-    usage.sonnetOutput += r.outputTokens;
-  } else {
-    usage.haikuInput += r.inputTokens;
-    usage.haikuOutput += r.outputTokens;
-  }
+  addUsage(usage, req.stage, req.model, r.inputTokens, r.outputTokens);
   return r.output;
 }
 
@@ -163,9 +204,7 @@ export const callWebSearch: WebCaller = async (req) => {
 
 export async function searchAndCount(web: WebCaller, usage: Usage, req: WebRequest): Promise<WebResult> {
   const r = await web(req);
-  usage.haikuInput += r.inputTokens;
-  usage.haikuOutput += r.outputTokens;
-  usage.webSearches += r.webSearches;
+  addUsage(usage, 'fill', BRIEFING.WEB_FILL_MODEL, r.inputTokens, r.outputTokens, r.webSearches);
   return r;
 }
 

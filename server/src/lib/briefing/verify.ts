@@ -34,7 +34,7 @@ const EN_UNIT: Record<string, number> = { trillion: 1e12, billion: 1e9, million:
 /** 글에서 숫자를 값으로 뽑는다 — "1조2000억" → 1.2e12, "$12.5 billion" → 1.25e10, 쉼표 제거, %와 %p 구분 */
 export function extractNumbers(text: string): { value: number; kind: 'pct' | 'pctp' | 'plain'; raw: string }[] {
   const out: { value: number; kind: 'pct' | 'pctp' | 'plain'; raw: string }[] = [];
-  const re = /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(조|억|만|천|trillion|billion|million|thousand|tn|bn|mn|k)?(?:\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(억|만|천))?\s*(%p|％p|퍼센트포인트|%|％|퍼센트)?/gi;
+  const re = /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(조|억|만|천|trillion|billion|million|thousand|tn|bn|mn|k)?(?:\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(억|만|천))?\s*(%p|％p|%포인트|％포인트|퍼센트포인트|%|％|퍼센트)?/gi;
   for (const m of text.matchAll(re)) {
     const raw = m[0].trim();
     if (!raw) continue;
@@ -99,4 +99,36 @@ export function isGenericWhy(why: string): boolean {
   const t = why.trim();
   if (!t) return true;
   return GENERIC_WHY.test(t) && t.length < 60;
+}
+
+// ---- 영향 칸 검증 (v0.46, 영향 칸 토론 2026-10-11) — 방향은 판단이라 코드가 맞고 틀림을 볼 수 없다.
+// 볼 수 있는 것: 그 줄의 방향 낱말이 근거 재료에도 같은 방향으로 있나(stated), 금지어, 길이, 왜 중요한가·양쪽 시각과의 겹침 ----
+
+/** 재료·줄에서 방향을 읽는 어휘 — 기사가 "…에 부담", "…이 늘어난다"처럼 직접 말한 것만 잡는다 */
+const DIRECTION_DOWN = /(부담|악화|우려|감소|위축|줄(어|었|여)|하락|둔화|타격|손실|축소|제한|압박|불리|차질|리스크|위험|지연)/;
+const DIRECTION_UP = /(기대|개선|확대|증가|늘(어|었|려)|호전|상승|회복|완화|유리|수혜|성장|기회|활성|촉진|강화|도움)/;
+
+export type Direction = 'up' | 'down' | 'mixed';
+
+/** 글에 방향 어휘가 있나 — 둘 다 있으면 mixed, 없으면 null */
+export function directionOf(text: string): Direction | null {
+  const down = DIRECTION_DOWN.test(text);
+  const up = DIRECTION_UP.test(text);
+  if (down && up) return 'mixed';
+  if (down) return 'down';
+  if (up) return 'up';
+  return null;
+}
+
+/** 영향 줄에 쓰지 않는 말 — 투자 조언으로 읽히거나 확신을 꾸미는 말 (감시 역할의 금지어 목록) */
+const IMPACT_BANNED = /(주가|매수|매도|수혜주|호재|악재|투자\s*적기|확실|반드시|틀림없|급등|급락|폭등|폭락|편향|왜곡)/;
+export function hasBannedWord(text: string): boolean {
+  return IMPACT_BANNED.test(text);
+}
+
+/** 한 줄이 다른 글(왜 중요한가·양쪽 시각)을 되풀이하나 — 글자 2개 묶음이 이만큼 겹치면 같은 말 */
+export function overlapsWith(line: string, others: string[]): boolean {
+  const joined = others.filter(Boolean).join('\n');
+  if (!joined) return false;
+  return titleOverlap(line, joined) >= BRIEFING.IMPACT_DUP_OVERLAP;
 }

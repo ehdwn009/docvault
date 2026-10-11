@@ -34,6 +34,7 @@ export async function mergeSameStories(picked: Picked[], ai: AiCaller, usage: Us
   try {
     const out = await callAndCount(ai, usage, {
       model: BRIEFING.SELECT_MODEL,
+      stage: 'merge',
       system: SYSTEM_BASE,
       user: [
         '아래는 브리핑에 실을 기사 목록이다. 분야가 달라도 **같은 사건**을 다룬 기사끼리 묶어라.',

@@ -6,14 +6,13 @@ import { errorText, mapLimit } from './limit.js';
 import type { Written } from './summarize.js';
 import { extractNumbers, sameValue } from './verify.js';
 
-// 요약 보기 다시 쓰기 (개선 합의안 4.7, 사용자 결정 2026-10-11) — 글머리표·쉽게·5W는 **우리가 쓴 요약만** 재료로 Haiku가 다시 쓴다.
-// 원문은 저장하지 않아 회차를 만든 뒤에는 볼 수 없고, 이 셋은 새 사실이 필요 없는 바꿔 쓰기라 싼 모델로 충분하다.
-// 양쪽 시각은 원문이 필요해서 Sonnet 요약 호출 안에서 같이 쓴다(summarize.ts). 다시 쓴 글에 요약에 없는 숫자가 들어오면 그 문장을 지운다
+// 요약 보기 다시 쓰기 (개선 합의안 4.7) — 글머리표는 **우리가 쓴 요약만** 재료로 Haiku가 다시 쓴다.
+// 원문은 저장하지 않아 회차를 만든 뒤에는 볼 수 없고, 글머리표는 새 사실이 필요 없는 바꿔 쓰기라 싼 모델로 충분하다.
+// v0.46: 5W와 "쉽게"는 여기서 뺐다 — 5W는 원문이 있어야 날짜·장소가 들어오므로 요약 호출(summarize.ts)이 쓰고,
+// "쉽게"는 밀도만 낮춘 기본 보기라 사용자가 내렸다(수집 재설계 토론 2026-10-11). 다시 쓴 글에 요약에 없는 숫자가 들어오면 그 문장을 지운다
 
 export type Lenses = {
   bullets?: string[];
-  easy?: string;
-  w5?: { who: string; what: string; when: string; where: string; why: string };
 };
 
 const LensSchema = z.object({
@@ -21,12 +20,6 @@ const LensSchema = z.object({
     z.object({
       k: z.number().describe('기사 번호'),
       bullets: z.array(z.string()).describe('글머리표 3~5줄, 한 줄 40자 안팎'),
-      easy: z.string().describe('쉽게 — 어려운 용어를 풀어 다시 쓴 글 3~5문장. 비유 하나 허용. 새 사실·숫자는 넣지 않는다'),
-      who: z.string().describe('누가. 요약에 없으면 빈 문자열'),
-      what: z.string().describe('무엇을'),
-      when: z.string().describe('언제. 없으면 빈 문자열'),
-      where: z.string().describe('어디서. 없으면 빈 문자열'),
-      why: z.string().describe('왜. 없으면 빈 문자열'),
     }),
   ),
 });
@@ -68,12 +61,11 @@ export async function writeLenses(
     const lines = batch.map((idx, j) => `${j + 1}. ${written.get(idx)!.title}\n${summaryText(written.get(idx)!)}`).join('\n\n');
     const out = await callAndCount(ai, usage, {
       model: BRIEFING.SELECT_MODEL,
+      stage: 'lens',
       system: SYSTEM_BASE,
       user: [
-        '아래 요약 글을 세 가지 보기로 다시 써라. 재료는 이 요약뿐이다 — 요약에 없는 사실·숫자·이름은 절대 넣지 않는다.',
-        '- bullets: 핵심을 3~5줄 글머리표로. 한 줄에 하나씩, 짧게.',
-        '- easy: 처음 듣는 사람에게 설명하듯 쉬운 말로 3~5문장. 어려운 용어는 풀어 쓰고 비유를 하나까지 써도 된다. 존댓말.',
-        '- 5W(who·what·when·where·why): 요약에 있는 것만 짧게. 없는 칸은 빈 문자열로 둔다 — 채우지 않는다.',
+        '아래 요약 글을 글머리표로 다시 써라. 재료는 이 요약뿐이다 — 요약에 없는 사실·숫자·이름은 절대 넣지 않는다.',
+        '- bullets: 핵심을 3~5줄 글머리표로. 한 줄에 하나씩, 짧게. 숫자는 요약에 있는 것만 그대로.',
         `\n<기사>\n${lines}\n</기사>`,
       ].join('\n'),
       schema: LensSchema,
@@ -93,18 +85,11 @@ export async function writeLenses(
         })
         .filter(Boolean)
         .slice(0, 5);
-      const easy = keepSupported(stripMeta(it.easy), base);
-      dropped += easy.dropped;
-      const w5 = { who: it.who.trim(), what: it.what.trim(), when: it.when.trim(), where: it.where.trim(), why: it.why.trim() };
-      const lens: Lenses = {};
-      if (bullets.length >= 2) lens.bullets = bullets;
-      if (easy.text.length >= 40) lens.easy = easy.text;
-      if (w5.what) lens.w5 = w5;
-      if (Object.keys(lens).length > 0) lenses.set(idx, lens);
+      if (bullets.length >= 2) lenses.set(idx, { bullets });
     }
   });
   const failed = results.find((r) => !r.ok);
   // 보기는 덤이다 — 실패해도 회차는 만들어진다
-  if (failed && !failed.ok) console.log(`[briefing] 요약 보기 다시 쓰기 실패: ${errorText(failed.error)}`);
+  if (failed && !failed.ok) console.log(`[briefing] 글머리표 다시 쓰기 실패: ${errorText(failed.error)}`);
   return { lenses, dropped };
 }

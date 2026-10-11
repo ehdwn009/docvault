@@ -45,6 +45,7 @@ export async function writeFallbacks(picked: Picked[], idxs: number[], ai: AiCal
   try {
     const res = await callAndCount(ai, usage, {
       model: BRIEFING.SELECT_MODEL,
+      stage: 'fallback',
       system: SYSTEM_BASE,
       user: [
         '아래 기사들은 본문을 구하지 못한 기사다. 기사마다 한국어 제목을 쓰고, 발췌가 있는 기사만 발췌에 있는 사실로 요약 한 문장을 써라.',

@@ -134,6 +134,13 @@
       "when": 1791703318116,
       "tag": "0018_briefing_v045",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791710694834,
+      "tag": "0019_briefing_v046",
+      "breakpoints": true
     }
   ]
 }

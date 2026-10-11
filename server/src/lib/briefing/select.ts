@@ -10,8 +10,19 @@ import { REGION_RULE, SUB_LIST, SUB_RULE } from './classify.js';
 // ③ 선별 (Haiku) — 세부 분야마다 한 번: 같은 사건 묶기 · 중요도 · new/updated · 분야당 상한.
 // 참고(1) 기사는 여기서 제목·요약·의미까지 쓴다 — 참고 기사에 Sonnet을 쓰지 않는 것이 비용 설계의 핵심 (설계 "③ 선별")
 
-/** 한 분야에 한 번에 보여 주는 후보 상한 — 검색 하나가 100건을 가져와도 범위 전체에서 고르게 이만큼 */
+/** 한 분야에 한 번에 보여 주는 후보 상한 — 검색 하나가 100건을 가져와도 이만큼만 */
 const MAX_INPUT_PER_SUB = 60;
+
+/**
+ * 선별 입력 자르기 (v0.46, 수집 재설계 토론) — 시간대 균등으로만 자르면 하루 100건 넘는 분야(증시·기업)에서 여러 언론이 다룬 사건이
+ * AI가 보기 전에 버려졌다. 다른 보도가 붙은 기사(언론사 수 ≥ 2)를 많은 순으로 먼저 넣고, 남는 자리는 나머지를 범위 전체에서 고르게 채운다
+ */
+function pickForSelect(cands: Candidate[], max: number, range: { since: number; until: number }): Candidate[] {
+  if (cands.length <= max) return [...cands].sort((a, b) => b.publishedAt - a.publishedAt);
+  const multi = cands.filter((c) => c.related.length > 0).sort((a, b) => b.related.length - a.related.length || b.publishedAt - a.publishedAt).slice(0, max);
+  const rest = cands.filter((c) => !multi.includes(c));
+  return [...multi, ...spreadPick(rest, max - multi.length, range.since, range.until)];
+}
 
 const HANGUL = /[가-힣]/;
 
@@ -57,12 +68,13 @@ const IMPORTANCE_RULES = [
 ].join('\n');
 
 async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[], range: { since: number; until: number }, ai: AiCaller, usage: Usage, signal?: AbortSignal): Promise<Picked[]> {
-  const input = spreadPick(cands, MAX_INPUT_PER_SUB, range.since, range.until);
+  const input = pickForSelect(cands, MAX_INPUT_PER_SUB, range);
   const max = sub.wide ? BRIEFING.MAX_ITEMS_WIDE : BRIEFING.MAX_ITEMS_NARROW;
   const lines = input.map((c, i) => `${i + 1}. (${c.source}) ${c.title}${c.snippet ? ` — ${c.snippet}` : c.feedText ? ` — ${c.feedText.slice(0, BRIEFING.SNIPPET_MAX_CHARS)}` : ' (발췌 없음 — 제목뿐)'}`).join('\n');
   const prevLines = prev.length ? prev.map((p) => `${p.storyId}: ${p.title}`).join('\n') : '(없음)';
   const out = await callAndCount(ai, usage, {
     model: BRIEFING.SELECT_MODEL,
+    stage: 'select',
     system: SYSTEM_BASE,
     user: [
       `분야 "${subPath(sub)}"의 기사들이다. 브리핑에 실을 이슈를 최대 ${max}개 골라라.`,

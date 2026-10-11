@@ -256,8 +256,13 @@ export const briefingRuns = sqliteTable(
     haikuOutputTokens: integer('haiku_output_tokens').notNull().default(0),
     sonnetInputTokens: integer('sonnet_input_tokens').notNull().default(0),
     sonnetOutputTokens: integer('sonnet_output_tokens').notNull().default(0),
+    /** 핵심 요약(Opus 5.5) 토큰 — 모델별 단가가 달라 따로 센다 (v0.46) */
+    opusInputTokens: integer('opus_input_tokens').notNull().default(0),
+    opusOutputTokens: integer('opus_output_tokens').notNull().default(0),
     /** 웹 검색 보강(S8)에서 쓴 검색 횟수 — 비용 근거 (v0.45) */
     webSearches: integer('web_searches').notNull().default(0),
+    /** 단계별 비용 분해 JSON {단계: {model, calls, input, output, webSearches, usd}} — "어느 단계가 돈을 먹나"의 실측 (v0.46) */
+    stageUsage: text('stage_usage'),
     /** 그때의 단가로 계산해 둔 추정 비용 — 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남는다 */
     costUsd: real('cost_usd').notNull().default(0),
     /** 실패·건너뜀 이유 (사람이 읽는 글) */

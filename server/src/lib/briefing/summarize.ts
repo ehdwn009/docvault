@@ -6,12 +6,13 @@ import { NO_META_RULE, stripMeta } from './clean.js';
 import { errorText, mapLimit } from './limit.js';
 import type { Picked } from './select.js';
 import { subPath } from './taxonomy.js';
-import { checkNumbers, extractNumbers, isGenericWhy, sameValue } from './verify.js';
+import { checkNumbers, directionOf, extractNumbers, hasBannedWord, isGenericWhy, overlapsWith, sameValue, sentenceNumbersSupported } from './verify.js';
 
-// ④ 요약 (Sonnet) — 핵심·주요 기사만 (뉴스 브리핑 설계 "④ 요약", 개선 합의안 4장).
+// ④ 요약 — 핵심·주요 기사만 (뉴스 브리핑 설계 "④ 요약", 개선 합의안 4장). 핵심은 Opus 5.5, 주요는 Sonnet 5.5 (v0.46).
 // 글 모양은 "필수 2칸 + 골라 쓰는 칸": 리드(무슨 일 2~3문장)와 왜 중요한가는 늘 쓰고, 배경·숫자·경과·반응·앞으로·용어는
 // 재료가 있을 때만 0~3개. 고정 4칸(v0.43)은 재료가 없는 칸까지 채우게 해 일반론과 조각 문장을 낳았다.
-// 재료마다 기호(A·B·C·S1·W1)가 붙어 있고 칸마다 어느 재료에서 썼는지(from)를 받는다 — 출처가 섞이는 것을 칸 단위로 잡는다
+// 재료마다 기호(A·B·C·S1·W1)가 붙어 있고 칸마다 어느 재료에서 썼는지(from)를 받는다 — 출처가 섞이는 것을 칸 단위로 잡는다.
+// v0.46: 원문을 보는 유일한 호출이라 5W와 영향 칸도 여기서 쓴다 — 요약만 보고 다시 쓰면(옛 lenses.ts) 날짜·장소·근거가 없어 칸이 빈다
 
 export const BLOCK_KINDS = ['background', 'numbers', 'timeline', 'reactions', 'next', 'terms'] as const;
 export type BlockKind = (typeof BLOCK_KINDS)[number];
@@ -29,6 +30,21 @@ export type Block = {
 
 export type Sides = { kind: 'dispute' | 'emphasis'; items: { label: string; text: string; from: string }[] };
 
+/** 5W(v0.46) — 칸마다 근거 기호. 재료에 없는 칸은 아예 없다(화면이 "기사에 없음") */
+export type W5Field = { text: string; from: string[] };
+export type W5 = { who?: W5Field; what?: W5Field; when?: W5Field; where?: W5Field; why?: W5Field };
+export const W5_KEYS = ['who', 'what', 'when', 'where', 'why'] as const;
+
+/** 영향 줄(v0.46) — stated: 기사가 그 방향을 직접 말했다(낱말 부담/기회/갈림이 붙는다) · inferred: AI가 재료에서 짚었다("AI 추론" 표시, 낱말 없음) */
+export type ImpactLine = {
+  target: string;
+  direction: 'up' | 'down' | 'mixed' | 'unclear';
+  kind: 'stated' | 'inferred';
+  text: string;
+  /** 근거 재료 기호 하나 — 필수 */
+  from: string;
+};
+
 export type Written = {
   title: string;
   /** 리드 — 무슨 일 2~3문장 */
@@ -41,9 +57,12 @@ export type Written = {
   sides?: Sides;
   /** 갱신된 이슈 — 직전 회차 이후 바뀐 점 한 줄 */
   changed?: string;
-  /** 검증 — 숫자 대조로 문제가 된 문장 수, 목표 길이 초과 여부 */
+  w5?: W5;
+  impact?: ImpactLine[];
+  /** 검증 — 숫자 대조로 문제가 된 문장 수, 목표 길이 초과 여부, 검증에서 지운 영향 줄 수 */
   numberDrops: number;
   overrun: boolean;
+  impactDrops: number;
 };
 
 /** 요약 근거 하나 — 본문 재료(A·B·C·W1)와 발췌(S1·S2)를 같은 모양으로 번호 매긴다 */
@@ -72,6 +91,26 @@ const SummarySchema = z.object({
       sidesKind: z.string().describe('양쪽 시각: 찬반이 갈리는 쟁점이면 "dispute", 언론사마다 강조점이 다르면 "emphasis", 해당 없으면 빈 문자열'),
       sides: z.array(z.object({ label: z.string(), text: z.string(), src: z.string() })).describe('양쪽 시각 2~3개: 입장·주장 한 문장·근거 재료 기호 하나. 없으면 빈 배열'),
       changed: z.string().describe('직전 회차 요약이 주어진 기사만: 그 뒤 새로 생긴 사실 한 줄. 새 사실이 없거나 직전 요약이 없으면 빈 문자열'),
+      w5: z
+        .object({
+          who: z.string().describe('누가 — 재료에 있는 주체. 없으면 빈 문자열'),
+          what: z.string().describe('무엇을 — 한 줄'),
+          when: z.string().describe('언제 — 재료에 적힌 날짜·시점 그대로. 없으면 빈 문자열'),
+          where: z.string().describe('어디서 — 재료에 적힌 곳. 없으면 빈 문자열'),
+          why: z.string().describe('왜(원인·배경) — 재료에 있을 때만. 없으면 빈 문자열'),
+          src: z.string().describe('5W의 근거 재료 기호 (쉼표)'),
+        })
+        .describe('5W — 재료에 있는 것만 짧게(칸당 한 줄). 없는 칸은 빈 문자열로 둔다, 채우지 않는다'),
+      impact: z
+        .array(
+          z.object({
+            target: z.string().describe('누구에게 — 가계·기업·시장·산업·정책 또는 기사의 실제 대상(예 "수출 기업"). 6자 이내'),
+            direction: z.string().describe('재료가 그 대상에게 부담이라 했으면 "down", 기회·개선이라 했으면 "up", 양면을 말했으면 "mixed", 재료가 방향을 말하지 않았으면 "unclear"'),
+            text: z.string().describe('한 문장 60자 이내, "~할 수 있다" 어미. 재료에 있는 사실에서만'),
+            src: z.string().describe('근거 재료 기호 하나'),
+          }),
+        )
+        .describe('영향 — 이 기사가 누구에게 어떤 영향인지. 재료에서 근거를 댈 수 있을 때만 0~2줄, 없으면 빈 배열. 왜 중요한가를 되풀이하지 않는다'),
     }),
   ),
 });
@@ -103,8 +142,15 @@ export function lengthTarget(p: Picked, evidence: Evidence[]): [number, number] 
   return [Math.min(base[0], upper), upper];
 }
 
-function describe(p: Picked, k: number, evidence: Evidence[], target: [number, number], prevSummary: string | undefined): string {
-  const head = `${k}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title} — 목표 ${target[0]}~${target[1]}자`;
+/** 영향 칸을 만드는 기사인가 — 경제·테크(wide) 분야의 핵심·주요, 본문 재료(발췌 말고)가 하나는 있어야 한다. 정치·사회는 만들지 않는다 */
+export function impactEligible(p: Picked, evidence: Evidence[]): boolean {
+  if (BRIEFING.IMPACT_MODE === 'off') return false;
+  if (p.importance < 2 || !p.sub.wide) return false;
+  return evidence.some((e) => e.via !== 'lede');
+}
+
+function describe(p: Picked, k: number, evidence: Evidence[], target: [number, number], prevSummary: string | undefined, impact: boolean): string {
+  const head = `${k}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title} — 목표 ${target[0]}~${target[1]}자${impact ? '' : ' · 영향 칸 없음(빈 배열)'}`;
   const parts = evidence.map((e) => {
     const kind = e.via === 'lede' ? '발췌' : e.via === 'web' ? '웹 검색 보도' : e.via === 'feed' ? '피드 본문' : '본문';
     return `   [${e.id} ${e.source}] ${kind}: ${e.text}`;
@@ -133,6 +179,57 @@ function pairSupported(value: string, material: string): boolean {
   return nums.every((n) => pool.some((p) => sameValue(p.value, n.value) && (p.kind === n.kind || (p.kind === 'plain' && n.kind === 'plain'))));
 }
 
+/** 대상이 정책·정부면 유불리를 붙이지 않는다 — "정책에 불리"는 곧 정치 판단이다 (영향 칸 토론, 감시 조건) */
+const POLICY_TARGET = /(정책|정부|당국|국회|여당|야당)/;
+
+/**
+ * 영향 줄 검증 — 전부 코드, AI 호출 없음. 근거 기호 하나 필수 · 60자 · 금지어 · 숫자 대조 · 왜 중요한가·양쪽 시각과 겹침.
+ * 방향: 줄의 방향 어휘가 근거 재료에도 같은 방향으로 있어야 stated. 아니면 inferred로 내리고 방향은 unclear —
+ * 재료 2,000자 안에 그 낱말이 있다는 것만 보장하지 같은 대상을 가리키는지는 못 본다는 한계를 알고 쓴다
+ */
+function verifyImpact(
+  raw: { target: string; direction: string; text: string; src: string }[],
+  evidence: Evidence[],
+  valid: Set<string>,
+  others: string[],
+  max: number,
+): { lines: ImpactLine[]; dropped: number } {
+  const lines: ImpactLine[] = [];
+  let dropped = 0;
+  for (const r of raw) {
+    const target = stripMeta(r.target).replace(/\s+/g, ' ').trim();
+    const text = stripMeta(r.text).trim();
+    const from = parseSrc(r.src, valid)[0];
+    if (!target || !text || !from || target.length > BRIEFING.IMPACT_TARGET_MAX_CHARS || text.length > BRIEFING.IMPACT_TEXT_MAX_CHARS) {
+      dropped++;
+      continue;
+    }
+    if (hasBannedWord(text) || hasBannedWord(target) || overlapsWith(text, others)) {
+      dropped++;
+      continue;
+    }
+    const material = materialText(evidence, [from]);
+    // 숫자는 log 모드에서도 영향 줄만큼은 지운다 — 판단 위에 틀린 숫자까지 얹지 않는다
+    if (!sentenceNumbersSupported(text, material)) {
+      dropped++;
+      continue;
+    }
+    const lineDir = directionOf(text);
+    const matDir = directionOf(material);
+    const claimed = r.direction.trim();
+    let kind: ImpactLine['kind'] = 'inferred';
+    let direction: ImpactLine['direction'] = 'unclear';
+    if (lineDir && matDir && (lineDir === matDir || matDir === 'mixed') && claimed !== 'unclear') {
+      kind = 'stated';
+      direction = claimed === 'mixed' ? 'mixed' : lineDir;
+    }
+    if (POLICY_TARGET.test(target) && (direction === 'up' || direction === 'down')) direction = 'mixed';
+    lines.push({ target, direction, kind, text, from });
+    if (lines.length >= max) break;
+  }
+  return { lines, dropped };
+}
+
 /** 핵심·주요 이슈의 글. 돌려주는 Map의 열쇠는 picked 배열의 위치 */
 export async function summarize(
   picked: Picked[],
@@ -141,28 +238,33 @@ export async function summarize(
   usage: Usage,
   opts: { prevSummaries?: Map<string, string>; signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
 ): Promise<Map<number, Written>> {
-  // 대분류(국내 경제, 세계 테크…)끼리 묶어야 모델이 같은 맥락에서 쓴다. 핵심은 재료가 길어 3건씩
+  // 대분류(국내 경제, 세계 테크…)끼리 묶어야 모델이 같은 맥락에서 쓴다. 핵심은 재료가 길어 3건씩, 그리고 상위 모델
   const groups = new Map<string, number[]>();
   picked.forEach((p, i) => {
     if (p.importance < 2) return;
     const key = `${p.importance === 3 ? 'core' : 'major'}/${p.sub.section}/${p.sub.category}`;
     groups.set(key, [...(groups.get(key) ?? []), i]);
   });
-  const batches: number[][] = [];
+  const batches: { idxs: number[]; core: boolean }[] = [];
   for (const [key, idxs] of groups) {
-    const size = key.startsWith('core/') ? BRIEFING.SUMMARY_CHUNK_CORE : BRIEFING.SUMMARY_CHUNK;
-    for (let i = 0; i < idxs.length; i += size) batches.push(idxs.slice(i, i + size));
+    const core = key.startsWith('core/');
+    const size = core ? BRIEFING.SUMMARY_CHUNK_CORE : BRIEFING.SUMMARY_CHUNK;
+    for (let i = 0; i < idxs.length; i += size) batches.push({ idxs: idxs.slice(i, i + size), core });
   }
 
   const written = new Map<number, Written>();
   let done = 0;
   opts.onProgress?.(0, batches.length);
-  const results = await mapLimit(batches, BRIEFING.SUMMARY_CONCURRENCY, async (batch) => {
+  const results = await mapLimit(batches, BRIEFING.SUMMARY_CONCURRENCY, async ({ idxs: batch, core }) => {
     const ev = batch.map((idx) => evidenceOf(picked[idx]!, materials.get(idx)));
     const targets = batch.map((idx, j) => lengthTarget(picked[idx]!, ev[j]!));
-    const lines = batch.map((idx, j) => describe(picked[idx]!, j + 1, ev[j]!, targets[j]!, picked[idx]!.prevStoryId ? opts.prevSummaries?.get(picked[idx]!.prevStoryId) : undefined)).join('\n');
+    const eligible = batch.map((idx, j) => impactEligible(picked[idx]!, ev[j]!));
+    const lines = batch
+      .map((idx, j) => describe(picked[idx]!, j + 1, ev[j]!, targets[j]!, picked[idx]!.prevStoryId ? opts.prevSummaries?.get(picked[idx]!.prevStoryId) : undefined, eligible[j]!))
+      .join('\n');
     const out = await callAndCount(ai, usage, {
-      model: BRIEFING.SUMMARY_MODEL,
+      model: core ? BRIEFING.SUMMARY_MODEL_CORE : BRIEFING.SUMMARY_MODEL,
+      stage: core ? 'summarize-core' : 'summarize',
       system: SYSTEM_BASE,
       user: [
         '아래 기사마다 브리핑 글을 한국어로 써라. 해외 기사도 한국어로. 기사마다 재료에 [기호 언론사]가 붙어 있다.',
@@ -176,6 +278,8 @@ export async function summarize(
         '- 언론사마다 수치가 다르면 평균 내지 말고 "A 기준 x, B 기준 y"로 나란히 쓴다.',
         '- 양쪽 시각(sides): 재료가 2곳 이상인 핵심 기사에서, 찬반이 갈리는 쟁점이면 dispute로 양쪽 주장을, 언론사마다 강조한 점이 실제로 다르면 emphasis로 2~3개. 각 항목의 src는 재료 하나. 한쪽만 있거나 다 같은 내용이면 빈 배열 — 억지로 맞추지 않는다. 편향·왜곡 같은 평가어는 쓰지 않는다.',
         '- changed: "직전 회차 요약"이 붙은 기사만, 그 요약에 없던 새 사실을 한 줄로. 새 사실이 없으면 빈 문자열.',
+        `- 5W(w5): 누가·무엇을·언제·어디서·왜를 재료에 있는 것만 칸당 한 줄(${BRIEFING.W5_TEXT_MAX_CHARS}자 이내). 날짜·장소는 재료 표기 그대로. 재료에 없는 칸은 빈 문자열로 둔다 — 채우지 않는다. src에 근거 기호.`,
+        `- 영향(impact): "영향 칸 없음"이 적힌 기사는 빈 배열. 나머지는 이 일이 누구에게 어떤 영향인지 0~${BRIEFING.IMPACT_MAX_CORE}줄 — 대상(target ${BRIEFING.IMPACT_TARGET_MAX_CHARS}자 이내) · 방향(direction) · 한 문장(${BRIEFING.IMPACT_TEXT_MAX_CHARS}자 이내, "~할 수 있다" 어미) · 근거 기호 하나(src). 재료가 그 방향을 직접 말했을 때만 up/down/mixed, 재료에서 짚어낸 것이면 unclear. 왜 중요한가·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 재료 밖 연쇄 추론(금리 → 내 대출)은 쓰지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다.`,
         '- 길이: 기사마다 적힌 목표 글자 수(리드+왜 중요한가+칸 합계) 안에서. 재료가 짧으면 짧게 쓴다.',
         '- 수치·날짜·고유명사는 재료에 있는 것만. 재료 밖의 배경지식을 사실처럼 쓰지 않는다. 원문 문장을 베끼지 말고 새로 쓴다.',
         NO_META_RULE,
@@ -243,6 +347,26 @@ export async function summarize(
         if (items.length >= 2 && new Set(items.map((s) => s.from)).size >= 2) sides = { kind: sk, items };
       }
       const changed = picked[idx]!.prevStoryId ? clean(it.changed, summaryFrom) : '';
+
+      // 5W — 근거 기호가 없으면 리드의 근거로. 칸마다 숫자 대조, 길이 상한. what이 없으면 5W 자체가 없다
+      const w5From = parseSrc(it.w5.src, valid);
+      const w5Base = w5From.length ? w5From : summaryFrom;
+      const w5: W5 = {};
+      for (const key of W5_KEYS) {
+        const text = clean(it.w5[key], w5Base).trim();
+        if (text && text.length <= BRIEFING.W5_TEXT_MAX_CHARS) w5[key] = { text, from: w5Base };
+      }
+
+      // 영향 — 자격이 있는 기사만, 검증을 통과한 줄만 (impactEligible·verifyImpact)
+      let impact: ImpactLine[] | undefined;
+      let impactDrops = 0;
+      if (eligible[j]) {
+        const max = picked[idx]!.importance === 3 ? BRIEFING.IMPACT_MAX_CORE : BRIEFING.IMPACT_MAX_MAJOR;
+        const r = verifyImpact(it.impact, evidence, valid, [why, ...(sides?.items.map((s) => s.text) ?? [])], max);
+        impactDrops = r.dropped;
+        if (r.lines.length > 0) impact = r.lines;
+      }
+
       const total = summary.length + why.length + blocks.reduce((n, b) => n + (b.text?.length ?? 0) + (b.pairs?.length ?? 0) * 12 + (b.items?.reduce((m, x) => m + x.text.length, 0) ?? 0), 0);
       written.set(idx, {
         title: it.title.trim(),
@@ -253,8 +377,11 @@ export async function summarize(
         blocks,
         ...(sides ? { sides } : {}),
         ...(changed ? { changed } : {}),
+        ...(w5.what ? { w5 } : {}),
+        ...(impact ? { impact } : {}),
         numberDrops: drops,
         overrun: total > target[1] * BRIEFING.LENGTH_OVERRUN_RATIO,
+        impactDrops,
       });
     }
   });
