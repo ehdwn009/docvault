@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>영향 칸 토론 보고서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 한 칸 읽기 문서. 결론 상자 → 토론 설정 → 네 입장 카드 → 쟁점표 → 합의안 → 결정 항목 → 구현 → 부록(원문) */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #0369a1; --accent-soft: #e3f1fa; --major: #c9741c; --core: #cf2f2f; --ok: #1d8556; --ok-soft: #e4f3ea;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15.5px; line-height: 1.7; }
+.wrap { max-width: 880px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 72px; display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3, h4 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 14px; }
+section > h2 { font-size: 23px; letter-spacing: -0.01em; padding-top: 6px; }
+section > h3 { font-size: 17px; margin-top: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.hero { display: flex; flex-direction: column; gap: 12px; }
+.hero h1 { font-size: clamp(26px, 4.2vw, 36px); letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; max-width: 70ch; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 0 14px 14px 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.verdict .tag { display: inline-block; background: var(--ok-soft); color: var(--ok); font-weight: 700; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; width: max-content; }
+.verdict ul, section ul, section ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.ask { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14.5px; min-width: 0; }
+.card h3 { font-size: 15.5px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .pos { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.card .pos.no { color: var(--core); } .card .pos.cond { color: var(--major); }
+.card ul { padding-left: 18px; gap: 3px; }
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tbody th { white-space: nowrap; font-weight: 600; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+td.fin { background: var(--ok-soft); font-weight: 500; }
+.decide { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.decide h3 { font-size: 16px; }
+.decide .opt { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+.decide .opt > div { background: var(--sunk); border-radius: 10px; padding: 9px 12px; min-width: 0; }
+.decide .opt b { display: block; margin-bottom: 2px; }
+.decide .rec { font-size: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.decide .rec b { color: var(--ok); }
+@media (max-width: 560px) { .decide .opt { grid-template-columns: 1fr; } }
+code { font-family: var(--f-mono); font-size: 0.9em; overflow-wrap: anywhere; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
+pre { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; background: var(--sunk); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0; white-space: pre; }
+pre.doc { white-space: pre-wrap; font-family: var(--f-body); font-size: 14px; line-height: 1.65; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; }
+details summary { cursor: pointer; font-weight: 600; padding: 12px 0; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+details summary::after { content: "펼치기"; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+details[open] summary::after { content: "접기"; }
+details > *:not(summary) { margin-bottom: 14px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+.steps li { padding-left: 2px; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">docvault · 뉴스 브리핑 · 에이전트 토론 · 2026-10-11</p>
+    <h1>"영향" 칸 — 넣을 것인가, 어떻게 보여줄 것인가</h1>
+    <p class="lead">사용자 제안: "쉽게" 보기는 접어 두고, 기사 하나의 내용으로 <b>이 일이 누구에게 어떤 영향인지(긍정·부정)</b>를 보여 주는 보기를 넣을 수 있나. 읽는 사람 대변 · 수집·파이프라인 담당 · 화면 디자인 담당 · 정확성·저작권 감시 네 역할이 두 라운드로 다퉜다. 시안: <a href="https://claude.ai/artifact/KBs3457rA2khUXRegz6z97">https://claude.ai/artifact/KBs3457rA2khUXRegz6z97</a> (저장소: docs/뉴스브리핑_영향보기_시안_20261011.html)</p>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <span class="tag">결론 — 조건부 도입 (4/4)</span>
+      <p><b>"긍정/부정 태그"가 아니라 "기사가 말한 영향을 대상별로 정리한 칸"으로 바꿔 넣는다.</b> 감시 역할은 반대로 시작해 조건부 찬성으로 옮겼고, 읽는 사람은 "칩"과 "방향 라벨"을 양보했으며, 디자인은 "접힘"과 "색"을 버렸다.</p>
+      <ul>
+        <li><b>무엇을</b>: 핵심·주요 기사의 "왜 중요한가" 아래에 <b>대상 · 낱말(부담/기회/갈림) · 한 문장 · 근거 언론사</b> 줄을 핵심 2개, 주요 1개까지. 기사 재료에 그 방향을 말한 구절이 실제로 있을 때만 낱말이 붙는다.</li>
+        <li><b>어디서</b>: Sonnet 요약 호출 안에서 양쪽 시각과 같은 자리에 쓴다(원문 재료가 있어야 근거 기호를 붙일 수 있다). Haiku 다시 쓰기로는 만들지 않는다.</li>
+        <li><b>누구에게 안 보이나</b>: 정치·사회(사건·인권)·연예 기사, 참고 기사, 제목만 기사에는 만들지 않고 빈 문구도 없다. 1차는 경제·테크 분야만.</li>
+        <li><b>어떻게 지키나</b>: 근거 기호 필수 · 방향 어휘 재료 대조 · 숫자 대조 · 금지어 · 60자 · "왜 중요한가"와 겹치면 삭제 — 전부 코드, AI 호출 없음. 틀린 곳 알리기에 "영향 판단이 이상함" 이유를 더해 2주 뒤 유지·축소를 정한다.</li>
+        <li><b>비용</b>: 회차당 약 $0.09, 월 약 $2.7 (현재 약 $75 → $78, 한도 $110).</li>
+        <li><b>사용자가 정할 것 3가지</b>: 아래 "결정해 주셔야 할 것" — 노동·복지 기사 포함 여부, AI가 짚은 영향(재료에 없는 것) 허용 여부, 2주 실측을 숨겨서 할지 보이게 할지.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>토론 설정</h2>
+    <p>사용자가 실제 회차 화면 다섯 장(크레딧물 355조 · 새출발기금 · 李 대통령 SNS · 엔비디아 GPU)을 보고 제안했다. 관점은 "AI가 기사마다 알아서(가계·시장·산업·정책 중 맞는 대상)"로 정했고, 추측·편향 위험을 같이 따지도록 했다. 네 역할은 각자 스크린샷, 개선 합의안(v0.2), <code>lenses.ts</code> · <code>summarize.ts</code> · <code>verify.ts</code> · <code>BriefingView.tsx</code>, 설계 문서 ④절을 읽고 1라운드 입장을 냈고, 2라운드에서 서로의 보고서를 읽고 질문에 답하며 양보·고수를 밝혔다.</p>
+    <div class="ask"><b>"쉽게" 보기가 안 와닿은 이유(읽는 사람 대변의 진단)</b> — 어휘만 풀고 밀도를 낮춘 기본 보기였다. 크레딧물 기사에서 355조·24%·93%가 전부 사라지고 "크게 늘었어요"만 남았다. 사용자가 막히는 지점은 단어가 아니라 "그래서 이게 나한테·시장에 무슨 뜻인가"이고, 그 의미 번역이 이번 "영향" 제안이다. 쉽게 칩을 내릴지는 이 안과 별개로 사용자에게 묻는다.</div>
+  </section>
+
+  <section>
+    <h2>1라운드 — 네 입장</h2>
+    <div class="cards">
+      <div class="card"><h3>읽는 사람 대변 <span class="pos cond">조건부 도입</span></h3><ul>
+        <li>"영향"만이 다섯 보기 중 유일하게 읽는 사람 쪽으로 주어를 바꾼 보기. 단 "왜 중요한가"를 대상별로 쪼갠 구조여야지, 같은 문장을 또 쓰면 쉽게의 재판</li>
+        <li>모양은 배지·점수 아닌 <b>대상별 줄</b> + 유리·부담·갈림 낱말. 쉽게 칩 자리에 넣자</li>
+        <li>크레딧물·새출발기금·엔비디아는 성립, 대통령 SNS는 불성립 — 칩이 안 보이는 게 정답</li>
+        <li>연쇄 추론("은행채 ↑ → 금리 ↑ → 내 대출")은 금지. 기사가 말하지 않은 영향은 [이 기사 묻기]로</li>
+      </ul></div>
+      <div class="card"><h3>수집·파이프라인 <span class="pos cond">조건부 도입</span></h3><ul>
+        <li>(a) Sonnet 요약 호출 안 $0.11 / (b) Haiku 요약만 $0.05 / (c) 별도 Sonnet $0.43 — <b>(a)</b>. (b)는 "추론의 추론"</li>
+        <li>스키마 <code>impact.targets[{who, direction, text, from}]</code>, 신뢰도·시계 숫자는 넣지 않는다(검증 불가능한 숫자를 하나 더 만드는 것)</li>
+        <li>방향 enum을 강제하면 모든 기사에 판정을 낸다 → 기본값 <code>unclear</code>, 재료에 방향 구절이 있을 때만 up/down</li>
+        <li>코드로 거르는 것: 기호·근거 구절·숫자·금지어·길이. 못 거르는 것(방향 적절성·대상 선택·논리 비약)은 신고로</li>
+      </ul></div>
+      <div class="card"><h3>화면 디자인 <span class="pos cond">조건부 도입</span></h3><ul>
+        <li>칩(a)·제목 배지(c)·목록 배지(d) 탈락, <b>기본 보기 안 칸(b)</b>. 칩은 기기가 보기를 기억해 다음 기사를 추론부터 읽게 만든다</li>
+        <li>점선 테두리(이 앱에서 "보조·얇음"의 기호) + "AI 추론" 꼬리표, 접힘 기본</li>
+        <li>방향은 글자 1순위·기호 2순위·색 3순위. 빨강/초록 금지(핵심 배지와 겹침)</li>
+        <li>성립 안 하면 칸 없음 — "뚜렷한 영향 없음" 문구는 30건 중 절반에 반복되는 소음</li>
+      </ul></div>
+      <div class="card"><h3>정확성·저작권 감시 <span class="pos no">조건부 반대</span></h3><ul>
+        <li>"영향"은 요약이 아니라 <b>예측·평가</b>. "재료에 있는 것만" 원칙과 정면 충돌 — 숫자처럼 대조할 대상이 없다</li>
+        <li>대통령 SNS에 붙이면 어느 쪽이든 편들기, 새출발기금은 "도덕적 해이"가 매체 프레임인데 라벨이 확정 판정으로 바꾼다 → 정치·사회는 분야 id로 금지</li>
+        <li>"긍정"은 "주가 오름"으로 읽힌다. 금지어: 주가·매수·매도·수혜주·호재·악재·확실·반드시·급등·급락·편향·왜곡</li>
+        <li>출처 왜곡이 더 큰 문제 — AI 추론에 기호 A를 붙이면 연합뉴스가 한 말처럼 보인다. 2주 숨김 실측 후 공개, 공개 배포 시 자동 꺼짐</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2라운드 — 쟁점별 수렴</h2>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>쟁점</th><th>읽는 사람</th><th>파이프라인</th><th>디자인</th><th>감시</th><th>합의</th></tr></thead>
+      <tbody>
+        <tr><th>위치</th><td>칩 → <b>상자로 양보</b></td><td>—</td><td>기본 보기 안, "왜 중요한가" 바로 아래로 옮김</td><td>상자 찬성, 칩 반대</td><td class="fin">기본 보기 안, 왜 중요한가 아래 점선 상자. 칩·목록 배지 없음</td></tr>
+        <tr><th>접힘</th><td>접힘 받되 접힌 줄에 방향 낱말 반대</td><td>—</td><td>접힘 → <b>항상 펼침으로 양보</b>(줄이 최대 2개)</td><td>접힘이면 우려 해소</td><td class="fin">항상 펼침 (줄 수가 적어 접을 이유가 없음)</td></tr>
+        <tr><th>방향 표기</th><td>3종 → <b>라벨 없이 문장 어미</b></td><td>enum은 데이터에 남김(기본 unclear)</td><td>4종·색 → <b>3종(부담·기회·갈림)·색 없음</b></td><td>라벨 없음 철회, stated 한정 허용</td><td class="fin">낱말 3종, 색·화살표 없음. 재료에 방향 구절이 있을 때만 낱말이 붙음. 라벨 없는 변형은 시안에 같이 둠</td></tr>
+        <tr><th>만드는 자리</th><td>Sonnet 안</td><td>Sonnet 안 ($0.09)</td><td>Sonnet 안</td><td>Sonnet 안(Haiku는 대조 불가)</td><td class="fin">Sonnet 요약 호출 안, 양쪽 시각과 같은 자리</td></tr>
+        <tr><th>근거 구절 저장</th><td>버림</td><td>quote 칸 자체를 <b>버림</b>(방향 어휘 대조로 대체)</td><td>—</td><td>버림(본문 미저장 원칙)</td><td class="fin">저장 안 함. 회차에는 기호(from)만</td></tr>
+        <tr><th>stated / inferred</th><td>구분을 꼬리표로 보여야("(동아일보)" vs "(AI 추론)")</td><td>kind 칸 버림 — 어휘 있으면 up/down, 없으면 unclear가 곧 구분</td><td>v1은 stated만 그림</td><td>inferred는 방향 unclear 강제, 숨김</td><td class="fin">v1은 기사가 말한 것만 화면에. inferred는 만들어도 stats에만 → <b>사용자 결정 ②</b></td></tr>
+        <tr><th>분야</th><td><b>노동·복지 포함 고수</b>(stated만)</td><td>경제·테크(<code>wide</code>)만, 노동·복지는 2주 뒤</td><td>분류는 두 역할 몫</td><td>노동·복지·생활·재난 stated만 허용으로 양보, 정치·사건·인권 금지</td><td class="fin">1차 경제·테크. 노동·복지는 <b>사용자 결정 ①</b></td></tr>
+        <tr><th>등급</th><td>핵심만 시작</td><td>주요까지(분야로 거르면 차이 $0.06)</td><td>핵심 2 · 주요 1</td><td>핵심 2 · 주요 1</td><td class="fin">핵심 2줄 · 주요 1줄</td></tr>
+        <tr><th>2주 실측</th><td><b>숨김 반대</b> — 숨기면 신고를 못 한다</td><td><code>hidden</code> 2주 후 <code>show</code></td><td>숨김 기간도 같은 모양</td><td>숨김 후 기준 충족 시 공개</td><td class="fin"><b>사용자 결정 ③</b></td></tr>
+        <tr><th>신고 이유 추가</th><td>필요</td><td>필요</td><td>필요(다섯째 버튼)</td><td>필수 조건</td><td class="fin">"영향 판단이 이상함" 추가</td></tr>
+        <tr><th>why 대체</th><td>제안</td><td><b>반대</b> — why는 핵심 자격 판정 장치, 정치 기사에도 있어야</td><td>반대 — 칸 모양이 기사마다 달라짐</td><td>—</td><td class="fin">둘 다 둔다. 겹치는 줄은 코드가 지운다(겹침 50%)</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>합의안</h2>
+    <h3>데이터</h3>
+<pre>// edition.ts — 회차 JSON v1에 없어도 되는 칸을 더한다
+export type Impact = {
+  items: {
+    target: string;                                   // ≤5자. 가계·시장·산업·정책 또는 "채무자"처럼 기사의 실제 대상
+    direction: 'up' | 'down' | 'mixed' | 'unclear';   // 기본 unclear. 재료에 방향 구절이 있을 때만 up/down
+    text: string;                                     // ≤60자, "~할 수 있다" 어미
+    from: string;                                     // 근거 재료 기호 하나 (A·B·W1) — 필수
+  }[];
+};
+// EditionItem += impact?: Impact
+// Edition     += impactVisible?: boolean   // IMPACT_MODE가 show일 때만 true
+// stats       += impactDrops?: number      // 검증에서 지운 줄 수
+// FlagItem.reason += 'impact'              // "영향 판단이 이상함"</pre>
+    <h3>규칙 (전부 코드, AI 호출 없음)</h3>
+    <ol>
+      <li><b>분야</b>: <code>taxonomy.ts</code>의 <code>wide</code>(경제·IT·테크 계열)만. 정치·사회·연예는 생성하지 않는다. 참고(1)·제목만 기사 제외, 본문 재료(body·feed·web) 1곳 이상.</li>
+      <li><b>근거</b>: 줄마다 <code>from</code> 하나, 재료에 없는 기호면 그 줄 삭제(기존 <code>parseSrc</code>).</li>
+      <li><b>방향</b>: <code>verify.ts</code>에 방향 어휘 사전(부담·악화·우려·감소·위축 / 기대·개선·확대·증가·호전 …). <code>from</code> 재료에 up 어휘가 있을 때만 up, down 어휘만 있으면 down, 둘 다면 mixed, 없으면 unclear. 모델이 낸 방향이 어휘와 어긋나면 unclear로 덮어쓴다.</li>
+      <li><b>문장</b>: 60자 초과 삭제, 숫자 대조(기존 <code>sentenceNumbersSupported</code>), 금지어 포함 시 삭제 — 주가·매수·매도·수혜주·호재·악재·투자 적기·확실·반드시·틀림없이·급등·급락·폭등·폭락·편향·왜곡, 그리고 <code>GENERIC_WHY</code> 패턴.</li>
+      <li><b>겹침</b>: "왜 중요한가"·양쪽 시각 문장과 글자 2개 묶음 겹침 50% 이상이면 삭제.</li>
+      <li><b>줄 수</b>: 핵심 2 · 주요 1. 남는 줄이 0이면 칸 없음.</li>
+      <li><b>대상 "정책"</b>: up/down을 붙이지 않는다(mixed·unclear만). "정책에 불리"는 곧 정치 판단.</li>
+      <li><b>모드</b>: <code>BRIEFING.IMPACT_MODE: 'off' | 'hidden' | 'show'</code>. 공개 배포(다른 사람에게 열기) 시 자동 off — 설계 보안 절 "다시 검토" 목록 첫째.</li>
+    </ol>
+    <h3>화면</h3>
+    <ul>
+      <li>기본 보기 안, "왜 중요한가" 바로 아래. 점선 테두리, 배경 투명, 색 없음. 머리말 <b>영향</b> + "기사가 말한 영향만 · AI가 추림".</li>
+      <li>줄: <b>대상</b> · <b>낱말</b>(부담 / 기회 / 갈림 — up/down/mixed에 대응, unclear는 낱말 없음) · 문장 · 근거 언론사. 폰은 두 줄, PC는 표 꼴.</li>
+      <li>성립하지 않는 기사는 상자 자체가 없다. 다른 보기(글머리표·5W·양쪽 시각)에서는 안 보인다.</li>
+      <li>[틀린 곳 알리기] 이유에 "영향 판단이 이상함" 버튼.</li>
+    </ul>
+    <h3>비용과 실측</h3>
+    <ul>
+      <li>회차당 약 $0.09(경제·테크 약 50건 × 출력 150토큰), 월 약 $2.7. 주요 묶음이 출력 상한(8,000토큰)에 가까워지므로 <code>SUMMARY_CHUNK</code> 8 → 6 검토.</li>
+      <li>2주(10회차 이상) 뒤 기준: 생성 대비 <code>impactDrops</code> 20% 미만, 낱말 붙은 줄 비율 50% 이상, 금지 분야 누출 0건. 공개 뒤 2주: 보인 줄 대비 "영향" 신고율 5% 미만이면 유지, 넘으면 낱말을 끄고 재심.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>결정해 주셔야 할 것</h2>
+    <div class="decide">
+      <h3>① 노동·복지 같은 정책성 사회 기사에도 열 것인가 (새출발기금이 경계)</h3>
+      <div class="opt">
+        <div><b>1차는 경제·테크만</b> 파이프라인·감시. 새출발기금은 방향 자체가 기사의 쟁점("도덕적 해이")이라 낱말이 곧 입장이 된다. 2주 실측 뒤 재론</div>
+        <div><b>기사가 말한 것만 허용</b> 읽는 사람. 그 기사는 영향이 곧 기사 내용이고 양면을 기사가 직접 말한다. 라벨을 빼고 근거 언론사를 붙이면 판정이 아니라 보도의 귀속</div>
+      </div>
+      <p class="rec"><b>권장</b> 1차는 경제·테크만. 2주 뒤 신고율이 낮으면 노동·복지·부동산을 "낱말 없이(unclear), 기사가 말한 것만"으로 연다. 시안의 "노동·복지 기사" 스위치가 두 경우를 보여 준다.</p>
+    </div>
+    <div class="decide">
+      <h3>② 기사가 말하지 않았지만 AI가 짚은 영향(inferred)을 허용할 것인가</h3>
+      <div class="opt">
+        <div><b>기사가 말한 것만</b> 감시·디자인. 사실상 "왜 중요한가"를 대상별로 쪼갠 것이라 위험이 거의 0. 대신 빈 기사가 많아진다</div>
+        <div><b>허용하되 꼬리표</b> 읽는 사람(1라운드). "의미 번역"이라는 원래 요구에 가장 가깝다. "(AI 추론)" 꼬리표로 구분. 이 앱에서 유일하게 재료 밖 문장이 실리는 칸이 된다</div>
+      </div>
+      <p class="rec"><b>권장</b> 기사가 말한 것만으로 시작. AI의 추정이 궁금하면 [이 기사 묻기]가 이미 그 자리다 — 거기서는 사용자가 질문했고 답이 의견임을 안다.</p>
+    </div>
+    <div class="decide">
+      <h3>③ 2주 실측을 숨겨서 할지, 보이게 할지</h3>
+      <div class="opt">
+        <div><b>숨김(hidden)</b> 파이프라인·감시. 만들고 저장하되 화면에는 안 그림. 관리자는 JSON("코드로 보기")으로 품질을 본 뒤 켠다 — 숫자 대조 log 모드와 같은 순서</div>
+        <div><b>보이게(show)</b> 읽는 사람. 혼자 쓰는 도구인데 숨기면 신고를 못 하고 2주 뒤 판단할 재료가 없다. 보이게 하고 신고로 판단</div>
+      </div>
+      <p class="rec"><b>권장</b> 보이게. 관리자 한 명이 쓰는 앱이라 "숨김 실측"은 JSON을 열어 보는 수고만 남긴다. 대신 켜는 날부터 신고 버튼이 함께 있어야 하고, 2주 뒤 위 기준으로 유지·축소를 정한다.</p>
+    </div>
+    <p class="muted">별건: "쉽게" 칩을 내릴지. 읽는 사람·디자인 모두 내리는 데 찬성(폰에서 칩 4개가 스크롤 없이 들어간다). 결정하시면 같은 작업에서 처리한다.</p>
+  </section>
+
+  <section>
+    <h2>구현 단계 (결정 후)</h2>
+    <ol class="steps">
+      <li><code>constants.ts</code> — <code>IMPACT_MODE</code>, <code>IMPACT_MAX_CORE: 2</code>, <code>IMPACT_MAX_MAJOR: 1</code>, <code>IMPACT_TEXT_MAX_CHARS: 60</code>, <code>IMPACT_DUP_OVERLAP: 0.5</code>, <code>SUMMARY_CHUNK</code> 검토</li>
+      <li><code>verify.ts</code> — <code>DIRECTION_UP</code>/<code>DIRECTION_DOWN</code> 어휘, <code>IMPACT_BANNED</code>, <code>directionOf(material)</code>, <code>overlapsWith(text, others)</code></li>
+      <li><code>summarize.ts</code> — 스키마에 <code>impact[]</code>(target·direction·text·src), 지시문 3줄("영향 줄은 리드·왜·양쪽 시각을 되풀이하지 않는다" 포함), 후처리</li>
+      <li><code>edition.ts</code> — <code>EditionItem.impact</code>, <code>Edition.impactVisible</code>, <code>stats.impactDrops</code>; <code>taxonomy.ts</code> <code>wide</code>로 분야 판정</li>
+      <li><code>readItems.ts</code>·<code>routes/me.ts</code>·<code>client/lib/briefing.ts</code> — 신고 이유 <code>impact</code>; <code>BriefingView.tsx</code> — 영향 상자(기본 보기, 왜 아래), 신고 버튼 다섯째</li>
+      <li>설계 문서 ④-3 "영향" 절, 보안 절 공개 검토 목록, API 명세(API-073 flag reason), CHANGELOG</li>
+    </ol>
+    <p class="muted">작업량은 v0.45의 양쪽 시각과 비슷하다(서버 반나절, 화면 반나절). 1단계 상수부터 6단계 문서까지 한 커밋 묶음.</p>
+  </section>
+
+  <section>
+    <h2>부록 — 토론 원문</h2>
+    <details><summary>1라운드 · 읽는 사람 대변</summary><pre class="doc">## 읽는 사람 대변 — &quot;영향&quot; 보기 제안에 대한 의견
+
+### 1. 읽는 데 도움이 되나 — &quot;쉽게&quot;가 안 와닿은 이유부터
+스크린샷의 &quot;쉽게&quot; 출력은 어휘만 풀었지 밀도를 낮춘 기본 보기다. 크레딧물 기사에서 355조·24%·93%가 전부 사라지고 &quot;크게 늘었어요&quot;, &quot;대부분을 차지했고&quot;만 남았다. 대통령 SNS 기사는 &quot;논란이 된 표현은 장난삼아 쓴 말&quot;이라고 하는데 무슨 표현인지 요약에 없어 더 모호해졌다. 사용자가 뉴스에서 막히는 지점은 단어가 아니라 &quot;그래서 이게 나한테·시장에 무슨 뜻인가&quot;다. 쉽게 보기는 그 질문에 답하지 않고 정보만 빼서, 읽을 이유가 없는 칩이 됐다. 사용자가 &quot;무시해봐&quot;라고 한 건 사실상 &quot;내가 원한 건 어휘 번역이 아니라 의미 번역&quot;이라는 말로 읽힌다 — 그 의미 번역이 이번 &quot;영향&quot; 제안이다.
+
+다섯 보기와 비교하면 글머리표·5W는 같은 내용의 다른 배열, 양쪽 시각은 입장의 나열이고, &quot;영향&quot;만이 유일하게 읽는 사람 쪽으로 방향을 바꾼 보기다. 다만 &quot;왜 중요한가&quot;(summarize.ts 지시문: &quot;시장·정책·생활에 어떤 영향인지&quot;)와 재료가 같다. 겹치지 않으려면 영향 보기는 왜 중요한가를 대상별·방향별로 쪼갠 구조화 판이어야지, 같은 문장을 한 번 더 쓰는 것이면 쉽게 보기의 재판이 된다.
+
+### 2. 어떤 모양이면 읽히나
+| 모양 | 장점 | 단점 |
+|---|---|---|
+| 긍정/부정 배지 하나 | 한눈에 | 기사 하나가 은행엔 유리, 회사채 시장엔 불리 — 한 값으로 못 적는다. 정치 기사에선 곧 정파 판단 |
+| 신호등·점수 | 스캔 쉬움 | 근거 없는 정밀함. 숫자가 문장보다 세게 읽혀 신뢰를 깎는다 |
+| 한 줄 문장 | 안전 | 왜 중요한가와 구분 안 됨 |
+| 대상별 줄 (내 선택) | 누구에게·어느 쪽·근거가 한 줄에 | 재료가 얇으면 줄이 안 나옴 — 그게 맞다 |
+
+제안 모양: [대상 칩] [방향 낱말] 한 문장 (근거 언론사) 최대 3줄.
+- 대상은 가계·시장·산업·정책 네 가지 고정 라벨.
+- 방향은 &quot;긍정/부정&quot;이 아니라 유리 · 부담 · 갈림 세 낱말(색은 흐리게, 화살표 금지). &quot;AI가 좋다/나쁘다 판정했다&quot;가 아니라 &quot;기사가 누구 쪽 부담이라 했다&quot;로 읽히게.
+- 줄마다 근거 언론사. 아래에 &quot;기사가 말한 영향만 정리했어요 · 전망은 아니에요&quot; 한 줄.
+- 폰에서 칩이 6개면 가로 스크롤이다. 쉽게를 빼고 그 자리에 넣는 쪽이 낫다.
+
+### 3. 기사별로 성립하나
+- 크레딧물 355조 (경제) — 성립. 기대 출력: `시장 · 부담 — 은행채가 늘며 회사채 발행은 줄어 기업 자금조달이 밀린다 (연합뉴스)`. 단 &quot;대출금리 오를 수 있다&quot;(가계)는 재료에 없으면 쓰면 안 된다 — 딱 추측이 끼어드는 자리.
+- 새출발기금 감면 (사회) — 성립, 갈림형. `가계(채무자) · 유리 — 평균 감면액이 연체이자의 6.6배` / `정책 · 갈림 — 성실 상환자와의 형평, 도덕적 해이 지적 (동아일보)`. 양쪽 시각과 겹칠 수 있어 둘 다 있으면 하나는 빼야 한다.
+- 李 대통령 SNS 소통 (정치) — 불성립. 영향 대상이 없다. 억지로 쓰면 &quot;소통 강화는 긍정적&quot; 같은 의견이 된다. 이 기사엔 칩이 안 보이는 게 정답이고, 안 보이는 기사가 많아도 실패가 아니다.
+- 엔비디아 GPU 323곳 (해외 테크) — 반쯤 성립. `산업 · 유리 — 대형 클라우드가 아니어도 GPU를 구할 경로가 늘었다 (CNBC)`. &quot;한국 반도체주에 호재&quot; 같은 국내 번역은 재료에 없으니 금지 — 해외 기사에서 가장 유혹이 큰 지점.
+
+정리하면 경제·산업 기사는 거의 성립, 사회·정책은 갈림형으로 성립, 정치·사건사고·인물 기사는 대개 불성립.
+
+### 4. 우려
+- 연쇄 추론: &quot;은행채 증가 → 금리 상승 → 내 대출 부담&quot;처럼 두 단계만 넘어가면 기사가 아니라 AI의 경제 전망이다. 한 단계, 재료에 문장이 있는 것만.
+- 편향: 노동·복지·정치 기사에서 &quot;누구에게 유리&quot;는 곧 입장이다. 방향 낱말을 고르는 순간 중립이 깨질 수 있어 정치 분류는 기본 제외가 안전하다.
+- 과장된 확신: 훑어 읽는 사용자는 문장보다 라벨을 본다. &quot;부담&quot; 한 낱말이 1~2문장 근거보다 오래 남는다. 그래서 색·화살표·점수는 빼고 낱말만.
+- AI 의견의 선: 사용자가 원하는 건 &quot;기사가 말한 영향을 대상별로 정리&quot;까지로 본다. &quot;기사가 말하지 않은 영향을 AI가 추정&quot;은 이 기사 묻기로 넘긴다 — 거기선 사용자가 질문했고 답이 의견임을 안다. 이 선을 넘으면 틀린 곳 알리기가 늘 것이다.
+
+### 5. 결론: 조건부 도입
+조건 세 가지. (a) Haiku 다시 쓰기가 아니라 원문이 있는 Sonnet 요약 호출 안에서, 양쪽 시각처럼 줄마다 from 필수 — 요약만 재료로 방향을 고르면 그 자체가 새 판단이라 &quot;새 사실 금지&quot; 원칙과 어긋난다. (b) 배지·점수 아닌 대상별 줄 + 유리·부담·갈림 낱말. (c) 재료에 근거 없으면 줄을 안 만들고 칩도 안 보인다. 쉽게 보기는 내려도 된다.
+
+다른 역할에게
+- 파이프라인: 핵심만인가 주요까지인가, Sonnet 출력 증가분은 얼마인가. 그리고 왜 중요한가(why)를 아예 이 구조로 바꿔 한 번만 쓰게 할 수 있나 — 겹침을 없애는 가장 싼 길 같다.
+- 화면: 칩을 하나 더 두는 것과, 기본 보기의 왜 중요한가 칸 자체를 대상별 줄로 그리는 것 중 어느 쪽이 폰에서 덜 번거로운가.
+- 감시: 방향 낱말은 사실이 아니라 판단인데 verify.ts가 볼 수 있는 건 근거 문장의 숫자·고유명사뿐이다. 그걸로 충분한가, 아니면 틀린 곳 알리기에 &quot;영향 판단이 치우침&quot; 선택지를 더해 사람이 거르게 해야 하나.</pre></details>
+    <details><summary>1라운드 · 수집·파이프라인 담당</summary><pre class="doc"># 수집·파이프라인 담당 — &quot;영향&quot; 보기, 어디서·무엇으로·얼마에
+
+## 1. 재료: 어디서 만들까
+&quot;영향&quot;은 재료에 적힌 사실이 아니라 추론이다. 그래서 핵심 질문은 &quot;추론의 근거를 코드가 붙잡을 수 있는 자리가 어디냐&quot;다.
+
+| | (a) Sonnet 요약 호출 안 | (b) Haiku, 우리 요약만 (lenses 방식) | (c) 별도 Sonnet 호출 |
+|---|---|---|---|
+| 재료 | 원문 A·B·C·W1 (기호 있음) | 요약 300~700자 | 원문을 다시 보냄 |
+| 품질 | 기사가 직접 말한 영향(&quot;회사채 위축&quot;, &quot;도덕적 해이 우려&quot;)을 기호로 가리킬 수 있다 | 요약에 압축된 한 줄에서 또 추론 — 추론의 추론 | (a)와 같으나 요약과 따로 써서 둘이 어긋날 수 있다 |
+| 회차당 비용 (핵심 25·주요 60, 영향 1건 ≈ 출력 120토큰) | 출력 10k×$10/M + 지시문 17묶음×300×$2/M ≈ $0.11 | 출력 10k×$5/M ≈ $0.05 | 입력 165k×$2/M = $0.33 + 출력 $0.10 ≈ $0.43 |
+| 월 (30일) | $3.3 | $1.5 | $13 |
+| 실패 시 | 요약과 운명을 같이한다 (sides와 같은 위험) | 보기만 빠진다 | 보기만 빠진다 |
+
+(a)를 고른다. 월 약 $75 → $78, 한도 $110 안. (b)는 싸지만 lenses의 전제(&quot;새 사실이 필요 없는 바꿔 쓰기&quot;)가 &quot;영향&quot;에는 성립하지 않아 Haiku에게 추론을 시키는 셈이고, (c)는 같은 재료를 두 번 보내는 값이 4배다. 단, 주요 8건 묶음에서 SUMMARY_MAX_OUTPUT_TOKENS 8000에 가까워지니(8×~600 + 영향 8×120 ≈ 5.8k) SUMMARY_CHUNK 8→6을 같이 검토한다.
+
+lenses 규칙의 적용 범위. 숫자 검증(sentenceNumbersSupported)은 그대로 쓴다 — 영향 문장에 재료에 없는 숫자(&quot;0.25%p 오를 것&quot;)가 오면 그 문장을 지운다. 반면 &quot;새 사실 금지&quot;는 적용 불가능하다. 영향은 정의상 재료에 없는 문장이다. 대신 &quot;근거 구절이 재료에 실제로 있는가&quot;로 바꾼다: 모델이 근거 구절(quote, 30자 안팎)을 재료 기호와 함께 내고, 코드가 그 재료 본문에 부분 문자열로 있는지 본다. 없으면 그 항목을 버린다. 비용 0.
+
+## 2. 스키마
+```ts
+export type Impact = {
+  /** 재료가 영향을 직접 말했나(stated), 재료에서 AI가 짚었나(inferred) */
+  kind: &#x27;stated&#x27; | &#x27;inferred&#x27;;
+  targets: {
+    who: &#x27;households&#x27; | &#x27;market&#x27; | &#x27;industry&#x27; | &#x27;policy&#x27; | &#x27;other&#x27;;
+    label?: string;            // other일 때만 (예 &quot;수출 기업&quot;)
+    direction: &#x27;up&#x27; | &#x27;down&#x27; | &#x27;mixed&#x27; | &#x27;unclear&#x27;;
+    text: string;              // 한 문장 80자 이내, &quot;~할 수 있다&quot; 어미
+    from: string;              // 근거 재료 기호 하나 — 검증 통과한 것만 남는다
+  }[];
+};
+// EditionItem += impact?: Impact;   stats += impactDrops?: number;
+```
+horizon·confidence는 넣지 않는다. 모델이 내는 신뢰도 숫자는 검증 불가능한 숫자를 하나 더 만드는 것이고, 시점은 추측 하나를 더 보태는 것이다.
+
+방향 enum의 위험. 긍/부를 강제하면 모델은 모든 기사에 판정을 내린다 — &quot;SNS 소통 계속&quot;에도 &#x27;긍정&#x27;을 붙인다. 대안 두 가지를 합친다: ① unclear를 기본값으로 지시하고 재료에 방향을 말한 구절이 있을 때만 up/down, ② 코드가 inferred이면서 up/down인 항목은 화면에 색 배지를 주지 않고 문장만 보인다(stated만 배지). 억지 판정을 데이터에서 막지 못하면 화면에서라도 약하게 보인다.
+
+## 3. 어떤 기사에 만드나
+- 만든다: why가 살아 있고(일반론 걸러진 뒤) + 본문 재료(body·feed·web) 1곳 이상 + 분야가 경제·산업·정책(환율·금리, 노동·복지, 부동산, 에너지, 테크·반도체). 핵심은 대상 2개까지, 주요는 1개.
+- 안 만든다: 정치(인사·발언·공방), 사회 사건·사고, 연예·스포츠, 발췌(lede)뿐인 기사, 참고.
+
+| 기사 | 판정 | 이유 |
+|---|---|---|
+| 크레딧물 355조, 은행채 93% | 만든다 | 환율·금리, 본문 1곳. 시장(채권 수급) 1개, 재료에 &quot;회사채는 줄고&quot;가 있어 stated 가능 |
+| 새출발기금 감면 6.6배 | 만든다 | 복지, 본문 2곳. 가계(채무자) up / 정책(도덕적 해이) down — 재료 자체가 양면을 말해 mixed가 정직하다 |
+| 李 대통령 SNS 소통 | 안 만든다 | 정치 발언. &quot;누구에게 영향&quot;이 정당 유불리 판단으로 흐른다 |
+| 엔비디아 GPU 공급업체 323곳 | 만든다 | 반도체, 본문 1곳. 산업(AI 인프라 조달) 1개. 가계·시장은 억지라 금지 |
+
+## 4. 검증: 코드로 거르는 것과 못 거르는 것
+거른다(비용 0): from이 진짜 기호인가(기존 parseSrc) · quote가 그 재료에 있는가(신설) · 숫자 대조(기존) · 금지어(&quot;확실히·반드시·틀림없이·급등·급락·폭락·폭등&quot;, 매수·매도·&quot;투자 적기&quot; 같은 권유 어휘) · 80자 초과 · 대상 수 초과 · kind: stated인데 quote 없음 → inferred로 강등.
+
+못 거른다: 방향이 맞는지, 대상 선택이 적절한지, 인용 구절이 실제로 그 결론을 뒷받침하는지(인용은 있되 논리 비약), 정책 기사마다 늘 한쪽으로 기우는 편향. 이 넷은 사람만 잡는다.
+
+그래서 flag 이유에 impact(&quot;영향 판단이 이상함&quot;)를 추가한다. stats.impactDrops와 함께 2주 본 뒤 유지·축소를 정한다 — 숫자 대조를 &#x27;log&#x27; 2주 후 켜기로 한 것과 같은 순서.
+
+## 5. 결론: 조건부 도입
+도입하되 ① 분야·재료 조건을 코드로 고정하고 ② 근거 인용 검증을 통과한 항목만 남기며 ③ inferred에는 색 배지를 주지 않고 ④ 2주 뒤 flag·drops로 재심한다. 비용은 회차당 약 $0.11, 월 $3.3로 한도 문제는 없다.
+
+질문
+- 읽는 사람 대변: 주요(본문 1곳)에도 보고 싶은가, 아니면 핵심만으로 시작해 신뢰를 쌓는 쪽이 나은가? 대상 넷(가계·시장·산업·정책)으로 충분한가?
+- 화면 디자인: stated만 색 배지, inferred는 문장만 — 이 구분을 칩 한 줄 안에서 보일 수 있나? &quot;쉽게&quot; 자리를 &quot;영향&quot;이 대신하는가?
+- 정확성·저작권 감시: 근거 인용(quote 30자)을 회차에 저장할 것인가, 검증에만 쓰고 버릴 것인가? 지금 규칙은 &quot;원문 문장을 베끼지 않는다&quot;라 저장하면 그 규칙과 부딪친다. 나는 검증 후 버리고 from만 남기는 쪽을 권한다.</pre></details>
+    <details><summary>1라운드 · 화면 디자인 담당</summary><pre class="doc"># 화면 디자인 담당 — &quot;영향&quot; 보기를 어떻게 그릴 것인가
+
+## 0. 전제와 한 줄 결론
+&quot;영향&quot;은 지금 있는 다섯 보기와 성격이 다르다. 글머리표·쉽게·5W는 &quot;기본 요약을 다시 쓴 것 — 새 사실 없음&quot;이고, 양쪽 시각은 원문에 있는 주장을 옮긴 것이다. 영향은 기사에 없는 판단을 AI가 보태는 유일한 칸이다. 그래서 화면 원칙은 하나다: 사실과 같은 옷을 입히지 않는다. 결론은 (b) 기본 보기 안의 칸이되, 왜 중요한가 바로 아래가 아니라 골라 쓴 칸 뒤·근거 줄 앞에 접힌 상태로 두고, 점선 테두리 + &quot;AI 추론&quot; 꼬리표로 구분한다.
+
+## 1. 위치 — 네 안 비교
+| 안 | 장점 | 단점 | 판단 |
+|---|---|---|---|
+| (a) 여섯 번째 칩 &quot;영향&quot; | 본문 자리를 통째로 써서 넓다 | 칩 줄이 폰에서 이미 가로 스크롤. &quot;다시 쓴 것&quot; 안내와 한 줄에 섞여 영향도 &quot;새 사실 없음&quot;으로 오해됨. 기기가 마지막 보기를 기억하므로 영향 칩을 고른 채 다음 기사로 넘어가면 사실(리드)을 건너뛰고 추론부터 읽게 된다 | 탈락 |
+| (b) 기본 보기 안 칸 | 리드·왜 중요한가(사실) 다음에 읽히므로 순서가 &quot;사실→추론&quot;. 근거 줄·틀린 곳 알리기 바로 위라 신고 동선이 짧다 | 기본 보기가 길어진다 → 접힘으로 해결 | 채택 |
+| (c) 제목 아래 배지 | 눈에 띔 | 제목 줄은 이미 핵심/주요·분야·갱신됨·&quot;지난 판 이후&quot;가 산다. 리드보다 위에 추론이 오는 순서 위반 | 탈락 |
+| (d) 목록 줄 배지 | 훑기 빠름 | 합의안 6.1 &quot;목록을 흔들지 않는다&quot;. 읽기 전에 방향을 먼저 박아 넣는 것 자체가 편향 장치. Ground News의 성향 막대는 언론사 단위 외부 데이터라 되지만, 우리는 기사 단위 AI 추측이라 안 된다 | 탈락 |
+
+왜 중요한가와 구분: 왜 중요한가는 왼쪽 파란 세로선 3px·라벨 accent 색. 영향은 세로선 없이 점선 테두리 상자(border-dashed)로 그린다. 점선은 이미 이 앱에서 &quot;제목만 · 원문 ↗&quot;에 쓰여 &quot;재료가 얇다/보조&quot;라는 뜻이 잡혀 있다. 채움색은 숫자 칩과 같은 p.soft를 쓰지 않고 투명 — 숫자 칩(사실)과 같은 질감을 피한다.
+
+## 2. 모양 — &quot;누구에게 → 어느 쪽 → 왜&quot;
+- 접힌 상태(기본): 한 줄. `영향 · AI 추론 ▾   가계 불리 · 정책 불확실`. 대상과 방향만 글자로 보이고 문장은 숨긴다.
+- 펼친 상태: 대상별 줄 1~3개. 네 대상(가계·시장·산업·정책)을 고정 칸으로 두지 않고 AI가 해당하는 것만 쓴다.
+- 한 줄 구조: `[대상 ≤5자] [방향 칩] 문장 ≤60자(폰 2줄) [근거 언론사]`.
+- 방향 표기: 글자가 1순위, 기호가 2순위, 색이 3순위. `▲ 유리` `▼ 불리` `◆ 엇갈림` `? 불확실`. 색은 새로 만들지 않고 팔레트에 있는 두 색만 빌린다: 유리 = accent(하늘), 불리 = warn(호박). 엇갈림·불확실은 muted. 빨강/초록 짝은 안 쓴다 — 빨강은 이미 &quot;핵심&quot; 배지, 보라는 &quot;갱신됨&quot;이라 뜻이 겹친다.
+- 신뢰도: 숫자 %는 안 쓴다. &quot;불확실&quot;이 곧 낮은 신뢰도이고, 기사에 근거가 없으면 5W처럼 &quot;기사에 없음&quot;으로 둔다.
+- 근거 연결: 문장 끝에 기존 &lt;From&gt;을 그대로 붙여 언론사 이름을 보인다. 데이터는 `impact?: { items: { target; direction; text; from: string[] }[] }` — sides와 같은 꼴.
+- 안내 줄(펼쳤을 때만): &quot;기사에 적힌 사실에서 AI가 미루어 짐작한 것 · 기사에 없는 판단이 섞일 수 있어요&quot;.
+
+## 3. 안 맞는 기사
+sides와 같은 규칙: 영향이 성립하지 않으면 칸을 만들지 않고 아무것도 보이지 않는다. &quot;뚜렷한 영향 없음&quot; 문구는 30건 중 절반에 반복되는 소음이고, 빈 상태 문구는 &quot;AI가 뭔가 빠뜨렸나&quot; 하는 의심만 키운다. 정치·사회 기사(스크린샷 4 &quot;SNS 소통&quot;)가 그 예다. 대신 &quot;이 기사 묻기&quot;가 이미 있으니 궁금하면 거기서 묻는다. 참고(importance 1)·제목만 기사에도 만들지 않는다.
+
+## 4. 와이어프레임 (요지)
+폰(새출발기금, 펼침): 리드 → 왜 중요한가 → 숫자 칩 → 점선 상자 [영향 · AI 추론 ▴] → &quot;연체 차주 ▲ 유리 — 원금 대부분을 감면받아 재기 부담이 줄어든다 (동아일보)&quot; / &quot;성실 상환자 ▼ 불리 — 안 갚는 쪽이 더 유리한 구조라 형평 논란이 커진다 (동아·연합)&quot; / &quot;정책 ? 불확실 — 감면 기준이 조여질지는 기사에 없음&quot; → 안내 줄 → 근거 줄·틀린 곳 알리기 → 원문 카드 → 묻기.
+접힌 상태: 점선 상자 안 한 줄 &quot;영향 · AI 추론  연체 차주 유리 · 성실 상환자 불리 · 정책 불확실 ▾&quot;.
+PC(크레딧물, 펼침): 표 꼴 — &quot;시장 ▼ 불리 은행채가 쏟아지면 채권 금리에 오름 압력이 생긴다&quot; / &quot;일반 기업 ▼ 불리 회사채 발행이 줄어 자금 조달이 은행 대출 쪽으로 쏠린다&quot; / &quot;가계 ? 불확실 대출 금리로 이어질지는 기사에 없음&quot;.
+PC는 한 줄에 대상(5자 고정폭) · 방향 칩 · 문장 표 꼴, 폰은 대상+방향을 첫 줄에 두고 문장을 둘째 줄로 내린다. 글자 수: 대상 ≤5자, 방향 4종 고정, 문장 ≤60자, 줄 ≤3개, 안내 1줄. 펼침 여부는 기기가 기억하되 기본값은 접힘이고, 영향 칸이 있는 기사에만 그린다.
+
+## 5. 결론과 질문
+채택: (b) 변형 — 기본 보기 안, 골라 쓴 칸 뒤, 점선 상자, 접힘 기본, 글자 방향 4종(유리·불리·엇갈림·불확실), 색은 accent·warn 두 가지만, 안 맞는 기사는 칸 없음.
+- 읽는 사람 대변에게: 접힘 기본이 맞나, 아니면 핵심(importance 3)만 펼침 기본으로 열어도 되나? 목록 배지 없이 &quot;영향 있는 기사&quot;를 못 찾는 게 불편한가?
+- 수집·파이프라인 담당에게: 영향을 Sonnet 요약 호출 안에서 같이 만들어야 원문 근거 from을 붙일 수 있다. 비용과 대상 1~3개 제한이 가능한가? 경제·산업·금융 분야에만 켜는 분류 조건을 줄 수 있나?
+- 정확성·저작권 감시에게: &quot;유리/불리&quot;라는 단정 글자를 허용할지, 아니면 &quot;오를 수 있다/줄 수 있다&quot;처럼 방향만 문장으로 쓰게 할지. verify.ts 규칙을 그대로 적용할 수 있나? 투자 판단 오인을 막는 문구를 안내 줄에 더 넣어야 하나?</pre></details>
+    <details><summary>1라운드 · 정확성·저작권 감시</summary><pre class="doc">## 영향(긍정/부정) 보기 — 정확성·저작권 감시 의견
+
+### 1. 본질: 영향은 요약이 아니라 예측·평가다
+현 설계의 축은 &quot;재료에 있는 것만&quot;이고, 코드가 그것을 지킨다 — summarize.ts는 칸마다 from을 받고 없는 기호면 버리며, lenses.ts는 우리 요약만 재료로 받아 keepSupported로 새 숫자를 지운다. 그런데 &quot;긍정/부정&quot;은 재료 어디에도 없는 판정이다. 숫자처럼 대조할 대상이 없으므로 verify.ts가 할 일이 없고, 틀려도 코드가 못 잡는다. 또 이미 why가 &quot;시장·정책·생활에 어떤 영향인지, 재료에서 근거를 댈 수 있을 때만&quot;으로 존재한다. 새 보기는 사실상 why에 방향 라벨을 붙이는 일이고, 더해지는 것은 전부 추론이다.
+
+절충(기사가 이미 &quot;…에 부담&quot;이라고 쓴 서술만 옮기기)은 가능하되 조건이 붙는다. 영향 문장은 from 기호 하나를 필수로 하고, 코드는 그 기호의 재료 글에 방향 어휘(부담·악화·우려·감소 / 호재·개선·기대·증가 등 사전)가 실제로 있는지 본다. 없으면 문장 삭제. 숫자 대조와 같은 &quot;재료에 있나&quot; 검사를 방향 어휘로 확장하는 것이다. 단, 이것은 재료 2,000자 안에 그 단어가 있다는 것만 보장하지, 그 단어가 같은 대상을 가리키는지는 못 본다 — 한계를 안고 쓰는 셈.
+
+### 2. 편향·정치
+4번(대통령 SNS)에 붙이면 이런 출력이 나온다. &quot;정치 — 긍정: 국민과 직접 소통을 넓힌다&quot; 또는 &quot;부정: 논란 표현 해명으로 정치적 부담&quot;. 어느 쪽이든 편들기이고, &quot;누구에게&quot;를 고르는 순간(대통령에게? 야당에게?) 프레임이 된다. 2번(새출발기금)은 더 나쁘다. &quot;가계 — 긍정: 빚 감면 / 시장 — 부정: 도덕적 해이&quot;. 긍정·부정 자체가 기사의 쟁점이고, 제목의 &quot;도덕적 해이 지적&quot;은 특정 매체 프레임인데 우리 라벨이 그것을 확정 판정으로 바꾼다. 합의안 12장에서 &quot;언론사 성향 표시&quot;를 &quot;우리가 매기면 논쟁거리&quot;라며 뺀 이유와 같다.
+
+따라서 방향 판정은 분야 id로 금지해야 한다. 모델 판단은 그날 기사마다 흔들린다. taxonomy.ts 기준 kr.pol.*, w.pol.*, kr.soc.*, w.soc.*는 영향 보기를 만들지 않고, 노동·교육·복지(kr.soc.labor)도 정책 가치 판단이라 포함한다. 남는 것은 econ·tech 계열뿐이다.
+
+### 3. 과장·확신
+&quot;긍정&quot;은 독자에게 &quot;주가 오름&quot;으로 읽힌다. 혼자 보는 도구라도 투자 판단 재료가 되는 순간 책임 구조가 생긴다. 시계 없는 방향(단기 비용 부담이 장기 이익일 수 있음)도 같은 문제. 필수 표시: (1) &quot;AI 추론&quot; 표식, (2) 근거 기호, (3) 대상(가계·산업 등)과 시계(단기/장기) 중 재료에 없는 것은 &quot;재료에 없음&quot;, (4) 긍정/부정 대신 &quot;부담 가능성 / 기회 가능성&quot; 같은 약한 어휘. 금지어 초안: 주가·매수·매도·수혜주·호재·악재·확실·반드시·급등·급락·편향·왜곡, 그리고 verify.ts의 GENERIC_WHY 일반론 표현.
+
+### 4. 저작권·법적
+사실 자체는 보호 대상이 아니지만(시사보도의 사실 전달), 분석·논평 문단은 기사에서 창작성이 가장 높은 부분이다. 그것을 &quot;영향&quot;으로 옮기면 아이디어 차용이라 표현 복제보다 법적 위험은 낮으나, 더 큰 문제는 출처 왜곡이다 — 기사가 한 평가를 AI 판정처럼 보이거나, AI 추론에 기호 A를 붙여 연합뉴스가 한 말처럼 보이게 한다. 혼자 보는 전제에서 복제 쟁점은 작아지지만, 설계 문서 보안 절의 &quot;다른 사람에게 공개하려면 다시 검토&quot; 항목에 영향 보기를 첫째로 올려야 한다.
+
+### 5. 검증 가능성
+AI 없이 코드로 걸 수 있는 것: 길이 상한(80자), 금지어, 분야 id 차단, from 필수, 방향 어휘가 재료에 있는지, 대상 어휘(가계·시장·산업) 중 하나만, &quot;정치&quot;는 대상에서 아예 금지. 방향과 본문의 불일치는 사전 대조 이상으로는 못 잡는다. readItems.ts:24와 client/src/lib/briefing.ts:67-68의 신고 이유(number | mixed | overstated | other)에 impact(&quot;영향 판단이 이상함&quot;)를 더하고, NUMBER_CHECK_MODE처럼 2주는 생성만 하고 숨긴 채 stats.impactDrops와 신고를 본 뒤 켠다.
+
+### 6. 결론: 조건부 반대
+기본 입장은 반대다. 그래도 넣는다면 조건은 다음 전부다: 경제·테크 분야만 / 긍정·부정 방향 라벨 없이 &quot;누구에게 어떤 부담·기회 가능성&quot; 문장 하나 / from 필수 + 방향 어휘 재료 대조 / 금지어·길이 검사 / &quot;AI 추론&quot; 표식 상시 / 신고 이유 추가 / 2주 숨김 실측 후 공개 / 공개 배포 시 자동 꺼짐.
+
+질문. 읽는 사람 대변에게: 이미 있는 why와 무엇이 다른가 — 방향 라벨을 빼면 그래도 원하는가. 파이프라인 담당에게: 방향 어휘 사전 대조를 Sonnet 호출 안(원문 있음)에서 할지, Haiku 다시 쓰기(요약만 있음)에서 할지 — 후자는 재료 대조가 불가능하다. 디자인 담당에게: &quot;긍정/부정&quot; 색·아이콘을 쓰지 않고도 의미가 전달되는 표시가 있는가.</pre></details>
+    <details><summary>2라운드 · 읽는 사람 대변</summary><pre class="doc">## 읽는 사람 대변 — 2라운드
+### 1. 답
+파이프라인에게. 핵심만으로 시작한다. 주요는 본문 1곳이라 &quot;기사가 직접 말한 영향&quot; 구절을 찾기 어렵고, 처음 2주 동안 틀린 줄을 몇 번 보느냐가 이 칸의 운명을 정한다. 대상 넷에 other+라벨을 더한 안은 좋다. &quot;연체 차주 / 성실 상환자&quot;가 &quot;가계&quot;보다 훨씬 잘 읽힌다. 라벨은 5자 안, 한 기사에 하나까지.
+디자인에게. 접힘 기본을 받는다. 다만 접힌 한 줄에 방향 낱말이 보이는 것은 반대 — 훑는 사람은 그 낱말만 보고 지나간다. 접힌 줄에는 대상만. 목록 배지는 없어도 불편하지 않다.
+감시에게. why와 다른 점은 주어다. why는 주어가 사건, 영향은 주어가 &quot;누구&quot;. 사용자가 원한 것은 그 주어 전환이지 긍정·부정 판정이 아니다. 그래서 방향 라벨을 빼도 원한다. 방향이 문장 어미에 담기면 충분하다.
+### 2. 양보 / 고수
+양보: 위치(칩 → 기본 보기 안 점선 상자), 방향 라벨(유리·부담·갈림 → 라벨 없이 문장만), 2주 실측과 신고 이유 추가.
+고수: 새출발기금류(노동·복지) 포함 — 영향이 곧 기사 내용이고 양면을 기사가 직접 말한다. 라벨을 빼고 근거 언론사를 붙이면 &quot;판정&quot;이 아니라 &quot;보도의 귀속&quot;이 된다. 절충으로 이 분야는 stated만. / 2주 &quot;숨김&quot; 실측 반대 — 혼자 쓰는 도구인데 숨기면 신고를 못 하고 2주 뒤 판단할 재료가 없다. / stated·inferred 구분은 꼬리표로 보여야 한다: stated &quot;(동아일보)&quot;, inferred &quot;(AI 추론)&quot;.
+### 3. 최종: 조건부 도입
+1 Sonnet 요약 호출 안, 줄마다 from + 근거 검증, 인용은 버림 / 2 핵심만, 대상 2줄, 2주 뒤 주요 확장 / 3 경제·테크 stated+inferred, 노동·복지·부동산 정책성 사회 stated만, 정치·사건사고·연예 없음 / 4 라벨 없음, 모양 `대상 — 문장 ≤60자 (근거)` / 5 기본 보기 안 점선 상자, &quot;AI 추론&quot; 꼬리표, 성립 안 하면 상자 없음 / 6 신고 이유 추가, 숨기지 않고 2주 뒤 재심 / 7 쉽게 칩은 별개로 내릴지 사용자에게 묻는다.
+### 4. 사용자 결정
+노동·복지 같은 정책성 사회 기사에 영향 칸을 열 것인가. 새출발기금 기사가 바로 그 경계다.</pre></details>
+    <details><summary>2라운드 · 수집·파이프라인 담당</summary><pre class="doc"># 수집·파이프라인 담당 — 2라운드
+### 1. 답
+읽는 사람. 주요까지 만든다. 분야를 경제·테크로 좁히면 24시간판 85건 중 약 50건, 출력 150토큰/건 → 회차당 $0.09, 핵심만이면 $0.03. 차이가 $0.06이라 등급보다 분야로 거른다. why 대체는 반대 — why는 핵심 자격 판정 장치이고 정치·사회 기사에도 있어야 한다. 겹침은 지시문 + titleOverlap 50% 이상 겹치는 줄 삭제로 막는다.
+디자인. 전부 가능. sides와 같은 자리에 넣고 parseSrc로 from 검증, taxonomy.ts의 wide 플래그로 분야.
+감시. 방향 어휘 대조는 Sonnet 호출 안. 분야 → wide; from → parseSrc; 방향 어휘 → verify.ts DIRECTION_UP/DOWN + directionSupported; 금지어·길이 → IMPACT_BANNED, IMPACT_TEXT_MAX_CHARS; 2주 숨김 → IMPACT_MODE; 신고 → FlagItem.reason &#x27;impact&#x27;.
+### 2. 양보 / 고수
+양보: quote 저장 버림 / kind 칸 버림(재료에 방향 어휘가 있으면 up/down, 없으면 unclear — 그 구분이 곧 stated/inferred) / 노동·복지는 처음엔 뺀다, 2주 뒤 재론.
+고수: 방향 enum은 데이터에 남긴다(기본 unclear, 어휘 있을 때만 up/down). Sonnet 호출 안에서 만든다. 매핑 up=유리, down=불리, mixed=엇갈림(up·down 어휘가 둘 다 재료에 있을 때만), unclear=불확실.
+### 3. 최종: 조건부 도입
+Impact = { items: { target ≤5자; direction up|down|mixed|unclear; text ≤60자; from }[] }; EditionItem.impact, Edition.impactVisible, stats.impactDrops.
+조건: 1 wide 분야만 / 2 본문 재료 1곳 이상, 참고·titleOnly 제외 / 3 from 필수, 어휘 있을 때만 up/down / 4 숫자 대조 + 금지어 + 60자 + 3줄 / 5 why·sides 겹침 삭제, 0줄이면 칸 없음 / 6 IMPACT_MODE off|hidden|show, 2주 hidden / 7 공개 배포 시 off.
+비용 회차당 약 $0.09, 월 약 $2.7.
+### 4. 구현 단계
+constants.ts(IMPACT_MODE, IMPACT_MAX_LINES 3, IMPACT_TEXT_MAX_CHARS 60, IMPACT_DUP_OVERLAP 0.5, SUMMARY_CHUNK 8→6 검토) → verify.ts(DIRECTION_UP/DOWN, IMPACT_BANNED, directionOf, isDuplicateLine) → summarize.ts(스키마 impact[], 지시문 3줄, 후처리) → edition.ts → readItems.ts·routes/me.ts·client/lib/briefing.ts(신고 이유 impact), BriefingView.tsx(impactVisible일 때만) → 설계 문서 ④-3, 보안 절, CHANGELOG.</pre></details>
+    <details><summary>2라운드 · 화면 디자인 담당</summary><pre class="doc"># 화면 디자인 담당 — 2라운드
+### 1. 답
+읽는 사람에게. 칩도, why 대체도 아니다. 영향은 일부 기사에만 생겨 칩이 기사마다 생겼다 사라지고 기억된 보기가 튕긴다. 답은 왜 중요한가 바로 아래에 붙는 대상별 줄. 1라운드의 &quot;골라 쓴 칸 뒤&quot; 위치를 바꾼다.
+파이프라인에게. 구분은 가능하나 v1에는 stated만 그린다. inferred는 만들어도 숨기고 stats에만. 쉽게 자리는 대신하지 않는다 — 영향은 칩이 아니다.
+감시에게. 색·아이콘 없이 된다. 같은 위치의 같은 폭 낱말 칸, 낱말은 부담 · 기회 · 갈림, 어미는 &quot;~할 수 있다&quot;. 색·화살표·배경 없음.
+### 2. 양보 / 고수
+양보: 접힘 → 항상 펼침(줄이 최대 2개면 접어서 얻는 게 없다) / 방향 색 → 색 없음 / &quot;AI 추론&quot; 꼬리표 → 머리말 &quot;기사가 말한 영향만 · AI가 추림&quot; / 4종 → 3종(유리는 &quot;기회&quot;) / 위치 → 왜 중요한가 아래.
+고수: 칩 아님 · 목록 배지 아님 · 점선 테두리 · 줄마다 언론사 · 없으면 아무것도 안 그림 · 신고 선택지 추가.
+### 3. 규격
+위치 기본 보기, 왜 중요한가 바로 아래 / 항상 펼침 / 머리 `영향` + muted `기사가 말한 영향만 · AI가 추림` / 줄 `대상(≤5자) · 낱말(부담/기회/갈림) 문장(≤60자) 언론사` / 핵심 2, 주요 1 / 색 없음, 점선 테두리, 배경 투명 / 라벨 없는 변형은 낱말 칸을 비우고 문장 안에 &quot;부담/기회 가능성&quot; / 빈 상태 문구 없음 / 쉽게 칩은 별건, 내리는 데 찬성.</pre></details>
+    <details><summary>2라운드 · 정확성·저작권 감시</summary><pre class="doc">## 2라운드 — 정확성·저작권 감시
+
+### 1. 질문에 답한다
+읽는 사람에게. 숫자·고유명사 대조로는 부족하다. 방향은 판단이라 코드가 맞고 틀림을 판정할 수 없다. 그래서 신고 선택지 impact(영향 판단이 치우침)는 선택이 아니라 필수 조건이고, 켜기 기준의 분모가 된다.
+파이프라인에게. quote는 검증 후 버리고 from만 남기는 데 동의한다. 30자라도 회차 JSON에 매일 쌓이면 &quot;본문은 저장하지 않는다&quot;가 무너진다. stated/inferred + &quot;근거 구절이 재료에 있는가&quot;는 내 방향 어휘 사전 대조보다 낫다. 다만 구절이 있다는 것과 그 구절이 방향을 말한다는 것은 다르다. 둘을 합친다: quote가 재료에 있고, quote 안에 방향 어휘가 있어야 stated. 아니면 inferred로 강등.
+디자인에게. &quot;유리/불리&quot; 글자는 stated에만 허용, inferred는 방향을 unclear로 코드가 강제하고 문장(&quot;~할 수 있다&quot;)만 보인다. verify.ts의 sentenceNumbersSupported는 from 재료를 상대로 그대로 쓸 수 있다. 안내 줄에 &quot;투자 판단의 근거가 아니에요&quot; 한 구절을 더한다.
+
+### 2. 양보 / 고수
+양보: ① 분야 — 노동·복지(kr.soc.labor)·생활(kr.soc.life)·재난(w.soc.disaster)은 허용하되 stated만, 그리고 대상 policy는 up/down 금지(mixed·unclear만). kr.pol.*·w.pol.*·kr.soc.case·w.soc.rights는 그대로 금지. ② 라벨 — &quot;글자 1순위·색 3순위·빨강초록 금지·접힘 기본&quot;이면 우려 대부분이 해소된다. 라벨 없음을 철회하고 4종(유리·불리·엇갈림·불확실)을 받되 stated 한정. ③ 위치 — 기본 보기 안 점선 상자에 찬성, 칩 추가 반대.
+고수: 근거 인용 미저장, inferred 방향 금지, 2주 숨김 실측, 공개 배포 시 자동 꺼짐.
+
+### 3. 최종 입장: 조건부 찬성
+코드로 검사: 1 분야 허용 목록 밖이면 생성 안 함 / 2 항목마다 from 하나, 없는 기호면 버림 / 3 quote가 from 재료에 부분 문자열로 있고 방향 어휘를 품어야 stated, 아니면 inferred / 4 inferred는 direction을 unclear로 덮어씀 / 5 소셜 분야는 inferred 항목 전부 버림, policy 대상은 up/down 버림 / 6 문장 60자 이하, 숫자 대조, 금지어 포함 시 항목 삭제 / 7 quote는 검증 후 버림, 저장 안 함 / 8 핵심 2개·주요 1개 초과 자름 / 9 BRIEFING.IMPACT_MODE: &#x27;log&#x27; | &#x27;show&#x27;, 로그 기간엔 stats.impactDrops만
+사람이 본다: 방향 적절성, 대상 선택, 인용과 결론의 비약, 분야별 쏠림 — 신고 이유에 impact를 더해 모은다.
+금지어 최종: 주가·매수·매도·수혜주·호재·악재·투자 적기·확실·반드시·틀림없이·급등·급락·폭등·폭락·편향·왜곡, 그리고 GENERIC_WHY 패턴.
+켜기 기준(10회차 이상, 2주): 생성 대비 impactDrops 비율 20% 미만, stated 비율 50% 이상, 금지 분야 누출 0건 → 화면 공개. 공개 후 2주: 보인 항목 대비 impact 신고율 5% 미만이면 유지, 넘으면 inferred를 아예 끄고 재심.
+
+### 4. 사용자가 결정할 한 가지
+inferred(기사가 말하지 않았지만 AI가 짚은 영향)를 허용할 것인가. 허용하면 &quot;의미 번역&quot;이라는 원래 요구에 가장 가깝지만 이 앱에서 유일하게 재료 밖 문장이 실리는 칸이 된다. stated만이면 사실상 &quot;왜 중요한가&quot;를 대상별로 쪼갠 것이라 위험은 거의 0이되 빈 기사가 많아진다. 나는 stated만으로 시작하기를 권한다.</pre></details>
+  </section>
+
+  <footer>작성: 에이전트 4인 토론을 사용자 세션이 정리. 근거 자료 — docs/뉴스브리핑_개선합의안_20261010.md(v0.2), docs/시장조사보고서_뉴스브리핑_20261010.md, 실제 회차 스크린샷 5장(2026-10-11). 비용 추정은 Haiku $1/$5, Sonnet $2/$10(백만 토큰당)을 썼다.</footer>
+</div>
+</body>
+</html>
