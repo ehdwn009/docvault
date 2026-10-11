@@ -373,9 +373,12 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
               '자동 생성 꺼짐 · 설정에서 켜기'
             )}
           </button>
-          <p>
+          <p className={status.monthCostUsd >= status.monthBudgetUsd * (status.budgetWarnRatio ?? 0.8) ? 'text-amber-400' : ''}>
             이번 달 비용 ≈ ${status.monthCostUsd.toFixed(2)} / ${status.monthBudgetUsd}
+            {status.monthCostUsd >= status.monthBudgetUsd * (status.budgetWarnRatio ?? 0.8) && ' · 한도에 가까워요'}
           </p>
+          {/* 틀린 곳 알리기 수 — 늘면 요약 길이부터 되돌린다 (개선 합의안 Q11) */}
+          {(status.monthFlagCount ?? 0) > 0 && <p>이번 달 틀린 곳 알림 {status.monthFlagCount}건</p>}
         </section>
       </div>
     </div>

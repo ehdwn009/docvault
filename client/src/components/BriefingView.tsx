@@ -1,37 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, isDarkViewerTheme, type ViewerTheme } from '../lib/api';
+import { api, ApiError, isDarkViewerTheme, type ViewerTheme } from '../lib/api';
 import {
+  BLOCK_LABEL,
   BRIEFING_READ_EVENT,
+  FLAG_LABEL,
   isSafeUrl,
   kstTime,
   kstToday,
   leadIdsOf,
+  LENS_LABEL,
   longDate,
   outletsOf,
   parseEdition,
   SLOT_SHORT,
   slotName,
+  type Block,
   type Edition,
   type EditionItem,
   type EditionNav,
+  type FlagReason,
   type Importance,
+  type LensKey,
+  type ReaderResult,
 } from '../lib/briefing';
 import Icon from './Icon';
 
-// SCR-191 회차 화면 (v0.43 개편) — 회차 막대 → 오늘의 핵심 → 고정 [국내|세계]+분야 막대 → 보기 고르기 → 목록.
-// 폰은 누른 자리에서 펼치고, 보이는 폭이 넓으면(PC) 목록|상세 두 칸. 읽은 기사는 흐리게, 서버에 더하기만 한다
-// (뉴스 브리핑 설계 "SCR-191", 시안 https://claude.ai/artifact/55AAfNufzn4VEcD5qFBYF5)
+// SCR-191 회차 화면 (v0.45 개편, 개선 합의안 6장) — 회차 막대 → 오늘의 핵심 → 고정 [국내|세계]+분야 막대 → 목록.
+// 폰: 핵심·주요는 전체 화면 시트로 열고(아래 고정 이전·다음, 좌우 밀기, 뒤로 제스처로 닫힘), 참고는 그 자리에서 펼친다.
+// PC(보이는 폭 넓음): 목록|상세 두 칸. 상세는 리드 → 왜 중요한가 → 골라 쓴 칸 → 양쪽 시각 → 근거 줄 → 원문 카드 → 묻기.
+// 요약 보기(기본·글머리표·쉽게·5W·양쪽 시각)는 기기가 기억한다. 원문을 다녀오면 그 기사로 돌아온다
+// (뉴스 브리핑 설계 "SCR-191", 시안 docs/뉴스브리핑_개선시안_20261011.html)
 
 type Props = {
   fileId: number;
   content: string;
   /** 뷰어 테마 — 이 화면은 우리가 그려서 테마를 직접 따른다 */
   theme: ViewerTheme;
-  /** 고정 막대 배경 — 본문 배경(THEME_BG)과 같아야 아래 글이 비치지 않는다 */
+  /** 고정 막대·시트 배경 — 본문 배경(THEME_BG)과 같아야 아래 글이 비치지 않는다 */
   stickyBg: string;
-  /** 활성 칸인가 — J/K/O 키는 활성 칸에서만 */
+  /** 활성 칸인가 — J/K/O/R/A 키는 활성 칸에서만 */
   isActive: boolean;
+  /** 앱 안 원문 보기가 켜져 있나 (설정 → 뉴스 브리핑) */
+  readerEnabled: boolean;
   onOpenFile: (fileId: number) => void;
+  /** 이 기사에 대해 묻기 — 제목·요약·주소만 넘긴다(원문은 질문 기록에 저장되므로 넘기지 않는다) */
+  onAsk?: (seed: { quote: string; context: string }) => void;
   /** 브리핑 형식이 아니면(깨진 JSON·모르는 version) 대신 그릴 것 — 뷰어의 코드 렌더러 */
   fallback: ReactNode;
 };
@@ -47,8 +60,15 @@ const WIDE_MIN_PX = 880;
 const MARK_READ_DELAY_MS = 600;
 /** 회차별로 기억하는 탭 수 — 오래된 것부터 잊는다 */
 const TAB_MEMORY = 60;
+/** 원문을 다녀온 뒤 이 시간 안에 앱이 다시 뜨면 그 기사로 돌아온다 (개선 합의안 6.4) */
+const RETURN_WINDOW_MS = 30 * 60 * 1000;
+/** 좌우로 이만큼 밀면 이전·다음 기사 */
+const SWIPE_PX = 60;
 const FILTER_KEY = 'dv_briefing_filter';
 const TAB_KEY = 'dv_briefing_tabs';
+const LENS_KEY = 'dv_briefing_lens';
+const RETURN_KEY = 'dv_briefing_return';
+const LENS_KEYS: LensKey[] = ['base', 'bullets', 'easy', 'w5', 'sides'];
 
 // 보는 취향은 기기에 둔다 — 사생활 모드 등에서 저장소가 막혀도 화면은 기본값으로 그린다
 function readFilter(): Filter {
@@ -85,6 +105,51 @@ function writeTab(fileId: number, tab: Section) {
     /* 위와 같음 */
   }
 }
+function readLens(): LensKey {
+  try {
+    const v = localStorage.getItem(LENS_KEY);
+    return LENS_KEYS.includes(v as LensKey) ? (v as LensKey) : 'base';
+  } catch {
+    return 'base';
+  }
+}
+function writeLens(l: LensKey) {
+  try {
+    localStorage.setItem(LENS_KEY, l);
+  } catch {
+    /* 위와 같음 */
+  }
+}
+type ReturnMark = { fileId: number; itemId: string; at: number };
+function writeReturn(mark: ReturnMark) {
+  try {
+    localStorage.setItem(RETURN_KEY, JSON.stringify(mark));
+  } catch {
+    /* 돌아올 때 맨 위에서 열릴 뿐이다 */
+  }
+}
+/** 한 번만 돌아온다 — 읽고 나면 지운다. 다른 회차 것이거나 30분이 지났으면 null */
+function takeReturn(fileId: number): string | null {
+  try {
+    const raw = localStorage.getItem(RETURN_KEY);
+    if (!raw) return null;
+    const m = JSON.parse(raw) as ReturnMark;
+    if (Date.now() - m.at > RETURN_WINDOW_MS) {
+      localStorage.removeItem(RETURN_KEY);
+      return null;
+    }
+    if (m.fileId !== fileId) return null;
+    localStorage.removeItem(RETURN_KEY);
+    return typeof m.itemId === 'string' ? m.itemId : null;
+  } catch {
+    return null;
+  }
+}
+/** 주소의 #a=기사id — 뒤로 제스처로 시트가 닫히게 기록을 쌓는다. 값은 회차의 기사 id 목록에 있을 때만 쓴다 */
+function hashItemId(): string | null {
+  const m = /^#a=([\w.-]{1,80})$/.exec(location.hash);
+  return m ? m[1]! : null;
+}
 
 /** 테마별 색 — Tailwind의 dark 변형은 OS 설정을 따라 뷰어 테마와 어긋나므로 쓰지 않는다.
     slate·sky는 고정 색(hex)으로 쓴다: 앱 테마(페이퍼·아이보리 등)가 그 두 램프를 뒤집어 정의해서,
@@ -95,16 +160,19 @@ function palette(dark: boolean) {
     muted: dark ? 'text-[#94a3b8]' : 'text-[#64748b]',
     accent: dark ? 'text-[#7dd3fc]' : 'text-[#0369a1]',
     updated: dark ? 'text-violet-300' : 'text-violet-700',
+    updatedBg: dark ? 'bg-violet-400/15' : 'bg-violet-500/10',
+    warn: dark ? 'text-amber-300' : 'text-amber-700',
     major: dark ? 'bg-amber-400/20 text-amber-200' : 'bg-amber-500/20 text-amber-800',
     line: dark ? 'border-white/10' : 'border-black/10',
+    whyLine: dark ? 'border-[#38bdf8]' : 'border-[#0284c7]',
     soft: dark ? 'bg-white/[0.06]' : 'bg-black/[0.04]',
     softer: dark ? 'bg-white/[0.04]' : 'bg-white',
-    whyBg: dark ? 'bg-[#0ea5e9]/15' : 'bg-[#0ea5e9]/10',
     seg: dark ? 'bg-white/10' : 'bg-black/[0.06]',
     segOn: dark ? 'bg-[#0f172a] text-[#f1f5f9] shadow' : 'bg-white text-[#0f172a] shadow',
     chipOn: 'bg-[#0284c7] text-white',
     chip: dark ? 'bg-white/10' : 'bg-black/[0.05]',
     selected: dark ? 'bg-[#0ea5e9]/15' : 'bg-[#0ea5e9]/10',
+    scrim: dark ? 'bg-black/60' : 'bg-black/40',
   };
 }
 type Palette = ReturnType<typeof palette>;
@@ -115,8 +183,6 @@ function badgeOf(importance: Importance, p: Palette): { label: string; className
   return { label: '참고', className: 'border border-current/25 opacity-60' };
 }
 
-const BASIS_LABEL: Record<NonNullable<EditionItem['basis']>, string> = { body: '본문 앞부분 기준', lede: '발췌 기준', title: '제목 기준' };
-
 /** 기사 하나와 그 자리(국내/세계·분야) */
 type Located = { item: EditionItem; section: Section; category: string; sub: string; subId: string };
 
@@ -126,15 +192,59 @@ function locateAll(e: Edition): Map<string, Located> {
   return m;
 }
 
-/** "증시 · 연합뉴스 외 3곳 · 15:40 · 갱신됨" — NEW는 거의 전부라 정보가 없어서 뺐다(설계) */
+/** "증시 · 연합뉴스 외 3곳 · 15:40" — NEW는 거의 전부라 정보가 없어서 뺐다(설계). 갱신됨은 따로 색을 준다 */
 function metaLine(l: Located): string {
   const more = outletsOf(l.item) - 1;
-  const parts = [l.sub, more > 0 ? `${l.item.source} 외 ${more}곳` : l.item.source, kstTime(l.item.publishedAt, false)];
-  if (l.item.status === 'updated') parts.push('갱신됨');
-  return parts.join(' · ');
+  return [l.sub, more > 0 ? `${l.item.source} 외 ${more}곳` : l.item.source, kstTime(l.item.publishedAt, false)].join(' · ');
 }
 
-export default function BriefingView({ fileId, content, theme, stickyBg, isActive, onOpenFile, fallback }: Props) {
+/** 옛 회차(v0.43 detail)도 같은 모양으로 — blocks → detail → summary 순 */
+function blocksOf(it: EditionItem): Block[] {
+  if (it.blocks) return it.blocks;
+  if (!it.detail) return [];
+  const out: Block[] = [];
+  if (it.detail.background) out.push({ kind: 'background', text: it.detail.background, from: [] });
+  if (it.detail.numbers) out.push({ kind: 'numbers', text: it.detail.numbers, from: [] });
+  if (it.detail.next) out.push({ kind: 'next', text: it.detail.next, from: [] });
+  return out;
+}
+
+/** 이 기사에서 고를 수 있는 보기 — 보기 글이 있는 것만 */
+function lensesOf(it: EditionItem): LensKey[] {
+  const out: LensKey[] = ['base'];
+  if (it.lenses?.bullets) out.push('bullets');
+  if (it.lenses?.easy) out.push('easy');
+  if (it.lenses?.w5) out.push('w5');
+  if (it.sides) out.push('sides');
+  return out;
+}
+
+/** 재료 기호 → 언론사 이름. 본문·웹 재료가 2곳 이상일 때만 문단 끝에 보인다 (출처 번호 대신, 개선 합의안 6.2) */
+function fromNames(it: EditionItem, from: string[]): string {
+  const bodies = (it.sources ?? []).filter((s) => s.via !== 'lede');
+  if (bodies.length < 2 || from.length === 0) return '';
+  const names = [...new Set(from.map((id) => it.sources?.find((s) => s.id === id)?.source).filter((x): x is string => !!x))];
+  return names.join('·');
+}
+
+/** 근거 줄 — 무엇을 보고 쓴 요약인지. 얇을 때만 경고색 */
+function basisLine(it: EditionItem): { text: string; warn: boolean } {
+  const bodies = (it.sources ?? []).filter((s) => s.via !== 'lede');
+  const names = [...new Set(bodies.map((s) => s.source))].slice(0, 3).join('·');
+  if (it.basis === 'web') return { text: `웹 검색으로 찾은 ${names || '다른 보도'}를 읽고 AI가 정리`, warn: false };
+  if (it.basis === 'body') return { text: `${names ? `${names} 본문` : '본문 앞부분'}을 읽고 AI가 정리`, warn: false };
+  if (it.basis === 'lede') return { text: '짧은 발췌만 보고 쓴 요약 — 원문으로 확인하세요', warn: true };
+  if (it.basis === 'title') return { text: '제목만 보고 쓴 요약 — 원문으로 확인하세요', warn: true };
+  return { text: 'AI가 쓴 요약', warn: false };
+}
+
+/** 첫 문장만 굵게 — 리드는 라벨 없이 첫 문장이 소제목 노릇을 한다 */
+function splitLead(text: string): [string, string] {
+  const m = /^(.+?[.!?。])\s+([\s\S]+)$/.exec(text.trim());
+  return m ? [m[1]!, m[2]!] : [text.trim(), ''];
+}
+
+export default function BriefingView({ fileId, content, theme, stickyBg, isActive, readerEnabled, onOpenFile, onAsk, fallback }: Props) {
   const edition = useMemo(() => parseEdition(content), [content]);
   const located = useMemo(() => (edition ? locateAll(edition) : new Map<string, Located>()), [edition]);
   const lead = useMemo(() => (edition ? leadIdsOf(edition).map((id) => located.get(id)).filter((l): l is Located => !!l) : []), [edition, located]);
@@ -143,12 +253,19 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [refOpen, setRefOpen] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  /** 폰 시트에 열린 기사 */
+  const [sheet, setSheet] = useState<string | null>(null);
   const [read, setRead] = useState<Set<string>>(() => new Set());
+  const [flagged, setFlagged] = useState<Set<string>>(() => new Set());
+  const [lens, setLensState] = useState<LensKey>(readLens);
+  /** 요약 ↔ 원문. 기사를 바꾸면 요약으로 돌아간다 */
+  const [mode, setMode] = useState<'sum' | 'read'>('sum');
+  const [readers, setReaders] = useState<Map<string, { status: 'loading' | 'ok' | 'fail'; data?: ReaderResult; message?: string }>>(() => new Map());
   /** 지난번에 마지막으로 읽은 기사 — [이어 읽기]가 데려갈 곳. 회차는 항상 맨 위에서 열린다 (설계 SCR-191 9) */
   const [resumeId, setResumeId] = useState<string | null>(null);
   /** 그림이 바뀐 뒤 해야 할 스크롤 — 탭을 바꾸면 목록 시작, 이어 읽기면 그 기사 */
   const [pendingScroll, setPendingScroll] = useState<{ to: 'list' } | { to: 'item'; id: string } | { to: 'edge'; which: 'first' | 'last' } | null>(null);
-  /** 키보드 J/K가 따라가는 줄 — 핵심 상자에서 골랐으면 핵심 순서로, 목록에서 골랐으면 목록 순서로 */
+  /** 키보드 J/K·시트의 이전·다음이 따라가는 줄 — 핵심 상자에서 골랐으면 핵심 순서로, 목록에서 골랐으면 목록 순서로 */
   const [cursor, setCursor] = useState<{ id: string; fromLead: boolean } | null>(null);
   const listTopRef = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState<EditionNav | null>(null);
@@ -159,6 +276,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   const catRefs = useRef(new Map<string, HTMLElement>());
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const pendingRead = useRef<Set<string>>(new Set());
+  /** 원문을 다녀와 복귀할 기사 — located가 준비된 뒤 한 번 */
+  const returnRef = useRef<string | null>(null);
   const p = palette(isDarkViewerTheme(theme));
 
   // 회차를 바꿔 열면 그 회차의 상태로 — 같은 컴포넌트가 다른 회차를 받는다(‹ › 이동)
@@ -167,16 +286,22 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     setOpen(new Set());
     setRefOpen(new Set());
     setSelected(null);
+    setSheet(null);
+    setMode('sum');
+    setReaders(new Map());
     setRead(new Set());
+    setFlagged(new Set());
     setResumeId(null);
     setPendingScroll(null);
     setNav(null);
+    returnRef.current = takeReturn(fileId) ?? hashItemId();
     let alive = true;
-    void api<{ state: { readItems?: string[] } }>(`/me/files/${fileId}/state`)
+    void api<{ state: { readItems?: string[]; flagItems?: { id: string }[] } }>(`/me/files/${fileId}/state`)
       .then((r) => {
         if (!alive) return;
         const items = r.state.readItems ?? [];
         setRead((prev) => new Set([...prev, ...items]));
+        setFlagged(new Set((r.state.flagItems ?? []).map((f) => f.id)));
         // 읽음 기록은 읽은 순서대로 쌓인다 — 마지막 것이 지난번에 멈춘 곳
         setResumeId(items.at(-1) ?? null);
       })
@@ -213,18 +338,15 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   }, [read, flushRead]);
   useEffect(() => () => flushRead(), [flushRead]);
 
-  const markRead = useCallback(
-    (id: string) => {
-      // 이번에 읽기 시작했으면 [이어 읽기]는 할 일을 다 했다
-      setResumeId(null);
-      setRead((prev) => {
-        if (prev.has(id)) return prev;
-        pendingRead.current.add(id);
-        return new Set(prev).add(id);
-      });
-    },
-    [],
-  );
+  const markRead = useCallback((id: string) => {
+    // 이번에 읽기 시작했으면 [이어 읽기]는 할 일을 다 했다
+    setResumeId(null);
+    setRead((prev) => {
+      if (prev.has(id)) return prev;
+      pendingRead.current.add(id);
+      return new Set(prev).add(id);
+    });
+  }, []);
 
   // 지금 보는 분야 강조 — 고정 막대 바로 아래를 지나는 분야. 스크롤 상자를 몰라도 되게 문서 전체의 scroll을 듣는다
   useEffect(() => {
@@ -257,9 +379,9 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
       .filter((c) => c.subs.length > 0);
   }, [edition, tab, filter]);
 
-  /** J/K 순서 — 지금 보이는 줄 그대로 (펼친 참고 포함) */
+  /** J/K·이전·다음 순서 — 지금 보이는 줄 그대로 (펼친 참고 포함, 제목만인 참고는 뺀다) */
   const order = useMemo(
-    () => visible.flatMap((c) => c.subs.flatMap((s) => [...s.items, ...(refOpen.has(s.id) ? s.refs : [])].map((i) => i.id))),
+    () => visible.flatMap((c) => c.subs.flatMap((s) => [...s.items, ...(refOpen.has(s.id) ? s.refs.filter((r) => !r.titleOnly) : [])].map((i) => i.id))),
     [visible, refOpen],
   );
   const leadOrder = useMemo(() => lead.map((l) => l.item.id), [lead]);
@@ -269,40 +391,113 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     [edition, tab],
   );
 
+  const setLens = (l: LensKey) => {
+    setLensState(l);
+    writeLens(l);
+  };
+
+  /** 원문을 새 탭으로 — 돌아오면 이 기사로 복귀하게 표시를 남긴다 */
+  const openOriginal = useCallback(
+    (id: string) => {
+      const url = located.get(id)?.item.url;
+      if (!url || !isSafeUrl(url)) return;
+      markRead(id);
+      writeReturn({ fileId, itemId: id, at: Date.now() });
+      window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    [located, fileId, markRead],
+  );
+
+  /** 폰 시트 열기 — 주소에 #a=기사id를 쌓아 뒤로 제스처로 닫히게. 이전·다음은 기록을 바꿔치기(쌓이지 않게) */
+  const openSheet = useCallback((id: string, how: 'push' | 'replace') => {
+    setSheet(id);
+    setMode('sum');
+    const url = `${location.pathname}#a=${id}`;
+    if (how === 'push' && !(history.state as { dvBriefingItem?: string } | null)?.dvBriefingItem) history.pushState({ dvBriefingItem: id }, '', url);
+    else history.replaceState({ dvBriefingItem: id }, '', url);
+  }, []);
+  const closeSheet = useCallback(() => {
+    setSheet(null);
+    setMode('sum');
+    if ((history.state as { dvBriefingItem?: string } | null)?.dvBriefingItem) history.back();
+  }, []);
+  useEffect(() => {
+    const onPop = () => {
+      const st = history.state as { dvBriefingItem?: string } | null;
+      if (!st?.dvBriefingItem) {
+        setSheet(null);
+        setMode('sum');
+      } else if (located.has(st.dvBriefingItem)) setSheet(st.dvBriefingItem);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [located]);
+
   /** key: 펼침 자리 — 핵심 상자와 목록에 같은 기사가 있어도 따로 펼친다 */
   const pick = useCallback(
     (id: string, key: string) => {
+      const it = located.get(id)?.item;
+      if (!it) return;
+      // 제목만인 참고는 펼칠 것이 없다 — 바로 원문으로
+      if (it.titleOnly) return openOriginal(id);
       markRead(id);
       setCursor({ id, fromLead: key.startsWith('lead:') });
-      if (wide) setSelected(id);
-      else
+      if (wide) {
+        setSelected(id);
+        setMode('sum');
+      } else if (it.importance >= 2) {
+        // 핵심·주요는 전체 화면 — 목록 안에서 들여쓴 채 펼치면 360px 폭에서 글 폭이 290px로 줄어 긴 글을 넣을 수 없다 (개선 합의안 6.2)
+        openSheet(id, 'push');
+      } else
         setOpen((prev) => {
           const next = new Set(prev);
           if (next.has(key)) next.delete(key);
-          else {
-            // 핵심 상자는 한 번에 하나만 — 여러 개 펼치면 "1분 훑기" 상자가 화면 몇 장으로 늘어났다 (사용성 평가 2026-10-01)
-            if (key.startsWith('lead:')) for (const k of prev) if (k.startsWith('lead:')) next.delete(k);
-            next.add(key);
-          }
+          else next.add(key);
           return next;
         });
     },
-    [wide, markRead],
+    [wide, markRead, located, openOriginal, openSheet],
   );
 
-  /** 키보드로 기사 하나로 가기 — 두 칸이면 오른쪽에 띄우고, 한 칸이면 그 줄만 펼친다. 줄은 화면 가운데로
-      (맨 아래에 붙으면 다음 기사가 안 보이고, 위로 가면 고정 막대 뒤에 숨었다) */
+  /** 키보드·이전·다음으로 기사 하나로 가기 — 두 칸이면 오른쪽에, 한 칸이면 시트를 바꿔 끼운다 */
   const go = useCallback(
     (id: string, fromLead: boolean) => {
       const key = fromLead ? `lead:${id}` : id;
+      const it = located.get(id)?.item;
       markRead(id);
       setCursor({ id, fromLead });
-      if (wide) setSelected(id);
-      else setOpen(new Set([key]));
-      requestAnimationFrame(() => rowRefs.current.get(key)?.scrollIntoView({ block: 'center' }));
+      if (wide) {
+        setSelected(id);
+        setMode('sum');
+        requestAnimationFrame(() => rowRefs.current.get(key)?.scrollIntoView({ block: 'center' }));
+      } else if (it && it.importance >= 2) openSheet(id, sheet ? 'replace' : 'push');
+      else {
+        setSheet(null);
+        setOpen(new Set([key]));
+        requestAnimationFrame(() => rowRefs.current.get(key)?.scrollIntoView({ block: 'center' }));
+      }
     },
-    [wide, markRead],
+    [wide, markRead, located, openSheet, sheet],
   );
+
+  // 원문을 다녀왔거나 주소에 기사가 있으면 그 기사로 — 회차는 맨 위에서 열린다는 규칙의 유일한 예외 (개선 합의안 6.4)
+  useEffect(() => {
+    const id = returnRef.current;
+    if (!id || !edition) return;
+    returnRef.current = null;
+    const l = located.get(id);
+    if (!l || l.item.titleOnly) return;
+    if (l.section !== tab) {
+      setTabState(l.section);
+      writeTab(fileId, l.section);
+    }
+    if (l.item.importance === 1) setRefOpen((prev) => new Set(prev).add(l.subId));
+    if (wide || l.item.importance >= 2) {
+      setCursor({ id, fromLead: false });
+      if (wide) setSelected(id);
+      else openSheet(id, hashItemId() === id ? 'replace' : 'push');
+    } else setPendingScroll({ to: 'item', id });
+  }, [edition, located, wide]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 필터를 바꿔 고른 기사가 목록에서 빠지면, 그 자리에서 가장 가까운 다음 기사로 옮긴다 —
   // 숨은 기사가 오른쪽에 남고 J가 맨 앞으로 가던 것 (사용성 평가 2026-10-01)
@@ -314,7 +509,73 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     if (next) setCursor({ id: next, fromLead: false });
   }, [order]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // J/K 다음·이전 기사, O 원문 (활성 칸에서만, 입력 중·수식키 조합은 무시). 두 칸이면 오른쪽에 띄우고 한 칸이면 펼친다.
+  /** 지금 기사 기준 이전·다음 — 시트의 아래 막대와 J/K가 같은 규칙 */
+  const step = useCallback(
+    (dir: 1 | -1): boolean => {
+      const fromLead = cursor?.fromLead ?? false;
+      const seq = fromLead ? leadOrder : order;
+      const i = cursor ? seq.indexOf(cursor.id) : -1;
+      const nextId = i === -1 ? (dir === 1 ? seq[0] : seq.at(-1)) : seq[i + dir];
+      if (!nextId) return false;
+      go(nextId, fromLead);
+      return true;
+    },
+    [cursor, leadOrder, order, go],
+  );
+  const stepPos = useMemo(() => {
+    if (!cursor) return null;
+    const seq = cursor.fromLead ? leadOrder : order;
+    const i = seq.indexOf(cursor.id);
+    return i === -1 ? null : { i, n: seq.length };
+  }, [cursor, leadOrder, order]);
+
+  /** 앱 안 원문 — 기사 id만 보낸다. 받은 글은 화면 상태에만 있고 회차를 바꾸면 사라진다 */
+  const loadReader = useCallback(
+    (id: string) => {
+      setReaders((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.set(id, { status: 'loading' });
+        return next;
+      });
+      void api<ReaderResult>(`/briefing/editions/${fileId}/items/${encodeURIComponent(id)}/reader`)
+        .then((data) => setReaders((prev) => new Map(prev).set(id, { status: 'ok', data })))
+        .catch((e: unknown) => setReaders((prev) => new Map(prev).set(id, { status: 'fail', message: e instanceof ApiError ? e.message : '원문을 받지 못했어요' })));
+    },
+    [fileId],
+  );
+  const canRead = useCallback((it: EditionItem | undefined) => !!it?.readUrl && readerEnabled, [readerEnabled]);
+  const currentId = wide ? selected : sheet;
+  useEffect(() => {
+    if (mode !== 'read' || !currentId) return;
+    const it = located.get(currentId)?.item;
+    if (!canRead(it) || readers.has(currentId)) return;
+    loadReader(currentId);
+  }, [mode, currentId, located, canRead, readers, loadReader]);
+
+  const ask = useCallback(
+    (id: string) => {
+      const it = located.get(id)?.item;
+      if (!it || !onAsk) return;
+      // 우리가 쓴 글만 — 원문 본문은 질문 기록(DB)에 남으므로 넘기지 않는다 (개선 합의안 6.6)
+      const context = ['[뉴스 브리핑 기사]', `제목: ${it.title}`, it.summary ? `요약: ${it.summary}` : '', it.why ? `왜 중요한가: ${it.why}` : '', `언론사: ${it.source}`, `원문: ${it.url}`]
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 1500);
+      onAsk({ quote: it.title.slice(0, 500), context });
+    },
+    [located, onAsk],
+  );
+
+  const flag = useCallback(
+    (id: string, reason: FlagReason) => {
+      setFlagged((prev) => new Set(prev).add(id));
+      void api(`/me/files/${fileId}/state`, { method: 'PUT', body: JSON.stringify({ flag: { id, reason } }) }).catch(() => {});
+    },
+    [fileId],
+  );
+
+  // J/K 다음·이전 기사, O 원문(앱 안 또는 새 탭), Shift+O 새 탭, R 요약↔원문, A 묻기, Esc 시트 닫기 (활성 칸에서만, 입력 중·수식키 조합은 무시).
   // 목록 끝에서 J는 다른 탭의 첫 기사로, 세계 맨 앞에서 K는 국내 끝으로 — 한 회차를 키보드만으로 끝까지 읽게
   useEffect(() => {
     if (!isActive) return;
@@ -323,38 +584,32 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
       if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      if (k === 'escape' && sheet) return closeSheet();
       if (k === 'j' || k === 'k') {
-        const fromLead = cursor?.fromLead ?? false;
-        const seq = fromLead ? leadOrder : order;
-        const i = cursor ? seq.indexOf(cursor.id) : -1;
         e.preventDefault();
-        if (k === 'j') {
-          if (i < seq.length - 1) return go(seq[i + 1]!, fromLead);
-          if (!fromLead && tab === '국내' && edition?.sections.some((s) => s.section === '세계')) {
-            setTabState('세계');
-            writeTab(fileId, '세계');
-            setPendingScroll({ to: 'edge', which: 'first' });
-          }
-        } else {
-          if (i > 0) return go(seq[i - 1]!, fromLead);
-          if (i === -1 && seq[0]) return go(seq[0], fromLead);
-          if (!fromLead && tab === '세계' && edition?.sections.some((s) => s.section === '국내')) {
-            setTabState('국내');
-            writeTab(fileId, '국내');
-            setPendingScroll({ to: 'edge', which: 'last' });
-          }
+        if (step(k === 'j' ? 1 : -1)) return;
+        const fromLead = cursor?.fromLead ?? false;
+        if (k === 'j' && !fromLead && tab === '국내' && edition?.sections.some((s) => s.section === '세계')) {
+          setTabState('세계');
+          writeTab(fileId, '세계');
+          setPendingScroll({ to: 'edge', which: 'first' });
+        } else if (k === 'k' && !fromLead && tab === '세계' && edition?.sections.some((s) => s.section === '국내')) {
+          setTabState('국내');
+          writeTab(fileId, '국내');
+          setPendingScroll({ to: 'edge', which: 'last' });
         }
       } else if (k === 'o' && cursor) {
-        const url = located.get(cursor.id)?.item.url;
-        if (url && isSafeUrl(url)) {
-          markRead(cursor.id);
-          window.open(url, '_blank', 'noopener,noreferrer');
-        }
+        if (!e.shiftKey && canRead(located.get(cursor.id)?.item)) setMode('read');
+        else openOriginal(cursor.id);
+      } else if (k === 'r' && cursor && canRead(located.get(cursor.id)?.item)) {
+        setMode((m) => (m === 'read' ? 'sum' : 'read'));
+      } else if (k === 'a' && cursor) {
+        ask(cursor.id);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isActive, cursor, order, leadOrder, tab, edition, located, go, markRead, fileId]);
+  }, [isActive, cursor, tab, edition, located, step, fileId, sheet, closeSheet, canRead, openOriginal, ask]);
 
   useEffect(() => {
     if (!pendingScroll) return;
@@ -419,18 +674,42 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
   const hasOther = edition.sections.some((s) => s.section === other);
   const leadRead = lead.filter((l) => read.has(l.item.id)).length;
   const sel = selected ? located.get(selected) : undefined;
+  const sheetItem = sheet ? located.get(sheet) : undefined;
   const countOf = (section: Section) =>
     (edition.sections.find((s) => s.section === section)?.categories ?? []).reduce(
       (n, c) => n + c.subs.reduce((m, sub) => m + sub.items.filter((i) => i.importance >= FILTER_MIN[filter]).length, 0),
       0,
     );
 
+  const detailProps = (l: Located) => ({
+    l,
+    p,
+    lens: lensesOf(l.item).includes(lens) ? lens : ('base' as LensKey),
+    setLens,
+    mode: canRead(l.item) ? mode : ('sum' as const),
+    setMode,
+    canRead: canRead(l.item),
+    reader: readers.get(l.item.id),
+    onOpenOriginal: () => openOriginal(l.item.id),
+    onRetryReader: () => {
+      setReaders((prev) => {
+        const next = new Map(prev);
+        next.delete(l.item.id);
+        return next;
+      });
+    },
+    flagged: flagged.has(l.item.id),
+    onFlag: (reason: FlagReason) => flag(l.item.id, reason),
+    onAsk: onAsk ? () => ask(l.item.id) : undefined,
+  });
+
   const row = (l: Located, opts: { lead?: number } = {}) => {
     const id = l.item.id;
     const key = opts.lead ? `lead:${id}` : id;
     const isOpen = !wide && open.has(key);
+    const isCurrent = (wide && selected === id) || (!wide && sheet === id);
     // 펼친 채로 흐려지면 읽는 중인 글이 꺼진 것처럼 보인다 — 접은 뒤에 흐리게
-    const isRead = read.has(id) && !isOpen && !(wide && selected === id);
+    const isRead = read.has(id) && !isOpen && !isCurrent;
     const badge = badgeOf(l.item.importance, p);
     return (
       <li
@@ -443,8 +722,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
       >
         <button
           onClick={() => pick(id, key)}
-          aria-expanded={wide ? undefined : isOpen}
-          aria-current={wide && selected === id ? 'true' : undefined}
+          aria-expanded={wide || l.item.importance >= 2 ? undefined : isOpen}
+          aria-current={isCurrent ? 'true' : undefined}
           // 마우스 클릭에는 테두리를 그리지 않는다 — J로 옮긴 뒤에도 클릭한 줄에 테두리가 남아 선택이 둘처럼 보였다
           className={`flex w-full items-start gap-2.5 rounded-md px-1 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] ${wide && selected === id ? p.selected : ''}`}
         >
@@ -458,21 +737,25 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
             {opts.lead && <span className={`text-[0.72em] font-semibold ${p.muted}`}>{`${l.section} · ${l.sub}`}</span>}
             <span className={`text-[1em] leading-snug ${isRead ? p.muted : l.item.importance === 3 ? 'font-semibold' : ''}`}>{l.item.title}</span>
             {/* 핵심 상자는 펼치지 않아도 무슨 일인지 한 줄 — 제목만으로는 고르기 어려웠다 */}
-            {opts.lead && !isOpen && !(wide && selected === id) && l.item.summary && (
-              <span className={`line-clamp-1 text-[0.82em] ${p.muted}`}>{l.item.summary}</span>
-            )}
+            {opts.lead && !isOpen && !isCurrent && l.item.summary && <span className={`line-clamp-1 text-[0.82em] ${p.muted}`}>{l.item.summary}</span>}
             {!opts.lead && (
               <span className={`text-[0.78em] ${p.muted}`}>
-                {metaLine(l).replace(/ · 갱신됨$/, '')}
+                {metaLine(l)}
                 {l.item.status === 'updated' && <span className={`font-semibold ${p.updated}`}> · 갱신됨</span>}
+                {l.item.titleOnly && <span className={`ml-1.5 rounded border border-dashed px-1 text-[0.9em] ${p.line}`}>제목만 · 원문 ↗</span>}
               </span>
             )}
+            {/* 갱신된 기사만 셋째 줄 — 같은 이야기를 다시 펼쳐 읽는 낭비가 더 크다 (개선 합의안 6.1) */}
+            {!opts.lead && l.item.changed && <span className={`line-clamp-1 text-[0.78em] ${p.updated}`}>지난 판 이후: {l.item.changed}</span>}
           </span>
-          {!wide && <Icon name="chevron" size={16} className={`mt-[0.2em] shrink-0 opacity-40 transition-transform ${isOpen ? 'rotate-90' : ''}`} />}
+          {!wide && !l.item.titleOnly && (
+            <Icon name={l.item.importance >= 2 ? 'chevron' : 'chevron'} size={16} className={`mt-[0.2em] shrink-0 opacity-40 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+          )}
+          {!wide && l.item.titleOnly && <Icon name="external" size={14} className="mt-[0.25em] shrink-0 opacity-40" />}
         </button>
         {isOpen && (
-          <div className={`pb-4 ${opts.lead ? 'pl-9' : 'pl-[2.9em]'}`}>
-            <ItemDetail l={l} p={p} onOpened={() => markRead(id)} />
+          <div className="px-1 pb-4">
+            <ItemDetail {...detailProps(l)} compact />
           </div>
         )}
       </li>
@@ -651,20 +934,20 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
             {leadBox}
             <div>{list}</div>
           </div>
-          <aside className={`sticky top-4 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border p-5 ${p.line}`}>
+          <aside className={`sticky top-4 flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden rounded-2xl border ${p.line}`}>
             {sel ? (
-              <div className="flex flex-col gap-3">
-                <p className={`m-0 text-[0.78em] font-semibold ${p.muted}`}>
-                  {sel.section} · {sel.category} · {sel.sub}
-                </p>
-                <h2 className="m-0 text-[1.3em] font-bold leading-snug">{sel.item.title}</h2>
-                <ItemDetail l={sel} p={p} onOpened={() => markRead(sel.item.id)} />
-              </div>
+              <>
+                <DetailTop l={sel} p={p} mode={canRead(sel.item) ? mode : 'sum'} setMode={setMode} canRead={canRead(sel.item)} />
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                  <ItemDetail {...detailProps(sel)} />
+                </div>
+                <StepBar p={p} pos={stepPos} onStep={step} hint="J/K 이동 · O 원문 · Shift+O 새 탭 · R 요약/원문 · A 묻기" />
+              </>
             ) : (
-              <p className={`m-0 py-10 text-center text-[0.9em] ${p.muted}`}>
+              <p className={`m-0 px-5 py-10 text-center text-[0.9em] ${p.muted}`}>
                 기사를 고르면 여기에 펼쳐집니다
                 <br />
-                <span className="text-[0.85em]">J/K 다음·이전 · O 원문</span>
+                <span className="text-[0.85em]">J/K 다음·이전 · O 원문 · A 묻기</span>
               </p>
             )}
           </aside>
@@ -674,6 +957,13 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
           {leadBox}
           <div>{list}</div>
         </>
+      )}
+
+      {/* 폰 시트 — 핵심·주요를 전체 화면으로. 뒤로 제스처(popstate)와 [← 목록]으로 닫힌다 */}
+      {!wide && sheetItem && (
+        <Sheet p={p} stickyBg={stickyBg} l={sheetItem} onClose={closeSheet} onStep={step} pos={stepPos} mode={canRead(sheetItem.item) ? mode : 'sum'} setMode={setMode} canRead={canRead(sheetItem.item)}>
+          <ItemDetail {...detailProps(sheetItem)} />
+        </Sheet>
       )}
     </div>
   );
@@ -693,60 +983,357 @@ function NavButton({ label, disabled, onClick, p, flip = false }: { label: strin
   );
 }
 
-/** 펼친 내용 — 요약 → 왜 중요한가 → 언론사·시각·근거 → [원문 보기] → 다른 보도 */
-function ItemDetail({ l, p, onOpened }: { l: Located; p: Palette; onOpened: () => void }) {
-  const { item } = l;
-  // 칸 구성(v0.43): 무슨 일·배경·숫자로 보면·앞으로 — 요약 한 덩어리는 제목을 되풀이해 읽을 것이 없었다. 빈 칸은 숨긴다
-  const parts = item.detail
-    ? ([
-        ['무슨 일', item.summary],
-        ['배경', item.detail.background],
-        ['숫자로 보면', item.detail.numbers],
-        ['앞으로', item.detail.next],
-      ] as const).filter(([, text]) => text)
-    : null;
+/** 상세 머리 — 분야 경로와 [요약|원문] 전환(앱 안 원문이 될 때만) */
+function DetailTop({ l, p, mode, setMode, canRead, onClose }: { l: Located; p: Palette; mode: 'sum' | 'read'; setMode: (m: 'sum' | 'read') => void; canRead: boolean; onClose?: () => void }) {
   return (
-    <div className="flex flex-col gap-2.5 text-[0.95em]">
-      {parts ? (
-        <dl className="m-0 flex flex-col gap-2.5">
-          {parts.map(([label, text]) => (
-            <div key={label} className="flex flex-col gap-0.5">
-              <dt className={`text-[0.72em] font-bold ${p.muted}`}>{label}</dt>
-              <dd className="m-0 leading-relaxed">{text}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : item.summary ? (
-        <p className="m-0 leading-relaxed">{item.summary}</p>
-      ) : (
-        <p className={`m-0 text-[0.9em] ${p.muted}`}>요약이 없는 기사예요 · 원문을 확인하세요</p>
+    <div className={`flex h-12 shrink-0 items-center gap-2 border-b px-3 ${p.line}`}>
+      {onClose && (
+        <button onClick={onClose} className="flex h-10 shrink-0 items-center gap-0.5 pr-2 text-[0.9em] font-semibold">
+          <Icon name="chevron" size={16} className="rotate-180" /> 목록
+        </button>
       )}
-      {item.why && (
-        <div className={`flex flex-col gap-0.5 rounded-xl px-3 py-2.5 ${p.whyBg}`}>
-          <span className={`text-[0.72em] font-bold ${p.accent}`}>왜 중요한가</span>
-          <span className="text-[0.95em] leading-relaxed">{item.why}</span>
+      <span className={`min-w-0 flex-1 truncate text-[0.78em] font-semibold ${p.muted}`}>
+        {l.section} · {l.category} · {l.sub}
+      </span>
+      {canRead && (
+        <div className={`flex shrink-0 rounded-lg p-[3px] ${p.seg}`}>
+          {(['sum', 'read'] as const).map((m) => (
+            <button key={m} onClick={() => setMode(m)} aria-pressed={mode === m} className={`h-7 rounded-md px-3 text-[0.8em] font-semibold transition ${mode === m ? p.segOn : 'opacity-60'}`}>
+              {m === 'sum' ? '요약' : '원문'}
+            </button>
+          ))}
         </div>
       )}
-      <div className={`flex flex-wrap items-center gap-x-2 text-[0.78em] ${p.muted}`}>
+    </div>
+  );
+}
+
+/** 아래 고정 이동 막대 — ‹ 이전 · 3/18 · 다음 › */
+function StepBar({ p, pos, onStep, hint }: { p: Palette; pos: { i: number; n: number } | null; onStep: (dir: 1 | -1) => boolean; hint?: string }) {
+  return (
+    <div className={`shrink-0 border-t ${p.line}`}>
+      <div className="grid h-12 grid-cols-[1fr_auto_1fr] items-center px-3">
+        <button onClick={() => onStep(-1)} disabled={!pos || pos.i <= 0} className="h-10 justify-self-start font-semibold disabled:opacity-30">
+          ‹ 이전
+        </button>
+        <span className={`text-[0.78em] tabular-nums ${p.muted}`}>{pos ? `${pos.i + 1} / ${pos.n}` : ''}</span>
+        <button onClick={() => onStep(1)} disabled={!pos || pos.i >= pos.n - 1} className="h-10 justify-self-end font-semibold disabled:opacity-30">
+          다음 ›
+        </button>
+      </div>
+      {hint && <p className={`m-0 px-3 pb-2 text-center text-[0.68em] ${p.muted}`}>{hint}</p>}
+    </div>
+  );
+}
+
+/** 폰 전체 화면 시트 — 좌우로 밀면 이전·다음 */
+function Sheet({
+  p,
+  stickyBg,
+  l,
+  onClose,
+  onStep,
+  pos,
+  mode,
+  setMode,
+  canRead,
+  children,
+}: {
+  p: Palette;
+  stickyBg: string;
+  l: Located;
+  onClose: () => void;
+  onStep: (dir: 1 | -1) => boolean;
+  pos: { i: number; n: number } | null;
+  mode: 'sum' | 'read';
+  setMode: (m: 'sum' | 'read') => void;
+  canRead: boolean;
+  children: ReactNode;
+}) {
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // 기사를 바꾸면 맨 위부터
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [l.item.id, mode]);
+  return (
+    <div className={`fixed inset-0 z-40 flex flex-col ${stickyBg} ${p.text}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} role="dialog" aria-modal="true">
+      <DetailTop l={l} p={p} mode={mode} setMode={setMode} canRead={canRead} onClose={onClose} />
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          touch.current = t ? { x: t.clientX, y: t.clientY } : null;
+        }}
+        onTouchEnd={(e) => {
+          const s = touch.current;
+          const t = e.changedTouches[0];
+          touch.current = null;
+          if (!s || !t) return;
+          const dx = t.clientX - s.x;
+          const dy = t.clientY - s.y;
+          if (Math.abs(dx) >= SWIPE_PX && Math.abs(dy) < SWIPE_PX * 0.7) onStep(dx < 0 ? 1 : -1);
+        }}
+      >
+        {children}
+      </div>
+      <StepBar p={p} pos={pos} onStep={onStep} />
+    </div>
+  );
+}
+
+type DetailProps = {
+  l: Located;
+  p: Palette;
+  lens: LensKey;
+  setLens: (l: LensKey) => void;
+  mode: 'sum' | 'read';
+  setMode: (m: 'sum' | 'read') => void;
+  canRead: boolean;
+  reader?: { status: 'loading' | 'ok' | 'fail'; data?: ReaderResult; message?: string };
+  onOpenOriginal: () => void;
+  onRetryReader: () => void;
+  flagged: boolean;
+  onFlag: (reason: FlagReason) => void;
+  onAsk?: () => void;
+  /** 목록 안 펼침(참고) — 제목·배지는 줄에 이미 있으니 뺀다 */
+  compact?: boolean;
+};
+
+/** 펼친 내용 (개선 합의안 6.2) — 제목 → 출처 줄 → 바뀐 점 → 보기 칩 → 리드 → 왜 중요한가 → 칸 → 근거 줄 → 원문 카드 → 묻기 */
+function ItemDetail(props: DetailProps) {
+  const { l, p, lens, setLens, mode, compact } = props;
+  const { item } = l;
+  const [flagOpen, setFlagOpen] = useState(false);
+  const badge = badgeOf(item.importance, p);
+  const lensKeys = lensesOf(item);
+  const bodies = (item.sources ?? []).filter((s) => s.via !== 'lede');
+  const basis = basisLine(item);
+  const more = outletsOf(item) - 1;
+
+  if (mode === 'read') return <ReaderBody {...props} />;
+
+  return (
+    <div className="flex flex-col gap-3.5 text-[0.95em]">
+      {!compact && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className={`rounded px-1.5 py-0.5 text-[0.7em] font-bold ${badge.className}`}>{badge.label}</span>
+            <span className={`text-[0.75em] font-semibold ${p.muted}`}>{l.sub}</span>
+          </div>
+          <h2 className="m-0 text-[1.3em] font-bold leading-snug">{item.title}</h2>
+          <p className={`m-0 text-[0.8em] ${p.muted}`}>
+            {more > 0 ? `${item.source} 외 ${more}곳 보도` : item.source}
+            {bodies.length > 0 && ` · ${bodies.length}곳 ${item.basis === 'web' ? '보도' : '본문'} 정리`} · {kstTime(item.publishedAt)}
+            {item.status === 'updated' && <span className={`font-semibold ${p.updated}`}> · 갱신됨</span>}
+          </p>
+        </div>
+      )}
+      {item.changed && (
+        <p className={`m-0 flex items-baseline gap-2 rounded-lg px-3 py-1.5 text-[0.85em] ${p.updatedBg} ${p.updated}`}>
+          <b className="shrink-0">지난 판 이후</b>
+          <span>{item.changed}</span>
+        </p>
+      )}
+      {lensKeys.length > 1 && (
+        <div className="-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5" role="group" aria-label="요약 보기">
+          {lensKeys.map((k) => (
+            <button key={k} onClick={() => setLens(k)} aria-pressed={lens === k} className={`h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-[0.8em] font-semibold transition ${lens === k ? p.chipOn : `border ${p.line} opacity-80`}`}>
+              {LENS_LABEL[k]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {lens === 'bullets' && item.lenses?.bullets ? (
+        <ul className="m-0 flex flex-col gap-1.5 pl-5">
+          {item.lenses.bullets.map((b, i) => (
+            <li key={i} className="leading-relaxed">
+              {b}
+            </li>
+          ))}
+        </ul>
+      ) : lens === 'easy' && item.lenses?.easy ? (
+        <div className="flex flex-col gap-2">
+          <p className="m-0 text-[1.02em] leading-[1.8]">{item.lenses.easy}</p>
+          <span className={`self-start rounded-full border px-2 text-[0.72em] ${p.line} ${p.muted}`}>쉽게 풀어 쓴 글 · 비유가 들어 있어요</span>
+        </div>
+      ) : lens === 'w5' && item.lenses?.w5 ? (
+        <dl className={`m-0 grid grid-cols-[4.6em_1fr] overflow-hidden rounded-xl border text-[0.95em] ${p.line}`}>
+          {(['who', 'what', 'when', 'where', 'why'] as const).map((k) => {
+            const label = { who: '누가', what: '무엇을', when: '언제', where: '어디서', why: '왜' }[k];
+            const v = item.lenses!.w5![k];
+            return [
+              <dt key={`${k}-t`} className={`border-b px-2.5 py-2 font-bold ${p.line} ${p.soft} ${p.accent}`}>
+                {label}
+              </dt>,
+              <dd key={`${k}-d`} className={`m-0 border-b px-2.5 py-2 ${p.line} ${v ? '' : `italic ${p.muted}`}`}>
+                {v || '기사에 없음'}
+              </dd>,
+            ];
+          })}
+        </dl>
+      ) : lens === 'sides' && item.sides ? (
+        <div className="flex flex-col gap-2">
+          <span className={`text-[0.75em] font-semibold ${p.muted}`}>{item.sides.kind === 'dispute' ? '찬반이 갈리는 쟁점' : '언론사마다 강조한 점'}</span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {item.sides.items.map((s, i) => (
+              <div key={i} className={`flex flex-col gap-1 rounded-xl px-3 py-2.5 ${p.soft}`}>
+                <b className="text-[0.95em]">{s.label}</b>
+                <p className="m-0 text-[0.92em] leading-relaxed">{s.text}</p>
+                <span className={`text-[0.75em] ${p.muted}`}>{item.sources?.find((x) => x.id === s.from)?.source ?? ''}</span>
+              </div>
+            ))}
+          </div>
+          <span className={`text-[0.72em] ${p.muted}`}>언론사 원문에서 쓴 것 · 한쪽 주장만 있으면 이 보기는 나오지 않아요</span>
+        </div>
+      ) : (
+        <BaseBody item={item} p={p} />
+      )}
+      {lens !== 'base' && lens !== 'sides' && <span className={`text-[0.72em] ${p.muted}`}>기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않아요</span>}
+
+      {(item.summary || item.titleOnly) && (
+        <div className={`flex items-baseline gap-2 border-t pt-2.5 text-[0.78em] ${p.line} ${basis.warn ? p.warn : p.muted}`}>
+          <span>{basis.text}</span>
+          {props.flagged ? (
+            <span className={`ml-auto shrink-0 font-semibold ${p.accent}`}>알렸어요</span>
+          ) : (
+            <button onClick={() => setFlagOpen((v) => !v)} className={`ml-auto shrink-0 underline underline-offset-2 ${p.muted}`}>
+              틀린 곳 알리기
+            </button>
+          )}
+        </div>
+      )}
+      {flagOpen && !props.flagged && (
+        <div className={`flex flex-col gap-1.5 rounded-xl border p-2.5 ${p.line}`}>
+          <span className="text-[0.85em] font-bold">어디가 틀렸나요?</span>
+          {(Object.keys(FLAG_LABEL) as FlagReason[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => {
+                props.onFlag(r);
+                setFlagOpen(false);
+              }}
+              className={`h-10 rounded-lg border px-3 text-left text-[0.9em] font-semibold ${p.line}`}
+            >
+              {FLAG_LABEL[r]}
+            </button>
+          ))}
+          <span className={`text-[0.72em] ${p.muted}`}>한 번 누르면 끝나요. 이번 달 신고 수는 브리핑 패널에 보여요</span>
+        </div>
+      )}
+
+      <OriginalCard {...props} />
+
+      {props.onAsk && (
+        <button onClick={props.onAsk} className={`flex h-11 items-center justify-center gap-1.5 rounded-xl text-[0.9em] font-bold ${p.soft}`}>
+          <Icon name="sparkle" size={15} /> 이 기사 묻기
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 기본 보기 — 리드(첫 문장 굵게) → 왜 중요한가(왼쪽 선) → 칸(문단 첫머리 굵은 라벨, 숫자는 칩, 경과는 날짜 열) */
+function BaseBody({ item, p }: { item: EditionItem; p: Palette }) {
+  const blocks = blocksOf(item);
+  if (!item.summary && !item.why && blocks.length === 0) {
+    return <p className={`m-0 text-[0.9em] ${p.muted}`}>{item.titleOnly ? '재료가 없어 제목만 실었어요 · 원문에서 확인하세요' : '요약이 없는 기사예요 · 원문을 확인하세요'}</p>;
+  }
+  const [first, rest] = splitLead(item.summary);
+  return (
+    <div className="flex flex-col gap-3">
+      {item.summary && (
+        <p className="m-0 text-[1.02em] leading-[1.7]">
+          <b>{first}</b>
+          {rest && ` ${rest}`}
+          <From item={item} from={item.summaryFrom ?? []} p={p} />
+        </p>
+      )}
+      {item.why && (
+        <p className={`m-0 border-l-[3px] pl-3 leading-relaxed ${p.whyLine}`}>
+          <b className={p.accent}>왜 중요한가</b> · {item.why}
+          <From item={item} from={item.whyFrom ?? []} p={p} />
+        </p>
+      )}
+      {blocks.map((b, i) => (
+        <div key={i} className="leading-relaxed">
+          {b.pairs ? (
+            <>
+              <b>{BLOCK_LABEL[b.kind]}</b>
+              <From item={item} from={b.from} p={p} />
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {b.pairs.map((x, j) => (
+                  <span key={j} className={`flex flex-col rounded-lg px-2.5 py-1 leading-tight ${p.soft}`}>
+                    <span className={`text-[0.7em] ${p.muted}`}>{x.label}</span>
+                    <b className="text-[0.95em] tabular-nums">{x.value}</b>
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : b.items ? (
+            <>
+              <b>{BLOCK_LABEL[b.kind]}</b>
+              <From item={item} from={b.from} p={p} />
+              <div className={`mt-1.5 flex flex-col border-l-2 pl-3 ${p.line}`}>
+                {b.items.map((x, j) => (
+                  <div key={j} className="grid grid-cols-[4.5em_1fr] gap-2 py-1 text-[0.92em]">
+                    <span className={`tabular-nums ${p.muted}`}>{x.date}</span>
+                    <span>{x.text}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="m-0">
+              <b>{BLOCK_LABEL[b.kind]} · </b>
+              {b.text}
+              <From item={item} from={b.from} p={p} />
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 문단 끝의 근거 언론사 — 본문을 2곳 이상 읽었을 때만 */
+function From({ item, from, p }: { item: EditionItem; from: string[]; p: Palette }) {
+  const names = fromNames(item, from);
+  return names ? <span className={`ml-1.5 whitespace-nowrap text-[0.75em] ${p.muted}`}>— {names}</span> : null;
+}
+
+/** 원문 카드 — 원 제목이 큰 글자(AI 제목과 견주는 기준), [앱에서 읽기] 또는 [사이트에서 열기 ↗], 다른 보도 */
+function OriginalCard({ l, p, canRead, setMode, onOpenOriginal }: DetailProps) {
+  const { item } = l;
+  return (
+    <div className={`flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 ${p.line}`}>
+      <span className={`text-[0.72em] ${p.muted}`}>원문</span>
+      <span className="text-[0.98em] font-bold leading-snug">{item.originalTitle ?? item.title}</span>
+      <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8em] ${p.muted}`}>
         <span>
           {item.source} · {kstTime(item.publishedAt)}
-          {item.status === 'updated' && ' · 갱신됨'}
         </span>
-        {(item.summary || item.detail) && <span className="ml-auto">AI 요약{item.basis ? ` · ${BASIS_LABEL[item.basis]}` : ''}</span>}
+        {canRead ? (
+          <button onClick={() => setMode('read')} className={`ml-auto font-bold ${p.accent}`}>
+            앱에서 읽기
+          </button>
+        ) : (
+          isSafeUrl(item.url) && (
+            <button onClick={onOpenOriginal} className={`ml-auto flex items-center gap-1 font-bold ${p.accent}`}>
+              사이트에서 열기 <Icon name="external" size={13} />
+            </button>
+          )
+        )}
       </div>
-      {isSafeUrl(item.url) && (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onOpened}
-          className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border text-[0.9em] font-semibold no-underline ${p.line} ${p.softer} ${p.text}`}
-        >
-          원문 보기 <Icon name="external" size={15} className="opacity-60" />
-        </a>
+      {canRead && isSafeUrl(item.url) && (
+        <button onClick={onOpenOriginal} className={`self-start text-[0.78em] underline underline-offset-2 ${p.muted}`}>
+          사이트에서 열기 ↗
+        </button>
       )}
       {item.related.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8em]">
+        <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t pt-1.5 text-[0.8em] ${p.line}`}>
           <span className={p.muted}>다른 보도</span>
           {item.related.map((r) =>
             isSafeUrl(r.url) ? (
@@ -761,6 +1348,75 @@ function ItemDetail({ l, p, onOpened }: { l: Located; p: Palette; onOpened: () =
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 앱 안 원문 — 받는 중에도 [사이트에서 열기]를 바로 보인다(기다리기 싫으면 바로 나갈 길). 실패하면 새 탭을 저절로 열지 않는다 */
+function ReaderBody({ l, p, reader, onOpenOriginal, onRetryReader }: DetailProps) {
+  const { item } = l;
+  const [sumOpen, setSumOpen] = useState(false);
+  const outBtn = (label: string) => (
+    <button onClick={onOpenOriginal} className={`flex h-10 items-center justify-center gap-1 rounded-xl border text-[0.9em] font-semibold ${p.line}`}>
+      {label} <Icon name="external" size={13} className="opacity-60" />
+    </button>
+  );
+  if (!reader || reader.status === 'loading') {
+    return (
+      <div className="flex flex-col gap-3">
+        <span className={`text-[0.8em] ${p.muted}`}>{item.source}에서 원문을 받는 중…</span>
+        {[70, 100, 85, 60].map((w, i) => (
+          <div key={i} className={`h-3 animate-pulse rounded ${p.soft}`} style={{ width: `${w}%` }} />
+        ))}
+        {outBtn('기다리지 않고 사이트에서 열기')}
+      </div>
+    );
+  }
+  if (reader.status === 'fail' || !reader.data) {
+    return (
+      <div className="flex flex-col gap-3 py-4 text-center">
+        <b className="text-[1.05em]">앱에서 보여 줄 수 없는 기사예요</b>
+        <span className={`text-[0.85em] ${p.muted}`}>{reader.message ?? '유료 기사이거나 본문을 뽑지 못했어요'}</span>
+        {outBtn('사이트에서 열기')}
+        <button onClick={onRetryReader} className={`text-[0.8em] underline underline-offset-2 ${p.muted}`}>
+          다시 받기
+        </button>
+      </div>
+    );
+  }
+  const d = reader.data;
+  const [first] = splitLead(item.summary);
+  // data-no-ask: 이 글은 끌어서 묻기 대상이 아니다 (Viewer.readOwnSelection)
+  return (
+    <div className="flex flex-col gap-3" data-no-ask="1">
+      {item.summary && (
+        <div className={`flex flex-col gap-1.5 rounded-xl px-3 py-2 text-[0.88em] ${p.soft}`}>
+          <div className="flex items-baseline gap-2">
+            <span className="line-clamp-1">{sumOpen ? item.summary : first}</span>
+            <button onClick={() => setSumOpen((v) => !v)} className={`ml-auto shrink-0 font-semibold ${p.accent}`}>
+              {sumOpen ? '요약 접기' : '요약 펼치기'}
+            </button>
+          </div>
+          {sumOpen && item.why && <span className={p.muted}>{item.why}</span>}
+        </div>
+      )}
+      <h2 className="m-0 text-[1.25em] font-bold leading-snug">{d.title}</h2>
+      <div className={`flex flex-wrap items-center gap-x-2 text-[0.8em] ${p.muted}`}>
+        <span>
+          {d.source}
+          {d.byline ? ` · ${d.byline}` : ''} · {kstTime(item.publishedAt)}
+        </span>
+        <button onClick={onOpenOriginal} className={`ml-auto font-semibold ${p.accent}`}>
+          사이트에서 보기 ↗
+        </button>
+      </div>
+      {d.paragraphs.map((t, i) => (
+        <p key={i} className="m-0 text-[1.02em] leading-[1.85]">
+          {t}
+        </p>
+      ))}
+      <span className={`text-[0.78em] ${p.muted}`}>사진·표는 원문에서 보세요 ↗</span>
+      <span className={`text-[0.72em] ${p.muted}`}>누를 때만 받아 와서 보여 주고, 저장하지 않아요</span>
     </div>
   );
 }

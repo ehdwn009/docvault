@@ -23,10 +23,10 @@ export default function BriefingSettings({ onOpenSources }: Props) {
   }, []);
 
   /** 보낸 것만 바뀐다 — 실패하면(순서가 어긋난 시각 등) 화면을 서버 값으로 되돌린다 */
-  async function save(patch: { autoEnabled?: boolean; schedule?: AutoSchedule }) {
+  async function save(patch: { autoEnabled?: boolean; schedule?: AutoSchedule; readerEnabled?: boolean }) {
     setError(null);
     try {
-      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot'>>('/briefing/settings', {
+      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'readerEnabled'>>('/briefing/settings', {
         method: 'PUT',
         body: JSON.stringify(patch),
       });
@@ -96,6 +96,22 @@ export default function BriefingSettings({ onOpenSources }: Props) {
           <p className="mt-2 text-xs text-slate-500">
             이번 달 ≈ ${status.monthCostUsd.toFixed(2)} / 한도 ${status.monthBudgetUsd} — 한도에 닿으면 자동 생성이 멈춥니다
           </p>
+          {/* 앱 안 원문 보기 — 기본 꺼짐. 서버에서 추출 품질을 잰 뒤 켠다 (개선 합의안 7장) */}
+          <label className="mt-3 flex items-start gap-2 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={status.readerEnabled ?? false}
+              onChange={(e) => void save({ readerEnabled: e.target.checked })}
+              className="mt-0.5 accent-slate-400"
+            />
+            <span>
+              앱 안 원문 보기
+              <span className="block text-slate-600">
+                기사 화면에서 [요약 | 원문]을 바꿔 가며 원문을 앱 안에서 읽습니다. 누를 때만 받아 오고 저장하지 않으며, 관리자만 봅니다. 켜기 전에 서버에서{' '}
+                <code className="text-slate-500">npm run briefing:readcheck -w server</code>로 추출 품질(70% 이상)과 범위(50% 이상)를 재 보세요. 유료 기사나 뽑지 못한 기사는 사이트로 보냅니다
+              </span>
+            </span>
+          </label>
           <button onClick={onOpenSources} className="mt-2 text-xs text-slate-400 underline hover:text-slate-200">
             수집 목록 열기 (RSS 주소·검색어)
           </button>

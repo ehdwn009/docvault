@@ -166,6 +166,17 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     };
   }, [termPop]);
   const termPopRef = useRef<HTMLDivElement>(null);
+  /** 브리핑 기사로 질문 — 제목을 인용으로, 요약·주소를 문맥으로 붙여 질문 패널을 연다 (개선 합의안 6.6) */
+  function askAboutArticle(seed: AskSeed) {
+    if (askConversing) setPendingQuote(seed.quote);
+    else {
+      setAskSeed(seed);
+      setPendingQuote(null);
+    }
+    setAskStarted(true);
+    setAskOpen(true);
+    showChrome();
+  }
   /** 용어로 질문 — 그 용어를 인용으로 붙여 질문 패널을 연다 (드래그 질문과 같은 자리로 들어간다) */
   function askAboutTerm(title: string) {
     if (askConversing) setPendingQuote(title);
@@ -312,6 +323,12 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     }
     const range = sel.getRangeAt(0);
     if (!container.contains(range.commonAncestorContainer)) return; // 패널 등 본문 밖의 선택은 무관
+    // 앱 안 원문 화면에서는 끌어서 묻기를 끈다 — 원문 전문이 질문 기록(DB)에 남으면 "본문은 저장하지 않는다"가 깨진다
+    const anchor = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+    if (anchor?.closest('[data-no-ask]')) {
+      setSelection(null);
+      return;
+    }
     const quote = sel.toString().replace(/\s+/g, ' ').trim().slice(0, ASK_QUOTE_MAX_CHARS);
     if (!quote) {
       setSelection(null);
@@ -955,7 +972,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                 theme={settings.viewerTheme}
                 stickyBg={THEME_BG[settings.viewerTheme]}
                 isActive={isActive ?? false}
+                readerEnabled={settings.briefingReader === 1}
                 onOpenFile={(id) => onSwapBriefing?.(id)}
+                onAsk={askAboutArticle}
                 fallback={
                   <Suspense fallback={<p className="text-sm text-slate-500">뷰어 준비 중…</p>}>
                     <CodeRenderer content={data.content} theme={settings.viewerTheme} fileName={file.name} />

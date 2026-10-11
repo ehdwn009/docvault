@@ -17,6 +17,13 @@ export const BRIEFING_STATUS_POLL_MS = 2000;
 
 export type Importance = 1 | 2 | 3;
 
+/** 골라 쓰는 칸 — 서버 summarize.ts의 Block과 같아야 한다 (v0.45) */
+export type BlockKind = 'background' | 'numbers' | 'timeline' | 'reactions' | 'next' | 'terms';
+export type Block = { kind: BlockKind; text?: string; pairs?: { label: string; value: string }[]; items?: { date: string; text: string }[]; from: string[] };
+export type Sides = { kind: 'dispute' | 'emphasis'; items: { label: string; text: string; from: string }[] };
+export type Lenses = { bullets?: string[]; easy?: string; w5?: { who: string; what: string; when: string; where: string; why: string } };
+export type ItemSource = { id: string; source: string; url: string; via: 'body' | 'feed' | 'lede' | 'web' };
+
 export type EditionItem = {
   id: string;
   title: string;
@@ -29,18 +36,41 @@ export type EditionItem = {
   storyId: string;
   status: 'new' | 'updated';
   related: { source: string; url: string }[];
-  /** 요약의 근거 — body(원문 앞부분) · lede(발췌) · title(제목뿐). 옛 회차에는 없다 */
-  basis?: 'body' | 'lede' | 'title';
+  /** 요약의 근거 — body(원문·피드 본문) · lede(발췌) · title(제목뿐) · web(웹 검색 보도). 옛 회차에는 없다 */
+  basis?: 'body' | 'lede' | 'title' | 'web';
   /** 이 사건을 다룬 서로 다른 언론사 수(대표 포함). 옛 회차에는 없다 — outletsOf로 센다 */
   outlets?: number;
-  /** 핵심·주요의 펼침 칸 — summary가 "무슨 일", 빈 칸은 숨긴다. 참고·옛 회차에는 없다 (v0.43) */
+  /** v0.43의 펼침 칸 — v0.45부터는 blocks. 옛 회차용 */
   detail?: { background: string; numbers: string; next: string };
+  // ---- v0.45 (개선 합의안 5.1) — 모두 없어도 되는 칸 ----
+  originalTitle?: string;
+  sources?: ItemSource[];
+  summaryFrom?: string[];
+  whyFrom?: string[];
+  blocks?: Block[];
+  sides?: Sides;
+  lenses?: Lenses;
+  /** 앱 안 원문으로 받을 주소가 있다 — 회차를 만들 때 본문 받기에 성공한 기사 */
+  readUrl?: string;
+  changed?: string;
+  /** 재료가 없어 제목만 실은 참고 — 누르면 펼치지 않고 바로 원문으로 */
+  titleOnly?: boolean;
 };
+
+/** 요약 보기 — 기본·글머리표·쉽게·5W·양쪽 시각 (v0.45). 기기가 마지막 선택을 기억한다 */
+export type LensKey = 'base' | 'bullets' | 'easy' | 'w5' | 'sides';
+export const LENS_LABEL: Record<LensKey, string> = { base: '기본', bullets: '글머리표', easy: '쉽게', w5: '5W', sides: '양쪽 시각' };
+export const BLOCK_LABEL: Record<BlockKind, string> = { background: '배경', numbers: '숫자', timeline: '경과', reactions: '반응', next: '앞으로', terms: '용어' };
+
+/** API-138 앱 안 원문 */
+export type ReaderResult = { title: string; byline: string | null; source: string; url: string; paragraphs: string[] };
+export type FlagReason = 'number' | 'mixed' | 'overstated' | 'other';
+export const FLAG_LABEL: Record<FlagReason, string> = { number: '숫자가 틀림', mixed: '다른 사건이 섞임', overstated: '제목이 과장됨', other: '기타' };
 
 export type Edition = {
   version: number;
   edition: { date: string; slot: 'morning' | 'noon' | 'evening' | 'adhoc'; label: string; since: number; until: number; createdAt: number };
-  stats: { sources: number; sourcesFailed: number; candidates: number; items: number };
+  stats: { sources: number; sourcesFailed: number; candidates: number; items: number; basis?: { body: number; lede: number; title: number; web: number }; webFilled?: number; demoted?: number };
   cost: { usd: number };
   /** 오늘의 핵심 기사 id. v0.43부터 — 없으면 leadIdsOf로 계산한다 */
   lead?: string[];
@@ -171,7 +201,7 @@ export type BriefingRun = {
   slot: Edition['edition']['slot'];
   editionDate: string;
   status: 'running' | 'ok' | 'error' | 'skipped' | 'cancelled';
-  stage: 'collect' | 'classify' | 'select' | 'read' | 'summarize' | 'save' | null;
+  stage: 'collect' | 'classify' | 'select' | 'read' | 'fill' | 'summarize' | 'lens' | 'save' | null;
   progressDone: number;
   progressTotal: number;
   sinceAt: number;
@@ -183,6 +213,8 @@ export type BriefingRun = {
   candidateCount: number;
   itemCount: number | null;
   costUsd: number;
+  /** 웹 검색 보강에서 쓴 검색 횟수 (v0.45) */
+  webSearches?: number;
   message: string | null;
   startedAt: number;
   finishedAt: number | null;
@@ -205,8 +237,14 @@ export type BriefingStatus = {
   last: BriefingRun | null;
   monthCostUsd: number;
   monthBudgetUsd: number;
+  /** 한도의 이 비율에 닿으면 미리 알린다 (v0.45) */
+  budgetWarnRatio?: number;
   /** 지금 만들면 모을 기사의 시작 시각 */
   nextSinceAt: number;
+  /** 앱 안 원문 보기 스위치 (v0.45, 설정에서 켠다) */
+  readerEnabled?: boolean;
+  /** 이번 달 "틀린 곳 알리기" 수 (v0.45) */
+  monthFlagCount?: number;
 };
 
 /** API-135 회차 목록 한 줄 */
@@ -226,13 +264,15 @@ export type EditionSummary = {
 /** API-136 */
 export type EditionNav = { prevId: number | null; nextId: number | null; sameDay: { fileId: number; slot: Slot; label: string }[] };
 
-export const STAGE_ORDER = ['collect', 'classify', 'select', 'read', 'summarize', 'save'] as const;
+export const STAGE_ORDER = ['collect', 'classify', 'select', 'read', 'fill', 'summarize', 'lens', 'save'] as const;
 
 export const STAGE_LABEL: Record<NonNullable<BriefingRun['stage']>, string> = {
   collect: '수집',
   classify: '분류',
   select: '선별',
   read: '원문 읽기',
+  fill: '웹 검색',
   summarize: '요약',
+  lens: '보기 쓰기',
   save: '저장',
 };

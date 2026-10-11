@@ -153,6 +153,8 @@ export type UserSettings = {
   termHighlight: number;
   /** 질문할 때 관련 카드를 문맥으로 함께 보내기 (1=켬) */
   askWithCards: number;
+  /** 브리핑 앱 안 원문 보기 (1=켬, 관리자만 의미 있음, v0.45) */
+  briefingReader?: number;
 };
 
 export type Changelog = { version: string; content: string };
