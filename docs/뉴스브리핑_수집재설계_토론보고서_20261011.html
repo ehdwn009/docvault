@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>수집 재설계 토론 보고서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 한 칸 읽기 문서. 결론 상자 → 비용 해부 → 네 입장 → 쟁점표 → 합의 로드맵 → 결정 항목 → 실측 설계 → 부록 */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #0369a1; --accent-soft: #e3f1fa; --major: #c9741c; --core: #cf2f2f; --ok: #1d8556; --ok-soft: #e4f3ea; --bar: #0284c7;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327; --bar: #38bdf8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327; --bar: #38bdf8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15.5px; line-height: 1.7; overflow-wrap: anywhere; }
+.wrap { max-width: 900px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 72px; display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3, h4 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 14px; }
+section > h2 { font-size: 23px; letter-spacing: -0.01em; padding-top: 6px; }
+section > h3 { font-size: 17px; margin-top: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.hero { display: flex; flex-direction: column; gap: 12px; }
+.hero h1 { font-size: clamp(26px, 4.2vw, 36px); letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; max-width: 72ch; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 0 14px 14px 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.verdict .tag { display: inline-block; background: var(--ok-soft); color: var(--ok); font-weight: 700; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; width: fit-content; max-width: 100%; }
+.verdict ul, section ul, section ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.ask { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14.5px; min-width: 0; }
+.card h3 { font-size: 15.5px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .pos { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.card ul { padding-left: 18px; gap: 3px; }
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tbody th { white-space: nowrap; font-weight: 600; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+td.fin { background: var(--ok-soft); font-weight: 500; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.no { color: var(--core); font-weight: 600; } .cond { color: var(--major); font-weight: 600; } .yes { color: var(--ok); font-weight: 600; }
+
+/* 비용 막대: 단계별 비중을 한 줄로 */
+.bars { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.bar-row { display: grid; grid-template-columns: 9.5em 1fr 4.5em; gap: 10px; align-items: center; font-size: 13.5px; }
+.bar-row .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-row .track { background: var(--sunk); border-radius: 6px; height: 14px; overflow: hidden; }
+.bar-row .fill { background: var(--bar); height: 100%; border-radius: 6px; }
+.bar-row .fill.lite { background: var(--major); }
+.bar-row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+.bars .cap { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 480px) { .bar-row { grid-template-columns: 7em 1fr 4em; } }
+
+.road { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; min-width: 0; }
+.step h3 { font-size: 15.5px; }
+.step .cost { font-family: var(--f-mono); font-size: 12.5px; color: var(--accent); }
+.step ul { padding-left: 18px; gap: 4px; }
+.step.stop { border-color: var(--core); }
+.step.stop h3 { color: var(--core); }
+.decide { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.decide h3 { font-size: 16px; }
+.decide .opt { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+.decide .opt > div { background: var(--sunk); border-radius: 10px; padding: 9px 12px; min-width: 0; }
+.decide .opt b { display: block; margin-bottom: 2px; }
+.decide .rec { font-size: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.decide .rec b { color: var(--ok); }
+@media (max-width: 560px) { .decide .opt { grid-template-columns: 1fr; } }
+code { font-family: var(--f-mono); font-size: 0.9em; background: var(--sunk); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+pre { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; background: var(--sunk); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0; white-space: pre; }
+pre.doc { white-space: pre-wrap; font-family: var(--f-body); font-size: 14px; line-height: 1.65; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; }
+details summary { cursor: pointer; font-weight: 600; padding: 12px 0; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+details summary::after { content: "펼치기"; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+details[open] summary::after { content: "접기"; }
+details > *:not(summary) { margin-bottom: 14px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">docvault · 뉴스 브리핑 · 에이전트 토론 · 2026-10-11</p>
+    <h1>수집부터 다시 — 더 좋으면서 싸게 만드는 길</h1>
+    <p class="lead">사용자 질문: "RSS를 긁어 AI가 정리하는 지금 방식은 비용이 많이 드는 것 같다. 애초에 Claude 웹 검색으로 '오늘 무슨 일이 있었나'를 묻고 찾는 식은 어떤가. 근본부터 다시 의논해 달라." 울타리는 세 가지 — 파이프라인 전체, <b>품질 우선에 비용 절감은 곁들임</b>, 무료 티어 키 허용. 이전 토론과 무관한 새 에이전트 4명(뉴스 출처·수집 전문가 · AI 호출 구조·비용 전문가 · 품질 담당 · 회의론자)이 두 라운드로 다퉜다. 외부 API 조건과 Anthropic 단가는 각자 웹에서 확인했다.</p>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <span class="tag">결론 — 수집 방식은 바꾸지 않는다. 돈은 모델에서, 품질은 재료에서 나온다 (4/4)</span>
+      <ul>
+        <li><b>웹 검색으로 사건부터 묻는 하향식은 4/4 반대.</b> 계산하면 수집~선별이 $0.9~1.5로 지금($0.35~0.8)보다 비싸거나 같고, 나오는 건 사건 25~30개뿐이다. 발행 시각(24시간 범위)·재현성·국내 커버리지·참고 층을 잃고 "무엇이 오늘의 사건인가"를 검색 엔진이 정하게 된다. 다만 <b>"오늘의 핵심 6건을 빠뜨리지 않았나" 교차검증</b>(검색 3회, 약 $0.06)에는 쓸 가치가 있다.</li>
+        <li><b>비용의 몸통은 수집이 아니라 Sonnet 요약(55%)</b>이다. 후보 600건 중 버려지는 450건의 분류·선별 비용은 $0.3 남짓. 수집을 어떻게 바꿔도 아낄 돈은 $0.3~0.5가 상한이고, 수집 재설계의 진짜 목적은 <b>핵심·주요가 본문 2곳 이상을 재료로 갖는 비율</b>(지금 스크린샷 4건 중 3건이 1곳)이다.</li>
+        <li><b>가장 큰 지렛대는 Haiku 4.5 → Haiku 5.5</b>(단가 1/10, 분류·선별·합치기·참고·요약 보기·웹 보강 전부). 품질 손해 없이 회차당 약 −$0.64. 4/4 찬성.</li>
+        <li><b>"지금 월 $75"는 실측이 아니라 종이 계산이다.</b> v0.45 파이프라인은 오늘 배포됐고 실측 0회. 유일한 실측(10/1, v0.42)은 추정보다 22% 낮았다. 그래서 <b>먼저 10회차(2주) 실측</b> — 1~5회차 기준선, 6회차부터 Haiku 5.5만 바꿔 단일 변수로 잰다. 단계별 토큰 칸(30줄)과 품질 지표 5개를 지금 넣는다.</li>
+        <li><b>비용 0인 수집 개선 4개는 지금 한다</b>: 수집 단계 사건 묶기(언론사 수 신호) · 선별 입력 자르기를 "언론사 수 우선"으로 · Google 검색 40개를 실패율 분모에서 분리(단일 장애점 제거) · 웹 검색 <code>allowed_domains</code> 20곳으로 제한. 그리고 서버에서 <code>briefing:check</code>를 돌려 통과한 후보 출처만 켠다.</li>
+        <li><b>하지 않는다</b>: 네이버 검색 API(개정 약관이 AI 입력·요약을 금지), NewsAPI·GNews·Mediastack 등 무료 뉴스 API(12~24시간 지연·월 100회), 프롬프트 캐시(Haiku 4.5는 최소 4,096토큰이라 한 바이트도 안 잡힘, 효과 2~3%), 단계 병합·분류 폐지, 후보·분야 축소, 주요 요약을 Haiku로 강등(A/B 전), 배치 API(사용자가 "새벽 자동 생성"으로 바꾸지 않는 한).</li>
+        <li><b>예상 비용</b>: 지금 약 $2.2/회차(월 $66) → 2단계(Haiku 5.5 + 출력 다이어트) <b>약 $1.5(월 $45)</b> → 3단계(실측 뒤 웹 보강 조정, 선택에 따라 핵심 Opus) $1.3~1.7(월 $39~51). 품질은 그대로거나 핵심이 더 좋아진 채로.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>지금 비용의 해부 (24시간판 1회, 추정 $2.2)</h2>
+    <p class="muted">비용 담당이 상수·코드로 단계별 토큰을 역산한 값. 실측이 아니라 추정이며, 실측이 오면 이 표를 먼저 고친다.</p>
+    <div class="bars">
+      <div class="bar-row"><span class="lbl">④ 요약 Sonnet 5.5</span><div class="track"><div class="fill" style="width:55%"></div></div><span class="val">$1.22</span></div>
+      <div class="bar-row"><span class="lbl">③-3 웹 검색 보강</span><div class="track"><div class="fill" style="width:21%"></div></div><span class="val">$0.47</span></div>
+      <div class="bar-row"><span class="lbl">③ 선별 Haiku 4.5</span><div class="track"><div class="fill lite" style="width:12%"></div></div><span class="val">$0.27</span></div>
+      <div class="bar-row"><span class="lbl">④-2 요약 보기 Haiku</span><div class="track"><div class="fill lite" style="width:10%"></div></div><span class="val">$0.21</span></div>
+      <div class="bar-row"><span class="lbl">② 분류 Haiku 4.5</span><div class="track"><div class="fill lite" style="width:4%"></div></div><span class="val">$0.08</span></div>
+      <p class="cap">파랑 = 수집 방식과 무관한 비용(요약·웹 검색 횟수), 주황 = Haiku 몫(5.5로 바꾸면 합계 $0.56 → 약 $0.08). 요약 $1.22 중 출력($0.65)이 입력($0.57)보다 크다 — 빈 문자열 칸·기호까지 JSON으로 내보내기 때문이라, 스키마의 빈 칸을 optional로 바꾸는 "출력 다이어트"만으로 약 −$0.1.</p>
+    </div>
+    <div class="ask"><b>사용자 제안(하향식)의 계산</b> — "오늘 주요 사건" 찾기(분야 8 × 검색 2회 + Sonnet) ≈ $0.35, 사건 25개 × 보도 찾기 2회 ≈ $0.5~0.9. 합 $0.9~1.3으로 지금 수집~선별($0.35~0.8)보다 비싸거나 같다. 검색 결과의 인용문은 150자 상한이라 500~700자 핵심 요약을 쓰려면 결국 원문을 받아야 하고, 그러면 지금과 같은 "출처 멈춤" 문제로 돌아온다. 얻는 것은 통신사(Reuters·AP) 직접 접근과 사건 단위 묶음, 코드 단순화. 잃는 것은 발행 시각·재현성·국내 세부 분야·참고 층이다.</div>
+  </section>
+
+  <section>
+    <h2>1라운드 — 네 입장</h2>
+    <div class="cards">
+      <div class="card"><h3>뉴스 출처·수집 전문가 <span class="pos">RSS 유지 + 개선</span></h3><ul>
+        <li>낭비는 작고 누수는 크다: Google 뉴스 검색 40개가 후보의 절반을 대는데 원문 주소도 발췌도 없다 — 얇은 재료의 근원</li>
+        <li>"몇 곳이 다뤘나" 신호가 수집 단계에 없고, 선별 입력 60건이 시간대 균등으로 잘려 큰 분야의 40%가 AI를 보기 전에 버려진다</li>
+        <li>무료 API 점검: 네이버 검색 API만 쓸 만(일 25,000회·원문 주소·발행 시각), 나머지는 지연 12~24h·월 100회</li>
+        <li>추천: 네이버(국내) + Google 편집 피드(세계) + 직접 RSS + 수집 단계 사건 묶기(비용 0)</li>
+      </ul></div>
+      <div class="card"><h3>AI 호출 구조·비용 전문가 <span class="pos">모델·출력에서 −32%</span></h3><ul>
+        <li>단가 확인(claude-api 스킬): Haiku 5.5 $0.10/$0.50, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20, 배치 50%, 검색 1,000회 $10</li>
+        <li>Sonnet 요약 55%, 출력이 입력보다 비싸다. "시스템 프롬프트 40번 반복"은 $0.06 — 체감과 달리 작고, 캐시는 안 잡힌다</li>
+        <li>채택: Haiku 5.5(−$0.64) · 요약만 배치(−$0.6) · 출력 다이어트(−$0.1). 핵심만 Opus 5.5(+$0.36)는 품질 우선이면 켜 볼 가치</li>
+        <li>하향식 검색은 발견 수단으로 부적합(−$1.4 이상), 핵심 6건 교차검증($0.06)으로만</li>
+      </ul></div>
+      <div class="card"><h3>품질 담당 <span class="pos">재료 2곳 비율이 병목</span></h3><ul>
+        <li>품질은 "AI가 잘 쓴다"가 아니라 재료(여러 언론 본문)와 선별 신호(몇 곳이 다뤘나)에서 온다. 설계 문서의 실패 사례 전부가 그 증거</li>
+        <li>판정표: 후보·분야 축소, 원문 읽기 핵심만, 하향식은 "많이 깎임". 렌즈(글머리표·5W·쉽게) 끄기는 "품질 그대로"</li>
+        <li>품질을 올리는 길: 핵심만 Opus, 꺼 둔 RSS 43곳 켜서 Google 비율 58% 낮추기, 숫자 대조 drop 전환</li>
+        <li>"좋아졌다"의 지표 8개 — 요약 없음 0, 핵심 중 재료 2곳 ≥ 70%, 24시간 분포, 세계 ≥ 30%, 신고율 ≤ 2% 등</li>
+      </ul></div>
+      <div class="card"><h3>회의론자 · 현실 점검 <span class="pos no">먼저 실측</span></h3><ul>
+        <li>"비용이 많이 든다"는 실측이 아니다. v0.45는 실측 0회, 유일한 실측(v0.42)은 추정보다 22% 낮았다. 단계별 토큰 칸이 없어 어디가 돈을 먹는지 모른다 — 30줄이면 된다</li>
+        <li>무료 API 현실: NewsAPI 24h 지연, Mediastack 월 100회, Brave 무료 폐지, Bing 종료. 키마다 만료·한도·약관이라는 새 실패 모드</li>
+        <li>배치 API: 7단계 직렬 왕복, 20분 설계 전면 수정, 버튼 UX 충돌 — 하지 말 것. 캐시: 효과 없음</li>
+        <li>확실한 순서: 실측 10회차 → Haiku 5.5(월 −$20) → 웹 보강 상한 실측 뒤 조정</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2라운드 — 쟁점별 수렴</h2>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>쟁점</th><th>출처·수집</th><th>비용 구조</th><th>품질</th><th>회의론자</th><th>합의</th></tr></thead>
+      <tbody>
+        <tr><th>하향식 웹 검색 수집</th><td class="no">반대</td><td class="no">반대</td><td class="no">반대</td><td class="no">반대</td><td class="fin">주 수집으로는 쓰지 않는다. 핵심 6건 교차검증($0.06)만 — 회의론자는 "파이프라인 밖 점검 스크립트로"</td></tr>
+        <tr><th>먼저 10회차 실측</th><td class="yes">동의</td><td class="yes">동의</td><td class="yes">동의</td><td class="yes">제안</td><td class="fin">1~5회차 기준선, 6~10회차 Haiku 5.5만. 단계별 토큰 칸 + 품질 stats 5개를 지금 넣는다</td></tr>
+        <tr><th>Haiku 4.5 → 5.5</th><td class="yes">찬성</td><td class="yes">찬성(최대 지렛대)</td><td class="yes">찬성</td><td class="yes">찬성, 6회차부터</td><td class="fin">채택. 체크리스트: 분류·선별은 <code>thinking: disabled</code>(아니면 effort low) · fallbacks 없음 → 거절 시 그 묶음만 버림/재시도 · web_search 도구 버전 1회 확인 · PRICES 갱신 · count_tokens로 토큰 증가 1회 비교 · 같은 후보로 두 모델 동시 선별 3회차(핵심 6건 겹침 ≥ 4, demoted 증가 없음)</td></tr>
+        <tr><th>네이버 검색 API</th><td class="no">철회(약관)</td><td>—</td><td class="cond">기준 충족 시</td><td class="no">반대(강화)</td><td class="fin">하지 않는다. 2026-07 개정 약관이 검색 결과의 저장·캐싱·AI 입력·요약 활용을 금지하고 신규 신청도 중단 — 우리 용도가 정확히 금지 조항</td></tr>
+        <tr><th>기타 무료 뉴스 API</th><td class="no">제외</td><td>—</td><td class="no">제외</td><td class="no">제외</td><td class="fin">NewsAPI(24h 지연)·GNews(12h)·NewsData(12h)·Mediastack(월 100회)·Bing(종료) 제외. GDELT는 세계 "언론사 수" 신호 보조로 실측 뒤 curl 1회 확인</td></tr>
+        <tr><th>수집 단계 사건 묶기 (비용 0)</th><td class="yes">제안</td><td class="yes">찬성(품질 이유)</td><td class="cond">조건부</td><td class="cond">조건부</td><td class="fin">채택. 유사도 0.7(S3 붙이기와 같게) · 같은 region · 6시간 안 · 숫자 집합 일치 · 정규화 제목 10자 미만 제외 · sub를 둘 다 알면 같아야. 묶음은 후보 축소가 아니라 <b>언론사 수 신호 + related</b>로만, 대표 1건은 선별 입력에 남긴다. 첫 5회차는 <code>stats.wouldMerge</code>로 세기만, 오결합 5% 이하 확인 뒤 켠다</td></tr>
+        <tr><th>배치 API (요약만)</th><td>—</td><td class="no">양보(하지 말 것)</td><td class="cond">자동=배치일 때만</td><td class="cond">새벽 자동 전제</td><td class="fin">버튼 유지면 하지 않는다. 250~350줄 + 새 실패 모드 3개(배치 거부·만료·부분 실패) + update.sh·재시작 복구와의 충돌을 월 $18과 바꿀 수 없다 → <b>사용자 결정 ①</b></td></tr>
+        <tr><th>프롬프트 캐시 · 단계 병합 · 분류 폐지</th><td class="no">분류 폐지 반대</td><td class="no">효과 2~3%</td><td class="no">분야 축소 반대</td><td class="no">반대</td><td class="fin">하지 않는다</td></tr>
+        <tr><th>핵심만 Opus 5.5 (+$0.36~0.42)</th><td>—</td><td class="cond">조건부 찬성</td><td class="cond">블라인드 65%</td><td class="cond">재료 70% 먼저</td><td class="fin">실측 뒤. 재료 2곳 비율 ≥ 70%를 먼저 만들고, 같은 재료를 두 모델에 보내 블라인드 3회차(+$1.1) → <b>사용자 결정 ③</b></td></tr>
+        <tr><th>주요 요약을 Haiku 5.5로</th><td>—</td><td class="cond">A/B 뒤</td><td class="cond">A/B 뒤(합격선)</td><td class="no">반대</td><td class="fin">A/B 전에는 내리지 않는다. 합격선: 숫자 drop·무효 기호·빈 why·길이 미달이 Sonnet의 1.5배 이내 + 블라인드 선호 40% 이상</td></tr>
+        <tr><th>주요 본문 2곳 → 1곳</th><td class="yes">제안</td><td class="no">절감 $0.15뿐</td><td class="cond">fetch만 끊고 공짜 재료 유지</td><td class="no">얕은 글 4건이 전부 1곳</td><td class="fin">보류. 절감이 "$1.2→$0.6"이 아니라 $0.15로 계산됐고, 스크린샷의 얕은 글이 바로 1곳 기사였다</td></tr>
+        <tr><th>웹 검색 보강 ($0.47)</th><td class="cond">도메인 제한 먼저</td><td class="cond">채움률 30% 미만이면 8건×1회</td><td class="cond">보류</td><td class="cond">실측 뒤</td><td class="fin"><code>allowed_domains</code>를 상위 20곳 + 통신사로 지금 제한(후보를 켜면 70개 → 요청 거부 위험). 실측 뒤 webFilled ≤ 3/15면 8건×1회($0.08) 또는 핵심 교차검증으로 전환</td></tr>
+        <tr><th>요약 보기(렌즈) 끄기</th><td>—</td><td class="no">5.5면 $0.03라 논거 소멸</td><td class="cond">쉽게는 끄고 나머지 측정</td><td>—</td><td class="fin">비용 이유로는 끄지 않는다. "쉽게"는 이전 토론과 같이 사용자 결정. 글머리표·5W는 2주 선택률 측정</td></tr>
+        <tr><th>Google 뉴스 의존</th><td class="cond">단일 장애점</td><td>—</td><td class="cond">편집 신호로만</td><td class="cond">비공식</td><td class="fin">검색 출처를 실패율 분모에서 분리(지금). 실측 뒤 검색 40개 → Top stories·주제 피드 10여 개로 교체 검토 → <b>사용자 결정 ②</b></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>합의 로드맵</h2>
+    <div class="road">
+      <div class="step"><h3>1단계 — 지금 (실측과 동시, AI 입출력 불변)</h3><span class="cost">$2.2/회차 그대로 · 코드 약 150줄</span><ul>
+        <li>단계별 토큰·비용 칸(<code>Usage</code>에 단계 이름, thinking_tokens) — 30줄</li>
+        <li>품질 stats 5개: <code>coreDeep</code>(핵심 중 재료 2곳 이상) · <code>slotGaps</code>(12칸 분포) · <code>worldShare</code> · <code>emptySubs</code> · <code>titleMismatch</code></li>
+        <li>수집 단계 사건 묶기 — 첫 5회차는 <code>wouldMerge</code>로 세기만</li>
+        <li>선별 입력 자르기: 시간대 균등 → 언론사 수 우선, 같으면 최신</li>
+        <li>Google 검색 출처를 실패율 분모에서 분리(한꺼번에 429를 받으면 회차가 통째로 실패하던 단일 장애점)</li>
+        <li><code>allowed_domains</code> 상위 20곳 + 통신사로 제한</li>
+        <li><code>PRICES</code>에 Haiku 5.5·Opus 5.5 단가(계산용)</li>
+        <li>서버에서 <code>briefing:check</code> 1회, 통과한 후보 출처만 켜기</li>
+        <li>교차검증 점검 스크립트(파이프라인 밖, $0.02): "오늘 한국·세계 톱10" vs 우리 핵심 6건 겹침</li>
+      </ul></div>
+      <div class="step"><h3>2단계 — 6회차부터 (단일 변수)</h3><span class="cost">≈ $1.5/회차 · 월 $45 · 품질 그대로</span><ul>
+        <li><b>Haiku 4.5 → 5.5</b> 전환(분류·선별·합치기·참고·요약 보기·웹 보강). 상수 1줄 + effort/thinking 설정 + 거절 처리</li>
+        <li>같은 후보로 두 모델 동시 선별 비교 3회차(+$0.03/회): 핵심 6건 겹침 ≥ 4, demoted·titleOnly 증가 없음, 한글 없는 제목 0</li>
+        <li>출력 다이어트 — 요약 스키마의 빈 문자열 칸을 optional로(−$0.1). 검증 코드는 이미 빈 값을 처리</li>
+        <li>사건 묶기 켜기(오결합 ≤ 5% 확인 뒤), 묶음의 언론사 수를 선별 프롬프트에</li>
+      </ul></div>
+      <div class="step"><h3>3단계 — 10회차 실측 뒤 (조건부)</h3><span class="cost">$1.3 ~ $1.7/회차 · 월 $39 ~ 51</span><ul>
+        <li>webFilled ≤ 3/15면 웹 보강 8건×1회($0.08) 또는 핵심 교차검증으로 전환</li>
+        <li>재료 2곳 비율 ≥ 70% 달성 뒤 핵심만 Opus 5.5 블라인드 3회차(+$1.1) → 선호 65% 이상이면 유지(+$0.36/회)</li>
+        <li>재료 1곳 주요만 Sonnet/Haiku 5.5 A/B(+$0.1) → 합격선 통과 시에만</li>
+        <li>Google 검색 40개 → Top stories·주제 피드 10여 개 교체 검토(피드 실존은 check로)</li>
+        <li>GDELT 세계 신호 — curl 1회로 한국어·도메인 분포 확인 뒤</li>
+        <li>글머리표·5W 선택률 1% 미만이면 끈다</li>
+      </ul></div>
+      <div class="step stop"><h3>하지 않는다</h3><span class="cost">4/4 또는 3/4</span><ul>
+        <li>웹 검색 하향식을 주 수집으로 (재현 불가 · 150자 인용 · 비용 ≥ 지금)</li>
+        <li>네이버 검색 API (약관), NewsAPI·GNews·NewsData·Mediastack (지연·한도), 네이버·다음 랭킹 스크래핑 (AI 크롤러 차단 공표)</li>
+        <li>배치 API — 버튼 사용을 유지하는 한</li>
+        <li>프롬프트 캐시, 단계 병합, 분류 단계 폐지</li>
+        <li>후보 상한·40분야·참고 층 축소, 원문 읽기 핵심만</li>
+        <li>주요 요약을 Haiku로 강등 (A/B 전), 검증 없는 후보 43곳 일괄 켜기, 실측 중 변수 둘 동시</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>예상 비용 ($/회차, 24시간판, 추정)</h2>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>단계</th><th class="num">지금</th><th class="num">2단계 (Haiku 5.5 + 출력 다이어트)</th><th class="num">3단계 (실측 뒤, Opus 없이)</th><th class="num">3단계 (핵심 Opus)</th></tr></thead>
+      <tbody>
+        <tr><th>② 분류</th><td class="num">0.08</td><td class="num">0.01</td><td class="num">0.01</td><td class="num">0.01</td></tr>
+        <tr><th>③ 선별·합치기</th><td class="num">0.27</td><td class="num">0.04</td><td class="num">0.04</td><td class="num">0.04</td></tr>
+        <tr><th>③-3 웹 보강</th><td class="num">0.47</td><td class="num">0.32</td><td class="num">0.10</td><td class="num">0.10</td></tr>
+        <tr><th>④ 요약</th><td class="num">1.22</td><td class="num">1.10</td><td class="num">1.10</td><td class="num">1.46</td></tr>
+        <tr><th>④-2 요약 보기</th><td class="num">0.21</td><td class="num">0.03</td><td class="num">0.03</td><td class="num">0.03</td></tr>
+        <tr><th>핵심 교차검증</th><td class="num">—</td><td class="num">—</td><td class="num">0.06</td><td class="num">0.06</td></tr>
+        <tr><th>회차 / 월 30회</th><td class="num fin">2.2 / $66</td><td class="num fin">1.5 / $45</td><td class="num fin">1.3 / $40</td><td class="num fin">1.7 / $51</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">기준: Haiku 4.5 $1/$5, Haiku 5.5 $0.10/$0.50, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20 (백만 토큰당), 웹 검색 1,000회 $10. 회의론자의 단서: 1~5회차 기준선 중앙값이 $1.5 아래로 나오면 재설계 논의는 여기서 끝나고, $2.5를 넘으면 Sonnet 구간부터 본다.</p>
+  </section>
+
+  <section>
+    <h2>결정해 주셔야 할 것</h2>
+    <div class="decide">
+      <h3>① 아침 회차를 "버튼 누르고 바로 읽기"로 유지할지, "새벽 자동 생성 → 아침에 읽기"로 바꿀지</h3>
+      <div class="opt">
+        <div><b>버튼 유지</b> 지금 방식. 배치 API는 영구히 제외(월 $18 절감 포기). 코드 변경 없음, 새 실패 모드 없음</div>
+        <div><b>새벽 05:00 자동 + 요약 배치</b> 요약 비용 반값(−$0.6/회, 월 −$18), 7시 전 완성률 95% 목표, 90분 미완 시 동기 폴백. 코드 250~350줄, 실패 모드 3개 추가, 배포 스크립트·재시작 복구와 맞물림</div>
+      </div>
+      <p class="rec"><b>권장</b> 버튼 유지. 사용자가 "자동 생성은 거의 안 쓴다"고 정했고, Haiku 5.5로 먼저 월 $20을 벌면 배치의 $18은 복잡도에 비해 작다. 자동 생성을 실제로 쓰게 되면 그때 다시 본다.</p>
+    </div>
+    <div class="decide">
+      <h3>② Google 뉴스(비공식 RSS)에 후보의 절반을 계속 맡길지, 직접 RSS를 사람이 관리하는 쪽으로 옮길지</h3>
+      <div class="opt">
+        <div><b>Google 중심 유지</b> 손이 안 가지만 429 한 번에 회차 절반이 빠진다(분모 분리로 "통째 실패"는 막는다). 검색 40개 → 편집 피드 10여 개로 바꾸면 호출 1/4</div>
+        <div><b>직접 RSS 40~70곳</b> 원문 주소·발췌·본문이 바로 와서 재료 2곳 비율이 오른다. 출처 깨짐을 매달 한두 번 사람이 봐야 한다(<code>briefing:check</code>)</div>
+      </div>
+      <p class="rec"><b>권장</b> 직접 RSS 쪽으로 무게를 옮기되 Google은 보조로 남긴다. 두 길의 비용 차이는 회차당 $0.1 미만이라 돈이 아니라 "품질의 원천(재료)"과 "운영 방식"의 선택이다. 첫 걸음은 서버에서 <code>briefing:check</code> 한 번.</p>
+    </div>
+    <div class="decide">
+      <h3>③ 핵심 20건에 Opus 5.5를 쓰는 블라인드 비교 3회차(+$1.1)를 허락할지</h3>
+      <div class="opt">
+        <div><b>허락</b> 같은 재료를 두 모델에 보내 두 버전을 저장, 화면에서 가린 채 고른다. 선호 65% 이상이면 유지(+$0.36/회, 월 +$11 — 그래도 지금보다 월 $15 싸다)</div>
+        <div><b>보류</b> 품질 병목은 글이 아니라 재료라는 데 네 역할이 동의했다. 재료 2곳 비율 70%를 먼저 만들면 Sonnet으로도 충분할 수 있다</div>
+      </div>
+      <p class="rec"><b>권장</b> 실측 10회차가 끝나고 재료 2곳 비율이 70%를 넘은 뒤에 허락. 그 전에는 비교해도 재료가 얇아 모델 차이가 안 보인다.</p>
+    </div>
+    <p class="muted">별건: "쉽게" 보기 끄기는 이전 토론(영향 칸)과 같은 결정 항목이다.</p>
+  </section>
+
+  <section>
+    <h2>실측 설계 (회의론자 안, 4/4 동의)</h2>
+    <ul>
+      <li><b>기간</b>: 2주 10회차, 하루 1회 버튼. 1~5회차 지금 코드 그대로(기준선), 6~10회차 Haiku 5.5만 바꿈 — 실측 중 변수는 하나만.</li>
+      <li><b>세는 칸</b>: <code>briefing_runs</code> 토큰·web_searches·cost_usd + 단계별 분해 · 회차 <code>stats</code>(basis·demoted·webFilled·bodiesRead·fromFeed·numberDrops + 새 5개) · 실행 시간 · 실패 출처 수 · <code>read_items</code> 펼침 수 · 신고 수.</li>
+      <li><b>합격선</b>: ① Anthropic 콘솔 청구 대비 <code>cost_usd</code> 오차 ≤ 15%(아니면 단가표부터) ② 기준선 중앙값 ≤ $1.5면 재설계 종료, &gt; $2.5면 Sonnet 구간부터 ③ Haiku 5.5: 회차당 −$0.5 이상 <b>그리고</b> 핵심 6건 겹침 ≥ 4·demoted 증가 없음 → 채택, 아니면 되돌림.</li>
+      <li><b>되돌림 기준(품질 담당)</b>: 핵심 중 재료 2곳 비율 −15%p, demoted/(핵심+주요) 10% 초과, 신고/펼침 2% 초과 중 하나면 되돌린다. 신고 0건은 분모(펼침 수)와 원문 열기 비율 없이는 뜻이 없다.</li>
+      <li><b>서버에서 바로 볼 수 있는 것</b>: <code>sqlite3 data/docvault.db "select json_extract(content_text,'$.stats') from files where kind='briefing' order by id desc limit 10"</code></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>부록 — 토론 원문</h2>
+    <details><summary>1라운드 · 뉴스 출처·수집 전문가</summary><pre class="doc"># 뉴스 출처·수집 전문가 보고서 — 수집·출처 재설계
+
+## 1. 지금 수집의 진단 (코드 기준)
+돈의 낭비는 생각보다 작고, 품질의 누수는 생각보다 크다. 24시간판 약 $2.5의 내역을 역산하면 수집·분류·선별(Haiku) 약 $0.43, 웹 검색 보강 약 $0.4, 요약 보기 $0.27, Sonnet 요약 약 $1.1~1.3. 후보 600건 중 버려지는 450건이 먹는 분류·선별 비용은 약 $0.3. 수집을 아무리 잘 재설계해도 아낄 수 있는 돈은 $0.3~0.5가 상한. 비용의 몸통은 &quot;핵심·주요 85건을 언론사 2~3곳 본문으로 Sonnet이 쓴다&quot;는 뒷단 결정이다.
+
+반대로 품질이 새는 곳은 전부 수집에 있다.
+| # | 누수 | 코드 근거 | 결과 |
+|---|---|---|---|
+| 1 | Google 뉴스 검색 40개가 후보의 절반 이상을 대는데 그 기사는 원문 주소도 발췌도 없다 | DEFAULT_QUERIES 40개, usefulSnippet(발췌=제목+언론사), isDirectUrl(Google 링크는 원문 못 읽음) | 제목만 남은 핵심·주요 → S8 웹 검색($0.4)이나 참고 강등. 얇은 재료의 근원 |
+| 2 | &quot;몇 곳이 다뤘나&quot; 신호가 수집 단계에 거의 없다 | dedupe()는 정규화 제목이 완전히 같을 때만 묶는다 | 같은 사건의 다른 제목 기사가 각각 후보로 들어가 토큰을 먹고, 영어 기사는 related가 거의 비어 핵심 판정에서 밀린다 |
+| 3 | 선별 입력 상한 60건/분야가 시간대 균등으로 잘린다 | MAX_INPUT_PER_SUB=60 + spreadPick | 하루 100건 넘는 분야는 AI가 보기 전에 40%가 중요도와 무관하게 버려진다 |
+| 4 | 출처당 40건 상한도 시간대 균등 | MAX_PER_SOURCE=40 | 통합 피드는 하루 300건+ → 임의 손실 |
+| 5 | 직접 RSS 27곳은 국내 언론 다양성이 낮다 | DEFAULT_FEEDS | 연합뉴스 쏠림. 후보 43곳은 미검증으로 꺼짐 |
+| 6 | 24시간 범위의 정확성은 피드 pubDate에 의존 — 지금 구조의 장점 | rss.ts parseDate | 하향식 검색으로 바꾸면 잃는 첫 번째 것 |
+
+## 2. 근본 대안
+A. 하향식 — Claude 웹 검색에 &quot;오늘 무슨 일&quot; 먼저 묻기 (3절)
+B. 이미 편집된 출처로 후보 줄이기 (키 없음): Google 뉴스 Top stories(news.google.com/rss?hl=ko&amp;gl=KR&amp;ceid=KR:ko)와 주제 피드(BUSINESS 등, 세계는 US:en판) + 언론사 &quot;주요뉴스&quot; 피드. 검색 40개를 주제 피드 10여 개로. 피드 순서 자체가 &quot;여러 언론이 다룬 사건&quot; 신호. 단 Google 링크·빈 발췌 문제는 그대로. 피드 실존은 서버의 briefing:check로 확인 필요.
+C. 집계 API 무료 티어:
+| 서비스 | 무료 한도 | 지연 | 국내 커버 | 판정 |
+|---|---|---|---|---|
+| 네이버 검색 API(뉴스) | 일 25,000회, display≤100, sort=date, originallink·pubDate 제공 | 거의 없음 | 네이버 제휴 언론 수백 곳 | 최우선 후보. Google 국내 검색 20개를 통째로 대체. 원문 주소 직접, 발행 시각 정확 |
+| GDELT DOC 2.0 | 키 없음, 15분 갱신 | 15분~ | 한국어 포함 미확인 | 세계 &quot;언론사 수&quot; 신호용 보조 |
+| NewsAPI Developer | 100회/일, 24시간 지연 | 24h | kr 지원 | 제외 |
+| GNews Free | 100회/일, 10건/회, 지연 12h | 12h? | 미확인 | 보조 이하 |
+| NewsData.io Free | 200 크레딧/일, 12시간 지연 | 12h | 미확인 | 제외 |
+| Mediastack Free | 100회/월 | 미상 | 미확인 | 제외 |
+| Brave Search API | 무료 폐지, 월 $5 크레딧 ≈ 1,000회 | — | 미확인 | 보조 |
+| Bing News API | 2025-08 퇴역 | — | — | 제외 |
+D. 네이버/다음 랭킹 페이지: 공개 API 없음, 네이버는 AI 크롤러 차단 공표. &quot;많이 본&quot;은 연예·사건 쏠림. 제외.
+
+비교표
+| 안 | 놓침 | 재료 깊이 | 시각 정확 | 국내 커버 | AI 비용(수집~선별) | 난도 | 약관 |
+|---|---|---|---|---|---|---|---|
+| 지금(RSS 27+검색 40) | 중 | 하(Google 절반이 제목만) | 상 | 중 | $0.43+보강 $0.4 | — | 낮음 |
+| A 하향식 검색 | 상(25~30건만, 참고층 소멸) | 중(인용만) | 하(발행 시각 없음) | 미지 | $0.9~1.3 | 낮음 | 낮음 |
+| B 편집 피드 | 중 | 하 | 상 | 중 | $0.3 | 낮음 | 낮음 |
+| C 네이버 API+GDELT | 하 | 상(원문 직접) | 상 | 상 | $0.3 + 보강 ≈ $0.1 | 중 | 중(확인) |
+| E 추천 조합(C+B+RSS) | 하 | 상 | 상 | 상 | ≈ $0.4 | 중 | 중 |
+
+## 3. 사용자 제안(웹 검색 하향식)의 정직한 평가
+- 1단계 &quot;오늘 주요 사건 찾기&quot;: 분야 8개 × 검색 2회 = $0.16 + Sonnet ≈ $0.19 → $0.35
+- 2단계 사건 25개 × 보도 찾기 2회 = $0.50 + Haiku 토큰 ≈ $0.04~0.43 → $0.5~0.9
+- 수집~선별 합 $0.9~1.3: 지금($0.83)보다 비싸거나 같은데, 나오는 건 사건 25~30개뿐. 지금은 핵심·주요 85 + 참고 60.
+얻는 것: 코드 단순화, 통신사 기사 직접 접근, 처음부터 사건 단위 묶음. 잃는 것: ① 편집 주체가 검색 엔진 랭킹과 모델의 사전지식으로 바뀜 ② 재현성 없음 ③ 24시간 범위 붕괴(발행 시각 없음) ④ 국내 커버리지 미지 ⑤ 참고 층 소멸.
+결론: 전면 하향식은 품질 우선 원칙에 맞지 않는다. &quot;오늘의 핵심 6건&quot;에 한해 검색 2회로 반대 시각·후속 보도 보강(≈ $0.12+토큰)은 가치 있음 — S8 구조 그대로 대상만 바꾸면 된다.
+
+## 4. 추천: E = 네이버 검색 API(국내 신호+재료) + Google 편집 피드(세계 신호) + 직접 RSS(재료) + 수집 단계 사건 묶기(비용 0)
+1. 국내: DEFAULT_QUERIES 국내 20개를 Google 대신 네이버 뉴스 검색 API로(분야당 display=100, sort=date, 20~60회/일). originallink로 원문 바로, pubDate로 범위 정확. 제목만 핵심·주요가 줄어 S8 비용 $0.4 → ~$0.1.
+2. 세계: Google 영어판 Top stories + WORLD/BUSINESS/TECHNOLOGY/SCIENCE 주제 피드로 검색 20개를 5~6개로. 피드 순서를 편집 신호로.
+3. 직접 RSS는 재료 공급원으로 유지, briefing:check 통과분만.
+4. 수집 단계 사건 묶기(비용 0): bigramSimilarity를 dedupe()에도 적용(같은 분야·6시간 안·유사도 0.6+)해 기사 600건 → 사건 ~250묶음, 묶음의 언론사 수를 선별 프롬프트에 준다. 분류·선별 입력 절반, 중요도 판정의 근거가 생김.
+5. MAX_INPUT_PER_SUB·MAX_PER_SOURCE를 시간대 균등이 아니라 &quot;언론사 수 → 최신&quot; 순으로.
+예상 비용: Haiku 수집~선별 $0.43 → ~$0.25, 웹 보강 $0.4 → ~$0.1 → 약 $2.0. Haiku 5.5 전환까지 합치면 $1.6~1.8.
+품질이 나아지는 지점: 국내 핵심·주요의 재료 있는 비율, 발행 시각 정확도, 국내 언론 다양성, &quot;다룬 언론사 수&quot; 정량 신호, 영어 기사 핵심 누락 완화.
+선행 확인(서버에서): 네이버 개발자 약관의 검색 결과 저장·가공 조항(우리는 제목·주소·시각만 저장), 한국판 Google Top stories 피드 실존, GDELT 한국어 포함 여부.
+
+## 5. 다른 역할에게
+- AI 호출 구조·비용: 수집이 &quot;사건 묶음 + 언론사 수&quot;를 넘기면 분류(②)를 없애고 선별만 남길 수 있나? 네이버·주제 피드는 분야를 이미 아니 분류 대상은 직접 RSS 150건 정도다.
+- 품질·회의론자: 사용자가 실제로 읽는 기사가 하루 20건이면 핵심·주요 85건을 전부 Sonnet 3곳 본문으로 쓰는 게 맞나? &quot;핵심 20건만 깊게(3곳), 주요는 1곳 본문&quot;이면 Sonnet $1.2 → $0.6 — 비용의 몸통은 수집이 아니라 여기라는 데 동의하나?</pre></details>
+    <details><summary>1라운드 · AI 호출 구조·비용 전문가</summary><pre class="doc">## AI 호출 구조·비용 보고 (24시간판 1회차 기준)
+
+### 0. 단가 (claude-api 스킬, 2026-10-06 갱신본 기준)
+- Haiku 4.5 $1 / $5 (입력/출력, 백만 토큰). 캐시 읽기 0.1배, 쓰기 1.25배(5분)·2배(1시간), 캐시 최소 길이 4,096토큰
+- Haiku 5.5 $0.10 / $0.50 (프롬프트 10만 토큰 이하). 캐시 최소 512. 토크나이저가 달라 같은 글이 약 30% 더 많은 토큰
+- Sonnet 5.5 $2 / $10, 캐시 읽기 $0.20, 최소 512. Opus 5.5 $4 / $20
+- Message Batches: 모든 토큰 50% 할인(캐시 포함), 대부분 1시간 안, 최대 24시간, 결과 29일 보관
+- web_search 1,000회당 $10 (+검색 결과가 입력 토큰으로 과금). 구조화 출력은 추가 과금 없음
+- 출처: platform.claude.com/docs/en/about-claude/pricing.md · batch-processing.md · prompt-caching.md
+
+### 1. 지금 비용의 해부 (상수·코드로 추정, 후보 600·핵심 20·주요 70·참고 90)
+| 단계 | 모델 | 호출 | 입력 tok | 출력 tok | $/회차 | 비고 |
+|---|---|---|---|---|---|---|
+| ② 분류 | Haiku 4.5 | 5 | 53k | 5k | 0.08 | 기사당 120tok |
+| ③ 선별 | Haiku 4.5 | 40 | 136k | 24k | 0.26 | 고정 지시 1.6k × 40 = 64k = $0.06 |
+| ③-2 합치기·참고 내림 | Haiku 4.5 | 2 | 6k | 1k | 0.01 | |
+| ③-3 웹 보강 | Haiku 4.5+검색 | ≤15 | 120k | 9k | 0.17 + 검색 30회 0.30 = 0.47 | 검색 결과가 입력으로 |
+| ④ 요약 | Sonnet 5.5 | 17 | 287k | 65k | 1.22 | 핵심 1건 ≈ 4.5k tok, 주요 ≈ 2.4k. 출력이 입력보다 비싸다 |
+| ④-2 보기 | Haiku 4.5 | 9 | 50k | 32k | 0.21 | 출력이 대부분 |
+| 합계 | | ~88 | | | ≈ $2.2 | 설계 문서와 일치 |
+
+Sonnet 요약이 55%, 그중 절반이 출력(JSON 칸·빈 문자열·src 기호 포함). 웹 보강 20%는 토큰보다 검색 횟수. &quot;같은 시스템 프롬프트 40번 반복&quot;은 $0.06 — 작다. Haiku 4.5 캐시 최소가 4,096이라 캐시를 켜도 한 바이트도 안 잡힌다.
+
+### 2. 구조적 절감안
+| 안 | 절감 $/회차 | 품질 | 난도 | 판단 |
+|---|---|---|---|---|
+| (a) 배치 API — 전 단계 | ~0.95 | 없음 | 상 (6단계 의존 → 배치 6라운드) | 과함 |
+| (a&#x27;) 배치 — ④ 요약만 | ~0.6 | 없음 | 중 (라운드 1번, batch id 보존·재개) | 채택 |
+| (b) 캐시 — 선별 고정부 | 0 (4.5) / 0.005 (5.5) | 없음 | 하 | 효과 없음 |
+| (c) 선별 40회 → 대분류 8회 | 0.05 | 분야별 상한 흔들릴 위험 | 중 | 비용 이유로는 아님 |
+| (d) Haiku 4.5 → Haiku 5.5(분류·선별·합치기·보기·웹보강) | ~0.64 | 지시 이행 ↑ | 하 | 채택. effort low 명시 필수 |
+| (d&#x27;) 핵심만 Opus 5.5 | −0.36 (배치면 −0.18) | 핵심 품질 ↑ | 하 | 품질 우선이면 켜 볼 가치 |
+| (d&#x27;&#x27;) 주요를 Haiku 5.5로 | 0.66 | 숫자·출처 기호 정확도 위험 | 하 | 기본 반대. 한 회차 A/B 뒤 결정 |
+| (e) 입력 다이어트 — 핵심 3,000+1,500×2 → 2,000+1,000×2 | 0.06 | 양쪽 시각 재료 감소 | 하 | 발췌 S1~S4는 본문 2곳 이상이면 2개로 → 0.07 |
+| (e&#x27;) 출력 다이어트 — 빈 문자열 칸 optional로 | ~0.1 | 없음 | 하 | 채택 |
+| (f) web_search로 사건부터 묻기 | −1.4 이상 | 재료 질 ↓ | 중 | 발견 수단으로 부적합 |
+
+(f) 계산: 분야 40개를 덮으려면 검색 ≥80회 = $0.8 + 결과 토큰 320k(Sonnet $0.64). 검색당 ~10건, 발췌 수백 자 — 본문이 없어 재료가 더 얇아진다. 반면 RSS 600건의 분류·선별은 Haiku 5.5로 $0.04. 후보 1건당 비용 30~50배, 재현성 없음. 다만 &quot;오늘 핵심 6건 교차검증&quot; 용도 — Sonnet 1회·검색 3회($0.06)로 &quot;오늘 한국·세계 톱10&quot;을 받아 LEAD가 큰 사건을 놓쳤는지 확인하는 건 싸고 품질에 직결된다.
+
+### 3. 제안 조합 — &quot;싼 곳은 10배 싸게, 비싼 곳은 반값에, 핵심은 더 좋게&quot;
+1. 분류·선별·합치기·참고 내림·보기: Haiku 5.5, effort low, 동기 호출
+2. 웹 보강: Haiku 5.5 + web_search, 상한 15건 유지. 도구 버전 지원 1회 확인
+3. ④ 요약만 배치 1라운드: 핵심 7요청(Opus 5.5 또는 Sonnet 5.5) + 주요 10요청(Sonnet 5.5). 60초마다 retrieve. 90분 안에 안 끝나면 cancel 후 동기 호출로 대체
+4. 선택: 핵심 교차검증 Sonnet+web_search 1회
+
+| 항목 | Sonnet 핵심 | Opus 핵심 |
+|---|---|---|
+| 분류·선별·합치기·보기 (Haiku 5.5) | 0.08 | 0.08 |
+| 웹 보강 (토큰 0.02 + 검색 0.30) | 0.32 | 0.32 |
+| 요약 배치 | 0.61 | 0.80 |
+| 교차검증(선택) | 0.06 | 0.06 |
+| 회차 | ≈ $1.07 | ≈ $1.26 |
+| 월 30회 | ≈ $32 | ≈ $38 (지금 $66) |
+
+시간: 동기 구간 10분 안팎, 배치 17요청은 보통 5~20분, 문서상 상한 1시간(극단 24시간).
+
+### 4. 위험
+- 배치 꼬리 지연·만료: expired/errored 요청만 동기 재호출. 실행 기록에 batch id·단계 저장, 재기동 뒤 폴링 재개. RUN_TIMEOUT_MS를 &quot;동기 20분 + 배치 90분&quot; 2단계로
+- 캐시: 쓰지 않는 게 단순
+- Haiku 5.5 함정: effort 기본 medium → 반드시 low; 서버측 fallbacks 없음; 토큰 +30%; 10만 토큰 넘으면 5배 단가(무관)
+- 비용 기록: costOf()가 배치 할인·모델별 단가를 모른다 → PRICES에 Haiku 5.5·Opus 5.5·배치 tier 추가 필요
+- Opus 5.5는 thinking을 끌 수 없다 → effort low
+
+### 5. 다른 역할에게
+- 출처·수집: bodiesRead·webFilled 실측이 얼마인가? 웹 보강이 15건 중 0~3건만 채우면 $0.30은 교차검증으로
+- 품질: 주요 요약을 Sonnet 5.5·Haiku 5.5 두 번 돌려 한 회차 비교(+$0.1)? 핵심에 Opus 5.5가 차이를 내는지도
+- 회의론자: &quot;버튼 누르고 최대 1시간 뒤 완성&quot;을 받아들일 수 있나? 만료 시 자동 동기 재실행을 코드가 할지 사람이 누를지</pre></details>
+    <details><summary>1라운드 · 품질 담당</summary><pre class="doc">## 품질 담당 보고서 — 수집·요약 파이프라인 재설계
+
+한 줄 결론. 이 브리핑의 품질은 &quot;AI가 잘 쓴다&quot;에서 오는 것이 아니라 재료(여러 언론 본문)와 선별 신호(몇 곳이 다뤘나)에서 온다. 웹 검색 하향식은 둘 다 검색 엔진에 넘기는 구조라 품질을 깎으면서 비용도 거의 안 준다. 가장 큰 절감은 품질과 무관한 곳(Haiku 4.5 → 5.5, 캐싱, 렌즈)에 있다.
+
+### 1. 품질의 원천 분해 — 빼면 무엇이 무너지나
+| 원천 | 코드 | 빼면 무너지는 것 (설계 문서의 실제 실패) |
+|---|---|---|
+| (a) 폭 | collect.ts spreadPick 12칸, 분야당 상한 7/5, LEAD_WORLD_MIN 2 | 최신순으로 자르자 137건 전부 마지막 90분 기사. 언론사 수로만 겨루자 오늘의 핵심 6건 전부 국내 |
+| (b) 선별 | select.ts IMPORTANCE_RULES, edition.ts outlets → leadIdsOf (AI 안 부름) | 모태펀드 행사가 핵심, 미군 철수가 주요. 같은 언론사 4번 세어 &quot;외 5곳&quot;이 실제 2곳 |
+| (c) 재료 | body.ts 핵심 3곳·주요 2곳, summarize.ts lengthTarget 재료÷3 | Google 발췌는 제목 되풀이 → 후보 58%가 제목뿐 → &quot;요약이 제목 되풀이&quot;, 핵심·주요 15~20% 빈 요약. 재료 글자 수가 곧 글 길이 상한 |
+| (d) 글 | Sonnet 리드·왜·칸 0~3, from 기호 | 고정 4칸 → 일반론. 스크린샷: Haiku가 다시 쓴 &quot;쉽게&quot;가 355조·24%·93%를 전부 지움 — 싼 모델로 압축하면 생기는 전형 |
+| (e) 검증 | verify.ts 제목 겹침 30%, 숫자 대조(log), 일반론 why 강등 | 한겨레 본문을 연합뉴스 글로(이름표 없을 때). 숫자 대조는 아직 log |
+
+스크린샷 4건은 모두 &quot;주요 · 1곳 본문 정리&quot;(1건만 2곳). 지금 품질의 병목은 글이 아니라 재료 2곳 이상 비율이다.
+
+### 2. 절감 후보 판정표
+| # | 후보 | 판정 | 근거 |
+|---|---|---|---|
+| ① | 후보 800(현재 상수)→300 | 많이 깎임 | 40분야×상한 ≈ 240건이라 300이면 선별이 아니라 전수 게재. outlets 신호 붕괴. 절감 $0.3 남짓 |
+| ② | 분야 40→대분류 8 | 많이 깎임, 절감 미미 | 선별 입력이 60에 잘려 후보를 버리고, &quot;분야당 핵심 2건&quot;·storyId·화면 칩이 무너짐 |
+| ③ | 주요 요약을 Haiku로 | 조금~많이 깎임 | 주요는 읽는 글의 다수. &quot;쉽게&quot; 사례처럼 숫자가 빠진다. 재료 1곳 주요만 Haiku 5.5로 A/B 실측 후. 대신 분류·선별·참고·렌즈를 Haiku 4.5→5.5는 품질 그대로 −$0.5/회 |
+| ④ | 원문 읽기 핵심만 | 많이 깎임 | 주요 60건이 제목 되풀이 → 참고 강등·빈 요약 재발. 절감은 Sonnet 입력 −$0.3뿐 |
+| ⑤ | 웹 검색 보강 끄기 | 조금 깎임(보류) | ≈ $0.3. stats.webFilled 2주 실측 뒤 3건 미만이면 끈다 |
+| ⑥ | 렌즈(글머리표·5W·쉽게) 끄기 | 품질 그대로 | 새 사실 없는 재배열. &quot;쉽게&quot;는 숫자를 지운다. 양쪽 시각은 Sonnet 안이라 유지. $0.23→0 (사용자 결정) |
+| ⑦ | web_search 하향식 | 많이 깎임 | 3장 |
+| ⑧ | Google Top stories·언론사 주요뉴스 | 대체면 조금 깎임, 신호로 추가면 향상 | 편집자 선택 = 공짜 중요도 신호. 후보를 대체하지 말고 outlets에 가산 |
+| ⑨ | GDELT·NewsAPI 무료 | NewsAPI 많이 깎임 / GDELT 보류 | NewsAPI 24시간 지연. GDELT는 국내 묶음 약해 세계 신호 보강용만 |
+| ⑩ | 배치 API | 조건부 품질 그대로 | 직렬이라 지연 누적. 버튼 눌러 바로 읽는 UX에선 &quot;읽을 때 없음&quot;이 곧 품질 저하. 자동 생성(04시)으로 바꾸고 요약만 배치면 0 |
+
+### 3. 사용자 제안(웹 검색 하향식) 평가
+- 편집 주체 이전: &quot;오늘의 사건 20개&quot;는 검색 엔진 랭킹. 분류표 40개가 분야당 0.5건이 된다. 바이오·에너지·지역·경제지표가 사라진다.
+- 국내 커버리지: 검색 인덱스는 포털 재게재 중심. 분야별 40번 검색하면 검색료만 $0.8 — 지금 수집·분류·선별($0.43)보다 비싸다. 절감이 아니다.
+- 같은 사건 반복·발행 시각: 묶기는 결국 모델 몫. 날짜는 크롤 시각과 섞여 since/until·12칸 분포·updated 판정이 불가능.
+- 재현성: 같은 질문에 매일 다른 답.
+- 공정한 장점: Reuters·AP·Bloomberg를 RSS 없이 직접, 사건 묶음과 cited_text가 from 체계와 맞음, 피드 71곳·원문 200건 받기의 멈춤 문제가 사라짐.
+- 결론: 상향식 유지 + 웹 검색은 &quot;제목만 핵심 보강(S8)&quot;과 &quot;오늘의 핵심 6건 교차검증&quot;(1회 $0.02, 누락 감지)으로만.
+
+### 4. 품질을 올리는 방향과 상쇄 재원
+1. 핵심 25건만 상위 모델(Opus 5.5)로, 주요는 Sonnet low 유지. +$0.5/회. 재원: Haiku 4.5→5.5(−$0.5) + 공통 지시문 캐싱.
+2. 재료 2곳 비율을 올린다: 꺼 둔 직접 RSS 43곳을 briefing:check로 켜 Google 비율 58%를 낮춘다. 핵심 자격에 &quot;본문 2곳 이상&quot;을 코드로 요구. 비용 +$0.01.
+3. 숫자 대조 drop 전환 + 원 제목 숫자 대조(originalTitle 숫자가 AI 제목과 다르면 강등). 비용 0.
+
+### 5. &quot;좋아졌다&quot;의 지표 (회차마다 stats에 자동)
+- 요약 없음 = 0, demoted·titleOnly 수
+- 핵심 중 재료 2곳 이상 ≥ 70%, 주요 중 1곳 이상 ≥ 90%, basis 분포
+- 24시간 분포: 12칸 중 빈 칸 0, 최대 칸 ≤ 25%
+- 세계 비율 ≥ 30%, 오늘의 핵심 중 세계 ≥ 2, 0건 분야 ≤ 10/40
+- 중복: 제목 bigram 겹침 ≥ 0.7인 쌍 0, 한글 없는 제목 0
+- numberDrops/(핵심+주요) ≤ 5%, 원 제목 대비 숫자 불일치 0
+- 신고 수/읽은 기사 ≤ 2%, 원문 열기 비율
+- 재현성: 같은 후보로 2회 선별 시 오늘의 핵심 6건 겹침 ≥ 4
+
+### 6. 다른 역할에게
+- 출처·수집: 후보 43곳 중 살아 있는 곳은 몇이며, 켜면 Google 비율이 얼마로 떨어지나. GDELT가 한국어 사건 묶음을 주는지 실측 가능한가.
+- AI 구조·비용: Haiku 4.5→5.5 전환 시 선별 회귀를 &quot;핵심 6건 겹침 ≥ 4&quot;로 검증할 수 있나. 배치의 누적 지연과 캐싱 절감률을 숫자로.
+- 회의론자: 참고 90건의 폭은 &quot;안 읽어도 놓치지 않았다는 안심&quot;인데 그 가치를 어떻게 재나. 신고 0건은 좋은 것인가, 안 누른 것인가.</pre></details>
+    <details><summary>1라운드 · 회의론자</summary><pre class="doc"># 회의론자 · 현실 점검 보고
+
+## 1. &quot;비용이 많이 든다&quot;는 전제부터 — 실측은 1회뿐이다
+| 숫자 | 출처 | 성격 |
+|---|---|---|
+| $0.51/회차 (24시간판, 후보 600·기사 137) | 설계 문서 &quot;비용 추정&quot;, 10/1 실행 | 유일한 실측, v0.42 파이프라인 |
+| $1.0/회차 | 설계 v0.43 조정 | 추정 |
+| $2.2~2.5/회차 → 월 $66 + 묻기 $9 = $75 | 개선 합의안 8장 | 추정. v0.45 코드는 오늘(10/11) 커밋됐다. 이 파이프라인을 돌린 기록은 0회 |
+
+즉 &quot;지금 월 $75&quot;는 오늘 배포한 코드에 대한 종이 계산이다. 10/1 실측은 추정($0.65)보다 22% 낮았다 — 이번에도 그럴 수 있고, 반대로 넘칠 수도 있다. 모른다.
+측정 장치는 이미 있다. briefing_runs에 haiku/sonnet in/out, web_searches, cost_usd가 회차마다 남고, 회차 JSON stats에도 같은 합계가 있다. 없는 것은 단계별 분해다 — Usage가 모델별 합계뿐이라 분류·선별·요약·보기·웹 보강 중 어디가 돈을 먹는지 모른다. callAndCount에 단계 이름 하나 넘겨 쌓으면 30줄이다.
+결론: 먼저 10회차(2주) 실측. 비교 대상은 Anthropic 콘솔 사용량 페이지.
+
+## 2. 사용자 제안(web_search 하향식)의 실패 모드 — 같은 잣대로 RSS도
+공식 조건: 검색 1회 $10/1,000 + 결과는 입력 토큰으로 과금, 인용문(cited_text)은 150자 상한, allowed_domains는 와일드카드 불가, 목록이 길면 request_too_large(현재 allowedDomainsOf()가 피드 70곳 호스트를 전부 넣으니 후보를 켜면 여기 걸릴 수 있다).
+| 잣대 | web_search 하향식 | RSS 상향식(현재) |
+|---|---|---|
+| 재현·디버깅 | 불가. 매일 다른 결과 집합 | 받은 목록·실패 출처가 실행 기록에 남음 |
+| 범위(&quot;직전 회차 이후&quot;) | 날짜 필터 없음, page_age로 추정뿐 | pubDate로 정확 |
+| 재료 | 150자 인용. 핵심 500~700자를 쓰려면 결국 원문 받기 → 같은 멈춤 문제 | 발췌 300자 + 피드 본문 + 원문 3곳 |
+| 비용 감 | 분야 40 × 2회 = 80검색 = $0.8 + 결과 토큰 ≈ $1.5. 싸지 않다 | 추정 $2.2, 실측 $0.51 |
+| 한국어 품질 | 커버리지 비공개, 측정 자료 없음 | 국내 피드 EUC-KR 처리 있음 |
+| 멈춤 | 서버 쪽 루프, pause_turn·속도 제한 | 10/2·10/6 한 출처에 걸림, 바깥 마감으로 대응 |
+| 출처 폐쇄 | Anthropic 약관·도구 버전 | 국내 5곳 시간 초과, 후보 43곳 미검증, Google 뉴스 RSS는 비공식 |
+하향식은 &quot;더 좋고 싸다&quot;의 어느 쪽도 성립하지 않는다. 다만 지금 쓰는 자리(제목뿐인 핵심·주요 보강, 최대 30검색 $0.3)는 적절하다.
+
+## 3. 무료 티어 API의 현실 (2026-10-11 검색 확인)
+| API | 무료 조건 | 하루 1회 24시간판에 |
+|---|---|---|
+| NewsAPI Developer | 100건/일, 기사 24시간 지연, 비상업 | 지연 때문에 불가 (newsapi.org/pricing) |
+| GNews | 100건/일 × 10기사, 지연 12시간, 비상업 | 상한·지연 |
+| Mediastack | 100건/월, 지연 | 하루 3건 |
+| GDELT DOC 2.0 | 키 없음, 15분 갱신, sourcelang:kor. 제목·URL만, 본문 없음. 429 빈발 | 본문은 결국 직접 받아야 함 |
+| Brave Search | 무료 티어 폐지(2026-02), 월 $5 크레딧 ≈ 1,000회 | 가능하나 키·크레딧 관리 추가 |
+| Bing Search | 2025-08-11 종료 | 불가 |
+공통: 키마다 만료·한도·약관(비상업)이라는 새 실패 모드. 입문자 혼자 운영에서 키 하나는 곧 월 1회 장애다.
+
+## 4. 구조 변경의 숨은 비용
+| 변경 | 코드 규모 | 새 실패 모드 | 절감 |
+|---|---|---|---|
+| 배치 API(50% 할인) | 폴링·24시간 만료·expired 부분 재제출, 7단계 직렬이라 배치 7번 왕복, 20분 설계 전면 수정 | &quot;대부분 1시간 안&quot;이지 보장 아님 → 버튼 UX 충돌 | 토큰비 절반 ≈ $0.5~1.1/회차 |
+| 프롬프트 캐시 | 작음 | Haiku 4.5 최소 캐시 4,096토큰 — 공통 접두가 1~2K라 캐시가 안 걸린다. Sonnet은 걸리지만 ~$0.03 | 무시 가능 |
+| 단계 병합 | 중간 | 한 묶음 실패 = 전부 재시도, 구조화 출력 거부 폭 커짐 | 호출 수 감소뿐 |
+| 출처 70곳 | 0 | 각 출처의 멈춤·인코딩, allowed_domains 길이 | 비용 ↑ |
+
+## 5. 제안 — 확실한 순서
+1. 실측 10회차 + 단계별 토큰 칸. 변경 30줄. 회차당 $1.5 아래면 재설계 논의 종료.
+2. Haiku 4.5 → Haiku 5.5 (공식 단가 $0.10/$0.50, 4.5의 1/10). Haiku 토큰비 ≈ $0.8/회차 → ≈ $0.08, 월 -$20 안팎. 확인: 구조화 출력·web_search 도구가 5.5에서 도는지, 생각 토큰(5.5는 기본 켜짐), 분류 정확도·demoted 수 3회차 나란히.
+3. 웹 보강 상한 실측 뒤 조정 — webFilled 비율 30% 아래면 15건×2회 → 8건×1회($0.3 → $0.08).
+하지 말 것: 하향식 검색을 주 수집으로 / 배치 API / 외부 뉴스 API 키 추가 / 프롬프트 캐시 / 단계 병합 / 핵심·주요 요약을 Sonnet에서 내리기 / briefing:check 없이 후보 43곳 일괄 켜기.
+
+## 6. 다른 역할에게
+- 출처·수집: briefing:check 결과 — 70곳 중 OK 몇 곳, 본문 주는 곳 몇 곳, 국내 20초 안 응답률? 그 수 없이 &quot;70곳&quot;은 추정이다.
+- AI 호출 구조·비용: 단계별 토큰 분해 — 어느 단계가 비용의 50%를 넘나? Haiku 5.5의 생각 토큰이 출력에 몇 % 붙나?
+- 품질: 비용을 줄였을 때 되돌릴 기준 숫자 — 핵심 중 재료 2곳 이상 비율, demoted 비율, 신고 건수가 몇 % 내려가면 되돌리나?</pre></details>
+    <details><summary>2라운드 · 뉴스 출처·수집 전문가</summary><pre class="doc"># 출처·수집 전문가 — 2라운드
+
+## 1. 질문에 대한 답
+비용 담당에게 — bodiesRead·webFilled 실측. 이 환경의 DB는 비어 있고 v0.45는 실측 0회. briefing_runs에는 그 칸이 없다. 실측은 회차 JSON의 stats(attached·bodiesRead·fromFeed·extractRejected·webFilled·demoted·basis)에 있다. 서버에서: sqlite3 data/docvault.db &quot;select json_extract(content_text,&#x27;$.stats&#x27;) from files where kind=&#x27;briefing&#x27; order by id desc limit 10&quot;. 웹 보강이 10회차 평균 15건 중 3건 이하면 $0.30을 &quot;핵심 6건 교차검증&quot;으로 돌리는 데 동의 — 단 allowedDomainsOf()가 피드 호스트를 전부 넣는 문제(후보를 켜면 70개 → request_too_large)를 상위 20곳+통신사로 자르는 수정이 먼저다. webFilled가 낮은 이유가 &quot;도메인 목록 때문에 호출이 깨져서&quot;일 수 있다.
+품질 담당에게 — 후보 43곳·Google 비율·GDELT. briefing:check를 이 환경에서 못 돌렸다. 추정: 약 35곳 생존, 본문(content:encoded)을 주는 곳은 세계 쪽 6~8곳. 켜면 직접 주소 기사 약 +500건, Google 비율 58% → 약 40~45%. 비율보다 stats.attached(Google 기사가 직접 기사에 붙은 수)가 오르는 것이 중요 — 국내 20곳이 켜지면 붙는 비율이 크게 뛴다. GDELT는 sourcelang:kor로 제목·URL·도메인을 주지만 본문도 묶음도 없다. 서버에서 curl 한 줄로 도메인 분포를 보면 국내 커버를 바로 알 수 있다. 세계 &quot;언론사 수&quot; 신호로만, 실측 뒤.
+회의론자에게 — &quot;70곳은 추정&quot; 동의, 네이버는 양보. 약관 때문에 철회: 네이버 개발자센터 검색 API는 2026-07-31부터 신규 신청 중단, NAVER API HUB로 이관됐고 개정 약관이 검색 결과의 저장·캐싱·AI 입력·요약 활용을 금지한다. 우리는 제목을 Haiku에 넣고 요약하므로 바로 걸린다. 다만 &quot;키 = 월 1회 장애&quot;를 일반 규칙으로는 받지 않는다 — 기준은 약관과 만료 정책.
+
+## 2. 양보·고수
+양보: 네이버 API(약관), 하향식 전면 전환, &quot;70곳&quot; 숫자.
+고수: 비용의 몸통은 Sonnet 요약이라는 진단. 수집 재설계의 목적은 절감이 아니라 재료 2곳 이상 비율. Google 뉴스가 지금 단일 장애점 — 검색 40개가 한꺼번에 429를 받으면 67곳 중 40곳 실패 → MIN_SOURCE_OK_RATIO 0.5에 걸려 회차가 통째로 실패한다. 실측 전에 고쳐야 한다.
+
+## 3. 최종 입장
+지금 할 것(실측 전에도 안전, AI 비용 0)
+1. 수집 단계 사건 묶기 — 같은 region, 발행 시각 차 ≤ 6h, 한글 제목 bigramSimilarity ≥ 0.6(품질 담당은 0.7), 한글 없는 제목은 단어 Jaccard ≥ 0.5, 두 제목에 숫자가 있으면 숫자 집합이 같아야, 정규화 제목 10자 미만은 묶지 않는다, sub를 둘 다 알면 같아야. 대표는 select의 점수로, 나머지는 related. 묶음의 언론사 수를 선별 프롬프트 줄머리에. 오결합의 피해는 related 링크 하나 — 대표 기사는 바뀌지 않는다. 효과: 선별 입력 600 → ~250묶음(Haiku −$0.1), 핵심 판정에 정량 근거.
+2. 선별 입력 60건 자르기를 시간대 균등 → 언론사 수 우선, 같으면 최신. 비용 0.
+3. Google 검색 출처를 실패율 분모에서 분리. 단일 장애점 제거.
+4. allowedDomainsOf() 상위 20곳+통신사로 제한.
+5. 단계별 토큰 칸 + stats를 실행 기록에도 복사.
+6. 서버에서 briefing:check 1회, 통과한 후보만 켜기. 재료 2곳 비율 ↑, Haiku +$0.1 이하.
+실측 10회차 뒤 할 것
+- webFilled ≤ 3/15면 웹 보강 → 핵심 6건 교차검증으로 전환($0.30 → $0.12).
+- Google 검색 40개 → 한국판·영어판 Top stories + 주제 피드 10여 개로 교체. Google 호출 1/4, 편집 신호 추가.
+- GDELT 세계 신호 — curl 실측 뒤.
+하지 말 것
+- 네이버 API(약관), 하향식 주 수집, 네이버·다음 랭킹 스크래핑, NewsAPI·GNews·NewsData·Mediastack(지연·한도), 분류 단계 폐지.
+
+## 4. 사용자가 결정해야 할 한 가지
+Google 뉴스(비공식 RSS, 약관 없음, 언제든 429)에 후보의 절반과 &quot;편집 신호&quot;까지 맡길 것인가, 아니면 직접 RSS 40~70곳을 사람이 관리하는 쪽으로 무게를 옮길 것인가. 두 길의 비용 차이는 회차당 $0.1 미만이라 돈이 아니라 운영 방식의 선택이다.</pre></details>
+    <details><summary>2라운드 · AI 호출 구조·비용 전문가</summary><pre class="doc">## 2라운드 — AI 호출 구조·비용
+
+### 1. 질문에 대한 답
+출처 → 분류 ② 없애기. 분류는 분야를 모르는 직접 RSS 기사에만 돈다. 150건이면 Haiku 5.5로 2회·$0.003 — 없앨 가치가 없고, 선별이 분류까지 떠안으면 토큰이 오히려 는다. &quot;사건 묶음 + 언론사 수&quot;의 값은 비용이 아니라 중요도 판정 신호 — 찬성, 이유는 품질. web_search 도구 버전: Haiku 5.5 지원 버전 문서 없음 → 1회 호출로 확인, 둘 다 안 되면 웹 보강만 4.5에 남긴다(차이 $0.15). 100K 절벽: 최대 프롬프트 ≈ 10k 토큰으로 10배 여유. 진짜 위험은 allowed_domains 70개 — 통신사 4 + 국내 상위 10으로 줄인다.
+품질 → &quot;핵심 6건 겹침 ≥ 4&quot; 회귀 검증: 같은 후보 집합에 두 모델을 동시에 돌려야 한다(비교 모드, 선별 +$0.03). 같은 모델 2회의 겹침 기준선부터 잰다. 배치 누적 지연: 전 단계 6라운드 = 보통 30분~2시간, 최악 6시간+. 캐싱 절감률 합계 2~3% — 안 한다.
+회의론자 → 단계별 분해(추정): Sonnet 요약 55%, 출력($0.65)이 입력($0.57)보다 크다. 10/1 실측도 Sonnet 49%. Haiku 5.5 생각 토큰: 공식 수치 없음, JSON 추출은 5~15%로 본다. usage.output_tokens_details.thinking_tokens를 Usage에 더하면 첫 회차에 확정. 100% 붙어도 단가 1/10이라 4.5보다 싸다.
+배치 재설계: 양보한다. 정직한 규모 200~300줄 + 새 실패 모드 3개(배치 거부·만료·부분 실패). 얻는 것 월 $18. &quot;하루 1회 버튼&quot;에 최대 1시간 대기를 얹는 대가로 안 맞고, &quot;아침 자동 + 배치&quot;는 사용자가 자동 생성을 안 쓴다 했으니 전제가 없다. 하지 말 것.
+
+### 2. 양보·고수
+양보: 배치, 캐싱, 단계 병합. 고수: Haiku 5.5가 최대 지렛대(−$0.64)이며 품질 손해 없음. 출력 다이어트(스키마 optional)는 실측 없이 안전. &quot;주요 1곳 본문 → Sonnet 절반&quot;은 과대.
+
+### 3. 최종 입장
+① Haiku 5.5 체크리스트: effort: &#x27;low&#x27; 명시 · fallbacks 없음→거절 시 그 묶음만 Sonnet 재시도 · 도구 버전 1회 확인 · PRICES에 5.5·Opus 5.5 추가 · 토큰 +30% · 비교 기준 = 같은 후보로 두 모델 동시 선별 3회차: 핵심 6건 겹침, demoted·titleOnly 수, 한글 없는 제목 0, 숫자 대조 drop률.
+② 핵심 Opus 5.5: 찬성, 조건부. +$0.36/회차. 핵심 묶음을 두 모델에 동시에 보내 두 버전을 저장, 화면 토글로 블라인드 선택 3회차(+$1.1 총). 3회 중 2회 Opus가 낫지 않으면 끈다.
+③ 주요 Haiku 5.5: 재료 1곳 주요만 A/B 뒤. 절감 상한 $0.3.
+④ 렌즈 끄기: 5.5로 바꾸면 $0.21→$0.03이라 비용 논거가 사라진다. 지금은 끄지 않는다.
+⑤ 주요 1곳 본문: 입력 −49k tok = $0.10, 출력 −$0.05. 합계 $0.15 — &quot;$1.2→$0.6&quot;의 1/4. 유지.
+⑥ 실측 없이 안전한 변경: Haiku 5.5 전환(상수 1줄) · 단계별 Usage 칸 + thinking_tokens(30줄) · 스키마 optional로 빈 문자열 제거(출력 −10%) · allowed_domains 축소 · PRICES 갱신. 실측 뒤: Opus 핵심, 웹 보강 상한(webFilled 30% 미만이면 8건×1회), 주요 A/B, 렌즈 재평가.
+
+### 4. 최종 비용표 ($/회차, 추정)
+| 단계 | 지금 | 1단계 (지금 할 것) | 2단계 (실측 뒤) |
+|---|---|---|---|
+| ② 분류 | 0.08 | 0.01 | 0.01 |
+| ③ 선별·합치기 | 0.27 | 0.04 | 0.04 |
+| ③-3 웹 보강 | 0.47 | 0.32 | 0.10 (8건×1회) |
+| ④ 요약 | 1.22 | 1.10 (출력 다이어트) | 1.46 (핵심 Opus) |
+| ④-2 렌즈 | 0.21 | 0.03 | 0.03 |
+| 핵심 교차검증 | — | — | 0.06 |
+| 회차 / 월 30회 | 2.2 / $66 | 1.50 / $45 | 1.70 / $51 |
+1단계는 품질 그대로 −32%, 2단계는 핵심 품질을 올리고도 −23%.
+
+### 5. 사용자가 결정할 한 가지
+핵심 20건에 Opus 5.5를 쓰는 블라인드 A/B 3회차를 허락하나 — 한 번 +$1.1, 채택하면 월 +$11.</pre></details>
+    <details><summary>2라운드 · 품질 담당</summary><pre class="doc">## 품질 담당 — 2라운드
+
+### 1. 질문에 대한 답
+비용 담당(주요 Sonnet vs Haiku 5.5 A/B, 핵심 Opus). 같은 재료 묶음을 두 모델에 보내고, 코드가 세는 것 4개 + 사람 1개로 판정. 코드: ① numberDrops/문장 수 ② 무효 from으로 버려진 칸 수 ③ isGenericWhy로 비워진 why 수 ④ 길이 하한 미달 수. 사람: 같은 기사 20건을 블라인드로 읽고 &quot;더 낫다&quot;를 고른다. 합격선: Haiku가 ①~④ 모두 Sonnet의 1.5배 이내이고 블라인드 선호 40% 이상이면 전환. Opus 핵심은 블라인드 10건 선호 65% 이상일 때만 유지.
+회의론자(되돌림 숫자). 기준값은 실측 10회차 평균. 핵심 중 재료 2곳 이상 비율 −15%p, demoted/(핵심+주요) 10% 초과, 신고 읽은 기사 대비 2% 초과 중 하나면 되돌린다. &quot;신고 0건&quot;은 단독으로는 아무 뜻이 없다 — 원문 열기 비율과 짝으로 본다. 원문 열기가 늘면서 신고 0이면 &quot;안 눌렀다&quot;다.
+출처(주요 1곳 본문). 조금 깎임, 조건부 수용. 스크린샷 4건 중 3건이 이미 1곳이고, 주요는 양쪽 시각을 만들지 않으며 250~400자는 본문 1곳 2,000자÷3으로 충분. 조건: 2곳째를 받기(fetch)만 끊고, 피드 본문·발췌(공짜)는 재료로 유지. 비용의 몸통이 요약이라는 데 동의. 단 참고 90건을 깎는 데는 반대 — 폭은 &quot;놓치지 않았다&quot;는 안심이고 그 비용은 Haiku 5.5면 $0.04.
+
+### 2. 쟁점 판정표
+| 쟁점 | 판정 | 품질 조건 |
+|---|---|---|
+| ① 수집 단계 사건 묶기 | 받는다, 조건부 | 오결합 위험은 후속 기사(수치 갱신)·같은 주체 다른 사건·연재물. 조건: 유사도 0.7 + 숫자 일치 + 같은 분야 + 6시간. 묶음을 후보 축소가 아니라 언론사 수 신호 + related로만 쓰고 대표 1건은 선별 입력에 남긴다. 첫 회차 묶음 30개를 눈으로 봐 오결합 5% 이하 |
+| ② 네이버 검색 API | 실측 뒤, 품질 기준 충족 시 감수 | 국내 Google 검색 20개의 &quot;제목만&quot; 문제를 구조적으로 푸는 유일한 후보. 감수 기준: 국내 핵심·주요의 재료 2곳 비율 +20%p 또는 제목만 비율 10% 미만. 키 실패 시 Google 검색으로 자동 복귀 |
+| ③ 배치 API | 실측 뒤, &quot;자동=배치·버튼=동기&quot; 두 경로일 때만 | 아침 루틴이면 품질은 &quot;7시에 있다&quot;이지 &quot;누르면 즉시&quot;가 아니다. 조건: 자동 05:00 시작, 90분 미완 시 동기 폴백, 7시 전 완성률 95% 이상. 수시판 버튼은 동기 유지 |
+| ④ 렌즈 | 양쪽 시각 유지, 쉽게는 끈다, 글머리표·5W는 측정 | 2주간 보기별 선택 수를 세고 1% 미만은 끈다. 쉽게는 숫자를 지우고 사용자가 안 와닿는다 했으니 지금 |
+| ⑤ 실측 stats 5개 | 지금 추가 | coreDeep(핵심 중 재료 2곳 이상 수) · slotGaps(12칸 중 빈 칸·최대 칸 비율) · worldShare(세계 비율, 핵심 6 중 세계) · emptySubs(0건 분야 수) · titleMismatch(원 제목과 AI 제목의 숫자 불일치 수) |
+
+### 3. 양보·고수
+양보: 주요 2곳 → 1곳 받기(공짜 재료 유지). 배치를 &quot;실측 뒤 조건부&quot;로. 네이버 키를 기준 숫자로 묶는다.
+고수: 참고 층·40분야·후보 상한은 깎지 않는다. 핵심·주요 요약 모델은 A/B 전에 내리지 않는다. 하향식 검색은 교차검증 1회 외 쓰지 않는다.
+
+### 4. 최종 입장
+| 구분 | 항목 | 품질 영향 | 되돌림 기준 |
+|---|---|---|---|
+| 지금 할 것 | Haiku 4.5→5.5(분류·선별·참고·렌즈·웹보강, effort low) | 그대로 또는 향상 | 3회차 demoted·핵심 6 겹침 ≥ 4 미달 시 복귀 |
+| | stats 5개 + 단계별 비용 칸 | 측정 기반 | — |
+| | 쉽게 끄기, 수집 단계 묶기(0.7·숫자 일치) | 그대로 | 오결합 &gt; 5% |
+| | 핵심 6건 교차검증 web_search 1회($0.06) | 누락 감지 ↑ | — |
+| 실측 뒤 | 주요 Sonnet/Haiku 5.5 A/B, 핵심 Opus 블라인드 | 결과로 결정 | 1장 합격선 |
+| | 주요 1곳 받기, 네이버 API, 자동=배치 | 조금 깎임 가능 | 2장 기준 |
+| | 글머리표·5W 유지 여부 | 없음 | 선택률 1% |
+| 하지 말 것 | 하향식 수집, 후보·분야 축소, 원문 읽기 핵심만, 검증 없는 후보 43곳 일괄 켜기 | 많이 깎임 | — |
+
+### 5. 사용자가 결정할 한 가지
+아침 회차를 &quot;버튼&quot;에서 &quot;자동 05:00 시작&quot;으로 바꿀 것인가. 이것이 배치 API(−$0.6/회)와 7시 전 완성 보장의 전제이고, 버튼을 고수하면 배치는 영구히 제외된다.</pre></details>
+    <details><summary>2라운드 · 회의론자</summary><pre class="doc"># 회의론자 2라운드
+
+## 1. 질문에 답
+- 비용 담당 — &quot;버튼 누르고 1시간&quot;: 버튼 사용자로서는 아니다. 2초 폴링으로 진행을 보는 제품에서 1시간은 실패로 보인다. 새벽 자동 생성이면 받아들일 수 있다 — 단 사용자가 이미 &quot;자동은 거의 안 쓴다&quot;고 정했다. 만료 꼬리는 코드가 동기 재실행해야 한다. 숨은 상호작용 셋: ① update.sh는 running이면 컨테이너 교체를 미룬다 → 배치 90분 창 동안 배포가 막힌다. ② 재시작 시 recoverStaleRuns()가 running을 전부 실패로 닫는다 → batch id를 DB에 남기고 기동 시 폴링을 재개하지 않으면 돈 낸 결과가 고아가 된다. ③ Sonnet의 fallbacks: &#x27;default&#x27;는 배치에서 거부된다. 코드 규모 ≈ 250~350줄 + ERD·API 문서. 절감 월 $18.
+- 품질 담당 — 참고 90건의 가치: read_items로 회차당 참고 펼침 수를 센다. 10회차 평균 펼침 &lt; 3이면 &quot;안심&quot;의 값은 Top stories 10건 대비 핵심 6건 겹침으로만 잰다. 신고율 = 신고/펼침. 펼침 &lt; 20/회차면 0건은 &quot;안 누름&quot;이다.
+- 출처 담당 — 비용의 몸통: Sonnet 55% 동의. &quot;주요 1곳 본문&quot;은 반대 — 스크린샷의 얕은 글 4건이 전부 &quot;주요 1곳&quot;이다. 먼저 깎을 곳은 출력 다이어트($0.1)와 실측 뒤 핵심 입력 길이다.
+
+## 2. 재판정
+| # | 1라운드 | 재판정 | 근거 |
+|---|---|---|---|
+| ① 네이버 검색 API | 하지 말 것 | 하지 말 것(강화) | 약관 개정으로 검색 결과의 저장·캐싱·AI 입력·요약 활용 금지, 신규 신청 중단, 기존 키 2027-06 유예 후 API HUB 이관. 우리 용도가 정확히 금지 조항 |
+| ② 배치(요약만) | 반대 | 실측 뒤 조건부 | 전제: 새벽 자동 생성으로 바꾼다. 버튼 유지면 하지 말 것 |
+| ③ Haiku 5.5 | 찬성 | 찬성, 함정 추가 | (a) 5.5는 thinking: disabled가 허용 — 분류·선별은 low가 아니라 끄는 게 싸고 결정적. (b) web_search 도구 버전 미확인. (c) finish()가 거절을 던져 묶음 하나가 실행 전체를 죽인다 → 분류는 &quot;그 묶음만 버림&quot;. (d) 속도 제한 풀 별도. (e) &quot;+30%&quot;는 Opus 4.7 토크나이저 수치 — count_tokens로 1회 비교 |
+| ④ 핵심 Opus 5.5 | — | 실측 뒤 조건부 | +$0.42/회차. 병목은 글이 아니라 재료 — 재료 2곳 비율 ≥ 70%를 먼저 만들고 3회차 가림 비교 |
+| ⑤ 수집 단계 묶기 | — | 조건부 | 오결합 모드: 후속 기사(숫자 검사 재사용), 연재 템플릿, 영어 제목 bigram 과겹침, 묶이면 비대표 발췌·본문 버림, 분야 다른 기사가 한 sub로. 0.7·같은 region·숫자 일치, 첫 5회차는 세기만(stats.wouldMerge) |
+
+## 3. 최종 입장
+지금 할 것(실측과 동시, AI 입출력 불변): 단계별 토큰 칸 / allowed_domains 개수·wouldMerge 로그 / 서버에서 briefing:check / PRICES에 5.5·Opus 단가 / 신고율·펼침 수 쿼리 / Top10 교차검증은 파이프라인 밖 점검 스크립트로($0.02).
+실측 뒤 조건부: Haiku 5.5(6~10회차 단일 변수) → 출력 다이어트 → 후보 43곳 켜기(check 통과분) → 웹 보강 상한 → 배치·Opus(전제 충족 시).
+하지 말 것: 네이버 API / 하향식 검색 주 수집 / NewsAPI·Mediastack·GNews / 캐시 / 주요 요약 Haiku 강등 / 실측 중 변수 둘 동시.
+
+## 4. 실측 설계
+2주 10회차, 하루 1회 버튼. 1~5회차 지금 코드 그대로(기준선), 6~10회차 Haiku 5.5만 바꿈. 칸: briefing_runs 토큰·webSearches·costUsd + 단계별 분해, stats.basis·demoted·webFilled·bodiesRead·fromFeed·numberDrops, 실행 시간, 실패 출처 수, read_items 펼침 수, 신고 수. 합격선: ① 콘솔 청구 대비 cost_usd 오차 ≤ 15% ② 기준선 중앙값 ≤ $1.5면 재설계 종료, &gt; $2.5면 Sonnet 구간부터 ③ Haiku 5.5: 회차당 −$0.5 이상 그리고 핵심 6건 겹침 ≥ 4·demoted 증가 없음 → 채택.
+
+## 5. 사용자가 정할 한 가지
+&quot;버튼 누르고 바로 읽기&quot;를 유지하나, &quot;새벽 자동 생성 → 아침에 읽기&quot;로 바꾸나. 이 하나가 배치(월 −$18)·지연 허용치·Opus 여유를 전부 결정한다.</pre></details>
+  </section>
+
+  <footer>작성: 에이전트 4인 토론을 사용자 세션이 정리. 비용은 전부 추정이며 실측(10회차) 뒤 갱신한다. 외부 API 조건은 각 역할이 2026-10-11 웹에서 확인한 2차 자료 기준이고, 네이버 API HUB 약관·Google 뉴스 피드 실존은 서버에서 한 번 더 확인해야 한다. 이전 토론: docs/뉴스브리핑_영향보기_토론보고서_20261011.html, docs/뉴스브리핑_개선합의안_20261010.md.</footer>
+</div>
+</body>
+</html>
