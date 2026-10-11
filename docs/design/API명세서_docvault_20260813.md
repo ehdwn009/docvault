@@ -25,6 +25,11 @@
 | ASK_LIMIT_EXCEEDED | 429 | 오늘 질문 한도(30) 초과. 읽기·지난 대화는 됨 |
 | BRIEFING_RUNNING | 409 | 뉴스 브리핑이 이미 만들어지는 중. 응답에 지금 도는 실행(`run`)이 함께 온다 — 화면은 그 진행을 이어서 보여 준다 |
 | BRIEFING_BUDGET_EXCEEDED | 409 | 이번 달 브리핑 비용이 월 한도에 닿음. `force: true`로 다시 보내면 만든다(사용자 확인 후) |
+| BRIEFING_READER_OFF | 403 | 앱 안 원문 보기가 꺼져 있음(설정 → 뉴스 브리핑, v0.45) |
+| BRIEFING_READER_NOT_FOUND | 404 | 그 회차에 그 기사가 없음 (v0.45) |
+| BRIEFING_READER_NO_URL | 404 | 앱에서 받을 주소(`readUrl`)가 없는 기사 — 화면은 사이트로 보낸다 (v0.45) |
+| BRIEFING_READER_UNREADABLE | 422 | 받긴 했지만 본문을 뽑지 못함(유료벽·짧게 뽑힘·제목과 안 맞음). 우회하지 않고 사이트로 보낸다 (v0.45) |
+| BRIEFING_READER_FETCH_FAILED | 422 | 원문 페이지를 받지 못함(시간 초과·차단) (v0.45) |
 | ASK_UPSTREAM_ERROR | 502 | LLM 호출 실패 (인증·과부하·시간 초과). 스트리밍 중이면 `error` 이벤트로 옴. 사용자 질문은 저장돼 있어 다시 시도 가능 |
 
 ## API 목록
@@ -114,6 +119,7 @@
 | API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43) | 관리자 |
 | API-137 | POST | /briefing/runs/{id}/cancel | 도는 실행 중지 — 진행 카드의 [중지] (2026-10-02) | 관리자 |
 | API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자 |
+| API-138 | GET | /briefing/editions/{fileId}/items/{itemId}/reader | 브리핑 기사 앱 안 원문 보기 — 기사 id만 받아 그때 받아 문단으로 (v0.45) | 관리자, 설정으로 켠 경우 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -340,9 +346,10 @@
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
 | fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 10~300). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
 | markRead | string[] | 브리핑 회차에서 읽은 기사 id(≤200개, 각 ≤80자). 기존 목록에 **더하기만** 한다(중복 무시, 회차당 최대 1000개). 다른 기기에서 동시에 읽어도 서로 지우지 않게 교체가 아니라 더하기다 (v0.43) |
+| flag | object | 브리핑 기사의 "틀린 곳 알리기"(v0.45) `{ id: 기사 id(≤80자), reason: "number"(숫자가 틀림) \| "mixed"(다른 기사가 섞임) \| "overstated"(과장됨) \| "other", note?: ≤200자 }`. 회차당 200건까지 기억하고, 같은 기사를 다시 알리면 마지막 것으로 덮어쓴다. 어디에도 보내지 않고 저장만 — 실측 2주 뒤 숫자 대조 전환의 근거 |
 
 ### Response
-**200 OK** — 갱신된 state 객체
+**200 OK** — 갱신된 state 객체 (브리핑이면 `readItems`·`flagItems` 포함)
 
 ---
 
@@ -351,7 +358,7 @@
 | 항목 | 내용 |
 |---|---|
 | 메서드 / 경로 | GET /me/files/{id}/state |
-| 설명 | 이 파일에 대한 내 최신 열람 상태(읽던 위치·배율·맞춤·즐겨찾기, 브리핑이면 읽은 기사 `readItems`) 조회. 뷰어가 문서를 열 때마다 호출 — 트리(API-021)의 state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의 복원 기준은 이 조회다 |
+| 설명 | 이 파일에 대한 내 최신 열람 상태(읽던 위치·배율·맞춤·즐겨찾기, 브리핑이면 읽은 기사 `readItems`와 틀린 곳 알리기 `flagItems: [{ id, reason, note?, at }]`(v0.45)) 조회. 뷰어가 문서를 열 때마다 호출 — 트리(API-021)의 state는 앱 시작 시점 캐시라, 재방문·기기 간 이어 읽기의 복원 기준은 이 조회다 |
 | 인증 필요 | 예 (열람 가능한 파일만) |
 
 ### Response
@@ -562,7 +569,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ### API-120 — POST /cards/{id}/review
 `{ "result": "ok" | "again" }` → **200** `{ "nextReviewAt", "intervalDays" }`. again → 1일, ok → max(2, 이전×2), 상한 60일. 즐겨찾기·읽던 위치는 건드리지 않는다.
 
-## API-131 ~ API-134: 뉴스 브리핑
+## API-131 ~ API-138: 뉴스 브리핑
 
 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md). 전부 관리자 전용(다른 계정은 403 FORBIDDEN). 회차는 files의 문서(`kind='briefing'`, 본문 = 회차 JSON)라 열기·삭제·태그·즐겨찾기·검색은 파일 API를 그대로 쓴다. 여기는 **만드는 일**만.
 
@@ -574,11 +581,11 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "sinceAt": 1790830800000, "untilAt": 1790847000000,
   "fileId": null, "fileName": null,
   "sourceCount": 48, "failedSources": ["한겨레 경제"], "candidateCount": 512, "itemCount": null,
-  "costUsd": 0.18, "message": null, "startedAt": 1790847000000, "finishedAt": null,
+  "costUsd": 0.18, "webSearches": 4, "message": null, "startedAt": 1790847000000, "finishedAt": null,
   "live": { "log": [ { "at": 1790847001000, "text": "수집 시작 — 출처 67곳" } ], "waiting": [ { "name": "한겨레 경제", "seconds": 12 } ] }
 }
 ```
-`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | summarize | save. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
+`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | fill(웹 검색 보강, v0.45) | summarize | lens(요약 보기 다시 쓰기, v0.45) | save. `webSearches`는 웹 검색 보강에 쓴 검색 수(v0.45) — 토큰과 따로 과금(1,000회당 $10)되어 따로 센다. `costUsd`에는 이미 들어 있다. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
 
 ### API-131 Response — GET /briefing/status
 ```json
@@ -591,10 +598,14 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "running": null,
   "last": { "...": "실행 객체 — 가장 최근에 끝난 것" },
   "monthCostUsd": 12.4,
-  "monthBudgetUsd": 80,
+  "monthBudgetUsd": 110,
+  "budgetWarnRatio": 0.8,
+  "readerEnabled": false,
+  "monthFlagCount": 2,
   "nextSinceAt": 1790837540572
 }
 ```
+`budgetWarnRatio`(v0.45)는 비용이 한도의 이 비율에 닿으면 패널 바닥의 비용 줄을 노랗게 — 값은 서버 상수. `readerEnabled`는 이 관리자의 앱 안 원문 보기 설정(USER_SETTINGS.briefing_reader, v0.45) — 회차 화면이 [앱에서 보기] 단추를 보일지 정한다. `monthFlagCount`는 이번 달(한국시간) 틀린 곳 알리기 수(v0.45).
 `configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 버튼을 잠근다. `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`·`nextAutoSlot`은 자동이 켜져 있을 때 다음으로 켜진 회차의 시작 시각(unix ms)과 그 회차, 꺼져 있거나 켜진 회차가 없으면 null — 화면은 시각으로 회차를 짐작하지 않는다(사람마다 시각이 다르다). `schedule`은 회차별 켜기·시작 시각(한국시간 "HH:MM"), 저장된 것이 없으면 기본값(v0.43). `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
 
 ### API-132 — POST /briefing/runs
@@ -612,7 +623,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 **200** `{ "runs": [ 실행 객체 ] }` — 최근 시작순, limit 최대 100. 자동 실행이 한도로 건너뛴 기록(`skipped`)도 여기 보인다.
 
 ### API-134 — PUT /briefing/settings
-**Body** `{ "autoEnabled"?: boolean, "schedule"?: { "morning"|"noon"|"evening": { "on": boolean, "at": "HH:MM" } } }` — 보낸 것만 바꾼다 → **200** `{ "autoEnabled", "schedule", "nextAutoAt", "nextAutoSlot" }`. USER_SETTINGS.briefing_auto·briefing_schedule에 저장한다. `schedule`은 세 회차를 다 보내야 하고, 시각은 아침 < 점심 < 저녁 순서이며 21:59까지 — 어기면 400 VALIDATION_ERROR(v0.43). 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
+**Body** `{ "autoEnabled"?: boolean, "schedule"?: { "morning"|"noon"|"evening": { "on": boolean, "at": "HH:MM" } }, "readerEnabled"?: boolean }` — 보낸 것만 바꾼다 → **200** `{ "autoEnabled", "schedule", "nextAutoAt", "nextAutoSlot", "readerEnabled" }`. USER_SETTINGS.briefing_auto·briefing_schedule·briefing_reader에 저장한다. `readerEnabled`(v0.45)는 앱 안 원문 보기 — 기본 꺼짐이고, 켜기 전에 서버에서 `briefing:readcheck`로 추출 품질을 재는 것이 설계다. `schedule`은 세 회차를 다 보내야 하고, 시각은 아침 < 점심 < 저녁 순서이며 21:59까지 — 어기면 400 VALIDATION_ERROR(v0.43). 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
 
 ### API-135 — GET /briefing/editions?before=YYYY-MM-DD&days=7 (v0.43)
 **200** `{ "editions": [ { "fileId", "editionDate", "slot", "label", "createdAt", "itemCount", "leadCount", "leadRead", "readCount", "state": "unread"|"partial"|"done" } ], "nextBefore": "YYYY-MM-DD" | null }`
@@ -625,4 +636,10 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-136 — GET /briefing/editions/{fileId}/nav (v0.43)
 **200** `{ "prevId": number | null, "nextId": number | null, "sameDay": [ { "fileId", "slot", "label" } ] }` — 생성 순서로 바로 앞·뒤 회차와, 같은 날(한국시간) 회차들(이른 순). 회차 문서가 아니면 404.
+
+### API-138 — GET /briefing/editions/{fileId}/items/{itemId}/reader (v0.45)
+앱 안 원문 보기. **200** `{ "title", "byline": string | null, "source", "url", "paragraphs": string[] }` — 그 기사의 `readUrl`(회차를 만들 때 본문 받기에 성공한 언론사 주소)을 그때 받아 Readability로 문단만 뽑아 돌려준다(최대 80문단).
+- **기사 id만 받는다** — 임의 주소를 받으면 열린 프록시가 되므로. 내 회차 문서가 아니거나 기사가 없으면 404 BRIEFING_READER_NOT_FOUND, `readUrl`이 없으면 404 BRIEFING_READER_NO_URL(화면은 새 탭으로 보낸다).
+- 설정(API-134 `readerEnabled`)이 꺼져 있으면 403 BRIEFING_READER_OFF. 받지 못하면 422 BRIEFING_READER_FETCH_FAILED, 600자 미만이거나 제목과 맞지 않으면(유료벽·추출 실패) 422 BRIEFING_READER_UNREADABLE — 우회하지 않는다.
+- 서버 전체에서 **동시 1건**(대기열)·20초. 받은 글은 디스크·DB에 두지 않고 메모리 캐시(10분·20건)까지만, 응답 헤더 `Cache-Control: no-store`.
 

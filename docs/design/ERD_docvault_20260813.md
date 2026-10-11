@@ -98,6 +98,7 @@ erDiagram
         integer next_review_at "카드 복습 예정 시각, NULL=아직 (2026-09-20)"
         integer review_interval_days "마지막 채점의 간격(일), 기본 0"
         text read_items "브리핑 회차에서 읽은 기사 id JSON 배열, NULL=안 읽음 (v0.43)"
+        text flag_items "브리핑 기사 틀린 곳 알리기 JSON 배열 [{id,reason,note,at}], NULL=없음 (v0.45)"
     }
     USER_SETTINGS {
         integer user_id PK, FK
@@ -112,6 +113,7 @@ erDiagram
         integer ask_with_cards "0|1 질문 때 관련 카드 함께 보내기 (기본 1, 2026-09-20)"
         integer briefing_auto "0|1 뉴스 브리핑 자동 생성 (기본 0, 관리자만 의미, 2026-10-01)"
         text briefing_schedule "nullable, 자동 생성 회차별 켜기·시각 JSON (v0.43)"
+        integer briefing_reader "0|1 브리핑 앱 안 원문 보기 (기본 0, 관리자만 의미, v0.45)"
         integer updated_at
     }
     GOOGLE_ACCOUNTS {
@@ -180,7 +182,7 @@ erDiagram
         text slot "morning|noon|evening|adhoc"
         text edition_date "YYYY-MM-DD (한국시간) — 자동 회차 중복 방지 기준"
         text status "running|ok|error|skipped|cancelled"
-        text stage "collect|classify|select|read|summarize|save — 진행 표시용 (read는 v0.43)"
+        text stage "collect|classify|select|read|fill|summarize|lens|save — 진행 표시용 (read는 v0.43, fill·lens는 v0.45)"
         integer progress_done
         integer progress_total
         integer since_at "다룬 기사 범위 시작 (unix ms)"
@@ -195,6 +197,7 @@ erDiagram
         integer sonnet_input_tokens
         integer sonnet_output_tokens
         real cost_usd "끝날 때의 단가로 계산한 추정 비용"
+        integer web_searches "웹 검색 보강에 쓴 검색 수 (기본 0, v0.45)"
         text message "실패·건너뜀 이유 (사람이 읽는 글)"
         text lead_ids "오늘의 핵심 기사 id JSON 배열 — 패널이 회차 JSON을 열지 않고 핵심 읽음을 세려고 (v0.43)"
         integer started_at
@@ -246,11 +249,14 @@ erDiagram
 - **배움 카드 (2026-09-18, v0.26)**: 카드는 FILES의 md 행이다(`kind='card'`). 별도 테이블을 만들지 않은 이유 — 편집·버전·태그·검색·공유·백업이 전부 FILES에 걸려 있어, 카드를 따로 두면 그 모든 기능을 다시 만들어야 한다. 대신 `kind`로 **파일 트리에서만 뺀다**(문서와 섞이면 구분이 안 된다). 카드의 머리말(한 줄·별칭·종류·주제·태그·연결·출처)은 컬럼이 아니라 **본문 맨 위의 frontmatter**에 있다 — 사람이 편집기에서 고칠 수 있어야 하고, 목록은 수백 장까지 매번 파싱해도 싸다. 제목은 파일 이름이다(두 군데 두지 않는다). CARD_THREADS는 카드가 어느 대화에서 왔는지 — 대화 정리 예외와 "원 대화 보기"의 근거.
 - **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
   - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다. v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
+  - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).
   - **읽음 기록 (v0.43)**: USER_FILE_STATE.read_items는 그 회차에서 읽은 기사 id 목록이다. 즐겨찾기·읽던 위치와 같은 "이 사람 × 이 파일" 사실이라 같은 표에 둔다 — 폰에서 읽은 것이 PC에서도 흐리게 보인다. 더하기만 한다(API-073 `markRead`). BRIEFING_RUNS.lead_ids는 그 회차의 "오늘의 핵심" 목록 사본이다 — 회차 JSON에도 `lead`로 있지만, 패널이 회차 수십 개의 "핵심 n 남음"을 세려고 JSON을 매번 여는 것은 무겁다. 같은 사실이 두 군데라 저장할 때 한 번에 같이 쓰고 고치지 않는다(회차는 편집 불가). v0.43 이전 회차는 처음 패널에 나올 때 JSON에서 읽어 채운다.
   - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
   - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.
+  - BRIEFING_RUNS.web_searches(v0.45)는 웹 검색 보강(설계 ③-3)에 쓴 검색 수다. 토큰이 아니라 검색 횟수로 과금(1,000회당 $10)되는 비용이라 토큰 칸과 따로 두고, cost_usd에는 합쳐 넣는다. stage의 `fill`(웹 검색 보강)·`lens`(요약 보기 다시 쓰기)도 v0.45.
   - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.
   - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다. USER_SETTINGS.briefing_schedule은 그 사용자의 회차별 켜기·시작 시각 JSON(`{"morning":{"on":true,"at":"06:30"},…}`, v0.43)이고, null이면 기본(06:30·11:30·17:30 모두 켬) — 스케줄러가 사용자마다 이 값으로 지금 돌 회차를 고른다.
+  - USER_SETTINGS.briefing_reader(v0.45)는 앱 안 원문 보기 스위치(기본 0). 관리자에게만 의미가 있고, 회차 화면의 [앱에서 보기]와 API-138은 이 값이 1인 사용자에게만 열린다. 기본이 꺼짐인 이유: 켜기 전에 `briefing:readcheck`로 추출 품질(70%)·범위(50%)를 재는 것이 설계라서다. 원문은 저장하지 않으므로 이 표 밖에 원문 칸은 없다.
   - 인덱스 `briefing_runs_owner_started_idx (owner_id, started_at)` — 패널의 최근 실행·실행 기록·이번 달 비용 합계가 전부 "이 사람의 최근 실행부터" 읽는다.
   - `running` 행은 기동 시 `error`("서버 재시작으로 중단")로 정리한다 — 한 번에 하나만 돈다는 잠금이 DB 행에도 걸려 있어, 남겨 두면 영원히 실행 중으로 보인다.
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.
