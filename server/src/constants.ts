@@ -278,7 +278,8 @@ export const BRIEFING = {
   /** 웹 검색 단가 (USD/1000회) — ASK.SEARCH_PER_1000_USD와 같은 값. 웹 검색 보강(S8)의 비용 근거 */
   SEARCH_PER_1000_USD: 10,
   /** 분류·선별 답 길이 상한 (토큰) */
-  SELECT_MAX_OUTPUT_TOKENS: 8000,
+  /** Haiku 5.5는 같은 글을 약 30% 많은 토큰으로 센다 — 선별 답이 잘려 JSON이 깨지지 않게 8000 → 12000 (v0.47.1) */
+  SELECT_MAX_OUTPUT_TOKENS: 12000,
   /** Opus 5.5·Sonnet 5.5는 생각 토큰이 max_tokens에 포함된다(effort low라도) — 답이 잘리지 않게 넉넉히 (v0.46) */
   SUMMARY_MAX_OUTPUT_TOKENS: 16000,
   /** 원문 읽기(설계 "③-1 근거 보강") — 이 중요도 이상만, 본문 앞부분 몇 자까지, 한 곳당 시간·크기, 동시 개수, 기사당 시도할 주소 수.

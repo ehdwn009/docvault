@@ -85,10 +85,13 @@ export type AiResult<T> = { output: T; inputTokens: number; outputTokens: number
 /** 안전 분류기 거절 — Haiku 5.5에는 서버측 폴백이 없어 클라이언트가 4.5로 다시 부른다 */
 class RefusalError extends Error {}
 
-/** 다른 모델로 다시 불러 볼 만한 실패 — 요청 모양을 거부(400)했거나, 모델을 모르거나(404), 분류기가 거절한 경우 */
+/** 다른 모델로 다시 불러 볼 만한 실패 — 요청 모양을 거부(400)했거나, 모델을 모르거나(404), 분류기가 거절했거나,
+    답을 스키마대로 읽지 못한 경우(SDK "Failed to parse structured output" — 잘린 JSON이든 스키마 위반이든 그 모델의 답 문제다).
+    v0.47.0 첫 실행에서 Haiku 5.5의 선별 답이 이 오류로 회차 전체를 실패시켰다 — 폴백 조건에 없어서였다 */
 function fallbackWorthy(e: unknown): boolean {
   if (e instanceof RefusalError) return true;
-  return e instanceof Anthropic.APIError && (e.status === 400 || e.status === 404);
+  if (e instanceof Anthropic.APIError && (e.status === 400 || e.status === 404)) return true;
+  return e instanceof Error && e.message.includes('Failed to parse structured output');
 }
 
 export type AiCaller = <S extends z.ZodType>(req: AiRequest<S>) => Promise<AiResult<z.infer<S>>>;
@@ -126,7 +129,8 @@ export const callClaude: AiCaller = async (req) => {
     return await callHaiku(c, req, req.model);
   } catch (e) {
     if (req.model === BRIEFING.SELECT_MODEL_FALLBACK || !fallbackWorthy(e)) throw e;
-    console.log(`[briefing] ${req.model} ${e instanceof Error ? e.message.slice(0, 80) : String(e)} → ${BRIEFING.SELECT_MODEL_FALLBACK}로 다시 호출 (${req.stage})`);
+    // 이유를 넉넉히 남긴다 — 스키마 위반이면 어느 칸인지, 잘렸으면 그 사실이 여기 보인다
+    console.log(`[briefing] ${req.model} → ${BRIEFING.SELECT_MODEL_FALLBACK}로 다시 호출 (${req.stage}): ${e instanceof Error ? e.message.slice(0, 300) : String(e)}`);
     const r = await callHaiku(c, req, BRIEFING.SELECT_MODEL_FALLBACK);
     return { ...r, fallback: true };
   }
@@ -200,7 +204,7 @@ export const callWebSearch: WebCaller = async (req) => {
     return await searchWith(c, req, BRIEFING.WEB_FILL_MODEL);
   } catch (e) {
     if (!fallbackWorthy(e)) throw e;
-    console.log(`[briefing] ${BRIEFING.WEB_FILL_MODEL} ${e instanceof Error ? e.message.slice(0, 80) : String(e)} → ${BRIEFING.WEB_FILL_MODEL_FALLBACK}로 다시 호출 (fill)`);
+    console.log(`[briefing] ${BRIEFING.WEB_FILL_MODEL} → ${BRIEFING.WEB_FILL_MODEL_FALLBACK}로 다시 호출 (fill): ${e instanceof Error ? e.message.slice(0, 300) : String(e)}`);
     return { ...(await searchWith(c, req, BRIEFING.WEB_FILL_MODEL_FALLBACK)), fallback: true };
   }
 };
