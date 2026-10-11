@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>뉴스 브리핑 다음 단계 통합안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 결론 상자 → 세 토론을 한 줄기로 → 릴리스 로드맵(v0.46 / v0.47 / 실측 뒤) → 비용표 → 남은 결정 6개 */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #0369a1; --accent-soft: #e3f1fa; --major: #c9741c; --core: #cf2f2f; --ok: #1d8556; --ok-soft: #e4f3ea;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15.5px; line-height: 1.7; overflow-wrap: anywhere; }
+.wrap { max-width: 900px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 72px; display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 14px; }
+section > h2 { font-size: 23px; letter-spacing: -0.01em; padding-top: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.hero { display: flex; flex-direction: column; gap: 12px; }
+.hero h1 { font-size: clamp(26px, 4.2vw, 36px); letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; max-width: 72ch; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 0 14px 14px 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.verdict .tag { display: inline-block; background: var(--ok-soft); color: var(--ok); font-weight: 700; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; width: fit-content; max-width: 100%; }
+ul, ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.three { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14.5px; min-width: 0; }
+.card h3 { font-size: 15.5px; }
+.card .src { font-size: 12.5px; color: var(--muted); }
+.card ul { padding-left: 18px; gap: 3px; }
+.rel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.rel h3 { font-size: 16px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.rel h3 .ver { font-family: var(--f-mono); font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 1px 8px; border-radius: 999px; }
+.rel h3 .cost { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+.rel ul { padding-left: 18px; gap: 4px; font-size: 14.5px; }
+.rel .why { font-size: 13.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 8px; }
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tbody th { white-space: nowrap; font-weight: 600; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.fin { background: var(--ok-soft); font-weight: 500; }
+.decide { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; display: grid; grid-template-columns: 2.2em 1fr; gap: 6px 10px; font-size: 14.5px; }
+.decide .n { font-family: var(--f-mono); font-weight: 700; color: var(--accent); }
+.decide .q { font-weight: 600; }
+.decide .r { grid-column: 2; color: var(--muted); font-size: 13.5px; }
+.decide .r b { color: var(--ok); }
+code { font-family: var(--f-mono); font-size: 0.9em; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">docvault · 뉴스 브리핑 · 통합 실행안 · 2026-10-11</p>
+    <h1>다음 단계 통합안 — 영향 칸 · 수집 재설계 · 5W</h1>
+    <p class="lead">오늘 돌린 두 번의 에이전트 토론(영향 칸, 수집·요약 파이프라인 재설계)과 5W 빈칸 질문을 한 줄기로 묶었다. 사용자 추가 조건: <b>필요하면 Opus 5.5를 써도 된다.</b> 이 문서는 "무엇을, 어느 순서로, 얼마에" 하나와, 아직 남은 결정 6개로 끝난다.</p>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <span class="tag">한 줄 요약</span>
+      <ul>
+        <li><b>세 주제는 같은 뿌리</b>다 — 품질은 "AI가 잘 쓰느냐"가 아니라 <b>원문 재료를 보는 시점에 무엇을 쓰느냐</b>에서 갈린다. 5W가 비는 이유도, 영향 칸을 Haiku 다시 쓰기로 만들면 안 되는 이유도, 수집 재설계의 목적이 "재료 2곳 비율"인 이유도 전부 이것이다.</li>
+        <li>그래서 <b>원문을 보는 단 한 번의 호출(핵심·주요 요약)에 리드·왜·칸·양쪽 시각·5W·영향을 모두 담고</b>, 그 호출의 모델을 핵심은 Opus 5.5, 주요는 Sonnet 5.5로 둔다. 원문을 못 보는 Haiku 다시 쓰기에는 글머리표만 남긴다("쉽게"는 내리는 쪽 권장).</li>
+        <li><b>돈은 모델 교체에서 번다</b> — 분류·선별·합치기·참고·글머리표·웹 보강을 Haiku 4.5 → 5.5(단가 1/10). 핵심 Opus와 영향 칸을 더해도 지금보다 싸다: 추정 $2.2 → v0.46 $2.6 → v0.47 $1.9 → 실측 뒤 $1.5~1.7/회차.</li>
+        <li><b>수집 방식은 바꾸지 않는다.</b> 하향식 웹 검색·네이버 API·무료 뉴스 API·배치 API·캐시는 전부 제외. 수집에서는 비용 0인 개선 4개(사건 묶기 · 언론사 수 우선 자르기 · Google 실패 분리 · 도메인 제한)와 <code>briefing:check</code>로 출처 늘리기만.</li>
+        <li><b>순서</b>: v0.46(품질 묶음 + 측정 칸) → 5회차 기준선 실측 → v0.47(Haiku 5.5) → 10회차 실측 뒤 조정. 실측 중 변수는 한 번에 하나.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>세 토론이 한 줄기로 만나는 지점</h2>
+    <div class="three">
+      <div class="card"><h3>5W가 비는 이유</h3><span class="src">lenses.ts · 사용자 질문</span><ul>
+        <li>5W는 원문이 아니라 <b>우리 요약만</b> 재료로 Haiku가 다시 쓴다. 원문은 요약 뒤 버린다(저작권)</li>
+        <li>지시문: "요약에 있는 것만. 없는 칸은 비운다 — 채우지 않는다" → 요약에 날짜·장소가 없으면 빈칸</li>
+        <li>해법: 5W를 <b>원문을 보는 요약 호출 안</b>으로 옮긴다. 양쪽 시각이 이미 그 자리다. 그래도 없는 칸은 "기사에 없음"으로 표시</li>
+      </ul></div>
+      <div class="card"><h3>영향 칸 (토론 1)</h3><span class="src">조건부 도입 4/4</span><ul>
+        <li>"긍정/부정 태그"가 아니라 <b>기사가 말한 영향을 대상별로 한 줄씩</b>: 대상 · 낱말(부담/기회/갈림) · 문장 · 근거 언론사</li>
+        <li>같은 이유로 Haiku 다시 쓰기가 아니라 <b>요약 호출 안</b>에서 — 근거 기호를 붙이려면 원문이 있어야 한다</li>
+        <li>왜 중요한가 아래 점선 상자, 칩·배지·색 없음. 경제·테크만, 핵심 2줄·주요 1줄. 검증은 전부 코드(근거 기호·방향 어휘·숫자·금지어·겹침)</li>
+      </ul></div>
+      <div class="card"><h3>수집 재설계 (토론 2)</h3><span class="src">수집 유지, 모델 교체 4/4</span><ul>
+        <li>하향식 웹 검색은 비싸고(수집~선별 $0.9~1.5) 발행 시각·재현성·국내 폭을 잃는다 — 핵심 6건 교차검증($0.06)에만</li>
+        <li>비용의 55%는 Sonnet 요약. 수집 변경으로 아낄 돈은 $0.3~0.5 상한. 지렛대는 <b>Haiku 5.5</b>(−$0.64)</li>
+        <li>"월 $75"는 실측 0회의 종이 계산 → 10회차 실측, 단계별 토큰 칸·품질 stats 5개부터</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>릴리스 로드맵</h2>
+
+    <div class="rel">
+      <h3><span class="ver">v0.46</span> 품질 묶음 + 측정 칸 — 지금 <span class="cost">≈ $2.6/회차 (+$0.4)</span></h3>
+      <ul>
+        <li><b>요약 호출 재편</b> (<code>summarize.ts</code>): 출력 스키마에 <code>w5</code>(누가·무엇을·언제·어디서·왜, 재료 기호 포함)와 <code>impact[]</code>(대상·방향·문장·기호)를 더하고, 빈 문자열 칸은 optional로(출력 −$0.1). 핵심 묶음은 <b>Opus 5.5</b>(effort low), 주요 묶음은 Sonnet 5.5 그대로. 핵심 3건·주요 8건 묶음 유지, 출력 상한 확인.</li>
+        <li><b>5W</b>: <code>lenses.ts</code>에서 5W를 뺀다(글머리표만 남김). 화면은 요약 호출이 준 5W를 쓰고, 빈 칸은 숨기지 않고 "기사에 없음".</li>
+        <li><b>영향 칸</b>: <code>verify.ts</code>에 방향 어휘 사전·금지어·겹침 검사, <code>edition.ts</code>에 <code>impact</code>·<code>impactVisible</code>·<code>stats.impactDrops</code>, <code>taxonomy.ts</code> <code>wide</code>로 분야 판정, 신고 이유 <code>impact</code>("영향 판단이 이상함") 추가, <code>BriefingView.tsx</code>에 점선 상자.</li>
+        <li><b>측정 칸</b>: <code>Usage</code>에 단계 이름·thinking_tokens(단계별 비용 분해), <code>stats</code>에 <code>coreDeep</code>·<code>slotGaps</code>·<code>worldShare</code>·<code>emptySubs</code>·<code>titleMismatch</code>·<code>wouldMerge</code>, 실행 기록에 복사. <code>PRICES</code>에 Opus 5.5·Haiku 5.5 단가.</li>
+        <li><b>수집, 비용 0</b>: 수집 단계 사건 묶기(유사도 0.7·같은 region·6시간·숫자 일치, 첫 5회차는 세기만) · 선별 입력 자르기를 언론사 수 우선으로 · Google 검색 출처를 실패율 분모에서 분리 · 웹 검색 <code>allowed_domains</code> 상위 20곳 + 통신사.</li>
+        <li><b>서버에서 한 번</b>: <code>briefing:check</code> → 통과한 후보 출처만 수집 목록에서 켜기.</li>
+        <li>"쉽게" 칩 내리기(결정 ④ 시).</li>
+      </ul>
+      <p class="why">왜 한 묶음인가: 5W·영향·Opus는 전부 같은 호출(요약)의 스키마와 모델을 바꾸는 일이라 따로 내면 같은 파일을 세 번 고친다. 측정 칸은 이 묶음이 곧 실측 기준선이 되므로 같이 나가야 한다. 비용은 Opus +$0.4, 영향 +$0.09, 출력 다이어트 −$0.1로 약 +$0.4.</p>
+    </div>
+
+    <div class="rel">
+      <h3><span class="ver">실측 1~5회차</span> 기준선 (v0.46 그대로, 5일) <span class="cost">변경 없음</span></h3>
+      <ul>
+        <li>세는 것: 단계별 비용, Anthropic 콘솔 청구 대비 <code>cost_usd</code> 오차(≤ 15%), 핵심 중 재료 2곳 비율, demoted·titleOnly, webFilled, 5W 빈 칸 비율, 영향 줄 수·impactDrops, 신고/펼침, 원문 열기 비율, 사건 묶기 wouldMerge 오결합(눈으로 30개).</li>
+        <li>기준선 중앙값이 $1.5 아래면 비용 쪽 논의는 여기서 끝(품질 쪽만 계속), $2.5를 넘으면 요약 입력 길이부터 본다.</li>
+      </ul>
+    </div>
+
+    <div class="rel">
+      <h3><span class="ver">v0.47</span> Haiku 5.5 — 6회차부터 <span class="cost">≈ $1.9/회차 (−$0.7)</span></h3>
+      <ul>
+        <li>분류·선별·합치기·참고 내림·글머리표·웹 보강을 <b>Haiku 5.5</b>로. 분류·선별은 <code>thinking: disabled</code>(아니면 effort low), 거절 시 그 묶음만 버림/재시도(서버측 fallbacks 없음), web_search 도구 버전 1회 확인, <code>count_tokens</code>로 토큰 증가 1회 비교.</li>
+        <li>검증: 같은 후보로 4.5·5.5 동시 선별 3회차(+$0.03/회) — 핵심 6건 겹침 ≥ 4, demoted·titleOnly 증가 없음, 한글 없는 제목 0. 미달이면 상수 1줄로 되돌림.</li>
+        <li>사건 묶기 켜기(오결합 ≤ 5% 확인 뒤), 묶음의 언론사 수를 선별 프롬프트에.</li>
+      </ul>
+      <p class="why">단일 변수 원칙: 이 릴리스는 모델 교체 하나만. 품질 변화가 보이면 원인이 분명하다.</p>
+    </div>
+
+    <div class="rel">
+      <h3><span class="ver">실측 뒤</span> 조정 (10회차, 2주) <span class="cost">≈ $1.5 ~ 1.7/회차</span></h3>
+      <ul>
+        <li>webFilled ≤ 3/15면 웹 보강 8건×1회($0.08) 또는 핵심 6건 교차검증으로 전환.</li>
+        <li>영향 칸: impactDrops 20% 미만 · 낱말 붙은 줄 50% 이상 · 금지 분야 누출 0 → 유지. 신고율 5% 초과면 낱말을 끄고 재심. 노동·복지 확장은 이때(결정 ①).</li>
+        <li>숫자 대조 <code>drop</code> 전환(지금 log). 글머리표 선택률 1% 미만이면 끈다.</li>
+        <li>Google 검색 40개 → Top stories·주제 피드 10여 개 교체 검토, GDELT 세계 신호 curl 1회 확인(결정 ⑥).</li>
+        <li>재료 1곳 주요만 Sonnet/Haiku 5.5 A/B(+$0.1) — 합격선 통과 시에만.</li>
+      </ul>
+    </div>
+
+    <div class="rel">
+      <h3><span class="ver">하지 않음</span> 4/4 또는 3/4 반대 <span class="cost">—</span></h3>
+      <ul>
+        <li>하향식 웹 검색 주 수집 · 네이버 검색 API(약관이 AI 입력·요약 금지) · NewsAPI·GNews·NewsData·Mediastack(지연·한도) · 랭킹 페이지 스크래핑</li>
+        <li>배치 API(버튼 사용 유지 시) · 프롬프트 캐시(효과 2~3%) · 단계 병합 · 분류 폐지 · 후보·40분야·참고 층 축소 · 원문 읽기 핵심만 · 검증 없는 후보 43곳 일괄 켜기</li>
+        <li>영향 칸에 긍정/부정·색·칩·목록 배지 · 기사가 말하지 않은 영향(결정 ②가 "허용"이 아니면)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>비용표 ($/회차, 24시간판, 추정)</h2>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>단계</th><th class="num">지금 v0.45</th><th class="num">v0.46</th><th class="num">v0.47</th><th class="num">실측 뒤</th></tr></thead>
+      <tbody>
+        <tr><th>② 분류</th><td class="num">0.08</td><td class="num">0.08</td><td class="num">0.01</td><td class="num">0.01</td></tr>
+        <tr><th>③ 선별·합치기</th><td class="num">0.27</td><td class="num">0.27</td><td class="num">0.04</td><td class="num">0.04</td></tr>
+        <tr><th>③-3 웹 보강</th><td class="num">0.47</td><td class="num">0.47</td><td class="num">0.32</td><td class="num">0.10</td></tr>
+        <tr><th>④ 요약 (핵심 Opus · 주요 Sonnet · 5W · 영향)</th><td class="num">1.22</td><td class="num">1.60</td><td class="num">1.60</td><td class="num">1.60</td></tr>
+        <tr><th>④-2 글머리표 (쉽게·5W 제외)</th><td class="num">0.21</td><td class="num">0.12</td><td class="num">0.02</td><td class="num">0.02</td></tr>
+        <tr><th>핵심 교차검증</th><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0.06</td></tr>
+        <tr><th>회차 / 월 30회</th><td class="num fin">2.2 / $66</td><td class="num fin">2.6 / $77</td><td class="num fin">1.9 / $58</td><td class="num fin">1.7 / $51</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">단가: Haiku 4.5 $1/$5, Haiku 5.5 $0.10/$0.50, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20(백만 토큰당), 웹 검색 1,000회 $10. v0.46의 월 $77은 한도 $110 안이고, 하루 1회 사용 기준이다. 전부 추정 — 1~5회차 실측이 오면 이 표를 먼저 고친다.</p>
+  </section>
+
+  <section>
+    <h2>남은 결정 6개</h2>
+    <p class="muted">Opus 사용은 허용으로 받았다(핵심 요약에 적용). 아래는 권장안으로 진행해도 되고, 바꾸고 싶은 번호만 말해 주면 된다.</p>
+    <div class="decide">
+      <span class="n">①</span><span class="q">영향 칸을 노동·복지 같은 정책성 사회 기사에도 열 것인가</span>
+      <span class="r"><b>권장: 1차는 경제·테크만.</b> 실측 뒤 신고율이 낮으면 "낱말 없이, 기사가 말한 것만"으로 확장.</span>
+      <span class="n">②</span><span class="q">기사가 말하지 않았지만 AI가 짚은 영향을 허용할 것인가</span>
+      <span class="r"><b>권장: 기사가 말한 것만.</b> AI 추정은 [이 기사 묻기]가 이미 그 자리.</span>
+      <span class="n">③</span><span class="q">영향 칸 실측 2주를 숨겨서 할지, 보이게 할지</span>
+      <span class="r"><b>권장: 보이게.</b> 혼자 쓰는 앱이라 숨기면 신고할 수가 없다.</span>
+      <span class="n">④</span><span class="q">"쉽게" 칩을 내릴 것인가</span>
+      <span class="r"><b>권장: 내린다.</b> 밀도만 낮춘 기본 보기라 자리만 차지하고, 내리면 폰에서 칩 4개가 스크롤 없이 들어간다.</span>
+      <span class="n">⑤</span><span class="q">아침 회차를 "버튼"으로 유지할지, "새벽 자동 생성"으로 바꿀지</span>
+      <span class="r"><b>권장: 버튼 유지.</b> 배치 API(월 −$18)는 그 복잡도(250~350줄·새 실패 모드 3개)에 비해 작다.</span>
+      <span class="n">⑥</span><span class="q">Google 뉴스에 후보 절반을 계속 맡길지, 직접 RSS를 사람이 관리하는 쪽으로 옮길지</span>
+      <span class="r"><b>권장: 직접 RSS 쪽으로 무게, Google은 보조.</b> 첫 걸음은 서버에서 <code>briefing:check</code> 한 번.</span>
+    </div>
+  </section>
+
+  <footer>근거 문서: <a href="https://claude.ai/artifact/VJ7h7kLmu7N5TvYsX4EMdu">영향 칸 토론 보고서</a> · <a href="https://claude.ai/artifact/KBs3457rA2khUXRegz6z97">영향 칸 시안</a> · <a href="https://claude.ai/artifact/8gM7aVBpqtHejx7Z9635ge">수집 재설계 토론 보고서</a> (저장소 docs/ 동일 이름 파일). 5W 설명은 server/src/lib/briefing/lenses.ts의 지시문과 설계 문서 ④-2 절 기준.</footer>
+</div>
+</body>
+</html>
