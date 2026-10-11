@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>뉴스 브리핑 개선 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위는 짧은 머리, 가운데는 만져 보는 작업대(폰 두 대 또는 PC 한 대 + 설명), 아래는 지금과 비교 */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #0369a1; --accent-soft: #e3f1fa; --accent-ink: #ffffff;
+  --core: #cf2f2f; --major: #c9741c; --ref: #737c8c; --warn: #b4580e;
+  --why-line: #0284c7; --upd: #7c3aed; --upd-soft: #f1ebfd; --ok: #1d8556;
+  --chip-on: #0284c7; --frame: #20242b; --scrim: rgba(12, 16, 24, .45);
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #7dd3fc; --accent-soft: #15303f; --accent-ink: #0b1620;
+    --core: #f06262; --major: #eb9c4c; --ref: #8f98a7; --warn: #f0a35a;
+    --why-line: #38bdf8; --upd: #b597f6; --upd-soft: #2a2140; --ok: #45bb84;
+    --chip-on: #0ea5e9; --frame: #3b414b; --scrim: rgba(0, 0, 0, .6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #7dd3fc; --accent-soft: #15303f; --accent-ink: #0b1620;
+  --core: #f06262; --major: #eb9c4c; --ref: #8f98a7; --warn: #f0a35a;
+  --why-line: #38bdf8; --upd: #b597f6; --upd-soft: #2a2140; --ok: #45bb84;
+  --chip-on: #0ea5e9; --frame: #3b414b; --scrim: rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.65; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: flex; flex-direction: column; gap: 36px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+
+.hero { display: flex; flex-direction: column; gap: 12px; max-width: 74ch; }
+.hero h1 { font-size: clamp(28px, 4.4vw, 38px); letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; }
+.notice { border-left: 3px solid var(--major); background: var(--surface); padding: 10px 14px; border-radius: 0 10px 10px 0; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--sunk); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { font: inherit; font-size: 13px; font-weight: 600; border: 0; background: transparent; color: var(--muted); padding: 5px 14px; border-radius: 8px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.plain { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 5px 12px; border-radius: 8px; cursor: pointer; }
+.hint { font-size: 13px; color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; align-items: start; }
+.bench.pc { grid-template-columns: 1fr; }
+@media (max-width: 980px) { .bench { grid-template-columns: 1fr; } }
+.stage { min-width: 0; }
+.phones { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+.phone-col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.phone-label { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.phone { width: 350px; max-width: 100%; height: 700px; border: 9px solid var(--frame); border-radius: 34px; background: var(--surface); overflow: hidden; display: flex; flex-direction: column; }
+.phone::before { content: ""; display: block; height: 20px; flex: none; }
+.phone > .scr { flex: 1; min-height: 0; }
+.browser-scroll { overflow-x: auto; }
+.browser { min-width: 860px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; box-shadow: 0 6px 24px rgba(10,15,30,.08); }
+.browser-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.browser-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+.browser-bar span { margin-left: 10px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); background: var(--surface); border-radius: 6px; padding: 3px 10px; flex: 1; }
+.browser-body { display: grid; grid-template-columns: 1fr 1.15fr; height: 680px; }
+.browser-body > .scr { min-width: 0; min-height: 0; }
+.browser-body > .scr + .scr { border-left: 1px solid var(--line); }
+
+.notes { display: flex; flex-direction: column; gap: 14px; font-size: 14px; position: sticky; top: 80px; }
+.bench.pc .notes { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 28px; }
+.notes h3 { font-size: 19px; }
+.notes h4 { margin: 0 0 4px; font-size: 12.5px; color: var(--accent); letter-spacing: .02em; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.notes .try { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
+.notes .ref { font-size: 12.5px; color: var(--muted); }
+
+.cmp { display: flex; flex-direction: column; gap: 12px; }
+.cmp h2 { font-size: 22px; }
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; line-height: 1.5; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); background: var(--sunk); }
+tbody th { white-space: nowrap; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+/* ===== 시안 화면 ===== */
+.scr { font-size: 13.5px; line-height: 1.55; color: var(--fg); background: var(--surface); position: relative; display: flex; flex-direction: column; overflow: hidden; }
+.scr button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.pad { padding: 12px 14px; }
+.col { display: flex; flex-direction: column; }
+.g4 { gap: 4px; } .g6 { gap: 6px; } .g8 { gap: 8px; } .g10 { gap: 10px; } .g12 { gap: 12px; } .g14 { gap: 14px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.wrapx { flex-wrap: wrap; }
+.sm { font-size: 12px; } .xs { font-size: 11px; }
+.mt { color: var(--muted); }
+.b { font-weight: 700; } .sb { font-weight: 600; }
+.h1 { font-size: 19px; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; }
+.h2 { font-size: 15px; font-weight: 700; line-height: 1.4; }
+.badge { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; color: #fff; flex: none; }
+.b-core { background: var(--core); } .b-major { background: var(--major); } .b-ref { background: var(--ref); }
+
+/* 목록 */
+.l-head { text-align: center; }
+.lead-box { background: var(--sunk); border-radius: 14px; padding: 10px 12px 4px; }
+.l-row { display: flex; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: flex-start; width: 100%; }
+.l-row:last-child { border-bottom: 0; }
+.l-row[aria-current="true"] { background: var(--accent-soft); border-radius: 8px; margin-inline: -6px; padding-inline: 6px; width: calc(100% + 12px); }
+.l-num { width: 18px; text-align: center; font-weight: 700; color: var(--accent); flex: none; }
+.l-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.l-upd { color: var(--upd); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l-only { font-size: 10.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.tabs2 { display: inline-flex; background: var(--sunk); border-radius: 8px; padding: 2px; }
+.tabs2 span { padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; }
+.tabs2 span.on { background: var(--surface); }
+.cat { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; white-space: nowrap; }
+
+/* 상세 */
+.d-top { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex: none; }
+.d-top .path { font-size: 11.5px; color: var(--muted); font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-back { font-weight: 600; font-size: 13px; }
+.mini-seg { display: inline-flex; background: var(--sunk); border-radius: 8px; padding: 2px; flex: none; }
+.mini-seg button { padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
+.mini-seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.d-body { padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.srcline { font-size: 12px; color: var(--muted); }
+.changed { background: var(--upd-soft); color: var(--upd); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; display: flex; gap: 8px; align-items: baseline; }
+.changed b { flex: none; }
+.changed span:last-child { margin-left: auto; font-weight: 600; white-space: nowrap; }
+.lenses { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; margin-inline: -2px; padding-inline: 2px; }
+.lens { flex: none; border: 1px solid var(--line) !important; border-radius: 999px !important; padding: 4px 12px !important; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.lens[aria-pressed="true"] { background: var(--chip-on) !important; color: #fff !important; border-color: var(--chip-on) !important; }
+.lead-p { font-size: 14.5px; line-height: 1.7; }
+.lead-p b { font-weight: 700; }
+.why { border-left: 3px solid var(--why-line); padding: 2px 0 2px 12px; font-size: 14px; line-height: 1.65; }
+.why b { color: var(--accent); }
+.blk { font-size: 14px; line-height: 1.7; }
+.blk b { font-weight: 700; }
+.from { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.pairs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.pair { background: var(--sunk); border-radius: 8px; padding: 4px 9px; display: flex; flex-direction: column; line-height: 1.25; }
+.pair span { font-size: 10.5px; color: var(--muted); }
+.pair b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.bul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.6; }
+.easy { font-size: 14.5px; line-height: 1.8; }
+.tagline { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; align-self: flex-start; }
+.w5 { display: grid; grid-template-columns: 62px 1fr; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 13.5px; }
+.w5 > * { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.w5 > *:nth-last-child(-n+2) { border-bottom: 0; }
+.w5 dt { background: var(--sunk); font-weight: 700; color: var(--accent); margin: 0; }
+.w5 dd { margin: 0; }
+.w5 .none { color: var(--muted); font-style: italic; }
+.sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.side { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.side b { font-size: 13px; }
+.side p { font-size: 13px; line-height: 1.6; }
+.basis { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.basis .flag { margin-left: auto; white-space: nowrap; text-decoration: underline; text-underline-offset: 2px; color: var(--muted); }
+.basis .done { margin-left: auto; white-space: nowrap; color: var(--ok); font-weight: 600; }
+.web { color: var(--warn); font-weight: 600; }
+.ocard { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.ocard .ot { font-weight: 700; font-size: 14px; line-height: 1.45; }
+.ocard .om { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ocard .go { margin-left: auto; color: var(--accent); font-weight: 700; }
+.others { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.others a, .others span.l { color: var(--accent); }
+.ask { display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 12px; background: var(--sunk); font-weight: 700; width: 100%; text-align: center !important; }
+.d-nav { flex: none; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 8px 12px 10px; font-weight: 600; background: var(--surface); }
+.d-nav button[disabled] { opacity: .3; cursor: default; }
+.d-nav .next { text-align: right !important; justify-self: end; }
+.d-nav .pos { font-size: 12px; color: var(--muted); font-family: var(--f-mono); }
+.keys { font-size: 11px; color: var(--muted); font-family: var(--f-mono); padding: 0 12px 8px; text-align: center; }
+
+/* 원문 읽기 */
+.rd-sum { background: var(--sunk); border-radius: 10px; padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+.rd-sum button { margin-left: auto; font-weight: 600; color: var(--accent); white-space: nowrap; font-size: 12px; }
+.rd-p { font-size: 15px; line-height: 1.85; }
+.bar-skel { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--sunk), var(--line), var(--sunk)); background-size: 200% 100%; animation: sk 1.2s linear infinite; }
+@keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .bar-skel { animation: none; } }
+.outbtn { display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 10px; border: 1px solid var(--line); font-weight: 600; width: 100%; text-align: center !important; }
+
+/* 아래에서 올라오는 시트 */
+.scrim { position: absolute; inset: 0; background: var(--scrim); display: flex; align-items: flex-end; z-index: 4; }
+.sheet { background: var(--surface); width: 100%; border-radius: 16px 16px 0 0; padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.sheet .opt { border: 1px solid var(--line) !important; border-radius: 10px !important; padding: 10px 12px !important; font-weight: 600; width: 100%; }
+.sheet .grip { width: 36px; height: 4px; border-radius: 2px; background: var(--line); align-self: center; }
+.askbox { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; color: var(--muted); font-size: 13px; }
+.ctx { background: var(--sunk); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+.toast { position: absolute; left: 12px; right: 12px; bottom: 64px; background: var(--fg); color: var(--surface); border-radius: 10px; padding: 9px 12px; font-size: 12.5px; z-index: 5; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <span class="eyebrow">docvault 뉴스 브리핑 · 개선 합의안 v0.2 시안 · 2026-10-11</span>
+    <h1>뉴스 브리핑 개선 시안</h1>
+    <p class="lead">합의안 v0.2대로 바꾼 목록과 기사 화면입니다. 요약 보기 바꾸기, 이전·다음 이동, 앱 안 원문, 틀린 곳 알리기, 이 기사 묻기를 실제로 눌러 볼 수 있습니다.</p>
+    <div class="notice">
+      <span><b>기사·언론사·수치는 모두 가상</b>입니다. 언론사 이름도 지어낸 것입니다.</span>
+      <span>근거 문서: docs/뉴스브리핑_개선합의안_20261010.md (v0.2). 장 번호를 오른쪽 설명에 적어 두었습니다.</span>
+    </div>
+  </header>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="기기">
+      <button type="button" id="dev-phone" aria-pressed="true">폰</button>
+      <button type="button" id="dev-pc" aria-pressed="false">PC</button>
+    </div>
+    <button type="button" class="plain" id="reset">처음 상태로</button>
+    <span class="hint" id="hint"></span>
+  </div>
+
+  <div class="bench" id="bench">
+    <div class="stage" id="stage"></div>
+    <aside class="notes" id="notes" aria-live="polite"></aside>
+  </div>
+
+  <section class="cmp">
+    <h2>지금과 무엇이 달라지나</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>항목</th><th>지금 (v0.43)</th><th>시안</th><th>합의안</th></tr></thead>
+        <tbody>
+          <tr><th>요약이 없는 기사</th><td>핵심·주요도 "요약이 없는 기사예요"로 실림</td><td>0건. 다른 보도·웹 검색으로 채우고, 끝내 없으면 "제목만" 참고로 내림</td><td>S0 · S8 · 4.4</td></tr>
+          <tr><th>펼친 글 모양</th><td>회색 라벨 4칸 고정(무슨 일·배경·숫자로 보면·앞으로), 200~300자</td><td>리드 + 왜 중요한가 + 재료 있는 칸 0~3개, 문단 첫머리 굵게, 숫자는 칩. 핵심 500~700자</td><td>4.1 · 4.2</td></tr>
+          <tr><th>요약 보기</th><td>한 가지</td><td>기본 · 글머리표 · 쉽게 · 5W · 양쪽 시각</td><td>4.7</td></tr>
+          <tr><th>근거</th><td>"AI 요약 · 본문 앞부분 기준" (읽은 언론사가 틀리게 표시될 수 있음)</td><td>실제로 읽은 언론사 이름, 문단 끝 출처, 웹 검색이면 그렇게 밝힘</td><td>5.1 · 13</td></tr>
+          <tr><th>폰에서 읽기</th><td>목록 안에서 들여 쓴 채 펼침, 다음 기사로 가려면 접고 다시 스크롤</td><td>전체 화면, 아래 고정 이전·다음</td><td>6.2</td></tr>
+          <tr><th>원문</th><td>새 탭으로 나갔다 오면 회차 맨 위</td><td>돌아오면 그 기사로 복귀, 되는 기사는 앱 안에서 읽기(측정 후)</td><td>6.4 · 7</td></tr>
+          <tr><th>더 알고 싶을 때</th><td>원문을 열거나 글을 드래그해 질문</td><td>[이 기사 묻기] — 기사 제목·요약·주소를 넘겨 웹 검색으로 답</td><td>6.6</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>작성 2026-10-11 · 시안 속 기사와 언론사는 모두 가상입니다 · 원문 읽기의 로딩·실패는 흉내 낸 것입니다</footer>
+</div>
+
+<script>
+(function () {
+  // ---------- 가상 데이터 ----------
+  var A = {
+    a1: {
+      kind: 'core', short: '핵심 · 여러 언론 3곳을 엮은 기사',
+      section: '국내 · 경제 · 환율·금리',
+      title: "기준금리 2.50% 세 번째 동결…소수의견 1명 '인하'",
+      outlet: '새벽통신', outlets: 12, time: '10/10 11:42',
+      sources: [{ id: 'A', name: '새벽통신' }, { id: 'B', name: '한빛일보' }, { id: 'C', name: '바른신문' }],
+      lead: ['한국은행이 10일 기준금리를 연 2.50%로 묶었다.', '7월과 8월에 이어 세 번째 동결이다. 다만 이번에는 위원 6명 중 1명이 0.25%p 인하를 주장해, 다음 회의에서 내릴 수 있다는 신호로 읽힌다.'],
+      why: { t: '대출 금리 인하는 빨라야 11월이다. 채권 시장은 이미 인하를 반영해 움직이기 시작했다.', from: ['A', 'B'] },
+      blocks: [
+        { label: '배경', t: '9월 가계대출이 4.1조 원 늘어 올해 가장 많았고, 수도권 집값 오름세도 이어졌다. 내리면 대출과 집값을 다시 자극할 수 있다는 판단이다.', from: ['A', 'C'] },
+        { label: '숫자', pairs: [['기준금리', '연 2.50%'], ['9월 가계대출', '+4.1조 원'], ['인하 소수의견', '1명']], from: ['A'] },
+        { label: '앞으로', t: '다음 회의는 11월 27일. 총재는 "인하 가능성을 닫지 않았다"고 말했다.', from: ['A'] }
+      ],
+      lenses: {
+        bullets: ['기준금리 연 2.50%로 세 번 연속 동결', '위원 6명 중 1명은 0.25%p 인하 주장 — 11월 인하 신호로 읽힘', '9월 가계대출 4.1조 원 증가, 수도권 집값 오름세가 동결 이유', '다음 회의 11월 27일'],
+        easy: '은행에서 돈을 빌리면 이자를 내죠. 그 이자의 기준이 되는 숫자를 한국은행이 정하는데, 이번에도 그대로 2.50%에 뒀어요. 지금 내리면 사람들이 돈을 더 빌려 집을 사고, 집값이 더 오를까 걱정했기 때문이에요. 그래도 위원 한 명이 "내리자"고 해서, 다음 회의(11월 27일)에는 내릴 수도 있다는 기대가 생겼어요.',
+        w5: { 누가: '한국은행 금융통화위원회', 무엇을: '기준금리 연 2.50% 동결 (세 번째)', 언제: '10월 10일 회의', 어디서: '', 왜: '9월 가계대출 급증, 수도권 집값 오름세' },
+        sides: { kind: '찬반이 갈리는 쟁점', items: [
+          { label: '빨리 내려야', t: '자영업자와 청년 대출자의 이자 부담이 한계라며, 인하가 늦었다고 비판했다.', from: 'B' },
+          { label: '아직 이르다', t: '집값 불씨가 남아 있어 지금 내리면 가계부채를 다시 키운다며 동결을 불가피하다고 봤다.', from: 'C' }
+        ] }
+      },
+      basis: 'body',
+      originalTitle: '한은, 기준금리 연 2.50% 동결…3회 연속',
+      others: ['누리경제', '온누리방송', '미래경제', 'Global Wire'],
+      read: 'ok',
+      reader: { by: '새벽통신 · 김OO 기자 · 2026.10.10 11:42', paras: ['한국은행 금융통화위원회는 10일 정례회의를 열고 기준금리를 연 2.50%로 유지했다. 7월과 8월에 이어 세 번째 동결이다.', '이번 회의에서는 위원 1명이 0.25%포인트 인하 의견을 냈다. 시장에서는 이를 다음 회의 인하 신호로 받아들이는 분위기다.', '총재는 회의 뒤 기자간담회에서 "물가보다 금융안정이 더 급한 과제였다"며 "11월 인하 가능성을 닫지 않았다"고 말했다.'] }
+    },
+    a2: {
+      kind: 'core', short: '핵심 · 웹 검색으로 채운 기사',
+      section: '세계 · 세계경제 · 금리·중앙은행',
+      title: '미 연준 의사록 "연내 한 번 더 인하" 다수 의견',
+      outlet: 'Global Wire', outlets: 7, time: '10/10 03:05',
+      sources: [{ id: 'W1', name: 'Global Wire', web: true }, { id: 'W2', name: 'Atlas News', web: true }],
+      lead: ['미국 연방준비제도가 9월 회의 의사록을 공개했다.', '위원 다수가 연말까지 금리를 한 번 더 내리는 데 찬성한 것으로 나타났다. 고용 둔화를 물가보다 더 걱정했다는 대목이 눈에 띈다.'],
+      why: { t: '의사록이 고용 쪽 걱정을 드러내면서 연말 미국 금리 전망이 한 번 더 인하 쪽으로 기울었다.', from: ['W1', 'W2'] },
+      blocks: [
+        { label: '숫자', pairs: [['9월 인하 폭', '0.25%p'], ['추가 인하 지지', '위원 다수']], from: ['W1'] },
+        { label: '반응', t: '채권 시장은 12월 인하 가능성을 더 높게 반영했다.', from: ['W2'] }
+      ],
+      lenses: {
+        bullets: ['미 연준 9월 회의 의사록 공개', '위원 다수가 연내 한 번 더 인하에 찬성', '물가보다 고용 둔화를 더 걱정', '채권 시장은 12월 인하 가능성을 높게 반영'],
+        easy: '미국의 중앙은행인 연준이 지난달 회의에서 무슨 이야기를 했는지 기록을 공개했어요. 위원 여럿이 "올해 안에 한 번 더 금리를 내리자"는 쪽이었어요. 물건값보다 일자리가 줄어드는 걸 더 걱정했다는 뜻이에요.',
+        w5: { 누가: '미국 연방준비제도(연준)', 무엇을: '9월 회의 의사록 공개, 다수가 추가 인하 지지', 언제: '현지 시각 10월 9일', 어디서: '미국 워싱턴', 왜: '고용 둔화 우려' }
+      },
+      basis: 'web',
+      originalTitle: 'Fed minutes show most officials backed another cut this year',
+      others: ['Atlas News', '누리경제'],
+      read: 'none'
+    },
+    a3: {
+      kind: 'major', short: '주요 · 갱신된 기사, 원문 받기 실패',
+      section: '국내 · 경제 · 수출·무역',
+      title: '9월 수출 확정치 1,211억 달러…잠정치보다 2억 늘어',
+      outlet: '미래경제', outlets: 4, time: '10/10 09:10',
+      changed: '확정치가 나와 잠정치(1,209억 달러)보다 2억 달러 늘었다',
+      sources: [{ id: 'A', name: '미래경제' }],
+      lead: ['산업부가 9월 수출 확정치를 1,211억 달러로 발표했다.', '지난 1일 낸 잠정치보다 2억 달러 늘었고, 반도체가 증가분의 대부분을 차지했다.'],
+      why: { t: '수출 증가가 반도체 한 품목에 몰려 있다는 점이 확정치에서도 그대로 확인됐다.', from: ['A'] },
+      blocks: [
+        { label: '숫자', pairs: [['9월 수출', '1,211억 달러'], ['잠정치 대비', '+2억 달러'], ['전년 대비', '+7.2%']], from: ['A'] }
+      ],
+      lenses: {
+        bullets: ['9월 수출 확정치 1,211억 달러', '잠정치보다 2억 달러 증가', '전년 대비 7.2% 증가, 대부분 반도체'],
+        easy: '나라가 한 달 동안 외국에 판 물건값을 다시 정확히 세어 보니, 처음 발표 때보다 조금(2억 달러) 더 많았어요. 늘어난 건 대부분 반도체 덕분이었어요.',
+        w5: { 누가: '산업통상부', 무엇을: '9월 수출 확정치 발표', 언제: '10월 10일', 어디서: '', 왜: '' }
+      },
+      basis: 'body',
+      originalTitle: '9월 수출 1211억달러 확정…반도체 비중 역대 최고',
+      others: ['새벽통신', '다온경제', '하늘신문'],
+      read: 'fail'
+    }
+  };
+  var ORDER = ['a1', 'a2', 'a3'];
+  var LENS = [['base', '기본'], ['bullets', '글머리표'], ['easy', '쉽게'], ['w5', '5W'], ['sides', '양쪽 시각']];
+
+  // ---------- 상태 ----------
+  function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  var S = { device: load('bp-dev', 'phone'), cur: 'a1', lens: 'base', mode: 'sum', read: null, flagged: {}, sheet: null, toast: '', sumOpen: false };
+  var timer = null, toastTimer = null;
+
+  var stage = document.getElementById('stage');
+  var notes = document.getElementById('notes');
+  var bench = document.getElementById('bench');
+  var hint = document.getElementById('hint');
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function srcName(a, id) { for (var i = 0; i < a.sources.length; i++) if (a.sources[i].id === id) return a.sources[i].name; return id; }
+  function fromTxt(a, ids) { return a.sources.length >= 2 ? ' <span class="from">— ' + ids.map(function (i) { return esc(srcName(a, i)); }).join('·') + '</span>' : ''; }
+  function badge(k) { return k === 'core' ? '<span class="badge b-core">핵심</span>' : k === 'major' ? '<span class="badge b-major">주요</span>' : '<span class="badge b-ref">참고</span>'; }
+
+  // ---------- 목록 ----------
+  function listHTML() {
+    function row(id, opts) {
+      var a = A[id];
+      var cur = S.cur === id ? ' aria-current="true"' : '';
+      if (opts.lead) {
+        return '<button class="l-row" data-open="' + id + '"' + cur + '><span class="l-num">' + opts.lead + '</span><span class="l-txt"><span class="xs mt sb">' + esc(a.section.split(' · ').filter(function (_, i) { return i !== 1; }).join(' · ')) + '</span><span class="sb">' + esc(a.title) + '</span></span></button>';
+      }
+      return '<button class="l-row" data-open="' + id + '"' + cur + '>' + badge(a.kind) + '<span class="l-txt"><span' + (a.kind === 'core' ? ' class="sb"' : '') + '>' + esc(a.title) + '</span><span class="xs mt">' + esc(a.section.split(' · ')[2]) + ' · ' + esc(a.outlet) + ' 외 ' + (a.outlets - 1) + '곳 · ' + esc(a.time.split(' ')[1]) + (a.changed ? ' · <span style="color:var(--upd);font-weight:600">갱신됨</span>' : '') + '</span>' + (a.changed ? '<span class="l-upd">지난 판 이후: ' + esc(a.changed) + '</span>' : '') + '</span></button>';
+    }
+    function stat(kind, title, meta) {
+      return '<button class="l-row" data-stub="1">' + badge(kind) + '<span class="l-txt"><span>' + esc(title) + '</span><span class="xs mt">' + esc(meta) + '</span></span></button>';
+    }
+    return '<div class="scroll"><div class="pad col g10">' +
+      '<div class="row" style="justify-content:space-between"><span class="mt">‹</span><div class="col l-head"><span class="h2">10월 11일 (토) 수시판</span><span class="xs mt">어제 08:10 – 오늘 08:05 기사 · 131건</span></div><span class="mt">›</span></div>' +
+      '<div class="lead-box col"><div class="row"><span class="h2">오늘의 핵심</span><span class="xs mt">6건 · 약 1분</span></div>' +
+      row('a1', { lead: 1 }) + row('a2', { lead: 2 }) +
+      '<button class="l-row" data-stub="1"><span class="l-num">3</span><span class="l-txt"><span class="xs mt sb">국내 · 반도체·전자</span><span class="sb">HBM4 첫 양산 출하…고객사 2곳 확정</span></span></button>' +
+      '</div>' +
+      '<div class="row"><span class="tabs2"><span class="on">국내 88</span><span>세계 43</span></span><span class="cat">경제</span><span class="cat">정치</span></div>' +
+      '<div class="col">' +
+      row('a1', {}) + row('a3', {}) +
+      stat('major', '"11월엔 내린다" 채권 금리 일제히 하락', '증시 · 새벽통신 외 2곳 · 11:58') +
+      '<button class="l-row" data-titleonly="1">' + badge('ref') + '<span class="l-txt"><span>지방은행 예금 금리 줄줄이 인하</span><span class="xs mt">환율·금리 · 다온경제 · 09:30 <span class="l-only">제목만 · 원문 ↗</span></span></span></button>' +
+      '</div>' +
+      '<span class="xs mt">요약을 쓸 재료가 끝내 없던 기사는 참고로 내려 "제목만"으로 보이고, 누르면 펼치지 않고 바로 원문으로 갑니다.</span>' +
+      '</div></div>';
+  }
+
+  // ---------- 상세 ----------
+  function bodyHTML(a) {
+    var lensAvail = LENS.filter(function (l) { return l[0] === 'base' || (a.lenses && a.lenses[l[0]]); });
+    var lens = lensAvail.some(function (l) { return l[0] === S.lens; }) ? S.lens : 'base';
+    var h = '';
+    h += '<div class="col g6"><div class="row">' + badge(a.kind) + '<span class="xs mt sb">' + esc(a.section) + '</span></div>';
+    h += '<span class="h1">' + esc(a.title) + '</span>';
+    h += '<span class="srcline">' + esc(a.outlet) + ' 외 ' + (a.outlets - 1) + '곳 보도 · ' + a.sources.length + '곳 ' + (a.basis === 'web' ? '보도' : '본문') + ' 정리 · ' + esc(a.time) + '</span></div>';
+    if (a.changed) h += '<div class="changed"><b>지난 판 이후</b><span>' + esc(a.changed) + '</span><span>지난 판 ›</span></div>';
+    h += '<div class="lenses" role="group" aria-label="요약 보기">' + lensAvail.map(function (l) {
+      return '<button class="lens" data-lens="' + l[0] + '" aria-pressed="' + (l[0] === lens) + '">' + l[1] + '</button>';
+    }).join('') + '</div>';
+
+    if (lens === 'base') {
+      h += '<p class="lead-p"><b>' + esc(a.lead[0]) + '</b> ' + esc(a.lead[1]) + '</p>';
+      h += '<p class="why"><b>왜 중요한가</b> · ' + esc(a.why.t) + fromTxt(a, a.why.from) + '</p>';
+      a.blocks.forEach(function (b) {
+        if (b.pairs) {
+          h += '<div class="blk"><b>' + b.label + '</b>' + fromTxt(a, b.from) + '<div class="pairs">' + b.pairs.map(function (p) { return '<span class="pair"><span>' + esc(p[0]) + '</span><b>' + esc(p[1]) + '</b></span>'; }).join('') + '</div></div>';
+        } else {
+          h += '<p class="blk"><b>' + b.label + ' · </b>' + esc(b.t) + fromTxt(a, b.from) + '</p>';
+        }
+      });
+    } else if (lens === 'bullets') {
+      h += '<ul class="bul">' + a.lenses.bullets.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+    } else if (lens === 'easy') {
+      h += '<p class="easy">' + esc(a.lenses.easy) + '</p><span class="tagline">쉽게 풀어 쓴 글 · 비유가 들어 있어요</span>';
+    } else if (lens === 'w5') {
+      h += '<dl class="w5" style="margin:0">' + Object.keys(a.lenses.w5).map(function (k) {
+        var v = a.lenses.w5[k];
+        return '<dt>' + k + '</dt><dd' + (v ? '' : ' class="none"') + '>' + (v ? esc(v) : '기사에 없음') + '</dd>';
+      }).join('') + '</dl>';
+    } else if (lens === 'sides') {
+      h += '<span class="xs mt sb">' + esc(a.lenses.sides.kind) + '</span><div class="sides">' + a.lenses.sides.items.map(function (s) {
+        return '<div class="side"><b>' + esc(s.label) + '</b><p>' + esc(s.t) + '</p><span class="from">' + esc(srcName(a, s.from)) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    if (lens === 'sides') h += '<span class="xs mt">언론사 원문에서 쓴 것 · 한쪽 주장만 있으면 이 보기는 나오지 않습니다</span>';
+    else if (lens !== 'base') h += '<span class="xs mt">기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않습니다</span>';
+
+    var names = a.sources.map(function (s) { return s.name; }).join('·');
+    h += '<div class="basis"><span>' + (a.basis === 'web' ? '<span class="web">웹 검색</span>으로 찾은 ' + esc(names) + ' 보도를 읽고 AI가 정리' : esc(names) + ' 본문을 읽고 AI가 정리') + '</span>' +
+      (S.flagged[S.cur] ? '<span class="done">알렸어요</span>' : '<button class="flag" data-sheet="flag">틀린 곳 알리기</button>') + '</div>';
+    h += '<div class="ocard"><span class="xs mt">원문</span><span class="ot">' + esc(a.originalTitle) + '</span><span class="om"><span>' + esc(a.outlet) + ' · ' + esc(a.time) + '</span>' +
+      (a.read !== 'none' ? '<button class="go" data-mode="read">앱에서 읽기</button>' : '<button class="go" data-out="1">사이트에서 열기 ↗</button>') + '</span>' +
+      '<div class="others"><span class="mt">다른 보도</span>' + a.others.map(function (o) { return '<span class="l">' + esc(o) + '</span>'; }).join('') + '</div></div>';
+    h += '<button class="ask" data-sheet="ask">이 기사 묻기</button>';
+    return h;
+  }
+
+  function readerHTML(a) {
+    var h = '';
+    if (S.read === 'loading') {
+      h += '<div class="col g10"><span class="xs mt">' + esc(a.outlet) + '에서 원문을 받는 중…</span><div class="bar-skel" style="width:70%"></div><div class="bar-skel"></div><div class="bar-skel" style="width:85%"></div><div class="bar-skel" style="width:60%"></div></div>';
+      h += '<button class="outbtn" data-out="1">기다리지 않고 사이트에서 열기 ↗</button>';
+    } else if (S.read === 'fail') {
+      h += '<div class="col g8" style="padding:20px 0;text-align:center"><span class="h2">앱에서 보여 줄 수 없는 기사예요</span><span class="sm mt">유료 기사이거나 본문을 뽑지 못했어요. 새 탭은 저절로 열지 않습니다.</span></div>';
+      h += '<button class="outbtn" data-out="1">사이트에서 열기 ↗</button>';
+    } else {
+      h += '<div class="rd-sum"><span>' + esc(a.lead[0]) + '</span><button data-sumopen="1">' + (S.sumOpen ? '요약 접기 ▴' : '요약 펼치기 ▾') + '</button></div>';
+      if (S.sumOpen) h += '<p class="sm" style="line-height:1.7">' + esc(a.lead[1]) + ' ' + esc(a.why.t) + '</p>';
+      h += '<div class="col g4"><span class="h1">' + esc(a.originalTitle) + '</span><div class="row sm mt wrapx"><span>' + esc(a.reader.by) + '</span><button data-out="1" style="color:var(--accent);font-weight:600">사이트에서 보기 ↗</button></div></div>';
+      a.reader.paras.forEach(function (p) { h += '<p class="rd-p">' + esc(p) + '</p>'; });
+      h += '<span class="sm mt">사진·표는 원문에서 보세요 ↗</span><span class="xs mt">누를 때만 받아 와서 보여 주고, 저장하지 않아요 · 이 화면에서는 글을 끌어 질문하기가 꺼져 있어요</span>';
+    }
+    return h;
+  }
+
+  function sheetHTML(a) {
+    if (S.sheet === 'flag') {
+      return '<div class="scrim" data-close="1"><div class="sheet" data-stop="1"><span class="grip"></span><span class="h2">어디가 틀렸나요?</span>' +
+        ['숫자가 틀림', '다른 사건이 섞임', '제목이 과장됨', '기타'].map(function (t) { return '<button class="opt" data-flag="1">' + t + '</button>'; }).join('') +
+        '<span class="xs mt">한 번 누르면 끝나요. 이번 달 신고 수는 브리핑 패널에 보입니다.</span></div></div>';
+    }
+    if (S.sheet === 'ask') {
+      return '<div class="scrim" data-close="1"><div class="sheet" data-stop="1"><span class="grip"></span><span class="h2">이 기사 묻기</span>' +
+        '<span class="ctx">기사: ' + esc(a.title) + '</span>' +
+        '<div class="row wrapx g6"><span class="cat">내 대출 이자는 언제 내려가?</span><span class="cat">이게 왜 중요해?</span><span class="cat">지난번엔 어땠어?</span></div>' +
+        '<div class="askbox">궁금한 점을 적어 주세요</div>' +
+        '<span class="xs mt">기존 AI 질문 기능으로 열립니다. 넘기는 것은 기사 제목·요약·원문 주소뿐이고, 필요하면 AI가 웹 검색으로 찾아 출처를 붙여 답합니다.</span>' +
+        '<button class="opt" data-close="1" style="text-align:center">닫기</button></div></div>';
+    }
+    return '';
+  }
+
+  function detailHTML(isPc) {
+    var a = A[S.cur];
+    var i = ORDER.indexOf(S.cur);
+    var h = '<div class="d-top">' + (isPc ? '' : '<button class="d-back" data-back="1">← 목록</button>') +
+      '<span class="path">' + esc(a.section) + '</span>' +
+      (a.read !== 'none' ? '<span class="mini-seg"><button data-mode="sum" aria-pressed="' + (S.mode === 'sum') + '">요약</button><button data-mode="read" aria-pressed="' + (S.mode === 'read') + '">원문</button></span>' : '') +
+      '</div>';
+    h += '<div class="scroll" id="dscroll"><div class="d-body">' + (S.mode === 'read' ? readerHTML(a) : bodyHTML(a)) + '</div></div>';
+    h += '<div class="d-nav"><button data-nav="-1"' + (i <= 0 ? ' disabled' : '') + '>‹ 이전</button><span class="pos">' + (i + 1) + ' / ' + ORDER.length + '</span><button class="next" data-nav="1"' + (i >= ORDER.length - 1 ? ' disabled' : '') + '>다음 ›</button></div>';
+    if (isPc) h += '<div class="keys">J/K 이동 · O 앱 안 원문 · Shift+O 새 탭 · R 요약/원문 · A 묻기</div>';
+    h += sheetHTML(a);
+    if (S.toast) h += '<div class="toast">' + esc(S.toast) + '</div>';
+    return h;
+  }
+
+  // ---------- 그리기 ----------
+  function render(keepScroll) {
+    var prev = document.getElementById('dscroll');
+    var top = keepScroll && prev ? prev.scrollTop : 0;
+    var list = '<div class="scr">' + listHTML() + '</div>';
+    if (S.device === 'phone') {
+      stage.innerHTML = '<div class="phones">' +
+        '<div class="phone-col"><span class="phone-label">목록 (거의 그대로)</span><div class="phone">' + list + '</div></div>' +
+        '<div class="phone-col"><span class="phone-label">기사 화면 (전체 화면 시트)</span><div class="phone"><div class="scr" id="det">' + detailHTML(false) + '</div></div></div>' +
+        '</div>';
+      hint.textContent = '왼쪽 목록에서 기사를 고르면 오른쪽에 열립니다';
+    } else {
+      stage.innerHTML = '<div class="browser-scroll"><div class="browser"><div class="browser-bar"><i></i><i></i><i></i><span>docvault › 뉴스 브리핑 › 10월 11일 수시판 · 개선 시안</span></div>' +
+        '<div class="browser-body">' + list + '<div class="scr" id="det">' + detailHTML(true) + '</div></div></div></div>';
+      hint.textContent = 'PC: 왼쪽 목록, 오른쪽 상세 · 키보드 J/K·O·R·A도 됩니다 (좁은 화면에서는 옆으로 밀어 보세요)';
+    }
+    bench.classList.toggle('pc', S.device === 'pc');
+    var d = document.getElementById('dscroll');
+    if (d) d.scrollTop = top;
+    renderNotes();
+  }
+
+  function renderNotes() {
+    var a = A[S.cur];
+    var see = {
+      a1: ['리드 첫 문장만 굵게, 칸 이름은 문단 첫머리에 (회색 라벨 없음)', '숫자는 칩으로, 문단 끝에 근거 언론사', '근거 줄: 실제로 읽은 언론사 3곳', '보기 칩에 "양쪽 시각"이 있음 — 찬반이 갈리는 쟁점이라서', '5W의 "어디서"는 기사에 없어서 비워 둠'],
+      a2: ['직접 RSS가 없어 지금은 "요약 없음"이던 통신사 기사', '근거 줄에 "웹 검색으로 찾은 … 보도"라고 밝힘', '앱 안 원문 버튼 없음 — 웹 검색 재료라 받을 주소가 없어 처음부터 "사이트에서 열기"', '"양쪽 시각" 칩이 없음 — 쟁점·차이가 없으면 만들지 않음'],
+      a3: ['"지난 판 이후" 보라 줄 — 목록 셋째 줄에도 같은 한 줄', '읽은 곳이 1곳이라 문단 끝 출처 표시는 생략', '[원문]을 누르면 받기 실패 화면 — 새 탭을 저절로 열지 않음']
+    }[S.cur];
+    var lensNote = { base: '기본 보기', bullets: '글머리표 — 기본 요약을 3~5줄로', easy: '쉽게 — 용어를 풀어 다시 씀, 비유 표시', w5: '5W — 근거 없는 칸은 "기사에 없음"', sides: '양쪽 시각 — 원문에서 쓰고 근거 언론사를 붙임' }[S.lens] || '';
+    notes.innerHTML =
+      '<h3>' + esc(a.short) + '</h3>' +
+      '<div><h4>이 기사에서 볼 것</h4><ul>' + see.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul></div>' +
+      '<div><h4>지금 고른 보기</h4><p>' + esc(S.mode === 'read' ? '앱 안 원문 읽기 (7장 — 측정 후 넣을지 결정)' : lensNote) + '</p><p class="ref">고른 보기는 기기가 기억해 다음 기사도 그 보기로 엽니다</p></div>' +
+      '<div class="try"><h4>눌러 볼 것</h4><ul><li>보기 칩: 글머리표 · 쉽게 · 5W · 양쪽 시각</li><li>아래 ‹ 이전 · 다음 › (폰은 엄지 자리에 고정)</li><li>위 [요약 | 원문], 원문 카드의 "앱에서 읽기"</li><li>"틀린 곳 알리기", [이 기사 묻기]</li><li>목록의 "제목만" 참고 기사</li></ul></div>' +
+      '<p class="ref">합의안 v0.2: 글 모양 4.1·4.2 · 요약 보기 4.7 · 웹 검색 S8 · 화면 6.2~6.6 · 앱 안 원문 7</p>';
+  }
+
+  function showToast(t) {
+    S.toast = t;
+    render(true);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { S.toast = ''; render(true); }, 2200);
+  }
+
+  function open(id) {
+    clearTimeout(timer);
+    S.cur = id; S.mode = 'sum'; S.read = null; S.sheet = null; S.sumOpen = false;
+    render(false);
+  }
+  function setMode(m) {
+    var a = A[S.cur];
+    clearTimeout(timer);
+    if (m === 'read' && a.read !== 'none') {
+      S.mode = 'read'; S.read = 'loading'; S.sumOpen = false;
+      render(false);
+      timer = setTimeout(function () { S.read = a.read === 'fail' ? 'fail' : 'ok'; render(true); }, 1100);
+    } else {
+      S.mode = 'sum'; S.read = null;
+      render(false);
+    }
+  }
+  function nav(d) {
+    var i = ORDER.indexOf(S.cur) + d;
+    if (i >= 0 && i < ORDER.length) open(ORDER[i]);
+  }
+
+  stage.addEventListener('click', function (e) {
+    var t = e.target;
+    var el;
+    if ((el = t.closest('[data-stop]')) && !t.closest('button')) return;
+    if ((el = t.closest('[data-open]'))) return open(el.getAttribute('data-open'));
+    if (t.closest('[data-stub]')) return showToast('시안에서는 위의 기사 세 건만 열립니다');
+    if (t.closest('[data-titleonly]')) return showToast('"제목만" 기사는 펼치지 않고 바로 원문(사이트)으로 갑니다');
+    if ((el = t.closest('[data-lens]'))) { S.lens = el.getAttribute('data-lens'); save('bp-lens', S.lens); return render(true); }
+    if ((el = t.closest('[data-mode]'))) return setMode(el.getAttribute('data-mode'));
+    if ((el = t.closest('[data-nav]'))) return nav(+el.getAttribute('data-nav'));
+    if (t.closest('[data-sumopen]')) { S.sumOpen = !S.sumOpen; return render(true); }
+    if ((el = t.closest('[data-sheet]'))) { S.sheet = el.getAttribute('data-sheet'); return render(true); }
+    if (t.closest('[data-flag]')) { S.flagged[S.cur] = true; S.sheet = null; return render(true); }
+    if (t.closest('[data-close]')) { S.sheet = null; return render(true); }
+    if (t.closest('[data-out]')) return showToast('언론사 사이트가 새 탭으로 열리고, 돌아오면 이 기사로 복귀합니다');
+    if (t.closest('[data-back]')) return showToast('목록으로 돌아갑니다 (폰에서는 뒤로 제스처로도 닫힘)');
+  });
+
+  // PC 키보드 — 작업대 밖 입력란이 없으니 문서 전체에서 받되, PC 보기일 때만
+  document.addEventListener('keydown', function (e) {
+    if (S.device !== 'pc' || e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key.toLowerCase();
+    if (k === 'j') nav(1);
+    else if (k === 'k') nav(-1);
+    else if (k === 'o' && !e.shiftKey) setMode('read');
+    else if (k === 'o' && e.shiftKey) showToast('새 탭으로 언론사 사이트를 엽니다');
+    else if (k === 'r') setMode(S.mode === 'read' ? 'sum' : 'read');
+    else if (k === 'a') { S.sheet = 'ask'; render(true); }
+    else if (k === 'escape' && S.sheet) { S.sheet = null; render(true); }
+  });
+
+  function setDevice(d) {
+    S.device = d; save('bp-dev', d);
+    document.getElementById('dev-phone').setAttribute('aria-pressed', d === 'phone' ? 'true' : 'false');
+    document.getElementById('dev-pc').setAttribute('aria-pressed', d === 'pc' ? 'true' : 'false');
+    render(false);
+  }
+  document.getElementById('dev-phone').addEventListener('click', function () { setDevice('phone'); });
+  document.getElementById('dev-pc').addEventListener('click', function () { setDevice('pc'); });
+  document.getElementById('reset').addEventListener('click', function () {
+    S.lens = 'base'; S.flagged = {}; save('bp-lens', 'base'); open('a1');
+  });
+
+  S.lens = load('bp-lens', 'base');
+  setDevice(S.device === 'pc' ? 'pc' : 'phone');
+})();
+</script>
+
+</body>
+</html>
