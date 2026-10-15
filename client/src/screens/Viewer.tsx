@@ -168,10 +168,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const termPopRef = useRef<HTMLDivElement>(null);
   /** 브리핑 기사로 질문 — 제목을 인용으로, 요약·주소를 문맥으로 붙여 질문 패널을 연다 (개선 합의안 6.6) */
   function askAboutArticle(seed: AskSeed) {
-    if (askConversing) setPendingQuote(seed.quote);
-    else {
+    if (askConversing) {
+      setPendingQuote(seed.quote);
+      setPendingTransient(seed.transientQuote === true);
+    } else {
       setAskSeed(seed);
       setPendingQuote(null);
+      setPendingTransient(false);
     }
     setAskStarted(true);
     setAskOpen(true);
@@ -202,6 +205,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null);
   // 대화 중 문서에서 다시 드래그한 문장 — 다음 질문에 인용으로 붙는다
   const [pendingQuote, setPendingQuote] = useState<string | null>(null);
+  /** 그 인용이 브리핑 원문 탭에서 온 것 — 저장하지 않고 호출에만 싣는다 */
+  const [pendingTransient, setPendingTransient] = useState(false);
   // 지금 드래그돼 있는 문장 — [물어보기] 바를 띄우는 근거. 좌표는 뷰포트 기준 (html은 iframe 심이 보고)
   const [selection, setSelection] = useState<RendererSelection | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -345,7 +350,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 선택이 풀리면 바를 치우고, 터치 손잡이 조절처럼 mouseup이 안 오는 변경은 잠시 모아 읽는다.
   // HTML은 선택이 iframe 안에 있어 부모의 selectionchange가 오지 않는다 — 심이 따로 보고한다
   useEffect(() => {
-    if (file.fileType === 'html' && !(codeView && canCodeView)) return;
+    // 브리핑은 기사 화면(BriefingView)이 자기 선택을 읽어 묻기로 보낸다 — 폰 시트가 이 상자 밖(fixed)에 있고, 이웃 블록 문맥도 쓰지 않는다 (v0.48)
+    if (isBriefing || (file.fileType === 'html' && !(codeView && canCodeView))) return;
     const onChange = () => {
       window.clearTimeout(selectionTimerRef.current);
       const s = window.getSelection();
@@ -357,7 +363,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       document.removeEventListener('selectionchange', onChange);
       window.clearTimeout(selectionTimerRef.current);
     };
-  }, [file.fileType, codeView, canCodeView, readOwnSelection]);
+  }, [file.fileType, codeView, canCodeView, readOwnSelection, isBriefing]);
 
   /** 질문 패널 열기. 선택이 있으면 그 문장이 문맥(첫 대화) 또는 인용(대화 중)으로 붙는다 */
   const openAsk = useCallback(
@@ -1039,7 +1045,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               file={file}
               seed={askSeed}
               pendingQuote={pendingQuote}
-              onConsumePendingQuote={() => setPendingQuote(null)}
+              pendingTransient={pendingTransient}
+              onConsumePendingQuote={() => {
+                setPendingQuote(null);
+                setPendingTransient(false);
+              }}
               onConversingChange={setAskConversing}
               onOpenFile={onOpenFile}
               withCards={settings.askWithCards === 1}

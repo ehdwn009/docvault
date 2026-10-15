@@ -25,8 +25,10 @@ import Icon from './Icon';
 import SwipeRow from './SwipeRow';
 import { formatDate } from '../lib/date';
 
-/** 드래그로 시작할 때 붙는 문맥 — 선택 문장 + 앞뒤 문단 (설계 — 문서 전체는 보내지 않는다) */
-export type AskSeed = { quote: string; context: string };
+/** 드래그로 시작할 때 붙는 문맥 — 선택 문장 + 앞뒤 문단 (설계 — 문서 전체는 보내지 않는다).
+    itemId: 브리핑 기사 — 문맥은 서버가 회차에서 "우리가 쓴 글 전체"를 조립한다(context는 비워 보낸다, v0.48).
+    transientQuote: 원문 탭에서 고른 문장 — 그 호출에만 싣고 대화 기록(DB)에는 남기지 않는다 (해설 칸 토론 ⑦) */
+export type AskSeed = { quote: string; context: string; itemId?: string; transientQuote?: boolean };
 
 type Props = {
   /** 읽던 문서. null이면 문서 없이 시작하는 대화 — 챗봇(SCR-187): 인용 대신 "내 자료 참고" 스위치가 있다 */
@@ -37,6 +39,8 @@ type Props = {
   seed: AskSeed | null;
   /** 대화 중 문서에서 다시 드래그한 문장 — 다음 질문에 인용으로 붙는다. 붙이고 나면 부모가 비운다 */
   pendingQuote: string | null;
+  /** 그 문장이 원문 탭에서 온 것 — 호출에만 싣고 저장하지 않는다 */
+  pendingTransient?: boolean;
   onConsumePendingQuote: () => void;
   /** 대화가 실제로 시작됐는지(질문을 한 번이라도 보냈는지) — 부모가 새 선택을 "문맥 교체"로 볼지 "인용 추가"로 볼지 정한다 */
   onConversingChange?: (conversing: boolean) => void;
@@ -91,7 +95,7 @@ const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판).
 // file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
-export default function AskPanel({ file, inline = false, seed, pendingQuote, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
+export default function AskPanel({ file, inline = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
   const chatMode = file === null;
   const [status, setStatus] = useState<AskStatus | null>(null);
   // 챗봇: 내 자료 참고 스위치 — 질문마다 바꿀 수 있고 끈 상태를 기기가 기억한다 (기본 꺼짐)
@@ -201,12 +205,18 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
   async function ensureThread(): Promise<AskThread> {
     if (thread) return thread;
     const useSeed = seed && !seedUsedRef.current ? seed : null;
+    // 브리핑 기사: 기사 id만 — 문맥은 서버가 조립하고, 원문 탭에서 고른 문장(transient)은 대화에 저장하지 않는다
+    const seedBody = !useSeed
+      ? {}
+      : useSeed.itemId
+        ? { itemId: useSeed.itemId, ...(useSeed.transientQuote ? {} : { quote: useSeed.quote }) }
+        : { quote: useSeed.quote, context: useSeed.context };
     const { thread: t } = await api<{ thread: AskThread }>('/ask/threads', {
       method: 'POST',
       body: JSON.stringify({
         ...(file ? { fileId: file.id } : {}),
         ...(pendingModel ? { model: pendingModel } : {}),
-        ...(useSeed ? { quote: useSeed.quote, context: useSeed.context } : {}),
+        ...seedBody,
       }),
     });
     seedUsedRef.current = true;
@@ -221,9 +231,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
     setBusy(true);
     setError(null);
     setFailedQuestion(null);
-    const quote = pendingQuote ?? undefined;
+    // 저장하지 않는 인용(원문 탭 문장) — 첫 질문이면 seed에서, 대화 중이면 pendingQuote에서. 화면에는 보이고 서버에는 ephemeralQuote로 간다
+    const seedTransient = seed && !seedUsedRef.current && seed.transientQuote ? seed.quote : null;
+    const ephemeral = seedTransient ?? (pendingQuote && pendingTransient ? pendingQuote : null);
+    const quote = pendingQuote && !pendingTransient ? pendingQuote : undefined;
     if (pendingQuote) onConsumePendingQuote();
-    const shown = quote ? `「${quote}」\n\n${q}` : q;
+    const shown = quote ?? ephemeral ? `「${quote ?? ephemeral}」\n\n${q}` : q;
     const now = Date.now();
     setMessages((m) => [
       ...m,
@@ -244,6 +257,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
         {
           question: q,
           ...(quote ? { quote } : {}),
+          ...(ephemeral ? { ephemeralQuote: ephemeral } : {}),
           ...(excludeCardIds.length ? { excludeCardIds } : {}),
           // 챗봇만 스위치를 보낸다 — 문서 질문은 지금 동작(설정에 따라 카드만) 그대로
           ...(chatMode ? { myStuff } : {}),
@@ -424,10 +438,15 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
   const hasAnswer = messages.some((m) => m.role === 'assistant' && typeof m.id === 'number' && m.id > 0);
   const picking = picked.size > 0;
 
+  // 브리핑 기사면 무엇이 함께 가는지 적어 준다 — 모델이 무엇을 보고 답하는지 알아야 한다 (해설 칸 토론, 읽는 사람 조건)
+  const articleNote = seed?.itemId ? (seed.transientQuote ? '원문에서 고른 문장 · 이 문장은 저장하지 않아요 · 기사 요약·해설 함께' : '기사 제목·요약·해설을 함께 보내요') : null;
   const contextChip =
     thread?.quote || (seed && !seedUsedRef.current) ? (
       <div className="rounded-md border border-slate-800 border-l-2 border-l-amber-500 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-400">
-        <div className="mb-0.5 truncate text-slate-500">{thread?.fileName ?? file?.name}</div>
+        <div className="mb-0.5 truncate text-slate-500">
+          {thread?.fileName ?? file?.name}
+          {articleNote && ` · ${articleNote}`}
+        </div>
         <div className="line-clamp-3">“{thread?.quote ?? seed?.quote}”</div>
       </div>
     ) : null;
@@ -872,9 +891,10 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, onC
   }
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/50" onClick={onClose} />
+      {/* 브리핑 기사 시트(z-40)보다 위에 — 시트에서 고른 문장으로 열리는 질문이 시트 밑에 깔리지 않게 (v0.48) */}
+      <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose} />
       <div
-        className="fixed inset-x-0 z-30 flex flex-col rounded-t-2xl border-t border-slate-700 bg-slate-950"
+        className="fixed inset-x-0 z-[60] flex flex-col rounded-t-2xl border-t border-slate-700 bg-slate-950"
         // 시트 높이는 "보이는 영역"의 78% — 키보드가 올라오면 그만큼 줄고, 아래 끝은 키보드 위에 붙는다
         style={{ ...sheet.sheetStyle, top: vv.offsetTop + vv.height - sheetHeight, height: sheetHeight }}
       >

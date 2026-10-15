@@ -191,6 +191,8 @@ export const askThreads = sqliteTable('ask_threads', {
   outlineAt: integer('outline_at'),
   /** 이 대화의 답변 모델(ASK_MODELS.id). NULL이면 기본(ASK.DEFAULT_MODEL). 칩에서 바꾸면 다음 답부터 (v0.40) */
   model: text('model'),
+  /** 브리핑 기사 묻기(v0.48): 그 회차(file_id) 안의 기사 id. 문맥은 서버가 회차에서 조립해 context에 넣는다 */
+  itemId: text('item_id'),
 });
 
 export const askMessages = sqliteTable('ask_messages', {

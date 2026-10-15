@@ -95,7 +95,7 @@
 | API-098 | GET | /google/files/{driveFileId}/content | 드라이브 문서 메타+텍스트 본문 (구글 문서는 md로 변환) | 로그인 |
 | API-099 | GET | /google/files/{driveFileId}/raw | 드라이브 원본 스트리밍 (PDF·이미지 등) | 로그인 |
 | API-101 | GET | /ask/status | 질문 기능 상태 (키 설정 여부·오늘 남은 횟수·한도) + 모델 목록 models[]·defaultModel (v0.40) | 로그인 |
-| API-102 | POST | /ask/threads | 대화 시작 (문서·선택 문장·문맥을 붙여 빈 대화 생성). fileId 없으면 자유 대화(챗봇), model? | 로그인 |
+| API-102 | POST | /ask/threads | 대화 시작 (문서·선택 문장·문맥을 붙여 빈 대화 생성). fileId 없으면 자유 대화(챗봇), model?. 브리핑 기사는 itemId로 — 문맥은 서버가 조립 (v0.48) | 로그인 |
 | API-103 | POST | /ask/threads/{id}/messages | 질문 보내기 → 답변 SSE 스트리밍. 요청 excludeCardIds[]·myStuff?(챗봇 스위치), meta 이벤트에 model·cards[]·docs[] | 소유자 |
 | API-104 | GET | /ask/threads | 지난 대화 목록 (최근순, 본문 제외) | 로그인 |
 | API-105 | GET | /ask/threads/{id} | 대화 하나 + 메시지 전부 | 소유자 |
@@ -346,7 +346,7 @@
 | viewerFit | boolean | HTML 뷰어의 화면 맞춤 보정 사용 여부 (기본 true) |
 | fontScale | number \| null | 이 파일만의 글자 크기 배율(%, 10~300). **null을 보내면 파일별 값을 지우고 전역 기본값을 따른다** |
 | markRead | string[] | 브리핑 회차에서 읽은 기사 id(≤200개, 각 ≤80자). 기존 목록에 **더하기만** 한다(중복 무시, 회차당 최대 1000개). 다른 기기에서 동시에 읽어도 서로 지우지 않게 교체가 아니라 더하기다 (v0.43) |
-| flag | object | 브리핑 기사의 "틀린 곳 알리기"(v0.45) `{ id: 기사 id(≤80자), reason: "number"(숫자가 틀림) \| "mixed"(다른 기사가 섞임) \| "overstated"(과장됨) \| "impact"(영향 판단이 이상함, v0.46) \| "other", note?: ≤200자 }`. 회차당 200건까지 기억하고, 같은 기사를 다시 알리면 마지막 것으로 덮어쓴다. 어디에도 보내지 않고 저장만 — 실측 2주 뒤 숫자 대조 전환의 근거 |
+| flag | object | 브리핑 기사의 "틀린 곳 알리기"(v0.45) `{ id: 기사 id(≤80자), reason: "number"(숫자가 틀림) \| "mixed"(다른 기사가 섞임) \| "overstated"(과장됨) \| "impact"(영향 판단이 이상함, v0.46) \| "explain"(해설이 이상함, v0.48) \| "other", note?: ≤200자 }`. 회차당 200건까지 기억하고, 같은 기사를 다시 알리면 마지막 것으로 덮어쓴다. 어디에도 보내지 않고 저장만 — 실측 2주 뒤 숫자 대조 전환의 근거 |
 
 ### Response
 **200 OK** — 갱신된 state 객체 (브리핑이면 `readItems`·`flagItems` 포함)
@@ -501,11 +501,12 @@ GET /api/v1/google/files/{driveFileId}/content
 | fileId | number | N | 읽던 문서. 열람 권한이 있어야 한다(없으면 404). 없으면 문맥 없는 대화(G) |
 | quote | string | N | 드래그한 문장 (≤500자). 출처 인용이 된다 |
 | context | string | N | 선택 문장 앞뒤 문단 (≤1500자). **문서 전체가 아니라 이것만 LLM에 간다** |
+| itemId | string | N | 브리핑 기사 묻기(v0.48) — fileId(회차)와 함께. 서버가 회차 JSON에서 그 기사의 "우리가 쓴 글 전체"(리드·왜·칸·5W·영향·양쪽 시각·해설, ≤4000자 `BRIEFING.ASK_CONTEXT_MAX_CHARS`)를 조립해 context로 저장한다 — 보낸 context는 무시. 기사가 없으면 404, fileId 없이 보내면 400 |
 
 **201** — `{ "thread": { id, fileId, fileName, quote, title, createdAt, updatedAt } }`. title은 첫 질문이 오면 그 앞 60자로 채워진다(그 전엔 quote 또는 "새 대화").
 
 ### API-103 — POST /ask/threads/{id}/messages
-**Body** `{ "question": string(1~2000), "quote"?: string(≤500), "excludeCardIds"?: number[], "myStuff"?: boolean }` — quote는 대화 중 문서에서 다시 드래그한 문장. 저장되는 user 메시지는 `「quote」\n\n question` 꼴. `myStuff`는 챗봇(SCR-187)의 "내 자료 참고" 스위치: true면 이름이 걸린 내 카드(최대 3장) + 질문 낱말로 찾은 내 문서 단락(최대 3개)을 시스템에 덧붙이고, false면 순수 대화(카드도 안 감). 비우면 문서 질문의 동작 — 설정(askWithCards)에 따라 카드만. 답변 모델은 대화의 `model`(없으면 기본 Sonnet 5).
+**Body** `{ "question": string(1~2000), "quote"?: string(≤500), "ephemeralQuote"?: string(≤500), "excludeCardIds"?: number[], "myStuff"?: boolean }` — quote는 대화 중 문서에서 다시 드래그한 문장. 저장되는 user 메시지는 `「quote」\n\n question` 꼴. `ephemeralQuote`(v0.48)는 브리핑 **원문 탭**에서 고른 문장 — 이번 LLM 호출의 마지막 user 턴에만 싣고 DB에는 question만 저장한다(남의 글이 기록에 남지 않게). `myStuff`는 챗봇(SCR-187)의 "내 자료 참고" 스위치: true면 이름이 걸린 내 카드(최대 3장) + 질문 낱말로 찾은 내 문서 단락(최대 3개)을 시스템에 덧붙이고, false면 순수 대화(카드도 안 감). 비우면 문서 질문의 동작 — 설정(askWithCards)에 따라 카드만. 답변 모델은 대화의 `model`(없으면 기본 Sonnet 5).
 
 한도 검사는 스트림을 열기 **전**에 한다(429는 보통 JSON 응답). 통과하면 user 메시지를 먼저 저장하고 `text/event-stream`으로 답한다:
 

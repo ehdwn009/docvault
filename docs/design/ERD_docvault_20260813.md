@@ -98,7 +98,7 @@ erDiagram
         integer next_review_at "카드 복습 예정 시각, NULL=아직 (2026-09-20)"
         integer review_interval_days "마지막 채점의 간격(일), 기본 0"
         text read_items "브리핑 회차에서 읽은 기사 id JSON 배열, NULL=안 읽음 (v0.43)"
-        text flag_items "브리핑 기사 틀린 곳 알리기 JSON 배열 [{id,reason,note,at}], reason은 number|mixed|overstated|impact|other, NULL=없음 (v0.45, impact는 v0.46)"
+        text flag_items "브리핑 기사 틀린 곳 알리기 JSON 배열 [{id,reason,note,at}], reason은 number|mixed|overstated|impact|explain|other, NULL=없음 (v0.45, impact는 v0.46, explain은 v0.48)"
     }
     USER_SETTINGS {
         integer user_id PK, FK
@@ -158,6 +158,7 @@ erDiagram
         text outline_json "대화 정리 결과 JSON, 카드로 저장하면 NULL (2026-09-20)"
         integer outline_at "정리 만든 시각, updated_at보다 오래면 낡음"
         text model "답변 모델 id, NULL=기본(Sonnet). 칩에서 바꾸면 다음 답부터 (2026-09-21)"
+        text item_id "브리핑 기사 묻기: 그 회차(file_id) 안의 기사 id. context는 서버가 회차에서 조립한 우리 글 (v0.48)"
     }
     ASK_MESSAGES {
         integer id PK
@@ -223,7 +224,7 @@ erDiagram
 | GOOGLE_ACCOUNTS | 사용자×구글 계정 연결 (1:0..1). 드라이브 문서 열람과 백업 업로드가 이 토큰을 쓴다. **refresh token은 사실상 비밀번호와 같은 힘**을 가지므로 암호화해서 넣는다 — data/ 폴더가 곧 백업 단위라 DB 파일이 밖으로 나갈 수 있다 |
 | DRIVE_RECENTS | 드라이브에서 열어 본 문서의 **바로가기 기록**. 이름·형식만 두고 본문은 저장하지 않는다 — 원본은 드라이브에 있고 우리는 볼 때마다 새로 읽는다 |
 | BACKUP_SETTINGS | 자동 백업 설정 단일 행. 앱이 스스로 `data/`를 묶어 연결된 구글 드라이브에 올린다. 꺼져 있으면 아무 일도 하지 않는다(기본값 꺼짐) |
-| ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나, 또는 문서 없이 시작한 자유 대화(챗봇, file_id NULL). 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다. model은 이 대화의 답변 모델 |
+| ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나, 또는 문서 없이 시작한 자유 대화(챗봇, file_id NULL). 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다. model은 이 대화의 답변 모델. item_id가 있으면 브리핑 기사 묻기 — context는 서버가 그 회차에서 조립한 "우리가 쓴 글 전체"(v0.48) |
 | CARD_THREADS | 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때). 카드가 참조하는 대화는 30일 정리에서 빠진다 |
 | BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
@@ -238,6 +239,7 @@ erDiagram
 - **글자 크기 2층 구조 (2026-08-18)**: HTML 글자 크기는 USER_SETTINGS.html_font_scale(전역 기본 배율)과 USER_FILE_STATE.font_scale(이 파일만의 배율)로 나뉩니다. font_scale이 **NULL이면 전역을 따르고**, 값이 있으면 그것으로 **대체**합니다(곱하지 않습니다). NULL을 "없음"으로 쓰기 때문에 대부분의 파일은 전역 설정을 바꾸면 같이 따라오고, 유별난 문서만 자기 값을 갖습니다 — 그래서 UI에는 반드시 "기본값 따르기"(= NULL로 되돌리기)가 있어야 합니다. font_scale은 형식을 가리지 않습니다 — HTML은 문서 자신의 크기를 100%로, md·텍스트는 USER_SETTINGS.font_size를 100%로 삼을 뿐 규칙은 같습니다(전역 기본 배율 html_font_scale은 HTML에만 있습니다).
 - **복습 (2026-09-20)**: 카드의 복습 상태(next_review_at·review_interval_days)도 USER_FILE_STATE에 둡니다 — 카드는 files의 한 행이고 "이 사람이 이 카드를 얼마나 외웠나"는 사용자×파일 사실이라 즐겨찾기와 같은 자리입니다. NULL이면 아직 복습한 적 없음 = 만든 날 + 1일에 첫 복습. 몰랐다 → 1일, 알았다 → 간격 두 배(2·4·8…60일 상한). 문서(kind=doc) 행에는 늘 NULL입니다.
 - **정리 결과 저장 (2026-09-20)**: ASK_THREADS.outline_json·outline_at은 대화 정리(API-116) 결과입니다. 창을 닫았다 열어도, 앱을 나갔다 와도 같은 결과가 바로 뜨게 하려고 대화에 붙여 둡니다(정리는 대화 하나의 파생물이라 별도 표를 두지 않았습니다). outline_at이 updated_at보다 오래되면 "그 뒤에 답이 붙었다"고 표시하고, 카드로 저장(API-117)하면 지웁니다.
+- **브리핑 기사 묻기 (2026-10-15, v0.48)**: ASK_THREADS.item_id는 그 회차(file_id) 안의 기사 id다. 문맥(context)은 클라이언트가 보내지 않고 서버가 회차 JSON에서 리드·왜·칸·5W·영향·양쪽 시각·해설을 조립해 넣는다(≤4,000자, 문서용 1,500자와 별도) — "우리 글만 넘긴다"를 서버가 보장하기 위해서다. 전부 AI가 새로 쓴 글이라 저장해도 저작권 문제가 없다. 원문 탭에서 고른 문장은 quote에 넣지 않고(NULL) LLM 호출에만 실린다(API-103 `ephemeralQuote`). USER_FILE_STATE.flag_items의 reason에 `explain`(해설이 이상함)이 추가됐다.
 - **모델 선택 (2026-09-21)**: ASK_THREADS.model은 대화의 답변 모델(서버 상수 ASK_MODELS의 id), NULL이면 기본(Sonnet 5). 칩에서 바꾸면 다음 답부터. ASK_MESSAGES.model은 그 답을 실제로 낸 모델 — 대화 중에 모델을 바꿔도 답마다 무엇이었는지 남고, 관리자 사용량의 비용 추정이 모델별 단가를 CASE로 적용한다. NULL(v0.40 이전)은 전부 Opus였다.
 - **질문 때 카드 (2026-09-20)**: USER_SETTINGS.ask_with_cards가 켜져 있으면 질문·인용·드래그 문맥에 이름이 나오는 내 카드(최대 3장)의 한 줄·본문 앞부분을 LLM 시스템 프롬프트에 덧붙입니다. 어떤 카드가 갔는지는 저장하지 않습니다 — 답 안에서 화면에만 보입니다(meta). 저장하려면 ASK_MESSAGES에 칸이 필요한데, 답을 다시 볼 때 그 정보가 꼭 필요하진 않아 미뤘습니다.
 - **용어 밑줄 (2026-09-20)**: USER_SETTINGS.term_highlight는 문서를 읽을 때 내 배움 카드의 제목·별칭이 나오는 자리에 점선 밑줄을 그을지입니다(기본 1=켬). 읽기 취향이라 기기(localStorage)가 아니라 사람(USER_SETTINGS)에 붙습니다 — 폰에서 끄면 PC에서도 꺼집니다.
@@ -252,7 +254,7 @@ erDiagram
 - **배움 카드 (2026-09-18, v0.26)**: 카드는 FILES의 md 행이다(`kind='card'`). 별도 테이블을 만들지 않은 이유 — 편집·버전·태그·검색·공유·백업이 전부 FILES에 걸려 있어, 카드를 따로 두면 그 모든 기능을 다시 만들어야 한다. 대신 `kind`로 **파일 트리에서만 뺀다**(문서와 섞이면 구분이 안 된다). 카드의 머리말(한 줄·별칭·종류·주제·태그·연결·출처)은 컬럼이 아니라 **본문 맨 위의 frontmatter**에 있다 — 사람이 편집기에서 고칠 수 있어야 하고, 목록은 수백 장까지 매번 파싱해도 싸다. 제목은 파일 이름이다(두 군데 두지 않는다). CARD_THREADS는 카드가 어느 대화에서 왔는지 — 대화 정리 예외와 "원 대화 보기"의 근거.
 - **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
   - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다. v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
-  - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).
+  - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·영향 판단이 이상함·해설이 이상함(v0.48)·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).
   - **읽음 기록 (v0.43)**: USER_FILE_STATE.read_items는 그 회차에서 읽은 기사 id 목록이다. 즐겨찾기·읽던 위치와 같은 "이 사람 × 이 파일" 사실이라 같은 표에 둔다 — 폰에서 읽은 것이 PC에서도 흐리게 보인다. 더하기만 한다(API-073 `markRead`). BRIEFING_RUNS.lead_ids는 그 회차의 "오늘의 핵심" 목록 사본이다 — 회차 JSON에도 `lead`로 있지만, 패널이 회차 수십 개의 "핵심 n 남음"을 세려고 JSON을 매번 여는 것은 무겁다. 같은 사실이 두 군데라 저장할 때 한 번에 같이 쓰고 고치지 않는다(회차는 편집 불가). v0.43 이전 회차는 처음 패널에 나올 때 JSON에서 읽어 채운다.
   - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
   - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.

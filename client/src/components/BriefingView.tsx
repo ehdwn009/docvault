@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { api, ApiError, isDarkViewerTheme, type ViewerTheme } from '../lib/api';
+import { ASK_QUOTE_MAX_CHARS } from '../lib/constants';
 import {
   BLOCK_LABEL,
   BRIEFING_READ_EVENT,
+  EXPLAIN_LABEL,
   FLAG_LABEL,
   IMPACT_WORD,
   isSafeUrl,
@@ -19,6 +21,7 @@ import {
   type Edition,
   type EditionItem,
   type EditionNav,
+  type ExplainBlock,
   type FlagReason,
   type Importance,
   type LensKey,
@@ -27,11 +30,13 @@ import {
   W5_LABEL,
 } from '../lib/briefing';
 import Icon from './Icon';
+import type { AskSeed } from './AskPanel';
 
 // SCR-191 회차 화면 (v0.45 개편, 개선 합의안 6장) — 회차 막대 → 오늘의 핵심 → 고정 [국내|세계]+분야 막대 → 목록.
 // 폰: 핵심·주요는 전체 화면 시트로 열고(아래 고정 이전·다음, 좌우 밀기, 뒤로 제스처로 닫힘), 참고는 그 자리에서 펼친다.
-// PC(보이는 폭 넓음): 목록|상세 두 칸. 상세는 리드 → 왜 중요한가 → 골라 쓴 칸 → 양쪽 시각 → 근거 줄 → 원문 카드 → 묻기.
-// 요약 보기(기본·글머리표·쉽게·5W·양쪽 시각)는 기기가 기억한다. 원문을 다녀오면 그 기사로 돌아온다
+// PC(보이는 폭 넓음): 목록|상세 두 칸. 상세는 리드 → 왜 중요한가 → 영향 → 골라 쓴 칸 → 해설 상자(접힘, v0.48) → 근거 줄 → 원문 카드 → 묻기.
+// 요약 보기(기본·글머리표·5W·양쪽 시각)는 기기가 기억하지만 해설 상자는 기사마다 접힌 채 시작한다. 원문을 다녀오면 그 기사로 돌아온다.
+// 상세 안의 드래그는 여기서 직접 읽어 묻기로 보낸다 — 폰 시트는 뷰어의 본문 상자 밖(fixed)이라 뷰어의 선택 흐름이 닿지 않는다 (해설 칸 토론 2026-10-15)
 // (뉴스 브리핑 설계 "SCR-191", 시안 docs/뉴스브리핑_개선시안_20261011.html)
 
 type Props = {
@@ -46,8 +51,8 @@ type Props = {
   /** 앱 안 원문 보기가 켜져 있나 (설정 → 뉴스 브리핑) */
   readerEnabled: boolean;
   onOpenFile: (fileId: number) => void;
-  /** 이 기사에 대해 묻기 — 제목·요약·주소만 넘긴다(원문은 질문 기록에 저장되므로 넘기지 않는다) */
-  onAsk?: (seed: { quote: string; context: string }) => void;
+  /** 이 기사에 대해 묻기 — 기사 id와 고른 문장만 넘긴다. 문맥(우리가 쓴 글 전체)은 서버가 회차에서 조립한다(원문은 질문 기록에 저장되므로 넘기지 않는다) */
+  onAsk?: (seed: AskSeed) => void;
   /** 브리핑 형식이 아니면(깨진 JSON·모르는 version) 대신 그릴 것 — 뷰어의 코드 렌더러 */
   fallback: ReactNode;
 };
@@ -556,16 +561,13 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     loadReader(currentId);
   }, [mode, currentId, located, canRead, readers, loadReader]);
 
+  /** 기사 묻기 — pick이 있으면 고른 문장이 인용, 없으면 제목. 원문 탭에서 고른 문장(fromOriginal)은 그 호출에만 싣고 기록에 남기지 않는다.
+      문맥은 클라이언트가 만들지 않는다 — 서버가 회차에서 "우리가 쓴 글 전체"를 조립해야 원문이 섞이지 않는다 (해설 칸 토론 B, 개선 합의안 6.6) */
   const ask = useCallback(
-    (id: string) => {
+    (id: string, pick?: { quote: string; fromOriginal: boolean }) => {
       const it = located.get(id)?.item;
       if (!it || !onAsk) return;
-      // 우리가 쓴 글만 — 원문 본문은 질문 기록(DB)에 남으므로 넘기지 않는다 (개선 합의안 6.6)
-      const context = ['[뉴스 브리핑 기사]', `제목: ${it.title}`, it.summary ? `요약: ${it.summary}` : '', it.why ? `왜 중요한가: ${it.why}` : '', `언론사: ${it.source}`, `원문: ${it.url}`]
-        .filter(Boolean)
-        .join('\n')
-        .slice(0, 1500);
-      onAsk({ quote: it.title.slice(0, 500), context });
+      onAsk({ quote: (pick?.quote ?? it.title).slice(0, ASK_QUOTE_MAX_CHARS), context: '', itemId: it.id, ...(pick?.fromOriginal ? { transientQuote: true } : {}) });
     },
     [located, onAsk],
   );
@@ -704,9 +706,19 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     flagged: flagged.has(l.item.id),
     onFlag: (reason: FlagReason) => flag(l.item.id, reason),
     onAsk: onAsk ? () => ask(l.item.id) : undefined,
-    // 영향 칸은 회차가 켜 둔 경우에만(v0.46). 옛 회차에는 impactVisible이 없다
+    // 영향 칸·해설 상자는 회차가 켜 둔 경우에만(v0.46·v0.48). 옛 회차에는 그 칸이 없다
     impactOn: edition?.impactVisible === true,
+    explainOn: edition?.explainVisible === true,
   });
+  /** 상세 안에서 고른 문장으로 묻기 — 원문 탭이면 그 문장은 기록에 남기지 않는다 */
+  const askQuote = (id: string, quote: string) => {
+    const it = located.get(id)?.item;
+    if (!it) return;
+    ask(id, { quote, fromOriginal: mode === 'read' && canRead(it) });
+    window.getSelection()?.removeAllRanges();
+  };
+  const wideDetailRef = useRef<HTMLDivElement>(null);
+  const wideQuote = useQuote(wideDetailRef, wide && !!sel && !!onAsk);
 
   const row = (l: Located, opts: { lead?: number } = {}) => {
     const id = l.item.id;
@@ -943,10 +955,14 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
             {sel ? (
               <>
                 <DetailTop l={sel} p={p} mode={canRead(sel.item) ? mode : 'sum'} setMode={setMode} canRead={canRead(sel.item)} />
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div ref={wideDetailRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                   <ItemDetail {...detailProps(sel)} />
                 </div>
-                <StepBar p={p} pos={stepPos} onStep={step} hint="J/K 이동 · O 원문 · Shift+O 새 탭 · R 요약/원문 · A 묻기" />
+                {wideQuote ? (
+                  <AskBar p={p} quote={wideQuote} onAsk={() => askQuote(sel.item.id, wideQuote)} />
+                ) : (
+                  <StepBar p={p} pos={stepPos} onStep={step} hint="J/K 이동 · O 원문 · Shift+O 새 탭 · R 요약/원문 · A 묻기" />
+                )}
               </>
             ) : (
               <p className={`m-0 px-5 py-10 text-center text-[0.9em] ${p.muted}`}>
@@ -966,7 +982,18 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
 
       {/* 폰 시트 — 핵심·주요를 전체 화면으로. 뒤로 제스처(popstate)와 [← 목록]으로 닫힌다 */}
       {!wide && sheetItem && (
-        <Sheet p={p} stickyBg={stickyBg} l={sheetItem} onClose={closeSheet} onStep={step} pos={stepPos} mode={canRead(sheetItem.item) ? mode : 'sum'} setMode={setMode} canRead={canRead(sheetItem.item)}>
+        <Sheet
+          p={p}
+          stickyBg={stickyBg}
+          l={sheetItem}
+          onClose={closeSheet}
+          onStep={step}
+          pos={stepPos}
+          mode={canRead(sheetItem.item) ? mode : 'sum'}
+          setMode={setMode}
+          canRead={canRead(sheetItem.item)}
+          onAskQuote={onAsk ? (q) => askQuote(sheetItem.item.id, q) : undefined}
+        >
           <ItemDetail {...detailProps(sheetItem)} />
         </Sheet>
       )}
@@ -1013,6 +1040,54 @@ function DetailTop({ l, p, mode, setMode, canRead, onClose }: { l: Located; p: P
   );
 }
 
+/** 상세 상자 안의 드래그를 읽는다 — 선택이 상자 안에 있을 때만, 손을 뗀 뒤 잠시 모아서. 뷰어의 readOwnSelection과 같은 방식 */
+function useQuote(ref: RefObject<HTMLElement | null>, on: boolean): string | null {
+  const [quote, setQuote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!on) {
+      setQuote(null);
+      return;
+    }
+    let timer = 0;
+    const read = () => {
+      const sel = window.getSelection();
+      const box = ref.current;
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !box || !box.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+        setQuote(null);
+        return;
+      }
+      const q = sel.toString().replace(/\s+/g, ' ').trim().slice(0, ASK_QUOTE_MAX_CHARS);
+      setQuote(q || null);
+    };
+    const onChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(read, 300);
+    };
+    document.addEventListener('selectionchange', onChange);
+    return () => {
+      document.removeEventListener('selectionchange', onChange);
+      window.clearTimeout(timer);
+    };
+  }, [ref, on]);
+  return quote;
+}
+
+/** 문장을 고르면 이동 막대 자리에 통째로 들어서는 묻기 막대 — 같은 높이라 밀기 영역이 흔들리지 않고, 엄지 자리라 iOS 선택 메뉴와 안 겹친다 */
+function AskBar({ p, quote, onAsk }: { p: Palette; quote: string; onAsk: () => void }) {
+  return (
+    <div className={`shrink-0 border-t ${p.line}`}>
+      <div className="flex h-12 items-center gap-2 px-3">
+        <button onClick={onAsk} className="h-10 min-w-0 flex-1 truncate rounded-lg bg-sky-600 px-4 text-[0.9em] font-semibold text-white">
+          💬 「{quote.length > 12 ? `${quote.slice(0, 12)}…` : quote}」 물어보기
+        </button>
+        <button onClick={() => window.getSelection()?.removeAllRanges()} className={`h-10 w-10 shrink-0 rounded-lg border ${p.line}`} aria-label="선택 풀기">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** 아래 고정 이동 막대 — ‹ 이전 · 3/18 · 다음 › */
 function StepBar({ p, pos, onStep, hint }: { p: Palette; pos: { i: number; n: number } | null; onStep: (dir: 1 | -1) => boolean; hint?: string }) {
   return (
@@ -1042,6 +1117,7 @@ function Sheet({
   mode,
   setMode,
   canRead,
+  onAskQuote,
   children,
 }: {
   p: Palette;
@@ -1053,10 +1129,13 @@ function Sheet({
   mode: 'sum' | 'read';
   setMode: (m: 'sum' | 'read') => void;
   canRead: boolean;
+  /** 시트 안에서 고른 문장으로 묻기 — 없으면 묻기 기능이 꺼진 것 */
+  onAskQuote?: (quote: string) => void;
   children: ReactNode;
 }) {
   const touch = useRef<{ x: number; y: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const quote = useQuote(scrollRef, !!onAskQuote);
   // 기사를 바꾸면 맨 위부터
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
@@ -1078,12 +1157,14 @@ function Sheet({
           if (!s || !t) return;
           const dx = t.clientX - s.x;
           const dy = t.clientY - s.y;
+          // 선택 손잡이를 끄는 중에는 밀기가 아니다 — 60px 넘게 끌었다고 다음 기사로 튀지 않게
+          if (quote) return;
           if (Math.abs(dx) >= SWIPE_PX && Math.abs(dy) < SWIPE_PX * 0.7) onStep(dx < 0 ? 1 : -1);
         }}
       >
         {children}
       </div>
-      <StepBar p={p} pos={pos} onStep={onStep} />
+      {quote && onAskQuote ? <AskBar p={p} quote={quote} onAsk={() => onAskQuote(quote)} /> : <StepBar p={p} pos={pos} onStep={onStep} />}
     </div>
   );
 }
@@ -1104,6 +1185,8 @@ type DetailProps = {
   onAsk?: () => void;
   /** 영향 칸을 그리나 — 회차의 impactVisible */
   impactOn: boolean;
+  /** 해설 상자를 그리나 — 회차의 explainVisible (v0.48) */
+  explainOn: boolean;
   /** 목록 안 펼침(참고) — 제목·배지는 줄에 이미 있으니 뺀다 */
   compact?: boolean;
 };
@@ -1178,7 +1261,7 @@ function ItemDetail(props: DetailProps) {
           <span className={`text-[0.72em] ${p.muted}`}>언론사 원문에서 쓴 것 · 한쪽 주장만 있으면 이 보기는 나오지 않아요</span>
         </div>
       ) : (
-        <BaseBody item={item} p={p} impactOn={props.impactOn} />
+        <BaseBody item={item} p={p} impactOn={props.impactOn} explainOn={props.explainOn} />
       )}
       {lens === 'bullets' && <span className={`text-[0.72em] ${p.muted}`}>기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않아요</span>}
       {lens === 'w5' && <span className={`text-[0.72em] ${p.muted}`}>{item.w5 ? '원문을 읽은 요약이 같이 쓴 것 · 기사에 없는 칸은 비워 둬요' : '기본 보기의 요약을 다시 쓴 것이라 새 사실은 들어가지 않아요'}</span>}
@@ -1279,8 +1362,8 @@ function ImpactBox({ item, p }: { item: EditionItem; p: Palette }) {
   );
 }
 
-/** 기본 보기 — 리드(첫 문장 굵게) → 왜 중요한가(왼쪽 선) → 영향(점선 상자, v0.46) → 칸(문단 첫머리 굵은 라벨, 숫자는 칩, 경과는 날짜 열) */
-function BaseBody({ item, p, impactOn }: { item: EditionItem; p: Palette; impactOn: boolean }) {
+/** 기본 보기 — 리드(첫 문장 굵게) → 왜 중요한가(왼쪽 선) → 영향(점선 상자, v0.46) → 칸(문단 첫머리 굵은 라벨, 숫자는 칩, 경과는 날짜 열) → 해설 상자(접힘, v0.48) */
+function BaseBody({ item, p, impactOn, explainOn }: { item: EditionItem; p: Palette; impactOn: boolean; explainOn: boolean }) {
   const blocks = blocksOf(item);
   if (!item.summary && !item.why && blocks.length === 0) {
     return <p className={`m-0 text-[0.9em] ${p.muted}`}>{item.titleOnly ? '재료가 없어 제목만 실었어요 · 원문에서 확인하세요' : '요약이 없는 기사예요 · 원문을 확인하세요'}</p>;
@@ -1339,6 +1422,54 @@ function BaseBody({ item, p, impactOn }: { item: EditionItem; p: Palette; impact
           )}
         </div>
       ))}
+      {explainOn && <ExplainBox key={item.id} item={item} p={p} />}
+    </div>
+  );
+}
+
+const EXPLAIN_PEEK: Record<ExplainBlock['kind'], string> = { terms: '말뜻', why: '왜', effect: '그래서', watch: '다음' };
+
+/** 해설 상자(v0.48, 해설 칸 토론 — 에이전트 4인 합의) — 기본 보기 맨 아래의 점선 상자. 탭이 아닌 이유: 보기 칩은 기기가 기억해 한 번 고르면 다음 기사부터
+    AI 글로 열린다. 기사마다 접힌 채 시작하고 기억하지 않는다(key=item.id). 접힌 줄에 용어를 미리 보여 "이 말이 뭐지"가 한 번 눌러 끝나게.
+    칸 제목 옆 기호는 영향 칸과 같은 둘뿐 — 기사가 말한 칸은 언론사 이름, 기사 밖·AI가 짚은 칸은 "AI 추론" 알약. 칸이 없으면 상자도 없다 */
+function ExplainBox({ item, p }: { item: EditionItem; p: Palette }) {
+  const blocks = item.explain ?? [];
+  const [open, setOpen] = useState(false);
+  if (blocks.length === 0) return null;
+  const terms = blocks.find((b) => b.kind === 'terms')?.items ?? [];
+  const peek = terms.length > 0 ? terms.map((t) => t.term).join(' · ') : blocks.map((b) => EXPLAIN_PEEK[b.kind]).join(' · ');
+  return (
+    <div className={`rounded-xl border border-dashed ${p.line}`}>
+      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex h-11 w-full items-center gap-2 px-3 text-left">
+        <b className="shrink-0 text-[0.92em]">해설</b>
+        <span className={`min-w-0 flex-1 truncate text-[0.82em] ${p.muted}`}>{peek}</span>
+        <Icon name="chevron" size={14} className={`shrink-0 opacity-60 transition ${open ? '-rotate-90' : 'rotate-90'}`} />
+      </button>
+      {open && (
+        <div className="flex flex-col gap-3 px-3 pb-3">
+          <span className={`text-[0.72em] ${p.muted}`}>요약을 보고 AI가 푼 글 · 기사가 아니에요 · 제도·수치는 바뀔 수 있어요</span>
+          {blocks.map((b) => {
+            const src = b.basis === 'stated' ? fromNames(item, b.from) || item.sources?.find((x) => x.id === b.from[0])?.source || '' : 'AI 추론';
+            return (
+              <div key={b.kind} className="flex flex-col gap-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <b className="text-[0.9em]">{EXPLAIN_LABEL[b.kind]}</b>
+                  <span className={`shrink-0 text-[0.75em] ${b.basis === 'stated' ? '' : `rounded-full border px-1.5 ${p.line}`} ${p.muted}`}>{b.basis === 'stated' ? `— ${src}` : src}</span>
+                </div>
+                {b.items ? (
+                  b.items.map((t, i) => (
+                    <p key={i} className="m-0 text-[0.92em] leading-relaxed">
+                      <b>{t.term}</b> — {t.text}
+                    </p>
+                  ))
+                ) : (
+                  <p className="m-0 text-[0.92em] leading-relaxed">{b.text}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

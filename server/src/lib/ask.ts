@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { ASK, ASK_MODELS, CARD, type AskModelId } from '../constants.js';
 import { db } from '../db/index.js';
 import { askMessages, askThreads, cardThreads } from '../db/schema.js';
+import { ARTICLE_CONTEXT_MARK } from './briefing/askContext.js';
 
 // 질문(배움 카드 1판)의 비즈니스 로직 — 라우트는 파싱·응답만 하고 LLM·한도·문맥 조립은 여기서 한다.
 // 설계: docs/design/배움카드_docvault_20260918.md
@@ -58,13 +59,17 @@ type MessageRow = typeof askMessages.$inferSelect;
 /** 첫 질문 앞에 붙는 문맥 — 문서 이름·드래그한 문장·앞뒤 문단. 문서 전체는 절대 들어오지 않는다 (설계 원칙) */
 function buildContextPrefix(thread: ThreadRow, fileName: string | null): string {
   if (!thread.quote && !thread.context) return '';
-  // 브리핑 기사(제목·요약·주소만 넘어온다)는 "드래그한 부분"이 아니다 — 뉴스용 안내로 바꾼다 (개선 합의안 6.6)
-  const parts = thread.context?.startsWith('[뉴스 브리핑 기사]')
-    ? ['아래는 내 뉴스 브리핑의 기사 하나야(AI가 여러 보도를 읽고 쓴 요약). 이 기사에 대해 물을 거야. 최신 사정이 필요하면 웹 검색으로 찾고 출처를 밝혀 줘. 요약에 없는 수치는 지어내지 말고 찾아서 답해.', '']
+  // 브리핑 기사(서버가 회차에서 조립한 우리 글)는 "드래그한 부분"이 아니다 — 뉴스용 안내로 바꾼다 (개선 합의안 6.6, v0.48 해설 칸 토론)
+  const article = thread.itemId !== null || thread.context?.startsWith(ARTICLE_CONTEXT_MARK) === true;
+  const parts = article
+    ? [
+        '아래는 내 뉴스 브리핑의 기사 하나야. [기사가 말한 것]은 언론사 보도를 AI가 정리한 요약이고, [AI 해설·추론]은 AI가 배경지식으로 쓴 글이라 사실로 인용하지 마("기사에 따르면"이라고 하지 마). 이 기사에 대해 물을 거야 — 용어 뜻, 해석, 앞으로 어떻게 될지 같은 질문이면 기사 내용을 근거로 답하되 모르는 것은 모른다고 해. 최신 사정이 필요하면 웹 검색으로 찾고 출처를 밝혀 줘. 기사에 없는 수치는 지어내지 말고 찾아서 답해.',
+        '',
+      ]
     : ['아래는 내가 읽던 문서에서 드래그한 부분이야. 이걸 근거로 답해 줘.', ''];
-  if (fileName) parts.push(`[문서] ${fileName}`);
-  if (thread.quote) parts.push('[드래그한 문장]', thread.quote);
-  if (thread.context) parts.push('[앞뒤 문맥]', thread.context);
+  if (fileName && !article) parts.push(`[문서] ${fileName}`);
+  if (thread.quote) parts.push(article ? '[고른 문장]' : '[드래그한 문장]', thread.quote);
+  if (thread.context) parts.push(article ? '[기사]' : '[앞뒤 문맥]', thread.context);
   parts.push('', '---', '');
   return parts.join('\n');
 }
@@ -75,15 +80,18 @@ export function toApiMessages(
   thread: ThreadRow,
   rows: MessageRow[],
   fileName: string | null,
+  /** 이번 호출에만 싣는 인용 — 브리핑 원문 탭에서 고른 문장. DB의 마지막 user 메시지에는 없다(저장하지 않는다, v0.48) */
+  ephemeralQuote?: string,
 ): Anthropic.MessageParam[] {
   let window = rows.slice(-ASK.HISTORY_LIMIT);
   // 첫 메시지는 user여야 한다 — 창이 assistant에서 시작하면 하나 버린다
   while (window.length > 0 && window[0]!.role !== 'user') window = window.slice(1);
   const prefix = buildContextPrefix(thread, fileName);
-  return window.map((m, i) => ({
-    role: m.role,
-    content: i === 0 && prefix ? prefix + m.content : m.content,
-  }));
+  return window.map((m, i) => {
+    const last = i === window.length - 1 && m.role === 'user' && ephemeralQuote;
+    const body = last ? `「${ephemeralQuote}」\n\n${m.content}` : m.content;
+    return { role: m.role, content: i === 0 && prefix ? prefix + body : body };
+  });
 }
 
 /** 답변 스트림. 라우트가 text_delta를 흘려보내고 finalMessage()로 마무리한다.

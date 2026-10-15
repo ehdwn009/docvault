@@ -2,12 +2,13 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
-import { ASK, ASK_MODELS, ASK_MODEL_IDS } from '../constants.js';
+import { ASK, ASK_MODELS, ASK_MODEL_IDS, BRIEFING } from '../constants.js';
 import { db } from '../db/index.js';
 import { askMessages, askThreads, files } from '../db/schema.js';
 import { canReadFile } from '../lib/access.js';
 import { cardContextParagraph, listCards, matchCardsForAsk } from '../lib/cards.js';
 import { docContextParagraph, findDocPassages } from '../lib/askDocs.js';
+import { buildArticleContext } from '../lib/briefing/askContext.js';
 import { userSettings } from '../db/schema.js';
 import {
   collectSources,
@@ -33,6 +34,8 @@ const createSchema = z.object({
   quote: z.string().trim().max(ASK.QUOTE_MAX_CHARS).optional(),
   context: z.string().trim().max(ASK.CONTEXT_MAX_CHARS).optional(),
   model: z.enum(ASK_MODEL_IDS).optional(),
+  /** 브리핑 기사 묻기(v0.48) — fileId(회차)와 함께. 문맥은 서버가 회차에서 조립하므로 context는 무시한다 */
+  itemId: z.string().trim().min(1).max(BRIEFING.ITEM_ID_MAX_CHARS).optional(),
 });
 
 /** API-107: 대화 바꾸기 — 제목(직접 쓴 것)과 모델(다음 답부터). 보낸 칸만 바뀐다 */
@@ -47,6 +50,8 @@ const messageSchema = z.object({
   question: z.string().trim().min(1).max(ASK.QUESTION_MAX_CHARS),
   /** 대화 중 문서에서 다시 드래그한 문장 — 이번 질문에 인용으로 붙는다 */
   quote: z.string().trim().max(ASK.QUOTE_MAX_CHARS).optional(),
+  /** 브리핑 원문 탭에서 고른 문장(v0.48) — 이번 호출에만 싣고 저장하지 않는다(남의 글이 DB에 남지 않게, 개선 합의안 6.6) */
+  ephemeralQuote: z.string().trim().max(ASK.QUOTE_MAX_CHARS).optional(),
   /** 띠에서 ✕로 뺀 카드 — 이번 질문에 함께 보내지 않는다 (활용 ④) */
   excludeCardIds: z.array(z.number().int().positive()).max(20).optional(),
   /** 챗봇의 "내 자료 참고" 스위치(SCR-187). true면 내 카드 + 내 문서 단락, false면 순수 대화(카드도 안 감).
@@ -112,11 +117,20 @@ export const askRoutes = new Hono<AppEnv>()
     const body = c.req.valid('json');
 
     let fileName: string | null = null;
+    let context = body.context || null;
     if (body.fileId !== undefined) {
       const file = db.select().from(files).where(eq(files.id, body.fileId)).get();
       // 공유 문서(남의 문서)도 읽을 수 있으면 물어볼 수 있다 — 대화는 내 것이라 문서를 건드리지 않는다 (설계 흐름 K)
       if (!file || !canReadFile(user, file)) return fail(c, 404, 'NOT_FOUND', '파일이 없습니다');
       fileName = file.name;
+      if (body.itemId !== undefined) {
+        // 브리핑 기사: 문맥은 서버가 회차에서 조립한다 — 클라이언트 글자를 믿지 않는다 (v0.48)
+        if (file.kind !== 'briefing' || !file.contentText) return fail(c, 404, 'NOT_FOUND', '기사가 없습니다');
+        context = buildArticleContext(file.contentText, body.itemId);
+        if (context === null) return fail(c, 404, 'NOT_FOUND', '기사가 없습니다');
+      }
+    } else if (body.itemId !== undefined) {
+      return fail(c, 400, 'VALIDATION_ERROR', 'itemId: fileId가 필요합니다');
     }
 
     const now = Date.now();
@@ -125,8 +139,9 @@ export const askRoutes = new Hono<AppEnv>()
       .values({
         ownerId: user.id,
         fileId: body.fileId ?? null,
+        itemId: body.itemId ?? null,
         quote: body.quote || null,
-        context: body.context || null,
+        context,
         // 첫 질문이 오면 그것으로 바뀐다
         title: body.quote ? body.quote.slice(0, ASK.TITLE_MAX_CHARS) : '새 대화',
         model: body.model ?? null,
@@ -222,7 +237,7 @@ export const askRoutes = new Hono<AppEnv>()
       return fail(c, 429, 'ASK_LIMIT_EXCEEDED', `오늘 질문 한도(${limit}번)를 다 썼습니다. 내일 다시 물어보세요`);
     }
 
-    const { question, quote, excludeCardIds, myStuff } = c.req.valid('json');
+    const { question, quote, ephemeralQuote, excludeCardIds, myStuff } = c.req.valid('json');
     const content = quote ? `「${quote}」\n\n${question}` : question;
     // 내 카드 문맥 — 문서 질문은 설정(askWithCards)을 따르고, 챗봇은 "내 자료 참고" 스위치(myStuff)를 따른다.
     // 켜져 있으면 질문·인용·대화의 드래그 문맥에서 카드 이름을 찾아 최대 3장을 시스템에 덧붙인다
@@ -250,7 +265,7 @@ export const askRoutes = new Hono<AppEnv>()
       .run();
 
     const history = db.select().from(askMessages).where(eq(askMessages.threadId, id)).orderBy(asc(askMessages.id)).all();
-    const apiMessages = toApiMessages(found.thread, history, found.fileName);
+    const apiMessages = toApiMessages(found.thread, history, found.fileName, ephemeralQuote);
 
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({
