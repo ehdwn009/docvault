@@ -89,6 +89,8 @@ export type FetchOptions = {
   /** 없으면 종류별 기본값 (피드 FETCH_TIMEOUT_MS, 원문 BODY_FETCH_TIMEOUT_MS) */
   timeoutMs?: number;
   onPhase?: (phase: FetchPhase, url: URL) => void;
+  /** 이 요청을 끊는 손잡이를 돌려준다 — 바깥 마감이 걸리면 기다리던 읽기와 소켓을 실제로 닫는다 */
+  onAbortable?: (abort: (reason: Error) => void) => void;
 };
 
 /** 피드 하나를 글자로 받는다. 실패는 사람이 읽을 이유와 함께 던진다 */
@@ -112,6 +114,7 @@ export async function fetchGuarded(
 ): Promise<string> {
   // 클로저 안에서 바뀌는 값이라 객체 칸으로 둔다
   const at: { phase: FetchPhase | '시작 전'; url: string } = { phase: '시작 전', url: rawUrl };
+  let abortInner: ((reason: Error) => void) | null = null;
   const get = kind === 'feed' ? fetchFeedText : fetchPageText;
   const inner = get(rawUrl, {
     outer: opts.signal,
@@ -120,6 +123,9 @@ export async function fetchGuarded(
       at.phase = phase;
       at.url = url.href;
     },
+    onAbortable: (abort) => {
+      abortInner = abort;
+    },
   });
   try {
     return await withDeadline(
@@ -127,7 +133,10 @@ export async function fetchGuarded(
       opts.timeoutMs + BRIEFING.FETCH_DEADLINE_GRACE_MS,
       () => {
         console.log(`[briefing] 강제 포기: ${opts.label} — ${at.phase}에서 ${opts.timeoutMs / 1000}초 제한을 넘겨 멈춤 (${at.url})`);
-        return new Error(`응답 없음 · ${at.phase}`);
+        const e = new Error(`응답 없음 · ${at.phase}`);
+        // 안쪽 일을 "뒤에서 끝나게" 두면 소켓과 읽기가 매달린 채 남는다 — 포기하는 김에 실제로 끊는다 (2026-10-14)
+        abortInner?.(e);
+        return e;
       },
       opts.signal,
     );
@@ -138,8 +147,26 @@ export async function fetchGuarded(
 }
 
 async function fetchText(rawUrl: string, opts: FetchOptions & { accept: string; timeoutMs: number; maxBytes: number }): Promise<string> {
-  let url = new URL(rawUrl);
-  const signal = AbortSignal.any([AbortSignal.timeout(opts.timeoutMs), ...(opts.outer ? [opts.outer] : [])]);
+  const url = new URL(rawUrl);
+  // 요청마다 우리 AbortController 하나에 setTimeout으로 제한을 건다. AbortSignal.any([AbortSignal.timeout(), outer]) 조합은
+  // timeout 신호가 GC로 사라져 제한이 안 걸리는 버그가 Node에서 반복됐고(nodejs/node #57736 → 22.16에서 수정, #66610은 열려 있음),
+  // 10/14 아침판에서 다섯 출처가 "본문 받는 중"에 20초 제한을 지나쳐 바깥 마감에 걸렸다. 타이머와 컨트롤러를 우리가 쥐면 GC와 무관하다
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new DOMException('시간 초과', 'TimeoutError')), opts.timeoutMs);
+  const onOuter = () => ctrl.abort(opts.outer?.reason instanceof Error ? opts.outer.reason : new DOMException('중지', 'AbortError'));
+  if (opts.outer?.aborted) onOuter();
+  else opts.outer?.addEventListener('abort', onOuter, { once: true });
+  opts.onAbortable?.((reason) => ctrl.abort(reason));
+  try {
+    return await fetchHops(url, ctrl.signal, opts);
+  } finally {
+    clearTimeout(timer);
+    opts.outer?.removeEventListener('abort', onOuter);
+  }
+}
+
+async function fetchHops(start: URL, signal: AbortSignal, opts: FetchOptions & { accept: string; timeoutMs: number; maxBytes: number }): Promise<string> {
+  let url = start;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     opts.onPhase?.('주소 찾는 중', url);
     await assertPublicUrl(url, signal);
