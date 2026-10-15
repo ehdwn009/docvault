@@ -10,7 +10,7 @@ import { uniqueFileName } from '../naming.js';
 import type { PrevStory, Picked } from './select.js';
 import type { Demoted } from './fallback.js';
 import type { Lenses } from './lenses.js';
-import { evidenceOf, type Block, type ImpactLine, type Sides, type W5, type Written } from './summarize.js';
+import { evidenceOf, type Block, type ExplainBlock, type ImpactLine, type Sides, type W5, type Written } from './summarize.js';
 import { categoriesOf, SECTIONS, SUBS, type BriefingSection } from './taxonomy.js';
 import { kstParts } from './time.js';
 
@@ -59,6 +59,9 @@ export type EditionItem = {
   w5?: W5;
   /** 영향 — 누구에게 어떤 영향인지, 경제·테크 핵심 2줄·주요 1줄. stated만 낱말이 붙고 inferred는 "AI 추론" */
   impact?: ImpactLine[];
+  // ---- v0.48 (해설 칸 토론 2026-10-15) ----
+  /** 해설 상자 — 말뜻·왜 이렇게 됐나·그래서 어떻게 되나·다음에 볼 것. 칸마다 basis(stated·inferred·outside). 핵심·주요만, 칸이 없으면 없다 */
+  explain?: ExplainBlock[];
   /** 앱 안 원문으로 받을 주소 — 회차를 만들 때 본문 받기에 성공한 언론사 주소(본문이 아니라 주소). 없으면 사이트로 보낸다 */
   readUrl?: string;
   /** 갱신된 이슈 — 직전 회차 이후 바뀐 점 한 줄 */
@@ -89,6 +92,8 @@ export type Edition = {
     // ---- v0.46 실측 칸 (수집 재설계 토론) — 2주 10회차의 기준선. 되돌림 기준은 설계 문서 "④-3·실측" ----
     /** 영향 줄 수(stated·inferred)와 검증에서 지운 줄 수 */
     impact?: { stated: number; inferred: number; dropped: number };
+    /** 해설(v0.48) — 상자가 있는 기사 수, 기사 밖 지식 칸 수, 검증에서 지운 칸 수 */
+    explain?: { items: number; outside: number; dropped: number };
     /** 핵심 중 본문·웹 재료 2곳 이상 수 — 품질 병목 지표(목표 70% 이상) */
     coreDeep?: { deep: number; core: number };
     /** 실린 기사의 발행 시각 12칸 분포 — 빈 칸 수와 가장 큰 칸 비율(최신 쏠림 감시) */
@@ -107,6 +112,8 @@ export type Edition = {
   cost: { usd: number; haiku: { input: number; output: number }; sonnet: { input: number; output: number }; opus?: { input: number; output: number }; webSearches?: number };
   /** 영향 칸을 화면에 그리나 — IMPACT_MODE가 show일 때 true. 옛 회차(없음)는 그리지 않는다 */
   impactVisible?: boolean;
+  /** 해설 상자를 그리나 — EXPLAIN_MODE가 show일 때 true (v0.48) */
+  explainVisible?: boolean;
   /** 오늘의 핵심 기사 id (최대 LEAD_COUNT). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
   lead?: string[];
   sections: {
@@ -152,6 +159,7 @@ export function assembleEdition(args: {
   let demotedCount = 0;
   let overruns = 0;
   const impactCount = { stated: 0, inferred: 0, dropped: 0 };
+  const explainCount = { items: 0, outside: 0, dropped: 0 };
   const coreDeep = { deep: 0, core: 0 };
   let titleMismatch = 0;
 
@@ -189,6 +197,11 @@ export function assembleEdition(args: {
       if (w.overrun) overruns++;
       impactCount.dropped += w.impactDrops;
       for (const line of w.impact ?? []) impactCount[line.kind]++;
+      explainCount.dropped += w.explainDrops;
+      if (w.explain) {
+        explainCount.items++;
+        explainCount.outside += w.explain.filter((b) => b.basis === 'outside').length;
+      }
       if (importance === 3) {
         coreDeep.core++;
         if (evidence.filter((e) => e.via !== 'lede').length >= 2) coreDeep.deep++;
@@ -220,6 +233,7 @@ export function assembleEdition(args: {
       ...(lenses ? { lenses } : {}),
       ...(w?.w5 ? { w5: w.w5 } : {}),
       ...(w?.impact ? { impact: w.impact } : {}),
+      ...(w?.explain ? { explain: w.explain } : {}),
       ...(readUrl ? { readUrl } : {}),
       ...(w?.changed ? { changed: w.changed } : {}),
       ...(titleOnly ? { titleOnly: true } : {}),
@@ -262,6 +276,7 @@ export function assembleEdition(args: {
       demoted: demotedCount,
       overruns,
       impact: impactCount,
+      explain: explainCount,
       coreDeep,
       slotGaps: slotGapsOf(allItems.map((x) => x.it.publishedAt), args.since, args.until),
       worldShare: { items: allItems.filter((x) => x.world).length, lead: allItems.filter((x) => x.world && leadSet.has(x.it.id)).length },
@@ -277,6 +292,7 @@ export function assembleEdition(args: {
       webSearches: args.usage.webSearches,
     },
     ...(BRIEFING.IMPACT_MODE === 'show' ? { impactVisible: true } : {}),
+    ...(BRIEFING.EXPLAIN_MODE === 'show' ? { explainVisible: true } : {}),
     sections,
   };
 }

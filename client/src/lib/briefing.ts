@@ -31,6 +31,10 @@ export const W5_LABEL: Record<(typeof W5_KEYS)[number], string> = { who: '누가
 /** 영향 줄(v0.46) — stated: 기사가 말한 것(낱말 붙음) · inferred: AI가 짚은 것("AI 추론") */
 export type ImpactLine = { target: string; direction: 'up' | 'down' | 'mixed' | 'unclear'; kind: 'stated' | 'inferred'; text: string; from: string };
 export const IMPACT_WORD: Record<ImpactLine['direction'], string> = { up: '기회', down: '부담', mixed: '갈림', unclear: '' };
+/** 해설 상자(v0.48, 해설 칸 토론) — 서버 summarize.ts의 ExplainBlock과 같아야 한다. basis: stated(기사가 말함) · inferred(재료에서 AI가 짚음) · outside(기사 밖 지식) */
+export type ExplainKind = 'terms' | 'why' | 'effect' | 'watch';
+export type ExplainBlock = { kind: ExplainKind; text?: string; items?: { term: string; text: string }[]; from: string[]; basis: 'stated' | 'inferred' | 'outside' };
+export const EXPLAIN_LABEL: Record<ExplainKind, string> = { terms: '말뜻', why: '왜 이렇게 됐나', effect: '그래서 어떻게 되나', watch: '다음에 볼 것' };
 export type ItemSource = { id: string; source: string; url: string; via: 'body' | 'feed' | 'lede' | 'web' };
 
 export type EditionItem = {
@@ -62,6 +66,8 @@ export type EditionItem = {
   // ---- v0.46 ----
   w5?: W5;
   impact?: ImpactLine[];
+  // ---- v0.48 ----
+  explain?: ExplainBlock[];
   /** 앱 안 원문으로 받을 주소가 있다 — 회차를 만들 때 본문 받기에 성공한 기사 */
   readUrl?: string;
   changed?: string;
@@ -76,8 +82,8 @@ export const BLOCK_LABEL: Record<BlockKind, string> = { background: '배경', nu
 
 /** API-138 앱 안 원문 */
 export type ReaderResult = { title: string; byline: string | null; source: string; url: string; paragraphs: string[] };
-export type FlagReason = 'number' | 'mixed' | 'overstated' | 'impact' | 'other';
-export const FLAG_LABEL: Record<FlagReason, string> = { number: '숫자가 틀림', mixed: '다른 사건이 섞임', overstated: '제목이 과장됨', impact: '영향 판단이 이상함', other: '기타' };
+export type FlagReason = 'number' | 'mixed' | 'overstated' | 'impact' | 'explain' | 'other';
+export const FLAG_LABEL: Record<FlagReason, string> = { number: '숫자가 틀림', mixed: '다른 사건이 섞임', overstated: '제목이 과장됨', impact: '영향 판단이 이상함', explain: '해설이 이상함', other: '기타' };
 
 export type Edition = {
   version: number;
@@ -86,6 +92,8 @@ export type Edition = {
   cost: { usd: number };
   /** 영향 칸을 그리나 (v0.46). 없으면(옛 회차) 그리지 않는다 */
   impactVisible?: boolean;
+  /** 해설 상자를 그리나 (v0.48) */
+  explainVisible?: boolean;
   /** 오늘의 핵심 기사 id. v0.43부터 — 없으면 leadIdsOf로 계산한다 */
   lead?: string[];
   sections: { section: '국내' | '세계'; categories: { name: string; subs: { id: string; name: string; items: EditionItem[] }[] }[] }[];

@@ -93,6 +93,20 @@ export function checkNumbers(text: string, material: string): { text: string; dr
   return { text: sentences.filter((s) => !bad.includes(s)).join(' '), dropped: bad.length };
 }
 
+/** 숫자 대조로 걸린 문장을 모드와 상관없이 지운다 — 판단 위에 틀린 숫자를 얹지 않는 칸(영향·해설)용 */
+export function dropUnsupportedNumbers(text: string, material: string): { text: string; dropped: number } {
+  if (!text) return { text, dropped: 0 };
+  const sentences = splitSentences(text);
+  const kept = sentences.filter((s) => sentenceNumbersSupported(s, material));
+  return { text: kept.join(' '), dropped: sentences.length - kept.length };
+}
+
+/** 전망·예측 어미 — 해설 "다음에 볼 것"은 "~되면 …" 조건문만 쓰고 예측은 쓰지 않는다 (해설 칸 토론, 감시 조건) */
+const PREDICTIVE = /(할 것이다|할 것으로|전망|예상된다|예상이다|예측|것으로 보인다|가능성이 크다|확실시)/;
+export function isPredictive(text: string): boolean {
+  return PREDICTIVE.test(text);
+}
+
 /** "왜 중요한가"가 일반론인가 — 근거 없이 어디에나 붙는 말. 걸리면 그 기사는 핵심에서 주요로 내린다 (개선 합의안 4.4) */
 const GENERIC_WHY = /(관심이 쏠린|귀추가 주목|주목된다|이목이 집중|파장이 예상|영향이 주목|변화가 예상|추이를 지켜|관심이 모아)/;
 export function isGenericWhy(why: string): boolean {

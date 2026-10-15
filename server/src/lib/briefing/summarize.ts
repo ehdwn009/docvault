@@ -6,13 +6,14 @@ import { NO_META_RULE, stripMeta } from './clean.js';
 import { errorText, mapLimit } from './limit.js';
 import type { Picked } from './select.js';
 import { subPath } from './taxonomy.js';
-import { checkNumbers, directionOf, extractNumbers, hasBannedWord, isGenericWhy, overlapsWith, sameValue, sentenceNumbersSupported } from './verify.js';
+import { checkNumbers, directionOf, dropUnsupportedNumbers, extractNumbers, hasBannedWord, isGenericWhy, isPredictive, overlapsWith, sameValue, sentenceNumbersSupported } from './verify.js';
 
 // ④ 요약 — 핵심·주요 기사만 (뉴스 브리핑 설계 "④ 요약", 개선 합의안 4장). 핵심은 Opus 5.5, 주요는 Sonnet 5.5 (v0.46).
 // 글 모양은 "필수 2칸 + 골라 쓰는 칸": 리드(무슨 일 2~3문장)와 왜 중요한가는 늘 쓰고, 배경·숫자·경과·반응·앞으로·용어는
 // 재료가 있을 때만 0~3개. 고정 4칸(v0.43)은 재료가 없는 칸까지 채우게 해 일반론과 조각 문장을 낳았다.
 // 재료마다 기호(A·B·C·S1·W1)가 붙어 있고 칸마다 어느 재료에서 썼는지(from)를 받는다 — 출처가 섞이는 것을 칸 단위로 잡는다.
-// v0.46: 원문을 보는 유일한 호출이라 5W와 영향 칸도 여기서 쓴다 — 요약만 보고 다시 쓰면(옛 lenses.ts) 날짜·장소·근거가 없어 칸이 빈다
+// v0.46: 원문을 보는 유일한 호출이라 5W와 영향 칸도 여기서 쓴다 — 요약만 보고 다시 쓰면(옛 lenses.ts) 날짜·장소·근거가 없어 칸이 빈다.
+// v0.48: 해설 상자도 같은 호출 — 열 때 만들면 재료가 요약뿐이라 "추론의 추론"이 된다 (해설 칸 토론 2026-10-15)
 
 export const BLOCK_KINDS = ['background', 'numbers', 'timeline', 'reactions', 'next', 'terms'] as const;
 export type BlockKind = (typeof BLOCK_KINDS)[number];
@@ -45,6 +46,21 @@ export type ImpactLine = {
   from: string;
 };
 
+/** 해설 상자(v0.48, 해설 칸 토론 2026-10-15) — 기본 보기 맨 아래 접힌 상자. 칸: 말뜻 · 왜 이렇게 됐나 · 그래서 어떻게 되나 · 다음에 볼 것.
+    basis: stated(재료가 말했다, from 있음) · inferred(재료에서 AI가 짚었다, from 있음) · outside(기사 밖 지식, from 없음 — 말뜻·왜에만 허용) */
+export const EXPLAIN_KINDS = ['terms', 'why', 'effect', 'watch'] as const;
+export type ExplainKind = (typeof EXPLAIN_KINDS)[number];
+export type ExplainBasis = 'stated' | 'inferred' | 'outside';
+export type ExplainBlock = {
+  kind: ExplainKind;
+  /** why·effect·watch — 1~2문장 */
+  text?: string;
+  /** terms — 용어와 한 줄 뜻 */
+  items?: { term: string; text: string }[];
+  from: string[];
+  basis: ExplainBasis;
+};
+
 export type Written = {
   title: string;
   /** 리드 — 무슨 일 2~3문장 */
@@ -59,10 +75,13 @@ export type Written = {
   changed?: string;
   w5?: W5;
   impact?: ImpactLine[];
-  /** 검증 — 숫자 대조로 문제가 된 문장 수, 목표 길이 초과 여부, 검증에서 지운 영향 줄 수 */
+  /** 해설 상자 — 칸이 하나도 안 남으면 없다(화면은 상자를 안 그린다) */
+  explain?: ExplainBlock[];
+  /** 검증 — 숫자 대조로 문제가 된 문장 수, 목표 길이 초과 여부, 검증에서 지운 영향 줄 수, 지운 해설 칸 수 */
   numberDrops: number;
   overrun: boolean;
   impactDrops: number;
+  explainDrops: number;
 };
 
 /** 요약 근거 하나 — 본문 재료(A·B·C·W1)와 발췌(S1·S2)를 같은 모양으로 번호 매긴다 */
@@ -111,6 +130,19 @@ const SummarySchema = z.object({
           }),
         )
         .describe('영향 — 이 기사가 누구에게 어떤 영향인지. 재료에서 근거를 댈 수 있을 때만 0~2줄, 없으면 빈 배열. 왜 중요한가를 되풀이하지 않는다'),
+      explain: z
+        .object({
+          terms: z
+            .array(z.object({ term: z.string().describe('용어 그대로'), text: z.string().describe('한 줄 뜻, 초심자 눈높이') }))
+            .describe(`말뜻 — 기사 속 제도·전문용어 0~${BRIEFING.EXPLAIN_TERMS_MAX}개. 기사 밖 지식을 써도 된다. 수치·날짜·금액·면적 같은 현행 기준은 쓰지 않는다(제도는 바뀐다). 없으면 빈 배열`),
+          why: z.string().describe('왜 이렇게 됐나 — 원인·배경 1~2문장. 재료에 있으면 그것을, 없으면 기사 밖 배경지식으로. 모르면 빈 문자열'),
+          whySrc: z.string().describe('왜 이렇게 됐나의 근거 재료 기호(쉼표). 배경지식으로 썼으면 빈 문자열'),
+          effect: z.string().describe('그래서 어떻게 되나 — 이 일이 누구에게 어떤 영향인지 1~2문장. 대상은 가계·대출자·세입자·중소기업처럼 사람까지 내려간다. "~할 수 있다" 어미. 재료에 근거가 있을 때만, "해설 효과 칸 없음"이 적힌 기사는 빈 문자열'),
+          effectSrc: z.string().describe('그래서 어떻게 되나의 근거 재료 기호(쉼표)'),
+          watch: z.string().describe('다음에 볼 것 — "…되면 …" 조건문으로, 이 신호가 나오면 흐름을 안다는 식 1~2문장. 전망·예상은 쓰지 않는다. 날짜·일정은 재료에 있는 것만. 재료에 근거가 있을 때만'),
+          watchSrc: z.string().describe('다음에 볼 것의 근거 재료 기호(쉼표)'),
+        })
+        .describe('해설 — "해설 없음"이 적힌 기사는 전부 빈 값'),
     }),
   ),
 });
@@ -149,8 +181,16 @@ export function impactEligible(p: Picked, evidence: Evidence[]): boolean {
   return evidence.some((e) => e.via !== 'lede');
 }
 
-function describe(p: Picked, k: number, evidence: Evidence[], target: [number, number], prevSummary: string | undefined, impact: boolean): string {
-  const head = `${k}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title} — 목표 ${target[0]}~${target[1]}자${impact ? '' : ' · 영향 칸 없음(빈 배열)'}`;
+/** 해설 상자를 만드는 기사인가 — 핵심·주요 전부(참고는 재료가 없어 배경지식뿐이 된다). effect 칸은 경제·테크(wide)만 — 정치·사회·세계는
+    유불리를 못 붙이니 "당사자 나열"이 되고 그건 5W의 "누가"와 같은 말이다 (해설 칸 토론 4/4) */
+export function explainEligible(p: Picked): { on: boolean; effect: boolean } {
+  if (BRIEFING.EXPLAIN_MODE === 'off' || p.importance < 2) return { on: false, effect: false };
+  return { on: true, effect: p.sub.wide };
+}
+
+function describe(p: Picked, k: number, evidence: Evidence[], target: [number, number], prevSummary: string | undefined, impact: boolean, explain: { on: boolean; effect: boolean }): string {
+  const explainNote = !explain.on ? ' · 해설 없음' : explain.effect ? '' : ' · 해설 효과 칸 없음';
+  const head = `${k}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title} — 목표 ${target[0]}~${target[1]}자${impact ? '' : ' · 영향 칸 없음(빈 배열)'}${explainNote}`;
   const parts = evidence.map((e) => {
     const kind = e.via === 'lede' ? '발췌' : e.via === 'web' ? '웹 검색 보도' : e.via === 'feed' ? '피드 본문' : '본문';
     return `   [${e.id} ${e.source}] ${kind}: ${e.text}`;
@@ -230,6 +270,72 @@ function verifyImpact(
   return { lines, dropped };
 }
 
+/**
+ * 해설 검증 — 전부 코드. 말뜻·왜는 기사 밖 지식(outside)을 허용하되 숫자·날짜가 있으면 지운다(모델 기억에는 날짜가 없어 현행 기준과 어긋난다).
+ * 그래서·다음은 근거 기호가 있어야 남고, 숫자 대조는 모드와 상관없이 지운다. 그래서 칸의 basis는 영향 줄과 같은 규칙(방향 어휘가 재료에도 있으면 stated).
+ * 다음은 전망 어미를 지운다. 왜 중요한가·영향 줄·양쪽 시각과 겹치는 칸은 되풀이라 지운다
+ */
+function verifyExplain(
+  raw: { terms: { term: string; text: string }[]; why: string; whySrc: string; effect: string; effectSrc: string; watch: string; watchSrc: string },
+  evidence: Evidence[],
+  valid: Set<string>,
+  others: string[],
+  allowEffect: boolean,
+): { blocks: ExplainBlock[]; dropped: number } {
+  const blocks: ExplainBlock[] = [];
+  let dropped = 0;
+  const items = raw.terms
+    .map((t) => ({ term: stripMeta(t.term).trim(), text: stripMeta(t.text).trim() }))
+    .filter((t) => {
+      if (!t.term || !t.text) return false;
+      const ok = t.term.length <= BRIEFING.EXPLAIN_TERM_MAX_CHARS && t.text.length <= BRIEFING.EXPLAIN_TERM_TEXT_MAX_CHARS && extractNumbers(t.text).length === 0 && !hasBannedWord(t.text);
+      if (!ok) dropped++;
+      return ok;
+    })
+    .slice(0, BRIEFING.EXPLAIN_TERMS_MAX);
+  if (items.length > 0) blocks.push({ kind: 'terms', items, from: [], basis: 'outside' });
+
+  const textBlock = (kind: 'why' | 'effect' | 'watch', rawText: string, src: string) => {
+    let text = stripMeta(rawText).trim();
+    if (!text) return;
+    const from = parseSrc(src, valid);
+    if (text.length > BRIEFING.EXPLAIN_TEXT_MAX_CHARS || hasBannedWord(text) || overlapsWith(text, others)) {
+      dropped++;
+      return;
+    }
+    if (kind === 'watch' && isPredictive(text)) {
+      dropped++;
+      return;
+    }
+    if (from.length === 0) {
+      // 기사 밖 지식은 왜 이렇게 됐나에만 — 그래서·다음은 재료 근거가 없으면 AI의 전망이 된다 (감시 조건)
+      if (kind !== 'why' || extractNumbers(text).length > 0) {
+        dropped++;
+        return;
+      }
+      blocks.push({ kind, text, from, basis: 'outside' });
+      return;
+    }
+    const material = materialText(evidence, from);
+    const r = dropUnsupportedNumbers(text, material);
+    dropped += r.dropped;
+    text = r.text;
+    if (!text) return;
+    let basis: ExplainBasis = 'stated';
+    if (kind === 'effect') {
+      const lineDir = directionOf(text);
+      const matDir = directionOf(material);
+      basis = lineDir && matDir && (lineDir === matDir || matDir === 'mixed') ? 'stated' : 'inferred';
+    }
+    blocks.push({ kind, text, from, basis });
+  };
+  textBlock('why', raw.why, raw.whySrc);
+  if (allowEffect) textBlock('effect', raw.effect, raw.effectSrc);
+  else if (raw.effect.trim()) dropped++;
+  textBlock('watch', raw.watch, raw.watchSrc);
+  return { blocks, dropped };
+}
+
 /** 핵심·주요 이슈의 글. 돌려주는 Map의 열쇠는 picked 배열의 위치 */
 export async function summarize(
   picked: Picked[],
@@ -259,8 +365,9 @@ export async function summarize(
     const ev = batch.map((idx) => evidenceOf(picked[idx]!, materials.get(idx)));
     const targets = batch.map((idx, j) => lengthTarget(picked[idx]!, ev[j]!));
     const eligible = batch.map((idx, j) => impactEligible(picked[idx]!, ev[j]!));
+    const explains = batch.map((idx) => explainEligible(picked[idx]!));
     const lines = batch
-      .map((idx, j) => describe(picked[idx]!, j + 1, ev[j]!, targets[j]!, picked[idx]!.prevStoryId ? opts.prevSummaries?.get(picked[idx]!.prevStoryId) : undefined, eligible[j]!))
+      .map((idx, j) => describe(picked[idx]!, j + 1, ev[j]!, targets[j]!, picked[idx]!.prevStoryId ? opts.prevSummaries?.get(picked[idx]!.prevStoryId) : undefined, eligible[j]!, explains[j]!))
       .join('\n');
     const out = await callAndCount(ai, usage, {
       model: core ? BRIEFING.SUMMARY_MODEL_CORE : BRIEFING.SUMMARY_MODEL,
@@ -280,7 +387,8 @@ export async function summarize(
         '- changed: "직전 회차 요약"이 붙은 기사만, 그 요약에 없던 새 사실을 한 줄로. 새 사실이 없으면 빈 문자열.',
         `- 5W(w5): 누가·무엇을·언제·어디서·왜를 재료에 있는 것만 칸당 한 줄(${BRIEFING.W5_TEXT_MAX_CHARS}자 이내). 날짜·장소는 재료 표기 그대로. 재료에 없는 칸은 빈 문자열로 둔다 — 채우지 않는다. src에 근거 기호.`,
         `- 영향(impact): "영향 칸 없음"이 적힌 기사는 빈 배열. 나머지는 이 일이 누구에게 어떤 영향인지 0~${BRIEFING.IMPACT_MAX_CORE}줄 — 대상(target ${BRIEFING.IMPACT_TARGET_MAX_CHARS}자 이내) · 방향(direction) · 한 문장(${BRIEFING.IMPACT_TEXT_MAX_CHARS}자 이내, "~할 수 있다" 어미) · 근거 기호 하나(src). 재료가 그 방향을 직접 말했을 때만 up/down/mixed, 재료에서 짚어낸 것이면 unclear. 왜 중요한가·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 재료 밖 연쇄 추론(금리 → 내 대출)은 쓰지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다.`,
-        '- 길이: 기사마다 적힌 목표 글자 수(리드+왜 중요한가+칸 합계) 안에서. 재료가 짧으면 짧게 쓴다.',
+        `- 해설(explain): 기사가 아니라 AI가 푸는 글이라 따로 표시된다. "해설 없음"이 적힌 기사는 전부 빈 값. 말뜻(terms)은 기사 속 제도·전문용어 0~${BRIEFING.EXPLAIN_TERMS_MAX}개를 초심자 눈높이 한 줄로 — 이 칸만은 기사 밖 지식을 써도 되지만 수치·날짜·금액·면적 같은 현행 기준은 쓰지 않는다(제도는 바뀐다). 왜 이렇게 됐나(why)는 원인·배경 1~2문장 — 재료에 있으면 whySrc에 기호를, 재료 밖 배경지식이면 whySrc를 비운다(그때는 숫자·날짜·고유명사를 쓰지 않는다). 그래서 어떻게 되나(effect)는 재료에 근거가 있을 때만, 대상을 가계·대출자·세입자처럼 사람까지 내려 1~2문장("~할 수 있다"). 한 단계 결과만 쓰고 그 결과의 결과(금리 → 내 대출 → 소비)는 쓰지 않는다. "해설 효과 칸 없음"이 적힌 기사는 빈 문자열. 다음에 볼 것(watch)은 "…되면 …"처럼 조건문으로, 이 신호가 나오면 흐름을 안다는 식 1~2문장 — 전망·예상은 쓰지 않고 날짜·일정은 재료에 있는 것만. 왜 중요한가·영향·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다. 모르면 비운다.`,
+        '- 길이: 기사마다 적힌 목표 글자 수(리드+왜 중요한가+칸 합계) 안에서. 재료가 짧으면 짧게 쓴다. 해설은 목표 길이에 넣지 않는다.',
         '- 수치·날짜·고유명사는 재료에 있는 것만. 재료 밖의 배경지식을 사실처럼 쓰지 않는다. 원문 문장을 베끼지 말고 새로 쓴다.',
         NO_META_RULE,
         `\n<기사>\n${lines}\n</기사>`,
@@ -367,6 +475,15 @@ export async function summarize(
         if (r.lines.length > 0) impact = r.lines;
       }
 
+      // 해설 — 핵심·주요 전부. 왜 중요한가·영향·양쪽 시각과 겹치는 칸은 지운다 (verifyExplain)
+      let explain: ExplainBlock[] | undefined;
+      let explainDrops = 0;
+      if (explains[j]!.on) {
+        const r = verifyExplain(it.explain, evidence, valid, [why, ...(impact?.map((l) => l.text) ?? []), ...(sides?.items.map((s) => s.text) ?? [])], explains[j]!.effect);
+        explainDrops = r.dropped;
+        if (r.blocks.length > 0) explain = r.blocks;
+      }
+
       const total = summary.length + why.length + blocks.reduce((n, b) => n + (b.text?.length ?? 0) + (b.pairs?.length ?? 0) * 12 + (b.items?.reduce((m, x) => m + x.text.length, 0) ?? 0), 0);
       written.set(idx, {
         title: it.title.trim(),
@@ -379,9 +496,11 @@ export async function summarize(
         ...(changed ? { changed } : {}),
         ...(w5.what ? { w5 } : {}),
         ...(impact ? { impact } : {}),
+        ...(explain ? { explain } : {}),
         numberDrops: drops,
         overrun: total > target[1] * BRIEFING.LENGTH_OVERRUN_RATIO,
         impactDrops,
+        explainDrops,
       });
     }
   });

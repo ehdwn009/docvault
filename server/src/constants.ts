@@ -363,6 +363,17 @@ export const BRIEFING = {
   IMPACT_DUP_OVERLAP: 0.5,
   /** 5W 한 칸의 길이 상한 — 요약 호출이 원문을 보고 쓴다(v0.46). 없는 칸은 비워 두고 화면이 "기사에 없음"으로 보인다 */
   W5_TEXT_MAX_CHARS: 60,
+  /** 해설 상자(v0.48, 해설 칸 토론 2026-10-15 — 에이전트 4인 합의) — 'off'면 만들지 않는다. 핵심·주요만, 같은 요약 호출에서 미리 쓴다(열 때 만들면
+      원문이 없어 요약을 다시 푸는 "추론의 추론"). 칸: 말뜻(terms, 0~3개) · 왜 이렇게 됐나(why) · 그래서 어떻게 되나(effect, 경제·테크만) · 다음에 볼 것(watch).
+      말뜻·왜는 기사 밖 지식을 써도 되고(basis outside — 숫자·날짜가 있으면 지운다), 그래서·다음은 재료 근거(from)가 있어야 남는다. 연쇄 추론은 1단계 */
+  EXPLAIN_MODE: 'show' as 'off' | 'show',
+  EXPLAIN_TERMS_MAX: 3,
+  EXPLAIN_TERM_MAX_CHARS: 20,
+  EXPLAIN_TERM_TEXT_MAX_CHARS: 90,
+  EXPLAIN_TEXT_MAX_CHARS: 200,
+  /** 이 기사 묻기(v0.48) — 서버가 회차에서 조립해 넘기는 "우리가 쓴 글" 문맥의 상한. 문서용 ASK.CONTEXT_MAX_CHARS(1,500)와 따로 둔다 —
+      기사 하나는 문서 전체가 아니고, 글은 전부 AI가 새로 쓴 것이라 저장해도 저작권 문제가 없다 */
+  ASK_CONTEXT_MAX_CHARS: 4000,
   /** 새로 쓴 제목 최대 길이 (기획서 — 40자 이내) */
   TITLE_MAX_CHARS: 40,
   /** 회차 JSON 형식 버전 — 뷰어가 모르는 버전이면 코드 뷰어로 연다 */

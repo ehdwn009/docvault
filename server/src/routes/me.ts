@@ -51,7 +51,7 @@ const stateSchema = z
     flag: z
       .object({
         id: z.string().min(1).max(BRIEFING.ITEM_ID_MAX_CHARS),
-        reason: z.enum(['number', 'mixed', 'overstated', 'impact', 'other']),
+        reason: z.enum(['number', 'mixed', 'overstated', 'impact', 'explain', 'other']),
         note: z.string().trim().max(BRIEFING.FLAG_NOTE_MAX_CHARS).optional(),
       })
       .optional(),
