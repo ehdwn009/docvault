@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>해설 칸 토론 보고서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 한 칸 읽기 문서. 결론 상자 → 토론 설정 → 네 입장 카드 → 쟁점표 → 합의안 → 결정 항목 → 구현 → 부록(원문) */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #0369a1; --accent-soft: #e3f1fa; --major: #c9741c; --core: #cf2f2f; --ok: #1d8556; --ok-soft: #e4f3ea;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15.5px; line-height: 1.7; }
+.wrap { max-width: 880px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 72px; display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3, h4 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 14px; }
+section > h2 { font-size: 23px; letter-spacing: -0.01em; padding-top: 6px; }
+section > h3 { font-size: 17px; margin-top: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.hero { display: flex; flex-direction: column; gap: 12px; }
+.hero h1 { font-size: clamp(26px, 4.2vw, 36px); letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; max-width: 70ch; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 0 14px 14px 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.verdict .tag { display: inline-block; background: var(--ok-soft); color: var(--ok); font-weight: 700; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; width: max-content; }
+.verdict ul, section ul, section ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.ask { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14.5px; min-width: 0; }
+.card h3 { font-size: 15.5px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .pos { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.card .pos.no { color: var(--core); } .card .pos.cond { color: var(--major); }
+.card ul { padding-left: 18px; gap: 3px; }
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tbody th { white-space: nowrap; font-weight: 600; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+td.fin { background: var(--ok-soft); font-weight: 500; }
+.decide { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.decide h3 { font-size: 16px; }
+.decide .opt { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+.decide .opt > div { background: var(--sunk); border-radius: 10px; padding: 9px 12px; min-width: 0; }
+.decide .opt b { display: block; margin-bottom: 2px; }
+.decide .rec { font-size: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.decide .rec b { color: var(--ok); }
+@media (max-width: 560px) { .decide .opt { grid-template-columns: 1fr; } }
+code { font-family: var(--f-mono); font-size: 0.9em; overflow-wrap: anywhere; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
+pre { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; background: var(--sunk); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0; white-space: pre; }
+pre.doc { white-space: pre-wrap; font-family: var(--f-body); font-size: 14px; line-height: 1.65; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; }
+details summary { cursor: pointer; font-weight: 600; padding: 12px 0; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+details summary::after { content: "펼치기"; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+details[open] summary::after { content: "접기"; }
+details > *:not(summary) { margin-bottom: 14px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+.steps li { padding-left: 2px; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">docvault · 뉴스 브리핑 · 에이전트 토론 · 2026-10-15</p>
+    <h1>"해설" 칸과 "기사 맥락이 실린 묻기" — 어디에, 언제, 얼마나 깊게</h1>
+    <p class="lead">사용자 제안: 기사마다 <b>원인·영향이 있다 없다 하고 얕다</b>, <b>"토지거래허가가 뭐지" 같은 용어를 물을 길이 없다</b>, <b>질문할 때 기사 내용이 실려 있어야 한다</b>. 이에 대해 한 세션이 낸 초안("해설 탭 신설 · 전 분야 고정 4칸 · 핵심은 미리 + 주요는 열 때 생성 · 끌어서 묻기 + 문맥 4,000자 + 원문도 함께 스위치")을, 초안을 모르는 네 역할이 코드와 설계 문서를 읽고 검토했다.</p>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <span class="tag">합의 (4/4)</span>
+      <p><b>해설은 "탭"이 아니라 기본 보기 맨 아래의 접힌 점선 상자로, 회차를 만들 때 같은 요약 호출 안에서 핵심·주요 전부 미리 쓴다.</b> 네 역할 모두 탭을 반대했다 — 보기 칩은 기기가 기억해서 한 번 고르면 다음 기사부터 AI 글로 열리고, 그건 직전 토론이 칩을 버린 이유 그대로다. 초안의 "열 때 생성"도 전원 반대 — 원문을 저장하지 않으니 열 때는 요약을 또 푸는 "추론의 추론"이 되고, 새 표·라우트·월 비용 합산이 따라붙는다.</p>
+      <ul>
+        <li><b>칸:</b> 말뜻(용어 0~3, 기사에 있을 때만) · 왜 이렇게 됐나 · 그래서 어떻게 되나 · 다음에 볼 것. <b>정치·사회·세계는 "그래서 어떻게 되나"를 뺀다</b>(3칸). 참고 기사는 해설 없음. 빈 칸·빈 상자는 안 그린다.</li>
+        <li><b>깊이:</b> 연쇄 추론은 1단계까지(둘째 단계는 재료 근거가 있을 때만). 단 대상은 "가계·대출자·세입자"처럼 사람까지 내려온다. 숫자 대조는 해설 전 칸에 drop 강제, 금지어·정부 대상 유불리 금지 그대로.</li>
+        <li><b>표시:</b> 줄마다 꼬리표는 없다. 칸 제목 오른쪽에 영향 칸과 같은 기호 둘 — 기사가 말한 칸은 「— 언론사」, 기사 밖 칸은 「AI 추론」 알약. 데이터에는 칸마다 kind(stated / inferred / outside)를 남긴다. 머리말 고정 문구 "요약을 보고 AI가 푼 글 · 제도·수치는 바뀔 수 있어요".</li>
+        <li><b>묻기:</b> 폰 기사 화면에서 문장을 고르면 하단 [이전/다음] 막대가 「…」물어보기로 바뀐다. 문맥은 클라이언트가 보내지 않고 <b>서버가 fileId+itemId로 "우리가 쓴 글 전체"를 조립</b>(브리핑 전용 상한 4,000자), 질문 기록에는 [기사가 말한 것]/[AI 해설] 꼬리표를 달아 넘긴다. 원문 탭에서 고른 문장은 그 호출에만 싣고 저장하지 않는다(quote null).</li>
+        <li><b>"원문도 함께" 스위치는 1차에서 미룬다</b>(3/4). 전제인 앱 안 원문 보기의 품질 측정(briefing:readcheck)이 아직 없다.</li>
+        <li><b>비용:</b> 회차당 +$0.40(핵심 Opus·주요 Sonnet, 출력만 늘어남), 시간 +2~3분. 출력 상한 16k의 절반 안, 20분 한도까지 5분 여유. 월 합계 약 $45로 한도 $110 안.</li>
+      </ul>
+    </div>
+    <div class="ask">초안과 달라진 점 여섯: 탭 → 접힌 상자 · 전 분야 4칸 → 정치·사회·세계 3칸 · 핵심만 미리 → 핵심·주요 전부 미리(참고 제외) · 2단계 연쇄 → 1단계 · 줄 꼬리표 없음 → 칸 단위 기호 · 원문 스위치 → 미룸. 초안이 맞았던 것: 끌어서 묻기 연결, 문맥 4,000자, 우리 글만 저장.</div>
+  </section>
+
+  <section>
+    <h2>토론 설정</h2>
+    <p>사용자가 실제 기사 화면 두 장(원/달러 환율 1,338.3원 — 영향 칸 없음 · 서울 아파트 토허 신청 3,678건 — 영향 한 줄)과 일반 문서의 「시기의」물어보기 버튼 화면을 보고 제안했다. 네 역할(읽는 사람 대변 · 수집·파이프라인·비용 · 화면 디자인 · 정확성·저작권 감시)은 직전 토론(2026-10-11 영향 칸)의 합의와 감시 조건, 개선 합의안, <code>summarize.ts</code>·<code>ask.ts</code>·<code>BriefingView.tsx</code>·<code>Viewer.tsx</code>를 각자 읽었다. 초안은 "한 세션의 제안이며 동의할 의무가 없다"고 명시했다. 1라운드는 서로를 모른 채, 2라운드는 다른 세 입장을 보고 쟁점 8개에 찬성·양보·고수를 적었다.</p>
+    <p><b>발견 한 가지(디자인·읽는 사람):</b> 폰 기사 화면에서 물어보기가 안 뜨는 원인은 초안이 짚은 "선택이 뷰어 본문 상자 밖"이 아니라, 선택은 잡히는데 <b>뷰어 도구막대(z-20)가 기사 시트(z-40) 아래 깔려 버튼이 가려지는</b> 것이다(<code>Viewer.tsx:1071</code>, <code>BriefingView.tsx:1065</code>). 질문 시트(z-30)도 같은 스택 아래에 있어 실기기 확인이 필요하다.</p>
+  </section>
+
+  <section>
+    <h2>1라운드 — 네 입장</h2>
+    <div class="cards">
+      <div class="card"><h3>읽는 사람 대변 <span class="pos cond">A 조건부 · B 찬성</span></h3><ul>
+        <li>얕음은 설계된 것(<code>summarize.ts:282</code> 연쇄 금지, 주요 1줄·60자). 해설은 "미리 물어 둔 묻기"라 묻기 수준의 경계가 화면에 있어야 한다</li>
+        <li>탭이면 <code>dv_briefing_lens</code> 기억 때문에 다음 기사부터 AI 글. 폰 칩은 4개가 꼭 맞아 5개째는 넘친다</li>
+        <li>기본 보기 맨 아래 접힌 구획, 펼침 기억 안 함. 용어 0~3 + 3칸, 정치·사회·세계는 "누구에게" 빼기</li>
+        <li>문맥에 [기사가 말한 것]/[AI 해설] 꼬리표 — 안 그러면 답이 AI 추론을 "기사에 따르면"으로 되돌려 준다</li>
+      </ul></div>
+      <div class="card"><h3>수집·파이프라인·비용 <span class="pos cond">A 조건부 · B 찬성</span></h3><ul>
+        <li>4칸은 기존 칸(terms·background·impact·next)과 겹친다 — 같은 요약 호출에서 "항상 시도 + 근거 없으면 inferred"가 가장 싸다</li>
+        <li>요약 호출 안 $0.40/회차 · 별도 호출 $0.9~1.4 · 열 때 생성은 복잡도 최고에 재료가 요약뿐. 초안의 +$0.3~0.5는 호출 안에 넣을 때만 맞다</li>
+        <li>생성 시점이 저장소를 정한다(회차 때 → 회차 JSON, 열 때 → 별도 표). 섞지 말 것. 참고 제외</li>
+        <li>B 가능: ask_threads에 item_id, 서버 조립 4,000자, 원문은 마지막 user 턴에만 6,000자</li>
+      </ul></div>
+      <div class="card"><h3>화면 디자인 <span class="pos cond">A 조건부 · B 찬성</span></h3><ul>
+        <li>탭·칩 반대. 본문 아래·근거줄 위 점선 상자, 접힘 기본·기사마다 접힘</li>
+        <li>칸 이름 말뜻 / 왜 이렇게 됐나 / 그래서 어떻게 되나 / 다음에 볼 것. 기존 BLOCK_LABEL과 다른 이름으로 사실 칸과 구분</li>
+        <li>폰: 하단 [이전/다음] 막대가 선택 시 통째로 「…」물어보기로. 선택 중 좌우 밀기 끄기, 질문 시트 z-order 올리기</li>
+        <li>"원문도 함께"는 문맥 칩 끝 토글, 기본 꺼짐·기억 안 함·앱 안 원문 되는 기사에만</li>
+      </ul></div>
+      <div class="card"><h3>정확성·저작권 감시 <span class="pos cond">A 조건부 · B 조건부</span></h3><ul>
+        <li>③의 2단계 연쇄와 정치·사회 포함 반대 — 직전 토론이 "AI의 경제 전망"이라며 금지한 바로 그것</li>
+        <li>용어 칸: 모델 기억은 날짜가 없다 → 현행 수치(면적·금액·날짜) 금지, "제도는 바뀔 수 있음" 문구. 해설 전 칸 숫자 drop 강제</li>
+        <li>"탭이 경계"는 첫 기사에서만 작동. 기억 안 함·머리말·칸 단위 from/기사 밖 구분·틀린 곳 알리기 이유 추가가 최소 조건</li>
+        <li>원문 탭 드래그 문장은 기록에 남기지 말 것 — 500자면 문단 하나가 남고 카드로 가면 영구 보존</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2라운드 — 쟁점별 수렴</h2>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>쟁점</th><th>읽는 사람</th><th>파이프라인·비용</th><th>화면 디자인</th><th>감시</th><th>결론</th></tr></thead>
+      <tbody>
+        <tr><th>① 자리</th><td>접힌 상자</td><td>양보 → 상자</td><td>양보 → 기본 보기 맨 아래</td><td>상자·기억 안 함</td><td class="fin">기본 보기 맨 아래(블록 뒤·근거줄 앞) 접힌 점선 상자, 기사마다 접힘</td></tr>
+        <tr><th>② 생성 시점</th><td>양보 → 회차 때</td><td>고수: 회차 때 같은 호출</td><td>양보 → 회차 때</td><td>회차 때 — from이 생기는 유일한 자리</td><td class="fin">회차 때 같은 요약 호출 안에서 핵심·주요 전부, +$0.40·+2~3분</td></tr>
+        <tr><th>③ 참고 포함</th><td>제외</td><td>고수: 제외</td><td>제외(자리도 없음)</td><td>제외</td><td class="fin">참고 기사는 해설 없음</td></tr>
+        <tr><th>④ 정치·사회·세계의 "그래서"</th><td>고수: 뺀다</td><td>뺀다(wide 조건 유지)</td><td>고수: 뺀다(5W "누가"의 복사본)</td><td>양보 → 뺀다</td><td class="fin">비-wide 분야는 3칸</td></tr>
+        <tr><th>⑤ 연쇄 단계</th><td>양보 → 1단계, 대상은 사람까지</td><td>양보 → 1단계, 둘째는 from 필수</td><td>양보 → 1단계</td><td>고수: 1단계</td><td class="fin">1단계. 둘째 단계는 재료 근거 있을 때만. 대상은 사람까지 내려온다</td></tr>
+        <tr><th>⑥ 꼬리표</th><td>칸 단위 글자 + 머리말</td><td>칸마다 from[]+kind, 화면은 머리말</td><td>양보 → 칸 단위, 기존 기호 둘 재사용</td><td>양보 → 줄 없음, kind는 데이터 필수</td><td class="fin">줄 꼬리표 없음. 칸 제목 옆에 「— 언론사」/「AI 추론」, 데이터에 kind 3종</td></tr>
+        <tr><th>⑦ 원문 탭 드래그 저장</th><td>호출에만</td><td>호출에만, quote null</td><td>호출에만, "이 문장만" 철회</td><td>고수: 호출에만</td><td class="fin">저장 안 함. 서버가 우리 글 문맥을 붙인다</td></tr>
+        <tr><th>⑧ "원문도 함께" 1차</th><td>양보 → 포함</td><td>미룸(reader 꺼짐·미측정)</td><td>미룸</td><td>미룸</td><td class="fin">1차 미룸(3/4). 넣을 때 조건: 소유자+readerEnabled·context 미저장·답변 30자 연속 일치 검사·6,000자</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>합의안</h2>
+    <h3>해설 상자</h3>
+    <ul>
+      <li><b>데이터:</b> 회차 JSON의 기사마다 <code>explain</code> — 칸 배열, 칸마다 <code>kind</code>(terms / why / effect / watch), <code>text</code>, <code>from[]</code>, <code>basis</code>(stated / inferred / outside). 요약 스키마에 칸별 <code>src</code>를 받아 코드가 basis를 정한다: from 있고 숫자 통과 → stated, from 있고 방향 어휘가 재료에 없음 → inferred, from 없음 → outside. outside는 말뜻·왜에만 허용, 숫자·날짜·고유명사가 있으면 삭제.</li>
+      <li><b>생성:</b> <code>summarize.ts</code> 같은 호출. 해설 전용 system 문구를 SYSTEM_BASE 뒤에 덧붙인다 — "말뜻·배경은 기사 밖 지식을 써도 되나 재료와 어긋나면 재료 우선, 모르면 비운다, 현행 수치·날짜 금지". 예측 어미(~할 것이다·전망·예상된다) 정규식 삭제, "~되면" 조건문만. 영향 칸·왜 중요한가와 겹치는 줄은 삭제(기존 overlapsWith). 대상이 정부·정당·정책이면 방향 없음(기존 POLICY_TARGET).</li>
+      <li><b>화면:</b> 기본 보기 블록 뒤·근거줄 앞. 접힌 줄 「해설 · 토지거래허가 · 전세사기특별법 ⌄」(용어 없으면 「해설 · 왜 · 그래서 · 다음」). 펼치면 머리말 한 줄 + 칸. 말뜻 칸은 항상 「AI 추론」. 기사마다 접힘, 기억 안 함. 0칸이면 상자 없음. 틀린 곳 알리기에 "해설이 이상함" 추가.</li>
+      <li><b>끄기:</b> IMPACT_MODE처럼 <code>EXPLAIN_MODE: 'off' | 'show'</code> 한 상수. 실행 기록 stats에 <code>explain.dropped</code>.</li>
+    </ul>
+    <h3>끌어서 묻기 + 문맥</h3>
+    <ul>
+      <li>기사 시트가 선택을 직접 읽는다(Viewer의 blockContext는 안 씀 — 이웃이 근거줄·알리기 글). 폰은 하단 막대 교체, 선택 중 좌우 밀기 끄기, 질문 시트를 기사 시트 위로.</li>
+      <li>클라이언트는 <code>fileId + itemId + quote</code>만 보내고, 서버가 회차에서 우리 글 전체를 조립해 <code>ask_threads.context</code>에 저장(브리핑 전용 <code>ASK.BRIEFING_CONTEXT_MAX_CHARS</code> 4,000, 문서용 1,500은 그대로). 문맥은 [기사가 말한 것] / [AI 해설] 두 묶음으로 나누고 안내문에 "해설은 AI 글이니 사실로 인용하지 말 것".</li>
+      <li>원문 탭에서 고른 문장은 그 호출에만 싣고 <code>quote</code>는 null. 화면엔 그 세션 동안만 고른 문장이 보이고 기록엔 "원문 문장으로 물음" 한 줄. 질문 시트 문맥 칩에 무엇이 붙었는지 적는다("제목·요약·해설 함께").</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>결정해 주셔야 할 것</h2>
+    <div class="decide"><h3>1. 해설 상자 이름과 칸 이름</h3>
+      <div class="opt"><div><b>해설 · 말뜻 / 왜 이렇게 됐나 / 그래서 어떻게 되나 / 다음에 볼 것</b>디자인 제안. 기존 칸(용어·배경·앞으로)과 다른 이름이라 사실 칸과 안 헷갈린다</div><div><b>다른 이름</b>"풀이", "AI 해설" 등. 기존 칸 이름과 겹치지만 않으면 된다</div></div>
+      <div class="rec"><b>권고</b> 디자인 제안 그대로.</div></div>
+    <div class="decide"><h3>2. 해설에 웹 검색을 쓸지</h3>
+      <div class="opt"><div><b>안 쓴다 (1차)</b>말뜻·배경은 모델 기억 + 재료 우선. 현행 수치 금지로 시점 오류를 막는다. 비용 0</div><div><b>쓴다</b>용어 정의의 시점 오류는 줄지만 건당 +$0.01~0.02, 인용 본문 저장 금지 조건이 따라온다</div></div>
+      <div class="rec"><b>권고</b> 1차는 안 쓴다. 틀린 곳 알리기 "해설이 이상함" 집계를 2주 보고 정한다.</div></div>
+    <div class="decide"><h3>3. "원문도 함께" 스위치</h3>
+      <div class="opt"><div><b>미룬다 (3/4)</b>앱 안 원문 보기의 추출 품질(briefing:readcheck 70%/50%)을 먼저 재고, 우리 글 4,000자로 답이 모자랄 때 넣는다</div><div><b>1차 포함 (읽는 사람)</b>원문 탭 가서 다시 드래그하는 왕복이 번거롭다. 조건: 받기 실패·지연이면 원문 없이 보내고 알린다</div></div>
+      <div class="rec"><b>권고</b> 미룬다. 원문 탭에서 고른 문장이 호출에 실리므로 1차 요구는 그것으로 채워진다.</div></div>
+  </section>
+
+  <section>
+    <h2>구현 단계 (결정 후)</h2>
+    <ol class="steps">
+      <li>설계 문서 갱신 — 뉴스브리핑 설계 "④ 요약"·"요약 보기"·"묻기", 회차 JSON 모양(explain), ERD(ask_threads.item_id), API 명세(묻기 요청이 fileId+itemId). CHANGELOG.</li>
+      <li>수집 안정성 수정(별도 확정) — fetch.ts의 AbortController 직접 사용 + 바깥 마감 시 읽기 닫기.</li>
+      <li>summarize.ts — 스키마에 explain 칸·src, 해설 system 문구, basis 판정·숫자 drop·예측 어미·겹침 삭제, 비-wide는 effect 제외, 참고 제외. constants에 EXPLAIN_MODE·길이 상한.</li>
+      <li>edition.ts·run.ts — 회차 JSON에 explain, stats.explain.dropped. 실측 1회차: 출력 토큰·시간·dropped 확인(max_tokens 오류면 SUMMARY_CHUNK 6→5).</li>
+      <li>BriefingView.tsx — 접힌 점선 상자(ImpactBox 기호 재사용), 틀린 곳 알리기 이유 추가, 기사 시트 선택 감지·하단 막대 교체·밀기 끄기, 질문 시트 z-order.</li>
+      <li>ask — ask_threads.item_id, 서버 조립 문맥(BRIEFING_CONTEXT_MAX_CHARS), 문맥 꼬리표·안내문, 원문 탭 quote null. (원문도 함께는 결정 3에 따라.)</li>
+      <li>학습자료·프로젝트 지도·용어집 갱신(코드 정독 6부가 summarize.ts·BriefingView.tsx 줄 번호를 인용한다).</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>부록 — 토론 원문</h2>
+    <details><summary>1라운드 · 읽는 사람 대변</summary><pre class="doc">## 읽는 사람 대변 — A·B 검토
+
+### 1. 입장
+- A (해설 탭): 조건부 찬성. &quot;그래서 나한테?&quot;는 지금 구조로는 영원히 못 받는 답이라 자리는 필요하다. 다만 탭이면 안 된다 — 아래 근거 2.
+- B (끌어서 묻기 + 문맥 확장): 찬성. 단, 폰에서 안 뜨는 진짜 원인(겹침)을 같이 고쳐야 한다 — 근거 3.
+
+### 2. 근거 (체험 기준)
+1. 얕음은 설계된 것이다. summarize.ts:282 &quot;재료 밖 연쇄 추론(금리→내 대출)은 쓰지 않는다&quot;, 주요는 1줄·60자(IMPACT_MAX_MAJOR), 왜 중요한가와 50% 겹치면 삭제. 직전 토론에서 &quot;기사가 말하지 않은 영향은 [이 기사 묻기]로&quot;라고 정했으니, A는 &quot;미리 물어 둔 묻기&quot;다. 그러면 묻기와 같은 수준의 경계(&quot;사용자가 질문했고 답이 의견임을 안다&quot;)가 화면에 있어야 한다. 탭 이름 하나로는 부족하다.
+2. 탭이면 다음 기사부터 AI 해설로 열린다. BriefingView.tsx:72,111-120 dv_briefing_lens는 고른 보기를 기억해 다음 기사도 같은 보기로 연다(설계 SCR-191). 해설이 탭이면 J/K·[다음]으로 넘길 때마다 사실(기본)을 건너뛰고 AI 글부터 읽게 되고, 주요 기사는 열 때마다 생성 대기가 걸린다. 영향 칸 토론에서 칩을 버린 이유와 정확히 같다. 폰 칩도 지금 4개가 스크롤 없이 꼭 맞는다 — 5개째는 넘친다.
+3. 용어 질문이 갈 곳이 없다 — 데이터 정책이 아니라 겹침 문제. 폰 기사 시트는 fixed inset-0 z-40(BriefingView ~1066)이고, 폰의 [「…」물어보기] 버튼은 뷰어 도구막대에 있다(Viewer.tsx:663-669). 드래그는 잡히는데 버튼이 시트 밑에 깔린다. 게다가 묻기 문맥은 제목·요약·왜만 1,500자(BriefingView.tsx:559-568) — 용어·숫자·배경 칸, 5W, 영향, 양쪽 시각 전부 빠진다. 용어 칸(terms)은 6종 중 3칸 경쟁이라(summarize.ts:274-276) 숫자·경과에 자주 밀려 애초에 없는 기사가 많다.
+
+### 3. 바꿔야 할 점
+- 탭 → 기본 보기 맨 아래 접힌 구획 &quot;AI 해설 펼치기&quot;. 기사마다 접힌 채 시작, 펼침 상태 기억 안 함. 읽다가 내려가면 바로 있으니 발견도 더 쉽고, 지연 생성은 &quot;펼침=생성&quot;으로 자연스럽다(핵심은 미리 만들어 즉시).
+- 4칸 고정 → 용어 0~3 + 3칸. 용어는 기사에 있을 때만, 한 줄씩, 맨 위. 정치·사회·세계정치(비-wide)는 ③ &quot;그래서 누구에게&quot;를 빼고 3칸 — 유불리 없는 ③은 &quot;여러 쪽에 영향&quot;류 일반론이 된다(v0.43 고정 4칸의 재판).
+- B 버튼은 시트 아래 고정 막대 안에. [이전] [다음] 옆에 드래그 시 「…」물어보기.
+- 원문 탭 드래그에도 &quot;우리가 쓴 글&quot; 문맥은 붙인다 — 금지 대상은 원문 본문이지 우리 요약이 아니다.
+- 문맥에 꼬리표: [기사가 말한 것] / [AI 해설·추론]으로 나눠 넘기고 ask.ts 안내문에 &quot;해설은 AI 글이니 사실로 인용하지 말 것&quot;을 더한다. 안 그러면 답이 &quot;기사에 따르면 강북 집값이 오른다&quot;고 AI 추론을 사실로 되돌려 준다.
+
+### 4. 반드시 지킬 조건
+- 해설 머리말 고정: &quot;AI가 기사 밖 지식으로 푼 글 · 틀릴 수 있어요&quot;, 틀린 곳 알리기에 &quot;해설이 이상함&quot; 이유 추가.
+- 해설 ②③이 영향 칸·왜 중요한가와 같은 문장이면 지운다 — 한 기사에서 같은 말을 세 번 읽게 하지 않는다.
+- 생성 중·실패해도 기본 보기는 그대로 보이고, 실패는 &quot;지금은 못 만들었어요 · 다시&quot; 한 줄.
+- 질문창에 &quot;이 기사의 요약·해설을 같이 보냈어요&quot; 한 줄. &quot;원문도 함께&quot;는 앱 안 원문이 되는 기사에만 보이고, 받기에 실패하면 원문 없이 그냥 보내며 그렇게 말해 준다.
+- 숫자 대조·금지어·정치 유불리 금지는 해설에도 그대로.
+
+### 5. 사용자가 정할 것
+1. 해설을 탭으로 둘지 기본 아래 접힌 구획으로 둘지 (권장: 구획).
+2. 정치·사회 기사에서 &quot;그래서 누구에게&quot;를 뺄지(3칸) (권장: 뺀다).
+3. &quot;원문도 함께&quot; 스위치를 1차에 넣을지, 먼저 스위치 없이 써 보고 답이 모자랄 때 넣을지 (권장: 뒤로 미룬다).</pre></details>
+    <details><summary>1라운드 · 수집·파이프라인·비용</summary><pre class="doc">## 수집·파이프라인·비용 담당 의견
+
+### 1. 입장
+- A 해설 탭 — 조건부 찬성. 4칸은 이미 있는 칸과 겹친다(① 용어=terms 블록, ② 원인=background·w5.why, ③ 누구에게=impact, ④ 앞으로=next, summarize.ts). 얕은 이유는 &quot;재료 있을 때만 0~3칸&quot; 규칙 + 영향은 wide 분야만(impactEligible) + 검증 삭제다. 새 병렬 구조보다 같은 요약 호출에서 4칸을 항상 시도하고 근거 없으면 inferred 표시로 푸는 게 비용·복잡도 모두 가장 싸다.
+- B 끌어서 묻기 + 문맥 확장 — 찬성. 지금 ask.ts 구조로 &quot;그 호출에만 붙이고 저장 안 함&quot;이 가능하다(4절). 토큰 비용은 턴당 $0.01 미만.
+
+### 2. 비용 실측 추정
+가정: 핵심 20·주요 60, 해설 4칸 ≈ 550자 ≈ 400 출력 토큰/건, 재료 핵심 ~6,000자·주요 ~3,000자(별도 호출이면 입력 ~180k 토큰), 월 30회차. 단가는 BRIEFING.PRICES.
+
+| 방식 | 모델 | 회차당 | 월 | 지연 | 복잡도 |
+|---|---|---|---|---|---|
+| 미리, 요약 호출 안(입력 증가 0, 출력 +32k) | 핵심 Opus·주요 Sonnet | $0.40 | $12 | +1.5~2.5분 | 낮음 |
+| 미리, 별도 호출(재료 재전송) | Haiku 5.5 | $0.05 | $1.5 | +1~2분 | 중 |
+| 〃 | Sonnet 5.5 | $0.68 | $20 | +2~4분 | 중 |
+| 〃 | 핵심 Opus·주요 Sonnet | $0.89 | $27 | +3~4분 | 중 |
+| 〃 | Opus 5.5 | $1.36 | $41 | +4~5분 | 중 |
+| 탭 열 때(재료=우리 글 700자, 하루 10건) | Haiku / Sonnet / Opus | 건당 $0.0003 / $0.006 / $0.013 | $0.1 / $1.9 / $3.9 (+웹검색 시 +$3~6) | 열 때 5~10초 | 높음: 새 표·라우트·동시성·월 비용 합산 |
+| 절충(핵심 20 요약 호출 안 + 주요 열 때 Sonnet) | — | $0.16 + 하루 $0.06 | ≈ $7 | 둘 다 | 가장 높음(저장소 2곳·조회 2번) |
+
+초안의 &quot;+$0.3~0.5&quot;는 요약 호출 안에 넣을 때만 맞다. 별도 호출이면 $0.9~1.4로 회차 비용이 두 배. 열 때 생성은 원문이 없어(미저장 원칙) 요약을 다시 푸는 &quot;추론의 추론&quot;이라 영향 칸 토론에서 (b)안을 버린 이유가 그대로 적용된다. 한 달 합계: 회차 $1.5 × 30 ≈ $45 + 질문 → 한도 $110 안.
+
+### 3. 저장 설계
+- 회차 때 만들면 회차 JSON(impact·w5 선례). 생성 트랜잭션에서 한 번 쓰고 불변, data/ 한 파일이 백업 단위.
+- 열 때 만들면 별도 표(user_file_state.read_items/flag_items 선례). 브리핑 파일은 saveContent를 안 타서 버전이 없는데, 탭 열 때 content_text를 고쳐 쓰면 updatedAt이 바뀌고 readPrevious·findEditionItem과 경쟁하며 수백 KB JSON 버전이 쌓인다. 별도 표도 ZIP 내보내기에 안 따라가고, monthCostUsd(briefing_runs만 합산)에 더해야 한다.
+- 결론: 생성 시점이 저장소를 정한다. 섞지 말 것.
+
+### 4. B의 &quot;원문을 그 호출에만&quot; — 가능, 고칠 곳
+현재: 문맥은 ask_threads.context(≤1,500)에 저장되고 buildContextPrefix가 매 호출 창의 첫 user 메시지에 붙인다. 질문은 LLM 호출 전에 askMessages에 저장된다(routes/ask.ts:242). 그래서:
+1. ask_threads에 item_id(기사 id, 본문 아님) 추가 — 서버가 findEditionItem으로 readUrl을 찾으려면 필요.
+2. 문맥 4,000자: 클라이언트가 context를 보내지 말고 fileId+itemId를 보내 서버가 회차 JSON에서 &quot;우리가 쓴 글 전체&quot;를 조립(ASK.BRIEFING_CONTEXT_MAX_CHARS 4,000). 문서용 1,500은 그대로.
+3. messageSchema에 withOriginal. 라우트에서 readerEnabled 검사 → readOriginal(캐시 10분·동시 1·20초) → 실패면 스트림 열기 전 422.
+4. toApiMessages에 임시 인자를 더해 마지막 user 턴 content 뒤에만 원문 블록을 붙인다. DB의 content는 이미 원문 없이 저장돼 있어 바꿀 곳 없음. 상한 ASK.ORIGINAL_MAX_CHARS 6,000.
+5. 다음 턴에 스위치가 꺼지면 원문은 이력에 없다(답은 남음). 답에 원문이 길게 인용돼 저장되지 않게 시스템 안내 한 줄.
+비용: 문맥 4,000자 ≈ $0.005/턴, 원문 6,000자 ≈ $0.008/턴(Sonnet). 메모리: Readability 104MB, 회차 생성 중엔 줄 서서 20초+ 기다릴 수 있다.
+
+### 5. 바꿀 점 · 지킬 조건
+- 해설 대상은 핵심·주요만. 참고는 재료가 없어 열 때 해설 = 배경지식뿐 = &quot;이 기사 묻기&quot;와 같은 일.
+- &quot;기사 밖 배경지식&quot;은 SYSTEM_BASE(없는 사실 금지)·숫자 대조와 충돌 → 배경 칸은 숫자·날짜·고유명사 금지, 연쇄 추론은 impact처럼 inferred 표시·금지어·POLICY_TARGET 재사용.
+- 먼저 stage_usage·stats.impact.dropped·coreDeep 실측을 보라 — 얕은 게 생성 부족인지 검증 삭제인지 가른다.
+- SUMMARY_MAX_OUTPUT_TOKENS 16k 여유: 주요 6건 ≈ 8k+생각 토큰. max_tokens 오류 나면 SUMMARY_CHUNK 6→5.
+- 지킬 것: 원문 비저장(길이 상한·no-store·답 인용 제한), 회차 불변, 열 때 생성이면 월 한도 가드 합산, 관리자·readerEnabled 게이트, 기사 id만 받기(열린 프록시 금지).
+
+### 6. 사용자가 정할 것
+1. 해설을 회차 때 핵심·주요 80건 전부(+$0.4/회차, 단순) vs 핵심만 미리·주요는 열 때(+$7/월, 새 표·라우트). 차액 월 $5.
+2. &quot;원문도 함께&quot;의 전제인 앱 안 원문 보기를 켤지 — briefing:readcheck 70%/50%를 쟀는지.
+3. 배경지식 범위: 숫자 없는 배경만(검증 가능) vs 웹 검색 허용(+$0.01~0.02/건, 출처 표시).</pre></details>
+    <details><summary>1라운드 · 화면 디자인</summary><pre class="doc">## 화면 디자인 — 입장
+
+A 해설: 조건부 찬성 (탭·칩은 반대, 접힌 상자면 찬성) — 보기 칩은 기기가 기억한다(BriefingView.tsx:111 readLens/:119 writeLens). 해설을 한 번 고르면 다음 기사도 해설부터 열리고, 주요·참고는 기사마다 5~10초 생성이 걸린다. 영향 토론에서 칩을 떨어뜨린 이유가 그대로 적용된다.
+B 끌어서 묻기: 찬성 — 단 버튼은 기사 시트 자체의 아래 막대에. 선택 감지는 DOM상 시트가 scrollRef 안이라 잡히지만, Viewer 도구막대(Viewer.tsx:1071, z-20)가 시트(BriefingView.tsx:1065, z-40)에 덮여 버튼이 안 보이는 것이 진짜 원인.
+
+### A. 자리 · 대기 · 4칸
+- 자리: 칩이 아니라 모든 보기 공통으로 보기 본문 아래·근거줄 위(ItemDetail :1183~1186 사이)의 점선 상자. 영향 칸과 같은 &quot;보조·추론&quot; 기호, 색 없음. 접힘 기본, 기사마다 접힘(기억 안 함). 사실→추론 순서가 지켜지고 [틀린 곳 알리기]가 바로 밑.
+- 대기: 핵심은 미리 써 두고 즉시. 주요·참고는 [펼치기]를 누르면 상자 안에 뼈대 줄 + &quot;AI가 푸는 중 · 10초쯤&quot; + [기다리지 않고 묻기]. 이전/다음은 막지 않고 결과는 기사별 Map에 담아 돌아오면 그대로. 실패는 상자 안 한 줄 + [다시].
+- 4칸 (이름·순서 고정, 빈 칸은 안 그림 — &quot;기사에 없음&quot; 소음 금지): 말뜻(용어 2~4개 한 줄씩) → 왜 이렇게 됐나 → 그래서 어떻게 되나(영향 칸과 달리 기사 밖 연쇄 허용 — 그래서 상자 머리말이 곧 경계) → 다음에 볼 것. 기존 BLOCK_LABEL(용어·배경·앞으로)과 같은 이름은 피한다(사실 칸과 구분).
+- 줄마다 꼬리표 없음은 동의. 대신 머리말에 &quot;근거 언론사 없음&quot;을 넣어야 한다 — 재료가 요약뿐이라 from을 붙일 수 없다.
+
+### B. 폰 선택 → 묻기
+- 선택이 생기면 시트 아래 막대(StepBar :1017)가 통째로 바뀐다(위에 쌓지 않음 — 높이가 변하면 밀기 영역이 흔들림): 평소 &quot;‹ 이전 15/42 다음 ›&quot; → 선택 중 &quot;💬 「토지거래허가…」 물어보기 ✕&quot;(h-12, 전체 폭). 일반 문서와 같은 엄지 자리라 iOS 선택 메뉴와 안 겹친다. 선택 중에는 좌우 밀기(Sheet onTouchEnd :1074~1082)를 끈다 — 손잡이 끌기가 60px를 넘으면 다음 기사로 튄다.
+- 질문 시트(AskPanel.tsx:875~878, z-30)는 기사 시트(z-40) 아래 깔린다. 같은 스택이라 지금도 폰 시트의 [이 기사 묻기]가 보이는지 실기기 확인 필요. 질문 시트를 위로 올리고, 78% 높이라 위 22%에 고른 문장이 남게 한다.
+- 원문 탭: data-no-ask(:1434~1436)를 풀되 막대 글씨를 &quot;「…」 이 문장만 묻기&quot;로, 질문 시트 문맥 칩 둘째 줄에 &quot;원문에서 고른 문장 · 이 문장만 보냄&quot;. 요약 탭은 &quot;요약에서 고른 문장 · 기사 요약 함께&quot;. 차이는 글자로.
+- &quot;원문도 함께&quot; 스위치: 입력줄이 아니라 문맥 칩 오른쪽 끝의 작은 토글. 기본 꺼짐, 기억 안 함(사생활 결정이지 취향이 아님), 앱 안 원문이 되는 기사(canRead)에만 보이고 아니면 아예 없음. 켜면 칩에 &quot;+ 원문&quot;.
+
+### 바꿀 점 · 반드시 지킬 것
+1. 탭 → 접힌 상자. 칩 줄은 4개 유지(v0.46 &quot;폰에서 스크롤 없이&quot; 결정).
+2. 문맥은 Viewer의 blockContext(이웃 블록)를 쓰지 않고 브리핑이 직접 넘긴다 — 시트 안 이웃은 &quot;근거줄·틀린 곳 알리기&quot; 글이다. 지금 ask()(BriefingView.tsx:559~571)는 제목·요약·왜·언론사만 넘기니 영향·숫자·5W까지 넣고, 문맥 칩에 무엇이 붙었는지 적어 준다.
+3. 해설·끌어 묻기 모두 사실→추론 순서, 점선 기호, 색 없음.
+4. 선택 중 밀기 끄기, 질문 시트 z-order, 생성 중에도 이전/다음 자유.
+
+### 사용자가 정할 것
+1. 주요·참고 해설을 즉석 생성(5~10초, 비용)할지, 핵심만 미리 쓰고 나머지는 [기다리지 않고 묻기]로 보낼지.
+2. 원문 탭에서 고른 문장(최대 500자)이 질문 기록(DB)에 남는 것을 허용할지 — 합의안 6.6의 예외.
+3. &quot;원문도 함께&quot; 기본 꺼짐(권장)으로 둘지.</pre></details>
+    <details><summary>1라운드 · 정확성·저작권 감시</summary><pre class="doc">## 정확성·저작권 감시 의견 — 해설 탭(A)·문맥 확장(B)
+
+### 1. 입장
+- A 조건부 찬성 — ①②④는 조건 달면 받되, ③의 &quot;2단계 연쇄&quot;와 &quot;정치·사회 포함&quot;은 반대(직전 토론의 울타리를 넓힐 근거가 &quot;얕다&quot;는 느낌뿐이고, 그 얕음은 ①②로 대부분 풀린다).
+- B 조건부 찬성 — 우리 글 4,000자와 &quot;원문은 호출에만&quot;은 찬성. 원문 탭 드래그 문장을 기록에 남기는 것은 반대(저장 안 하면 찬성).
+
+### 2. A의 4칸 — 어디서 지어내고 치우치나
+| 칸 | 위험 | 코드로 거름 | 못 거름 → 최소 장치 |
+|---|---|---|---|
+| ① 용어 | 배경지식 허용 순간 SYSTEM_BASE(&quot;주어진 글에 없는 사실·수치 금지&quot;, ai.ts:252)와 정면충돌. &quot;토지거래허가&quot;를 2020년 기준 면적·절차로 설명해 현행과 어긋날 수 있음 — 모델 기억은 날짜가 없다 | 숫자: 해설 전 칸은 NUMBER_CHECK_MODE와 무관하게 drop(재료에 없는 숫자 삭제). 지금 terms 칸은 이미 &quot;수치·날짜·사람 이름 금지&quot;(summarize.ts:276) — 그 규칙 유지 | 제도 설명의 시점 오류는 못 거름 → 용어 칸에 &quot;제도·기준은 바뀔 수 있음&quot; 고정 문구, 날짜·금액·면적 같은 현행 수치 금지를 프롬프트+extractNumbers로 강제 |
+| ② 왜 | &quot;배경&quot;이 곧 서사 선택 — 정치 기사에서 어느 배경을 고르느냐가 입장. 일반론 양산 | isGenericWhy, 금지어 | 서사 편향은 못 거름 → from 기호 필수(재료에 있는 배경)와 &quot;기사 밖&quot; 표시(from 없음)를 칸 단위로 구분 |
+| ③ 누구에게 | 2단계 연쇄 = 직전 토론이 &quot;AI의 경제 전망&quot;이라며 금지한 바로 그것. 정치 기사의 &quot;누구에게&quot;는 유불리 자체가 입장(새출발기금 사례) | POLICY_TARGET(summarize.ts:183)·IMPACT_BANNED·directionOf·overlapsWith 전부 재사용 가능 | 연쇄의 논리 비약·대상 선택은 못 거름. 정치·사회·세계는 &quot;관련 당사자 나열&quot;로 한정하고 방향 어휘가 있으면 그 줄 삭제. 경제·테크도 연쇄는 1단계, 둘째 단계는 from이 있는 재료 문장일 때만 |
+| ④ 볼 것 | &quot;전망 아님&quot;이라지만 &quot;이 신호가 나오면 X&quot;는 조건부 예측. 날짜·일정 날조 | 기존 next 규칙(재료 일정만)·sentenceNumbersSupported·예측 어미 정규식 삭제 | 신호 선택의 편향 → 조건문 어미(&quot;~되면&quot;)만 허용, 줄당 from 또는 &quot;기사 밖&quot; 표시 |
+
+### 3. &quot;탭이 경계&quot;는 불충분
+직전 토론이 칩을 버린 이유가 그대로 적용된다: 기기가 보기를 기억하면(dv_briefing_lens) 다음 기사를 추론부터 읽는다. 탭 이름 하나는 첫 번째 기사에서만 경계로 작동한다. 최소 조건 — (a) 해설 탭은 기억하지 않고 늘 기본 탭으로 연다, (b) 탭 머리에 고정 안내 한 줄(&quot;AI가 배경지식을 섞어 쓴 해설 — 기사 아님&quot;), (c) 줄마다는 아니어도 칸 단위로 from 있음/&quot;기사 밖&quot; 구분은 남긴다(기호 A를 배경지식에 붙이면 연합뉴스가 한 말이 된다), (d) 틀린 곳 알리기에 reason: &#x27;explain&#x27; 추가 + stats.explain.dropped 집계.
+
+### 4. B — 저작권·설계 원칙 대조
+- 우리 글 4,000자 저장: 저작권 문제 없음(AI가 새로 쓴 글). 충돌은 ASK.CONTEXT_MAX_CHARS 1500의 주석 &quot;문서 전체를 안 보내는 선&quot;. 기사 하나 ≠ 문서 전체라 허용하되, 전역 상수를 올리지 말고 BRIEFING.ASK_CONTEXT_MAX_CHARS=4000 별도, 그리고 서버가 fileId+itemId로 회차에서 직접 조립(지금은 클라이언트가 문자열을 보낸다 — &quot;우리 글만&quot;을 보장하려면 서버 조립이어야 함). 보존은 기존 30일 그대로.
+- 원문을 호출에만: reader.ts 구조(메모리 캐시 10분·20건, no-store)와 맞고 thread.context에 안 들어가면 6.6과 충돌 없음. 조건: readerEnabled &amp;&amp; 회차 소유자일 때만(공유 문서도 묻기가 되므로), readOriginal 그대로 써서 유료벽 우회 없음, 답변 쪽 누출이 남은 구멍 — 모델이 원문 문단을 그대로 옮기면 ask_messages에 남는다. 시스템 지시 + 코드로 답과 원문 문단의 연속 30자 일치 검사 후 그 문장 삭제·카운트.
+- 원문 탭 드래그 문장 저장: 개선합의안 6.6·설계 SCR-191(data-no-ask)이 명시적으로 막은 것이고 이유는 &quot;남의 글이 DB에 남는다&quot;. 500자면 기사 문단 하나가 통째로 남고, 카드로 저장되면 30일 정리에서도 빠져 영구 보존된다(cardThreads). 허용하려면: 호출에만 싣고 quote는 null(화면엔 &quot;원문에서 고른 문장으로 물음&quot;만), 또는 정 남기려면 ≤150자·카드 저장 시 quote 제외·관리자 전용. 나는 전자.
+
+### 5. 반드시 지킬 조건(코드)
+1. 해설 전용 system 프롬프트(SYSTEM_BASE 재사용 금지) — 배경지식 허용 범위·&quot;모르면 칸을 비운다&quot;·현행 수치 금지 명시. 인젝션 규칙은 그대로.
+2. 해설 4칸 전부 checkNumbers drop 모드 강제 + hasBannedWord + 칸당 길이 상한 상수.
+3. ③: POLICY_TARGET→방향 없음, 정치·사회·세계(!sub.wide)는 방향 어휘 있는 줄 삭제, 줄당 from 또는 명시적 basis:&#x27;knowledge&#x27; 칸.
+4. ④: 예측 어미 정규식 삭제, 일정은 재료 숫자만.
+5. 별도 표에 model·promptVersion·createdAt·dropped 저장, 공개 배포 시 IMPACT_MODE처럼 EXPLAIN_MODE:&#x27;off&#x27; 한 상수로 끌 수 있게. 웹 검색을 쓴다면 인용 본문은 저장 않고 주소만.
+6. B: 서버 조립·별도 상수·원문은 thread.context 미저장·답변 substring 검사·quote null.
+
+### 사용자가 정할 것(3)
+1. ③ &quot;그래서 누구에게&quot;를 정치·사회·세계에 허용할지 — 권고: 당사자 나열만, 방향 없음.
+2. 해설 생성에 웹 검색을 허용할지 — 허용하면 현행 제도 오류는 줄지만 비용·인용 저장 문제, 불허면 모델 기억에 의존(시점 오류).
+3. 원문 탭 드래그 문장을 기록에 남길지 — 권고: 호출에만 싣고 저장 안 함.</pre></details>
+    <details><summary>2라운드 · 읽는 사람 대변</summary><pre class="doc">## 읽는 사람 대변 — 2라운드 양보/고수
+
+| 쟁점 | 입장 | 한 줄 이유 |
+|---|---|---|
+| ① 자리 | 찬성 접힌 상자(본문 아래·근거줄 위, 기사마다 접힘) | 탭은 dv_briefing_lens 기억 때문에 다음 기사를 AI 글부터 읽게 한다. 디자인 안과 같다 |
+| ② 생성 시점 | 양보 → 회차 때 핵심·주요 전부 | 열 때 생성은 원문 없이 요약을 또 푸는 글이라 읽는 사람에겐 더 얕은 해설 + 기다림. 접힌 채 시작이면 미리 만들어도 &quot;사실 먼저&quot; 순서는 지켜진다 |
+| ③ 참고 | 찬성 제외 | 한 문장짜리 기사엔 풀 재료가 없다 — 빈 칸만 는다 |
+| ④ 정치·사회·세계 ③ | 고수 빼기 | &quot;당사자 나열&quot;은 리드에 이미 있는 이름 반복. 빈 칸은 안 그린다는 규칙이 있으니 아예 없는 게 맞다 |
+| ⑤ 연쇄 단계 | 양보 → 1단계, 둘째는 근거 있을 때만 | 단, 1단계라도 대상은 &quot;가계·대출자·세입자&quot;처럼 사람까지 내려와야 한다. &quot;시장&quot;에서 끝나면 영향 칸 재판 |
+| ⑥ 꼬리표 | 찬성 칸 단위 &quot;기사 밖&quot; 글자 + 머리말 고정 문구 | 어느 줄이 기사 말이고 어느 줄이 AI 말인지는 줄에서 보여야 한다. 색·아이콘 없이 글자만 |
+| ⑦ 원문 드래그 저장 | 찬성 호출에만(quote null) | 대신 답변 화면엔 그 세션 동안 내가 고른 문장이 보여야 한다. 기록엔 &quot;원문 문장으로 물음&quot; 한 줄 |
+| ⑧ &quot;원문도 함께&quot; | 양보 → 1차 포함(칩 끝 토글, 기본 꺼짐, 앱 안 원문 기사만) | 원문 탭 가서 다시 드래그하는 왕복이 더 번거롭다. 조건: 받기 실패·지연이면 원문 없이 바로 보내고 그렇게 알린다 |
+
+끝까지 지킬 것 둘: 기사마다 접힌 채 시작(기억 안 함) · 틀린 곳 알리기에 &quot;해설이 이상함&quot;.</pre></details>
+    <details><summary>2라운드 · 수집·파이프라인·비용</summary><pre class="doc">## 2라운드 — 수집·파이프라인·비용
+
+(a) 요약 호출 안에 넣을 때 수치. 지금 출력은 주요 1건 ≈ 700토큰(리드·왜·칸·5W·영향·JSON), 핵심 1건 ≈ 1,000토큰. 해설 +400/건이면 주요 6건 묶음 4.2k→6.6k, 핵심 3건 묶음 3k→4.2k, effort low 생각 토큰 1~2k를 더해도 9k 안 — 16k의 절반 남는다. 시간: 묶음당 출력 +1.2~2.4k ≈ +20~35초, 묶음 ~22개·동시 4 → +2~3분. 현재 10~12분이라 20분 한도까지 5분 남는다. SUMMARY_CHUNK는 6 유지, max_tokens 오류가 실측에 나오면 5.
+
+(b) 전부 미리 생성해도 체험 손실 없다. 읽는 사람의 &quot;펼칠 때 생성&quot;은 접힘·펼침 기억 안 함이라는 자리 결정이지 생성 시점 결정이 아니다 — 미리 만들어도 접어 두면 같은 체험이고, 기다림·뼈대 줄·실패 상태가 사라진다. 열 때 만들면 재료가 우리 요약뿐(원문 미저장)이라 내용은 더 얕다. 치르는 값은 안 펼친 분량 ≈ 월 $10.
+
+(c) 칸 단위 from/기사 밖. 스키마에 칸마다 src를 받고 코드가 from = parseSrc(src)로 세 상태를 정한다: from 있고 숫자 대조 통과 → stated, from 있고 방향 어휘가 재료에 없음 → inferred(verifyImpact 그대로), from 없음 → outside(&quot;기사 밖&quot;) — outside는 ①말뜻·②배경에만 허용하고 숫자·날짜·고유명사가 있으면 삭제(drop 강제). ③은 impact를 넓히고 ④는 next를 필수 시도로 바꾸면 된다. 즉 해설 = 기존 네 칸의 &quot;항상 시도 + 상태 꼬리표&quot;이고 새 구조는 없다.
+
+| 쟁점 | 입장 | 한 줄 |
+|---|---|---|
+| ① 자리 | 양보 | 점선 상자·접힘 기본 찬성 — 데이터는 같고 비용 0 |
+| ② 생성 시점 | 고수 | 핵심·주요 전부 회차 때 같은 호출(+$0.40, +2~3분). 열 때 생성은 새 표·라우트·한도 합산에 재료도 요약뿐 |
+| ③ 참고 포함 | 고수(제외) | 재료가 없어 배경지식뿐 → [기다리지 않고 묻기]가 그 일 |
+| ④ 정치·사회·세계의 ③칸 | 찬성(빼기) | 당사자 나열은 검증 불가 일반론 — impactEligible의 wide 조건 유지 |
+| ⑤ 연쇄 단계 | 양보 | 1단계만, 둘째는 from 필수 — 코드가 거를 수 있는 건 from·숫자뿐 |
+| ⑥ 꼬리표 | 찬성 | 칸마다 from[]+kind(stated/inferred/outside), 화면은 머리말로 |
+| ⑦ 원문 탭 드래그 저장 | 찬성 | 호출에만 붙이고 quote null — 저장 content는 질문만 |
+| ⑧ &quot;원문도 함께&quot; 1차 | 양보(미룸) | 전제인 briefingReader가 꺼져 있고 readcheck 미측정. 1차는 서버 조립 4,000자 문맥만 |</pre></details>
+    <details><summary>2라운드 · 화면 디자인</summary><pre class="doc">## 화면 디자인 — 2라운드
+
+| 쟁점 | 입장 | 한 줄 |
+|---|---|---|
+| ① 자리 | 양보 | &quot;모든 보기 공통&quot; 철회 → 기본 보기 맨 아래(블록 뒤·근거줄 앞) 접힌 점선 상자. 영향 칸이 다른 보기에선 안 보이는 규칙과 맞춘다 |
+| ② 생성 시점 | 양보 | 회차 때 미리 생성. 뼈대 줄·&quot;푸는 중&quot;·[기다리지 않고 묻기] UI 전부 철회 |
+| ③ 참고 포함 | 찬성(제외) | 참고는 목록 안 compact 펼침이라 상자 둘 자리도 없다 |
+| ④ 정치·사회·세계의 ③칸 | 고수(뺀다) | 당사자 나열은 5W &quot;누가&quot;의 복사본이고 기사마다 같은 모양이 반복된다 — &quot;뚜렷한 영향 없음&quot; 소음과 같은 문제 |
+| ⑤ 연쇄 단계 | 양보 | 1단계만. 영향 칸과 겹치는 줄은 코드가 지우는 규칙 그대로 |
+| ⑥ 꼬리표 | 양보 | 줄 단위 없음 → 칸 단위 표시. 단 새 기호 없이 ImpactBox(BriefingView.tsx:1263·1273)의 둘(언론사 이름 / 테두리 알약 &quot;AI 추론&quot;)을 그대로 쓴다 |
+| ⑦ 원문 탭 문장 저장 | 찬성 | quote null·호출에만. &quot;이 문장만&quot; 철회 — 서버가 fileId+itemId로 우리 글 문맥을 붙인다 |
+| ⑧ &quot;원문도 함께&quot; 1차 | 양보 | 미룬다. ⑦이 되면 원문 탭에서 고른 문장이 호출에 실리니 1차 요구는 채워진다 |
+
+(a) 미리 생성되면 상자는 상태가 하나뿐이다 — 접힌 한 줄 + 펼침. 대기·실패·[다시]가 없고 머리말은 고정 문구 하나(&quot;요약을 보고 AI가 푼 글 · 제도·수치는 바뀔 수 있어요&quot;). 접힌 줄에 말뜻 칸의 용어를 미리 보인다: 「해설 · 토지거래허가 · 전세사기특별법 ⌄」 — &quot;이 말이 뭐지&quot;가 한 번 눌러서 끝나고, 용어가 없으면 「해설 · 왜 · 그래서 · 다음」. 해설이 0칸인 기사(참고·실패)는 상자 자체가 없다.
+
+(b) 칸 단위 from/기사 밖 — 색 없이, 칸 제목 줄 오른쪽 끝에: 기사가 말한 칸은 「— 동아일보」(From 컴포넌트 :1347), 기사 밖 칸은 테두리 알약 「AI 추론」(:1273). 영향 칸과 같은 문법이라 새로 배울 기호가 없고, 상자 전체는 점선, 칸은 구분선 없이 제목 굵게(BLOCK_LABEL 꼴). 말뜻 칸은 항상 &quot;AI 추론&quot; 알약(재료에 정의가 있을 리 없다).
+
+┌╌ 해설 · 요약을 보고 AI가 푼 글 · 제도·수치는 바뀔 수 있어요 ╌┐
+┆ 말뜻                                  (AI 추론)┆
+┆ 토지거래허가 — 집을 사기 전 구청 허가를 받는 제도 ┆
+┆ 왜 이렇게 됐나                       — 연합뉴스 ┆
+┆ …                                             ┆
+┆ 그래서 어떻게 되나                    (AI 추론)┆
+┆ 다음에 볼 것                          — 동아일보┆
+└╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+
+(c) 정치·사회의 ③칸 — &quot;당사자 나열&quot;로 두면 「그래서 누구에게 · 정부 · 야당 · 금융노조」 한 줄이 모든 정치 기사에 같은 꼴로 서고, 바로 위 5W의 &quot;누가&quot;와 겹쳐 읽는 사람이 &quot;왜 두 번?&quot;이 된다. 빼면 3칸 상자가 되는데, 칸 수가 기사마다 다른 건 이미 blocks(배경·숫자·경과)가 그렇게 그려져 어색하지 않다. 그래서 뺀다 — 빈 칸은 안 그린다는 원칙 그대로.
+
+끝까지 지킬 것: 접힘 기본·기사마다 접힘(기억 안 함), 빈 칸·빈 상자 안 그림, 기호는 영향 칸과 같은 둘뿐, 폰 선택→묻기 버튼은 시트 아래 막대 교체 + 선택 중 좌우 밀기 끄기 + 질문 시트가 기사 시트 위(z-order).</pre></details>
+    <details><summary>2라운드 · 정확성·저작권 감시</summary><pre class="doc">## 2라운드 — 정확성·저작권 감시
+
+(a) 같은 요약 호출에서 원문 재료를 보며 쓰면 줄어든다 — 기사가 현행 기준을 말하면 모델이 그걸 쓰고, 칸마다 from을 받을 수 있어 &quot;추론의 추론&quot;도 사라진다. 그래도 남는 것: 용어 풀이의 정의 자체는 여전히 모델 기억이다(기사는 &quot;토지거래허가&quot;를 쓰지 정의하지 않는다). 조건 셋은 유지 — ⑴ 재료와 어긋나면 재료 우선·모르면 빈 칸 지시, ⑵ 해설 전 칸 숫자 drop(재료에 없는 수치 삭제), ⑶ from 없는 칸은 데이터에 inferred(impact 재사용 찬성).
+(b) 읽는 사람 쪽으로 양보 — 정치·사회·세계는 ③칸 삭제. &quot;유불리 없는 칸은 일반론&quot;은 정확성 쪽에서도 맞다.
+(c) 줄 꼬리표 포기. 대신 칸별 kind는 데이터에 반드시 남기고, 화면은 머리말 한 줄이 &quot;기사 밖 지식: 말뜻·다음에 볼 것&quot;처럼 inferred 칸 이름을 적는다. 문맥의 [기사가 말한 것]/[AI 해설] 꼬리표(읽는 사람 제안)는 필수 조건에 넣는다.
+
+| 쟁점 | 입장 | 한 줄 |
+|---|---|---|
+| ① 자리 | 찬성 | 접힌 상자·기억 안 함이면 &quot;다음 기사부터 추론으로 읽기&quot; 우려가 해소 |
+| ② 생성 시점 | 찬성 | 회차 때 같은 호출 — from 기호가 생기는 유일한 자리 |
+| ③ 참고 포함 | 찬성(제외) | 재료 없는 기사에 배경지식만 쓰면 순수 기억 글 |
+| ④ 정치·사회·세계 ③칸 | 양보 | 삭제. 당사자 나열은 일반론이 된다는 지적 수용 |
+| ⑤ 연쇄 단계 | 고수 | 1단계. 둘째 단계는 from 있는 재료 문장일 때만 — 직전 토론의 선 |
+| ⑥ 꼬리표 | 양보 | 줄 없음. 칸별 kind는 데이터 필수, 머리말이 inferred 칸 이름 명시 |
+| ⑦ 원문 드래그 저장 | 고수 | quote null, 호출에만. 카드 저장 시 영구화되는 구멍 때문 |
+| ⑧ &quot;원문도 함께&quot; 1차 | 양보 | 미룸 찬성. 넣을 때 조건은 1라운드 그대로(소유자+readerEnabled·context 미저장·답변 30자 연속 일치 검사·6,000자) |</pre></details>
+  </section>
+
+  <footer>작성: 에이전트 4인 토론(각 2라운드)을 사용자 세션이 정리, 2026-10-15. 근거 자료 — docs/design/뉴스브리핑_docvault_20261001.md, docs/뉴스브리핑_개선합의안_20261010.md, docs/뉴스브리핑_영향보기_토론보고서_20261011.html, 실제 기사 화면 2장(10/14 환율·10/15 토허). 비용 추정은 server/src/constants.ts의 BRIEFING.PRICES(Haiku 5.5 $0.1/$0.5, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20, 백만 토큰당)를 썼다.</footer>
+</div>
+</body>
+</html>
