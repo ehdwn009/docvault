@@ -20,6 +20,8 @@ import { confirmDialog } from '../../lib/dialog';
 import { toast } from '../../lib/toast';
 
 type Props = {
+  /** 열람 계정(일반 사용자) — 관리자가 만든 회차 목록만 보이고, 만들기·진행·실행 기록·비용은 없다 (v0.49) */
+  readOnly?: boolean;
   onOpenFile: (fileId: number) => void;
   /** 설정 패널의 자동 생성 설정으로 */
   onOpenSettings: () => void;
@@ -27,7 +29,8 @@ type Props = {
   onOpenSources: () => void;
 };
 
-type EditionPage = { editions: EditionSummary[]; nextBefore: string | null };
+/** API-135 — ownerName은 남의 회차를 보는 열람 계정에게만 온다 */
+type EditionPage = { editions: EditionSummary[]; nextBefore: string | null; ownerName?: string | null };
 
 const SLOT_FULL: Record<BriefingRun['slot'], string> = { morning: '아침판', noon: '점심판', evening: '저녁판', adhoc: '수시판' };
 
@@ -59,9 +62,10 @@ function stateText(e: EditionSummary): { text: string; cls: string } {
   return { text: `핵심 ${e.leadCount - e.leadRead} 남음`, cls: 'text-slate-400' };
 }
 
-// SCR-190: 뉴스 브리핑 패널 (관리자만, v0.43 개편) — 회차의 보관함. 만들기·진행 → 오늘 회차 → 지난 브리핑(날짜별) → 자동·비용.
-// 실행 중에만 2초마다 상태를 다시 읽는다. 패널을 닫았다 열어도 같은 상태가 보인다(서버 실행 기록이 원천)
-export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSources }: Props) {
+// SCR-190: 뉴스 브리핑 패널 (v0.43 개편) — 회차의 보관함. 만들기·진행 → 오늘 회차 → 지난 브리핑(날짜별) → 자동·비용.
+// 실행 중에만 2초마다 상태를 다시 읽는다. 패널을 닫았다 열어도 같은 상태가 보인다(서버 실행 기록이 원천).
+// 열람 계정(readOnly)은 상태(API-131)를 읽지 않는다 — 관리자 전용이라 403이고, 보여 줄 것도 회차 목록뿐이다 (v0.49)
+export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources }: Props) {
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [page, setPage] = useState<EditionPage | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -85,6 +89,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
   }, []);
 
   const load = useCallback(async () => {
+    if (readOnly) return;
     const s = await api<BriefingStatus>('/briefing/status').catch(() => null);
     if (!s) return;
     setStatus(s);
@@ -109,7 +114,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
       }
       setRuns(null); // 실행 기록을 펼쳐 둔 상태였으면 다시 받게
     }
-  }, [loadEditions]);
+  }, [loadEditions, readOnly]);
 
   useEffect(() => {
     void load();
@@ -179,7 +184,9 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
     setRuns(r?.runs ?? []);
   }
 
-  if (!status) return <p className="px-4 py-4 text-sm text-slate-600">불러오는 중…</p>;
+  // 관리자만 상태를 기다린다 — 열람 계정은 회차 목록이 오는 대로 그린다
+  const admin = readOnly ? null : status;
+  if (!readOnly && !admin) return <p className="px-4 py-4 text-sm text-slate-600">불러오는 중…</p>;
 
   const today = kstToday();
   const editions = page?.editions ?? [];
@@ -191,22 +198,30 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
     if (day?.date === e.editionDate) day.items.push(e);
     else pastDays.push({ date: e.editionDate, items: [e] });
   }
-  const last = status.last;
-  const nextAutoToday = status.autoEnabled && status.nextAutoAt !== null && kstToday(status.nextAutoAt) === today && !running;
+  const last = admin?.last ?? null;
+  const nextAutoToday = !!admin && admin.autoEnabled && admin.nextAutoAt !== null && kstToday(admin.nextAutoAt) === today && !running;
 
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto pb-8">
       {/* 설정 단추 — 자동 생성 설정 · 수집 목록 · 실행 기록 */}
-      <div className="flex justify-end px-2">
-        <button
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="브리핑 설정"
-          aria-expanded={menuOpen}
-          className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
-        >
-          <Icon name="sliders" size={18} />
-        </button>
-      </div>
+      {admin && (
+        <div className="flex justify-end px-2">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="브리핑 설정"
+            aria-expanded={menuOpen}
+            className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
+          >
+            <Icon name="sliders" size={18} />
+          </button>
+        </div>
+      )}
+      {/* 열람 계정 — 누가 만든 브리핑인지, 그리고 읽기만 된다는 것 */}
+      {readOnly && (
+        <p className="px-4 pt-4 text-xs text-slate-500">
+          <b className="text-slate-300">{page?.ownerName ?? '관리자'}</b>님이 만든 뉴스 브리핑을 함께 봅니다. 읽음 표시와 틀린 곳 알리기는 내 것으로 따로 남아요
+        </p>
+      )}
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
@@ -224,9 +239,10 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
         </>
       )}
 
-      <div className="space-y-6 px-4">
+      <div className={`space-y-6 px-4 ${readOnly ? 'pt-4' : ''}`}>
+        {admin && (
         <section className="space-y-2">
-          {!status.configured && (
+          {!admin.configured && (
             <p className="rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
               AI 키가 연결되지 않아 브리핑을 만들 수 없어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣고 다시 시작하면 켜집니다.
             </p>
@@ -237,12 +253,12 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             <>
               <button
                 onClick={() => void start()}
-                disabled={!status.configured || starting}
+                disabled={!admin.configured || starting}
                 className="h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {starting ? '시작하는 중…' : '지금 브리핑 만들기'}
               </button>
-              <p className="text-center text-xs text-slate-500">{kstTime(status.nextSinceAt, kstToday(status.nextSinceAt) !== today)} 이후 새 기사로 · 약 1~2분</p>
+              <p className="text-center text-xs text-slate-500">{kstTime(admin.nextSinceAt, kstToday(admin.nextSinceAt) !== today)} 이후 새 기사로 · 약 1~2분</p>
             </>
           )}
           {!running && last && last.status !== 'ok' && (
@@ -263,6 +279,7 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             </div>
           )}
         </section>
+        )}
 
         <section>
           <div className="mb-2 flex items-baseline gap-1.5">
@@ -270,17 +287,17 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
             <span className="text-xs text-slate-500">{longDate(today)}</span>
           </div>
           <div className="space-y-1.5">
-            {nextAutoToday && status.nextAutoAt !== null && (
+            {admin && nextAutoToday && admin.nextAutoAt !== null && (
               <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2">
-                <SlotChip label={SLOT_SHORT[status.nextAutoSlot ?? 'adhoc']} />
+                <SlotChip label={SLOT_SHORT[admin.nextAutoSlot ?? 'adhoc']} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[status.nextAutoSlot ?? 'adhoc']} (자동)</span>
-                  <span className="text-xs text-slate-500">{kstTime(status.nextAutoAt, false)}에 만들기 시작</span>
+                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']} (자동)</span>
+                  <span className="text-xs text-slate-500">{kstTime(admin.nextAutoAt, false)}에 만들기 시작</span>
                 </span>
                 <span className="shrink-0 text-xs font-semibold text-slate-500">예정</span>
               </div>
             )}
-            {page && todays.length === 0 && !nextAutoToday && <p className="text-xs text-slate-600">오늘 만든 브리핑이 아직 없어요.</p>}
+            {page && todays.length === 0 && !nextAutoToday && <p className="text-xs text-slate-600">{readOnly ? '오늘 브리핑이 아직 없어요.' : '오늘 만든 브리핑이 아직 없어요.'}</p>}
             {todays.map((e, i) => {
               const st = stateText(e);
               return (
@@ -361,25 +378,27 @@ export default function BriefingPanel({ onOpenFile, onOpenSettings, onOpenSource
           </section>
         )}
 
+        {admin && (
         <section className="space-y-1 border-t border-slate-800 pt-4 text-xs text-slate-500">
           <button onClick={onOpenSettings} className="block text-left hover:text-slate-300">
-            {status.autoEnabled && status.nextAutoAt !== null ? (
+            {admin.autoEnabled && admin.nextAutoAt !== null ? (
               <>
-                자동 생성 켜짐 · 다음 <b className="text-slate-300">{kstTime(status.nextAutoAt, kstToday(status.nextAutoAt) !== today)} {SLOT_FULL[status.nextAutoSlot ?? 'adhoc']}</b>
+                자동 생성 켜짐 · 다음 <b className="text-slate-300">{kstTime(admin.nextAutoAt, kstToday(admin.nextAutoAt) !== today)} {SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']}</b>
               </>
-            ) : status.autoEnabled ? (
+            ) : admin.autoEnabled ? (
               '자동 생성 켜짐 · 켜 둔 회차가 없어요'
             ) : (
               '자동 생성 꺼짐 · 설정에서 켜기'
             )}
           </button>
-          <p className={status.monthCostUsd >= status.monthBudgetUsd * (status.budgetWarnRatio ?? 0.8) ? 'text-amber-400' : ''}>
-            이번 달 비용 ≈ ${status.monthCostUsd.toFixed(2)} / ${status.monthBudgetUsd}
-            {status.monthCostUsd >= status.monthBudgetUsd * (status.budgetWarnRatio ?? 0.8) && ' · 한도에 가까워요'}
+          <p className={admin.monthCostUsd >= admin.monthBudgetUsd * (admin.budgetWarnRatio ?? 0.8) ? 'text-amber-400' : ''}>
+            이번 달 비용 ≈ ${admin.monthCostUsd.toFixed(2)} / ${admin.monthBudgetUsd}
+            {admin.monthCostUsd >= admin.monthBudgetUsd * (admin.budgetWarnRatio ?? 0.8) && ' · 한도에 가까워요'}
           </p>
           {/* 틀린 곳 알리기 수 — 늘면 요약 길이부터 되돌린다 (개선 합의안 Q11) */}
-          {(status.monthFlagCount ?? 0) > 0 && <p>이번 달 틀린 곳 알림 {status.monthFlagCount}건</p>}
+          {(admin.monthFlagCount ?? 0) > 0 && <p>이번 달 틀린 곳 알림 {admin.monthFlagCount}건</p>}
         </section>
+        )}
       </div>
     </div>
   );

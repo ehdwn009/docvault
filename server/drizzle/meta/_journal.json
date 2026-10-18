@@ -148,6 +148,13 @@
       "when": 1792052541010,
       "tag": "0020_ask_item_id",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792321959110,
+      "tag": "0021_briefing_owner",
+      "breakpoints": true
     }
   ]
 }

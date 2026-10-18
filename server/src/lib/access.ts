@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { db } from '../db/index.js';
 import { folders } from '../db/schema.js';
 import type { SessionUser } from '../types.js';
+import { briefingOwnerOf } from './briefing/readers.js';
 import { fail } from './errors.js';
 
 type FileAccess = {
@@ -10,7 +11,14 @@ type FileAccess = {
   isShared: number;
   folderId?: number | null;
   deletedAt?: number | null;
+  /** 브리핑 열람 계정 판정에만 쓴다 — 빠져 있으면 그 규칙은 적용되지 않는다(막는 쪽으로 틀린다) */
+  kind?: string;
 };
+
+/** 관리자가 고른 열람 계정은 그 관리자의 브리핑 회차를 읽을 수 있다 — is_shared(전체 공개)와 다른, 사람을 고르는 공유 (v0.49) */
+function isBriefingReader(user: SessionUser, file: FileAccess): boolean {
+  return file.kind === 'briefing' && briefingOwnerOf(user.id) === file.ownerId;
+}
 
 /** 파일 자체가 공유이거나, 상위 폴더 체인 중 하나라도 공유면 열람 공개다 (API 명세 — 공유 폴더 하위 파일).
  *  부모를 거슬러 오르는 반복에 순환 방어가 없는 것은 routes/folders.ts의 wouldCycle이
@@ -33,11 +41,11 @@ export function isEffectivelyShared(file: { isShared: number; folderId?: number 
 
 // 권한 검사는 이 두 함수로만 한다 (CLAUDE.md 보안 — 라우트마다 제각각 검사 금지)
 
-/** 열람: 소유자, 공유 파일(폴더 상속 포함), 관리자 (API 명세서 — 파일 접근 규칙).
+/** 열람: 소유자, 공유 파일(폴더 상속 포함), 관리자, 브리핑 열람 계정(v0.49) (API 명세서 — 파일 접근 규칙).
  *  휴지통의 파일은 누구에게도 일반 접근을 허용하지 않는다 — 복원·영구삭제 전용 라우트만 예외 */
 export function canReadFile(user: SessionUser, file: FileAccess): boolean {
   if (file.deletedAt != null) return false;
-  return file.ownerId === user.id || user.role === 'admin' || isEffectivelyShared(file);
+  return file.ownerId === user.id || user.role === 'admin' || isEffectivelyShared(file) || isBriefingReader(user, file);
 }
 
 /** 수정: 소유자 또는 관리자. 공유 파일은 열람 전용 */

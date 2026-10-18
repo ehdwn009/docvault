@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` ADD `briefing_owner_id` integer REFERENCES users(id);

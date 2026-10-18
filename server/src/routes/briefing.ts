@@ -4,7 +4,7 @@ import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 import { BRIEFING, DEFAULT_USER_SETTINGS } from '../constants.js';
 import { db } from '../db/index.js';
-import { briefingRuns, userFileState, userSettings } from '../db/schema.js';
+import { briefingRuns, userFileState, users, userSettings } from '../db/schema.js';
 import { parseFlagItems } from '../lib/briefing/readItems.js';
 import { findEditionItem, readOriginal, ReaderError } from '../lib/briefing/reader.js';
 import { kstMonthStart } from '../lib/briefing/time.js';
@@ -22,17 +22,40 @@ import {
 } from '../lib/briefing/run.js';
 import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
 import { nextAuto, readSchedule, scheduleSchema, type AutoSchedule } from '../lib/briefing/autoSchedule.js';
+import { briefingOwnerOf, listReaderCandidates, setReader } from '../lib/briefing/readers.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
-// API-131~138 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
+// API-131~140 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
+// 예외는 열람 계정(v0.49)이 쓰는 회차 목록·이동 두 GET뿐이다.
 // 설계: docs/design/뉴스브리핑_docvault_20261001.md
 
-const adminGuard = createMiddleware<AppEnv>(async (c, next) => {
-  if (c.get('user').role !== 'admin') return fail(c, 403, 'FORBIDDEN', '관리자 전용입니다');
+/** 이 라우트 묶음 안에서만 쓰는 변수 — 지금 보는 회차의 주인(관리자 본인, 또는 열람 계정이 함께 보는 관리자) */
+type BriefingEnv = { Variables: AppEnv['Variables'] & { briefingOwnerId: number } };
+
+/** 열람 계정에게 열린 길 — 회차 목록(API-135)과 이전·다음(API-136). 그 밖은 전부 관리자 전용 */
+const READER_PATH = /\/briefing\/editions(?:\/\d+\/nav)?$/;
+
+// 기본은 거절, 예외를 명시한다 (CLAUDE.md 보안) — 열람 계정은 GET 두 개만, 그때 보는 회차의 주인을 실어 준다
+const briefingGuard = createMiddleware<BriefingEnv>(async (c, next) => {
+  const user = c.get('user');
+  if (user.role === 'admin') {
+    c.set('briefingOwnerId', user.id);
+    return next();
+  }
+  const owner = c.req.method === 'GET' && READER_PATH.test(c.req.path) ? briefingOwnerOf(user.id) : null;
+  if (owner === null) return fail(c, 403, 'FORBIDDEN', '관리자 전용입니다');
+  c.set('briefingOwnerId', owner);
   return next();
 });
+
+/** 열람 계정의 패널 머리에 보일 "○○님이 만든 브리핑" — 본인 회차면 null */
+function ownerNameFor(viewerId: number, ownerId: number): string | null {
+  if (viewerId === ownerId) return null;
+  const u = db.select({ name: users.displayName, username: users.username }).from(users).where(eq(users.id, ownerId)).get();
+  return u ? (u.name ?? u.username) : null;
+}
 
 function autoEnabled(userId: number): boolean {
   const row = db.select({ v: userSettings.briefingAuto }).from(userSettings).where(eq(userSettings.userId, userId)).get();
@@ -54,8 +77,8 @@ function monthFlagCount(userId: number, now = Date.now()): number {
   return n;
 }
 
-export const briefingRoutes = new Hono<AppEnv>()
-  .use('*', adminGuard)
+export const briefingRoutes = new Hono<BriefingEnv>()
+  .use('*', briefingGuard)
 
   // API-131: 상태 — 패널이 실행 중에만 2초마다 다시 읽는다
   .get('/status', (c) => {
@@ -111,22 +134,33 @@ export const briefingRoutes = new Hono<AppEnv>()
     }
   })
 
-  // API-135: 회차 목록 — 패널의 오늘·지난 브리핑 (v0.43)
+  // API-135: 회차 목록 — 패널의 오늘·지난 브리핑 (v0.43). 열람 계정은 함께 보는 관리자의 회차를, 읽음 상태는 자기 것으로 (v0.49)
   .get('/editions', (c) => {
     const before = c.req.query('before') ?? null;
     if (before !== null && !/^\d{4}-\d{2}-\d{2}$/.test(before)) return fail(c, 400, 'VALIDATION_ERROR', 'before: YYYY-MM-DD 형식이어야 합니다');
     const user = c.get('user');
-    return c.json(listEditions(user.id, user.id, before, clampDays(c.req.query('days'))));
+    const ownerId = c.get('briefingOwnerId');
+    return c.json({ ...listEditions(ownerId, user.id, before, clampDays(c.req.query('days'))), ownerName: ownerNameFor(user.id, ownerId) });
   })
 
   // API-136: 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43)
   .get('/editions/:fileId/nav', (c) => {
     const fileId = parseId(c.req.param('fileId'));
     if (fileId === null) return fail(c, 400, 'VALIDATION_ERROR', 'fileId: 올바르지 않은 값');
-    const user = c.get('user');
-    const nav = editionNav(user.id, user.id, fileId);
+    const nav = editionNav(c.get('briefingOwnerId'), c.get('user').id, fileId);
     if (!nav) return fail(c, 404, 'NOT_FOUND', '회차가 없습니다');
     return c.json(nav);
+  })
+
+  // API-139: 열람 계정 후보 — 일반 계정 전부와 지금 켜져 있는지 (v0.49)
+  .get('/readers', (c) => c.json({ users: listReaderCandidates(c.get('user').id) }))
+
+  // API-140: 열람 계정 켜기/끄기 — 그 계정의 briefing_owner_id를 나로 두거나 지운다 (v0.49)
+  .put('/readers/:userId', jsonBody(z.object({ on: z.boolean() })), (c) => {
+    const userId = parseId(c.req.param('userId'));
+    if (userId === null) return fail(c, 400, 'VALIDATION_ERROR', 'userId: 올바르지 않은 값');
+    if (!setReader(c.get('user').id, userId, c.req.valid('json').on)) return fail(c, 404, 'NOT_FOUND', '일반 계정이 아니거나 없습니다');
+    return c.json({ users: listReaderCandidates(c.get('user').id) });
   })
 
   // API-132: 만들기 시작 — 202로 곧바로 답하고 만드는 일은 뒤에서

@@ -165,6 +165,9 @@ export const userSettings = sqliteTable('user_settings', {
   briefingReader: integer('briefing_reader').notNull().default(0),
   /** 자동 생성 회차별 켜기·시작 시각 JSON {"morning":{"on":true,"at":"06:30"},…}. null이면 기본(06:30·11:30·17:30 모두 켬) (v0.43) */
   briefingSchedule: text('briefing_schedule'),
+  /** 이 사용자가 함께 보는 브리핑의 주인(관리자). null=안 봄. 관리자가 설정 → 뉴스 브리핑에서 계정을 고른다 (v0.49).
+      is_shared(전체 공개)와 달리 사람을 고르는 공유라 파일이 아니라 사람에 붙인다 — 앞으로 생길 회차까지 한 번에 열린다 */
+  briefingOwnerId: integer('briefing_owner_id').references(() => users.id, { onDelete: 'set null' }),
   updatedAt: integer('updated_at').notNull(),
 });
 

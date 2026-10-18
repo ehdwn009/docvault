@@ -205,6 +205,8 @@ export const meRoutes = new Hono<AppEnv>()
         fileType: files.fileType,
         ownerId: files.ownerId,
         isShared: files.isShared,
+        // 열람 계정이 읽은 남의 브리핑 회차도 최근 목록에 남게 — canReadFile의 브리핑 규칙은 kind를 본다 (v0.49)
+        kind: files.kind,
         lastOpenedAt: userFileState.lastOpenedAt,
       })
       .from(userFileState)

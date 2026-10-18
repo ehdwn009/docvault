@@ -13,14 +13,30 @@ type Props = {
   onOpenSources: () => void;
 };
 
-// SCR-147: 설정 → 뉴스 브리핑 (관리자만) — 자동 생성 켜기/끄기와 회차별 켜기·시각(v0.43), 이번 달 비용·한도 표시
+/** API-139 — 고를 수 있는 일반 계정 한 줄 */
+type ReaderCandidate = { id: number; username: string; displayName: string | null; isActive: number; on: boolean };
+
+// SCR-147: 설정 → 뉴스 브리핑 (관리자만) — 자동 생성 켜기/끄기와 회차별 켜기·시각(v0.43), 이번 달 비용·한도 표시, 함께 보는 계정(v0.49)
 export default function BriefingSettings({ onOpenSources }: Props) {
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readers, setReaders] = useState<ReaderCandidate[] | null>(null);
 
   useEffect(() => {
     void api<BriefingStatus>('/briefing/status').then(setStatus, () => setError('상태를 불러오지 못했어요'));
+    void api<{ users: ReaderCandidate[] }>('/briefing/readers').then((r) => setReaders(r.users), () => {});
   }, []);
+
+  /** 계정 하나 켜기/끄기 — 서버가 돌려준 목록으로 화면을 맞춘다 */
+  async function toggleReader(id: number, on: boolean) {
+    setError(null);
+    try {
+      const r = await api<{ users: ReaderCandidate[] }>(`/briefing/readers/${id}`, { method: 'PUT', body: JSON.stringify({ on }) });
+      setReaders(r.users);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '바꾸지 못했어요');
+    }
+  }
 
   /** 보낸 것만 바뀐다 — 실패하면(순서가 어긋난 시각 등) 화면을 서버 값으로 되돌린다 */
   async function save(patch: { autoEnabled?: boolean; schedule?: AutoSchedule; readerEnabled?: boolean }) {
@@ -115,6 +131,30 @@ export default function BriefingSettings({ onOpenSources }: Props) {
           <button onClick={onOpenSources} className="mt-2 text-xs text-slate-400 underline hover:text-slate-200">
             수집 목록 열기 (RSS 주소·검색어)
           </button>
+          {/* 함께 보는 계정 — 고른 일반 계정에만 내 회차가 읽기 전용으로 열린다. 비용은 그대로 내가 낸다 (v0.49, 사용자 결정) */}
+          <div className="mt-4 text-xs text-slate-400">
+            <p className="font-semibold text-slate-300">함께 보는 계정</p>
+            <p className="mt-0.5 text-slate-600">
+              고른 계정에 뉴스 브리핑 패널이 생기고, 내가 만든 회차(앞으로 생길 것 포함)를 읽기만 할 수 있어요. 읽음 표시·틀린 곳 알리기는 그 사람 것으로 따로 남고, 만들기·앱 안 원문 보기는 열리지 않아요
+            </p>
+            {readers && readers.length === 0 && <p className="mt-2 text-slate-600">일반 계정이 아직 없어요 — 관리자 → 사용자 관리에서 계정을 만들면 여기에 나타나요</p>}
+            {readers && readers.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {readers.map((u) => (
+                  <li key={u.id}>
+                    <label className={`flex min-h-9 items-center gap-2 ${u.isActive ? '' : 'opacity-50'}`}>
+                      <input type="checkbox" checked={u.on} onChange={(e) => void toggleReader(u.id, e.target.checked)} className="accent-slate-400" />
+                      <span className="truncate">
+                        {u.displayName ?? u.username}
+                        {u.displayName && <span className="text-slate-600"> · {u.username}</span>}
+                        {!u.isActive && <span className="text-slate-600"> (비활성)</span>}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </>
       )}
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}

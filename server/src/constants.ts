@@ -98,6 +98,8 @@ export const DEFAULT_USER_SETTINGS = {
   briefingSchedule: null as string | null,
   /** 앱 안 원문 보기 스위치(기본 꺼짐) — 서버에서 추출 품질을 잰 뒤(briefing:readcheck) 관리자가 켠다 (개선 합의안 7장) */
   briefingReader: 0,
+  /** 함께 보는 브리핑의 주인(관리자 id) — 관리자가 고른 일반 계정에만 값이 생긴다 (v0.49) */
+  briefingOwnerId: null as number | null,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */

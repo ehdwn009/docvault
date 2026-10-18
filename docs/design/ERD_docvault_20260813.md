@@ -12,6 +12,7 @@ erDiagram
     USERS ||--o{ FILE_VERSIONS : "저장한다"
     USERS ||--o{ USER_FILE_STATE : "가진다"
     USERS ||--|| USER_SETTINGS : "가진다"
+    USERS ||--o{ USER_SETTINGS : "브리핑을 함께 보여 준다 (briefing_owner_id)"
     FOLDERS ||--o{ FOLDERS : "하위 폴더"
     FOLDERS ||--o{ FILES : "담는다"
     FILES ||--o{ FILE_VERSIONS : "스냅샷"
@@ -114,6 +115,7 @@ erDiagram
         integer briefing_auto "0|1 뉴스 브리핑 자동 생성 (기본 0, 관리자만 의미, 2026-10-01)"
         text briefing_schedule "nullable, 자동 생성 회차별 켜기·시각 JSON (v0.43)"
         integer briefing_reader "0|1 브리핑 앱 안 원문 보기 (기본 0, 관리자만 의미, v0.45)"
+        integer briefing_owner_id FK "nullable, 함께 보는 브리핑의 주인(관리자) — 관리자가 고른 일반 계정에만 값, SET NULL (v0.49)"
         integer updated_at
     }
     GOOGLE_ACCOUNTS {
@@ -244,7 +246,7 @@ erDiagram
 - **질문 때 카드 (2026-09-20)**: USER_SETTINGS.ask_with_cards가 켜져 있으면 질문·인용·드래그 문맥에 이름이 나오는 내 카드(최대 3장)의 한 줄·본문 앞부분을 LLM 시스템 프롬프트에 덧붙입니다. 어떤 카드가 갔는지는 저장하지 않습니다 — 답 안에서 화면에만 보입니다(meta). 저장하려면 ASK_MESSAGES에 칸이 필요한데, 답을 다시 볼 때 그 정보가 꼭 필요하진 않아 미뤘습니다.
 - **용어 밑줄 (2026-09-20)**: USER_SETTINGS.term_highlight는 문서를 읽을 때 내 배움 카드의 제목·별칭이 나오는 자리에 점선 밑줄을 그을지입니다(기본 1=켬). 읽기 취향이라 기기(localStorage)가 아니라 사람(USER_SETTINGS)에 붙습니다 — 폰에서 끄면 PC에서도 꺼집니다.
 - 즐겨찾기·읽던 위치는 파일 속성이 아니라 USER_FILE_STATE(사용자×파일)에 둡니다. 공유 파일을 열람하는 다른 사용자도 자신만의 즐겨찾기·읽던 위치를 가질 수 있게 하기 위한 구조입니다 (기존 Manus 버전에서 파일에 붙어 있던 isFavorite의 개선).
-- 공유는 v1에서는 파일/폴더의 is_shared 플래그(전체 사용자 대상 열람 공개, 관리자만 토글)로 구현하고, 추후 특정 사용자 대상 공유가 필요해지면 SHARES(file_id, grantee_id, permission) 테이블로 확장합니다.
+- 공유는 v1에서는 파일/폴더의 is_shared 플래그(전체 사용자 대상 열람 공개, 관리자만 토글)로 구현하고, 추후 특정 사용자 대상 공유가 필요해지면 SHARES(file_id, grantee_id, permission) 테이블로 확장합니다. 첫 "특정 사용자 대상"은 v0.49의 브리핑 열람 계정인데, 파일 단위가 아니라 **"이 관리자의 브리핑 회차 전부(앞으로 생길 것 포함)"**라서 SHARES가 아니라 USER_SETTINGS.briefing_owner_id 한 칸으로 풀었습니다 — 회차마다 행을 만들면 매일 새 회차에 다시 공유를 켜야 합니다. 파일 단위 공유가 필요해지는 날 SHARES 계획은 그대로 유효합니다.
 - **구글 드라이브 연동 (2026-09-16)**: 연동은 **선택 기능**입니다 — 연결하지 않으면 세 테이블 모두 빈 채로 앱은 완전히 동작합니다(외부 의존 제로 원칙의 유지 방식).
   - GOOGLE_ACCOUNTS는 사용자당 최대 하나(user_id가 PK). 계정 삭제 시 CASCADE로 함께 지워지고, 지울 때 구글 쪽 권한도 회수(revoke)합니다 — 우리 DB에서만 지우면 구글에는 "docvault 접근 허용"이 남습니다.
   - 권한 범위는 `drive.file` 하나입니다. 이 권한은 **사용자가 구글 피커에서 직접 고른 파일**과 **앱이 만든 파일**에만 유효하므로, 드라이브 전체를 훑을 수 없습니다. 대신 구글의 앱 심사·보안 감사 대상이 아닙니다(`drive.readonly`는 restricted scope라 개인 프로젝트로는 통과가 사실상 불가).
@@ -263,6 +265,7 @@ erDiagram
   - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.
   - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다. USER_SETTINGS.briefing_schedule은 그 사용자의 회차별 켜기·시작 시각 JSON(`{"morning":{"on":true,"at":"06:30"},…}`, v0.43)이고, null이면 기본(06:30·11:30·17:30 모두 켬) — 스케줄러가 사용자마다 이 값으로 지금 돌 회차를 고른다.
   - USER_SETTINGS.briefing_reader(v0.45)는 앱 안 원문 보기 스위치(기본 0). 관리자에게만 의미가 있고, 회차 화면의 [앱에서 보기]와 API-138은 이 값이 1인 사용자에게만 열린다. 기본이 꺼짐인 이유: 켜기 전에 `briefing:readcheck`로 추출 품질(70%)·범위(50%)를 재는 것이 설계라서다. 원문은 저장하지 않으므로 이 표 밖에 원문 칸은 없다.
+  - USER_SETTINGS.briefing_owner_id(v0.49)는 **열람 계정** 칸이다 — 이 사용자가 함께 보는 브리핑의 주인(관리자) id, null이면 안 본다. 관리자가 설정 → 뉴스 브리핑에서 일반 계정을 골라 넣는다(API-140). 권한은 `canReadFile`이 "kind=briefing이고 FILES.owner_id가 내 briefing_owner_id면 읽기"로 본다 — 쓰기는 열리지 않는다. 사람에 붙인 이유는 위 공유 항목에: 회차는 매일 생기므로 파일마다 공유를 켜는 구조로는 "자동"이 되지 않는다. 주인 관리자가 지워지면 SET NULL로 저절로 닫힌다. 스케줄러·비용·실행 기록은 이 칸과 무관하다(만드는 사람은 그대로 관리자 한 명).
   - 인덱스 `briefing_runs_owner_started_idx (owner_id, started_at)` — 패널의 최근 실행·실행 기록·이번 달 비용 합계가 전부 "이 사람의 최근 실행부터" 읽는다.
   - `running` 행은 기동 시 `error`("서버 재시작으로 중단")로 정리한다 — 한 번에 하나만 돈다는 잠금이 DB 행에도 걸려 있어, 남겨 두면 영원히 실행 중으로 보인다.
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.

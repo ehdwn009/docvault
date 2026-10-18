@@ -1306,6 +1306,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정', admin: '관리자' };
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition touch:h-auto touch:min-h-11 touch:w-14 touch:flex-col touch:gap-0.5 touch:py-1.5';
   const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
+  // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
+  const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
@@ -1399,8 +1401,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {railButton('shared', '공유 파일')}
         {railButton('cards', '배움 카드')}
         {railButton('chat', '대화')}
-        {/* 뉴스 브리핑은 관리자만 — LLM 요금을 내는 사람 (설계 — 원칙) */}
-        {user.role === 'admin' && railButton('briefing', '뉴스 브리핑')}
+        {/* 뉴스 브리핑은 관리자(LLM 요금을 내는 사람)와, 관리자가 고른 열람 계정에게만 (설계 — 원칙, v0.49) */}
+        {canSeeBriefing && railButton('briefing', '뉴스 브리핑')}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
         {railButton('settings', '설정')}
         {user.role === 'admin' && railButton('admin', '관리자')}
@@ -1660,8 +1662,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           // 서버에 자동 저장되므로 다시 열면 "최근 대화"에서 이어 간다 (첫 판은 단순하게)
           <AskPanel file={null} inline seed={null} pendingQuote={null} onConsumePendingQuote={() => {}} onOpenFile={(f) => void selectFile(f)} isPc={!IS_TOUCH} onClose={() => setPanelCollapsed(true)} />
         )}
-        {panel === 'briefing' && user.role === 'admin' && (
+        {panel === 'briefing' && canSeeBriefing && (
           <BriefingPanel
+            readOnly={user.role !== 'admin'}
             onOpenFile={openFileById}
             onOpenSettings={() => setPanel('settings')}
             onOpenSources={openBriefingSources}

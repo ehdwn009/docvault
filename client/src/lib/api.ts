@@ -155,6 +155,8 @@ export type UserSettings = {
   askWithCards: number;
   /** 브리핑 앱 안 원문 보기 (1=켬, 관리자만 의미 있음, v0.45) */
   briefingReader?: number;
+  /** 함께 보는 브리핑의 주인(관리자 id) — 값이 있으면 일반 계정에도 브리핑 패널이 열린다 (v0.49) */
+  briefingOwnerId?: number | null;
 };
 
 export type Changelog = { version: string; content: string };
