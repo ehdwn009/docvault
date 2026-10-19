@@ -184,9 +184,10 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
 
   // 문맥(seed)이 새로 오면 아직 대화가 없는 한 그것을 쓴다 — 안 보내고 닫았다가 다른 문장을 고른 경우 (설계 흐름 A 되풀이).
   // 입력창은 채우지 않는다: 채워 두면 다른 걸 묻고 싶을 때 지우는 일이 생긴다. 대신 빠른 질문 버튼을 둔다
+  // 폰은 붙어 온 문장이 있을 때만 커서를 둔다 — 이 효과는 패널이 처음 뜰 때도 돌아, '대화'를 열자마자 키보드가 최근 대화 목록을 덮었다 (2026-10-19)
   useEffect(() => {
     if (!thread) seedUsedRef.current = false;
-    inputRef.current?.focus();
+    if (isPc || seed) inputRef.current?.focus();
   }, [seed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 새 메시지가 오면 아래로 — 스트리밍 중에는 매 조각마다
