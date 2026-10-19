@@ -27,12 +27,12 @@ export default function FavoritesPanel({ files, selectedId, onSelect, swipe }: P
         <SwipeRow key={file.id} {...swipe(file)}>
           <button
             onClick={() => onSelect(file)}
-            className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
+            className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
               file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
             }`}
           >
-            <span className="text-amber-400">★</span>
-            <FileName name={file.name} expanded={file.id === selectedId} />
+            <span className="leading-5 text-amber-400">★</span>
+            <FileName name={file.name} wrap expanded={file.id === selectedId} />
           </button>
         </SwipeRow>
       ))}

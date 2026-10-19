@@ -28,7 +28,7 @@ export default function RecentList({ files, onSelect, swipe }: Props) {
             onClick={() => onSelect(file)}
             className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
           >
-            <FileName name={file.name} />
+            <FileName name={file.name} wrap />
           </button>
         </SwipeRow>
       ))}

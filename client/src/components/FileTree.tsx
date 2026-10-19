@@ -20,6 +20,11 @@ const TYPE_BADGE: Record<string, string> = {
 // 뱃지가 이름 자리를 잡아먹지 않게 긴 타입명은 줄여 쓴다
 const BADGE_LABEL: Record<string, string> = { binary: 'bin', audio: 'aud', video: 'vid' };
 
+/** 배지가 확장자와 같은 말을 하면(HTML + .html) 확장자를 숨긴다 — .ts·.png처럼 배지보다 많은 걸 말하면 남긴다 (IA — 이름 표시) */
+function extMatchesBadge(file: TreeFile): boolean {
+  return splitExt(file.name).ext.slice(1).toLowerCase() === file.fileType;
+}
+
 export type TreeActions = {
   createFolder: (parentId: number | null) => void;
   /** 새 문서 — 이름만 묻고 md로 만들어 바로 편집 화면으로 */
@@ -422,7 +427,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   setFocus({ kind: 'folder', id: folder.id });
                 }}
                 onContextMenu={(e) => openMenu(e, folderMenu(folder))}
-                className={`group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 touch:py-3 text-sm transition ${
+                className={`group flex cursor-pointer items-start gap-1.5 rounded px-2 py-1 touch:py-3 text-sm transition ${
                   dropTarget === folder.id
                     ? 'bg-sky-900/50 outline outline-1 outline-sky-600'
                     : folder.id === selectedFolderId
@@ -435,14 +440,15 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 }`}
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
               >
-                <span className="text-[10px]">{expanded.has(folder.id) ? '▾' : '▸'}</span>
-                <span>📁</span>
+                {/* 두 줄 이름이어도 앞 요소는 첫 줄에, 뒤 요소는 행 가운데에 (IA — 이름 표시) */}
+                <span className="text-[10px] leading-5">{expanded.has(folder.id) ? '▾' : '▸'}</span>
+                <span className="leading-5">📁</span>
                 {isRenaming ? (
                   renameInput(renaming)
                 ) : (
-                  <FileName name={folder.name} expanded={folder.id === selectedFolderId} />
+                  <FileName name={folder.name} wrap expanded={folder.id === selectedFolderId} />
                 )}
-                <span className="ml-auto flex shrink-0 items-center gap-1">
+                <span className="ml-auto flex shrink-0 items-center gap-1 self-center">
                   {folder.isShared === 1 && <span className="text-[10px] text-sky-500">공유</span>}
                   {moreButton(() => folderMenu(folder))}
                 </span>
@@ -479,7 +485,7 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                   else onSelect(file);
                 }}
                 onContextMenu={(e) => openMenu(e, fileMenu(file))}
-                className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 touch:py-3 text-left text-sm transition ${
+                className={`group flex w-full cursor-pointer items-start gap-1.5 rounded px-2 py-1 touch:py-3 text-left text-sm transition ${
                   isChecked
                     ? 'bg-sky-950/60 text-slate-100 outline outline-1 outline-sky-800'
                     : file.id === selectedId
@@ -493,19 +499,19 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
               >
                 {selectionMode && (
-                  <span className={`text-xs ${isChecked ? 'text-sky-400' : 'text-slate-600'}`}>
+                  <span className={`text-xs leading-5 ${isChecked ? 'text-sky-400' : 'text-slate-600'}`}>
                     {isChecked ? '☑' : '☐'}
                   </span>
                 )}
-                <span className={`font-mono text-[10px] uppercase ${TYPE_BADGE[file.fileType] ?? ''}`}>
+                <span className={`font-mono text-[10px] uppercase leading-5 ${TYPE_BADGE[file.fileType] ?? ''}`}>
                   {BADGE_LABEL[file.fileType] ?? file.fileType}
                 </span>
                 {isRenaming ? (
                   renameInput(renaming)
                 ) : (
-                  <FileName name={file.name} expanded={file.id === selectedId} />
+                  <FileName name={file.name} wrap hideExt={extMatchesBadge(file)} expanded={file.id === selectedId} />
                 )}
-                <span className="ml-auto flex shrink-0 items-center gap-1">
+                <span className="ml-auto flex shrink-0 items-center gap-1 self-center">
                   {file.tags.map((tagId) => (
                     <span
                       key={tagId}

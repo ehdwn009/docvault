@@ -60,13 +60,13 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
           <div key={`d${folder.id}`}>
             <button
               onClick={() => toggleExpand(folder.id)}
-              className="flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left text-sm text-slate-400 transition hover:bg-slate-900"
+              className="flex w-full cursor-pointer items-start gap-1.5 rounded px-2 py-1 text-left text-sm text-slate-400 transition hover:bg-slate-900"
               style={{ paddingLeft: `${8 + depth * 14}px` }}
             >
-              <span className="text-[10px]">{expanded.has(folder.id) ? '▾' : '▸'}</span>
-              <span>📁</span>
-              <FileName name={folder.name} />
-              <span className="ml-auto shrink-0 text-[10px] text-slate-600">{folder.ownerName}</span>
+              <span className="text-[10px] leading-5">{expanded.has(folder.id) ? '▾' : '▸'}</span>
+              <span className="leading-5">📁</span>
+              <FileName name={folder.name} wrap />
+              <span className="ml-auto shrink-0 self-center text-[10px] text-slate-600">{folder.ownerName}</span>
             </button>
             {expanded.has(folder.id) && renderLevel(folder.id, depth + 1)}
           </div>
@@ -77,13 +77,13 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
           <button
             key={file.id}
             onClick={() => onSelect(file)}
-            className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
+            className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
               file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
             }`}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
           >
-            <FileName name={file.name} expanded={file.id === selectedId} />
-            <span className="ml-auto shrink-0 text-[10px] text-slate-600">{file.ownerName}</span>
+            <FileName name={file.name} wrap expanded={file.id === selectedId} />
+            <span className="ml-auto shrink-0 self-center text-[10px] text-slate-600">{file.ownerName}</span>
           </button>
         ))}
     </>
