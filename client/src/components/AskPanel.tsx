@@ -428,12 +428,16 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
   const currentModelId = thread?.model ?? pendingModel ?? status?.defaultModel ?? null;
   const currentModel = status?.models.find((m) => m.id === currentModelId) ?? null;
   const modelName = (id: string | null | undefined) => status?.models.find((m) => m.id === id)?.name ?? (id ? id : 'Opus 5');
-  const threadKind = (t: AskThread) =>
-    t.fileId !== null || t.fileName ? (
-      <span className="inline-flex items-center gap-1"><Icon name="doc" size={11} />{t.fileName ?? '문서'}</span>
-    ) : (
-      <span className="inline-flex items-center gap-1"><Icon name="chat" size={11} />자유 대화</span>
+  // 줄의 맨 끝에 두고 이름만 줄어들게 한다 — 덩어리(inline-flex)로 두면 줄어들지 못해 제목을 0칸으로 밀고 상자 밖으로 넘쳤다 (2026-10-19)
+  const threadKind = (t: AskThread) => {
+    const doc = t.fileId !== null || !!t.fileName;
+    return (
+      <span className="flex min-w-0 items-center gap-1">
+        <Icon name={doc ? 'doc' : 'chat'} size={11} className="shrink-0" />
+        <span className="truncate">{doc ? (t.fileName ?? '문서') : '자유 대화'}</span>
+      </span>
     );
+  };
   const notConfigured = status !== null && !status.configured;
   const canSend = !busy && !limitReached && !notConfigured && input.trim().length > 0;
   const hasAnswer = messages.some((m) => m.role === 'assistant' && typeof m.id === 'number' && m.id > 0);
@@ -564,8 +568,9 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
                   <div className="flex items-center rounded-md hover:bg-slate-900" onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) }); }}>
                     <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
                       <div className="truncate text-sm text-slate-200">{t.title}</div>
-                      <div className="truncate text-xs text-slate-500">
-                        {threadKind(t)} · {t.messageCount ?? 0}개 · {formatDate(t.updatedAt)}
+                      <div className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
+                        <span className="shrink-0">{formatDate(t.updatedAt)} · {t.messageCount ?? 0}개 ·</span>
+                        {threadKind(t)}
                       </div>
                     </button>
                     <button
@@ -612,9 +617,13 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
             <div className="rounded-lg border border-slate-800">
               <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold tracking-wide text-slate-500">최근 대화</div>
               {history.slice(0, RECENT_THREADS).map((t) => (
-                <button key={t.id} onClick={() => void loadThread(t.id)} className="flex w-full items-center gap-2 border-t border-slate-800 px-2.5 py-2 text-left hover:bg-slate-900">
-                  <span className="min-w-0 flex-1 truncate text-slate-200">{t.title}</span>
-                  <span className="shrink-0 text-[11px] text-slate-500">{threadKind(t)} · {formatDate(t.updatedAt)}</span>
+                // 두 줄 — 대화를 알아보는 이름은 제목이라 한 줄을 통째로 준다. 아랫줄에서 잘리는 쪽은 늘 문서 이름 (2026-10-19)
+                <button key={t.id} onClick={() => void loadThread(t.id)} className="block w-full border-t border-slate-800 px-2.5 py-2 text-left hover:bg-slate-900">
+                  <span className="block truncate text-slate-200">{t.title}</span>
+                  <span className="flex min-w-0 items-center gap-1 text-[11px] text-slate-500">
+                    <span className="shrink-0">{formatDate(t.updatedAt)} ·</span>
+                    {threadKind(t)}
+                  </span>
                 </button>
               ))}
               {history.length > RECENT_THREADS && (
