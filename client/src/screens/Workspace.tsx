@@ -622,6 +622,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       }, []);
       restoredRef.current = true;
       if (restore.panes.length > 0) {
+        // 주소를 되살린 문서에 맞춘다 — 홈 화면 앱은 다시 켜면 '/'에서 시작해, 화면은 문서인데 주소는 "문서 없음"이었다.
+        // 그 상태에서 뒤로가기(브리핑 시트의 [목록] 등)를 쓰면 아래 popstate가 '/'를 보고 문서를 전부 닫았다 (2026-10-19)
+        const shown = restore.panes[restore.active]!.id;
+        if (fileIdFromPath(location.pathname) !== shown) history.replaceState(null, '', `/f/${shown}`);
         setTabs(restore.tabs);
         setPanes(restore.panes);
         setActiveIdx(restore.active);
