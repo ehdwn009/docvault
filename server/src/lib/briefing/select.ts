@@ -11,20 +11,20 @@ import { REGION_RULE, SUB_LIST, SUB_RULE } from './classify.js';
 // 참고(1) 기사는 여기서 제목·요약·의미까지 쓴다 — 참고 기사에 Sonnet을 쓰지 않는 것이 비용 설계의 핵심 (설계 "③ 선별")
 
 /** 한 분야에 한 번에 보여 주는 후보 상한 — 검색 하나가 100건을 가져와도 이만큼만 */
-const MAX_INPUT_PER_SUB = 60;
+export const MAX_INPUT_PER_SUB = 60;
 
 /**
  * 선별 입력 자르기 (v0.46, 수집 재설계 토론) — 시간대 균등으로만 자르면 하루 100건 넘는 분야(증시·기업)에서 여러 언론이 다룬 사건이
  * AI가 보기 전에 버려졌다. 다른 보도가 붙은 기사(언론사 수 ≥ 2)를 많은 순으로 먼저 넣고, 남는 자리는 나머지를 범위 전체에서 고르게 채운다
  */
-function pickForSelect(cands: Candidate[], max: number, range: { since: number; until: number }): Candidate[] {
+export function pickForSelect(cands: Candidate[], max: number, range: { since: number; until: number }): Candidate[] {
   if (cands.length <= max) return [...cands].sort((a, b) => b.publishedAt - a.publishedAt);
   const multi = cands.filter((c) => c.related.length > 0).sort((a, b) => b.related.length - a.related.length || b.publishedAt - a.publishedAt).slice(0, max);
   const rest = cands.filter((c) => !multi.includes(c));
   return [...multi, ...spreadPick(rest, max - multi.length, range.since, range.until)];
 }
 
-const HANGUL = /[가-힣]/;
+export const HANGUL = /[가-힣]/;
 
 /** 직전 회차의 이슈 — summary는 ④ 요약이 "바뀐 점 한 줄"을 쓸 때 쓴다(선별에는 제목만 보여 준다) */
 export type PrevStory = { storyId: string; title: string; summary: string };
@@ -58,7 +58,7 @@ const SelectSchema = z.object({
 
 // 실제 회차에서 모태펀드 행사 정례화·지방간 연구 하나가 핵심, 미군 이라크 철수가 주요에 그쳤다 (사용성 평가 2026-10-01) —
 // 무엇을 올리고 무엇을 내리는지 예로 못 박는다
-const IMPORTANCE_RULES = [
+export const IMPORTANCE_RULES = [
   '중요도 기준 (회차마다 들쭉날쭉하지 않게 고정):',
   '- 3 핵심: 나라·시장 전체에 바로 영향이 있는 뉴스 — 정책·법안 결정, 금리·환율 결정, 전쟁·안보·외교의 큰 변화, 대형 사고·재난, 지수 급변, 대기업의 대규모 투자·실적. 분야당 많아야 2건, 없으면 0건',
   '- 2 주요: 흐름을 이해하는 데 필요한 뉴스, 진행 중인 이슈의 새 국면, 업계 판도를 바꿀 만한 일',
@@ -66,6 +66,23 @@ const IMPORTANCE_RULES = [
   '- 핵심으로 올리지 않는 것: 행사·포럼·간담회 개최나 정례화, MOU·업무협약, 수상·기부, 연구 결과 하나(논문·실험 한 건), 보도자료성 신제품 소개, 인사·일정 소식. 대개 참고, 파장이 클 때만 주요',
   '- 해외 기사는 다른 보도가 적다는 이유로 낮추지 않는다. 그 나라와 세계 시장에서의 무게로 판단한다',
 ].join('\n');
+
+/** 선별 지시문 — 선별 호출과 구독 생성 방식의 스킬(`briefing:job rules`)이 같은 글자를 쓴다 */
+export function selectRules(sub: BriefingSub, max: number): string[] {
+  return [
+    `분야 "${subPath(sub)}"의 기사들이다. 브리핑에 실을 이슈를 최대 ${max}개 골라라.`,
+    '- 같은 사건을 다룬 기사는 하나로 묶는다: 가장 정보가 많은 것을 main, 나머지를 related로.',
+    '- 이 분야에 맞지 않는 기사, 스포츠·연예·광고·홍보성 기사는 고르지 않는다.',
+    '- 직전 회차에 같은 이슈가 있었으면 prevStoryId에 그 id를 적는다(새 국면이 있을 때만 고른다).',
+    '- 참고(1) 이슈만 title·summary·why를 한국어로 새로 쓴다. 해외 기사도 제목까지 반드시 한국어로 옮긴다(고유명사는 원문 표기 가능).',
+    '- 이 분야보다 확실히 맞는 분야가 있는 기사는 그래도 고르되 moveTo에 그 분야 id를 적는다. 애매하면 빈 문자열.',
+    REGION_RULE,
+    SUB_RULE,
+    '- 발췌 없이 제목뿐인 기사는 summary를 빈 문자열로 둔다 — 제목에 없는 사실을 알 수 없다(제목 번역만 title에). why는 주어진 글에서 근거를 댈 수 있을 때만 쓰고, 일반론이면 빈 문자열.',
+    NO_META_RULE,
+    IMPORTANCE_RULES,
+  ];
+}
 
 async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[], range: { since: number; until: number }, ai: AiCaller, usage: Usage, signal?: AbortSignal): Promise<Picked[]> {
   const input = pickForSelect(cands, MAX_INPUT_PER_SUB, range);
@@ -77,17 +94,7 @@ async function selectOne(sub: BriefingSub, cands: Candidate[], prev: PrevStory[]
     stage: 'select',
     system: SYSTEM_BASE,
     user: [
-      `분야 "${subPath(sub)}"의 기사들이다. 브리핑에 실을 이슈를 최대 ${max}개 골라라.`,
-      '- 같은 사건을 다룬 기사는 하나로 묶는다: 가장 정보가 많은 것을 main, 나머지를 related로.',
-      '- 이 분야에 맞지 않는 기사, 스포츠·연예·광고·홍보성 기사는 고르지 않는다.',
-      '- 직전 회차에 같은 이슈가 있었으면 prevStoryId에 그 id를 적는다(새 국면이 있을 때만 고른다).',
-      '- 참고(1) 이슈만 title·summary·why를 한국어로 새로 쓴다. 해외 기사도 제목까지 반드시 한국어로 옮긴다(고유명사는 원문 표기 가능).',
-      '- 이 분야보다 확실히 맞는 분야가 있는 기사는 그래도 고르되 moveTo에 그 분야 id를 적는다. 애매하면 빈 문자열.',
-      REGION_RULE,
-      SUB_RULE,
-      '- 발췌 없이 제목뿐인 기사는 summary를 빈 문자열로 둔다 — 제목에 없는 사실을 알 수 없다(제목 번역만 title에). why는 주어진 글에서 근거를 댈 수 있을 때만 쓰고, 일반론이면 빈 문자열.',
-      NO_META_RULE,
-      IMPORTANCE_RULES,
+      ...selectRules(sub, max),
       `\n분야 목록:\n${SUB_LIST}`,
       `\n직전 회차의 이 분야 이슈:\n${prevLines}`,
       `\n<기사>\n${lines}\n</기사>`,

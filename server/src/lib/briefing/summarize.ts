@@ -188,7 +188,7 @@ export function explainEligible(p: Picked): { on: boolean; effect: boolean } {
   return { on: true, effect: p.sub.wide };
 }
 
-function describe(p: Picked, k: number, evidence: Evidence[], target: [number, number], prevSummary: string | undefined, impact: boolean, explain: { on: boolean; effect: boolean }): string {
+export function describe(p: Picked, k: number, evidence: Evidence[], target: [number, number], prevSummary: string | undefined, impact: boolean, explain: { on: boolean; effect: boolean }): string {
   const explainNote = !explain.on ? ' · 해설 없음' : explain.effect ? '' : ' · 해설 효과 칸 없음';
   const head = `${k}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title} — 목표 ${target[0]}~${target[1]}자${impact ? '' : ' · 영향 칸 없음(빈 배열)'}${explainNote}`;
   const parts = evidence.map((e) => {
@@ -337,6 +337,135 @@ function verifyExplain(
 }
 
 /** 핵심·주요 이슈의 글. 돌려주는 Map의 열쇠는 picked 배열의 위치 */
+export type SummaryItem = z.infer<typeof SummarySchema>['items'][number];
+export const SummaryItemSchema = SummarySchema.shape.items.element;
+
+/** 요약 지시문 — 요약 호출과 구독 생성 방식의 스킬(`briefing:job rules`)이 같은 글자를 쓴다. 한 곳만 고치면 둘이 같이 바뀐다 */
+export function summaryRules(): string[] {
+  return [
+    '아래 기사마다 브리핑 글을 한국어로 써라. 해외 기사도 한국어로. 기사마다 재료에 [기호 언론사]가 붙어 있다.',
+    `- 제목: ${BRIEFING.TITLE_MAX_CHARS}자 이내. 핵심 수치나 주체가 보이게.`,
+    '- 리드(lead): 무슨 일인지 2~3문장. 첫 문장은 주어를 다시 써도 된다. 대신 제목에 없는 구체 사실을 둘 이상 넣는다.',
+    '- 왜 중요한가(why): 시장·정책·생활에 어떤 영향인지. 재료에서 근거를 댈 수 있을 때만. "관심이 쏠린다", "귀추가 주목된다" 같은 일반론은 쓰지 말고 빈 문자열로.',
+    `- 골라 쓰는 칸(blocks): ${BLOCK_KINDS.map((k) => `${k}(${KIND_LABEL[k]})`).join(' · ')} 중 **재료가 있는 것만 0~${BRIEFING.BLOCKS_MAX}개**. 없으면 빈 배열. 칸을 채우려고 일반론을 쓰지 않는다. 리드에 쓴 사실을 칸에서 되풀이하지 않는다.`,
+    '  · numbers: pairs에 항목·값 2~4개, 값은 재료 표기 그대로. text는 빈 문자열.  · timeline: items에 날짜·한 줄 2~5개, 재료에 날짜가 있을 때만.',
+    '  · terms: 재료에 나온 어려운 용어를 한 줄로 풀이. 수치·날짜·사람 이름은 쓰지 않는다.  · next: 재료에 나온 일정·후속 조치만, 짐작하지 않는다.',
+    '- 근거 기호(leadSrc·whySrc·src): 그 글을 어느 재료에서 썼는지 기호를 적는다. 재료 기호가 아닌 것은 적지 않는다. 재료가 없는 칸은 만들지 않는다.',
+    '- 언론사마다 수치가 다르면 평균 내지 말고 "A 기준 x, B 기준 y"로 나란히 쓴다.',
+    '- 양쪽 시각(sides): 재료가 2곳 이상인 핵심 기사에서, 찬반이 갈리는 쟁점이면 dispute로 양쪽 주장을, 언론사마다 강조한 점이 실제로 다르면 emphasis로 2~3개. 각 항목의 src는 재료 하나. 한쪽만 있거나 다 같은 내용이면 빈 배열 — 억지로 맞추지 않는다. 편향·왜곡 같은 평가어는 쓰지 않는다.',
+    '- changed: "직전 회차 요약"이 붙은 기사만, 그 요약에 없던 새 사실을 한 줄로. 새 사실이 없으면 빈 문자열.',
+    `- 5W(w5): 누가·무엇을·언제·어디서·왜를 재료에 있는 것만 칸당 한 줄(${BRIEFING.W5_TEXT_MAX_CHARS}자 이내). 날짜·장소는 재료 표기 그대로. 재료에 없는 칸은 빈 문자열로 둔다 — 채우지 않는다. src에 근거 기호.`,
+    `- 영향(impact): "영향 칸 없음"이 적힌 기사는 빈 배열. 나머지는 이 일이 누구에게 어떤 영향인지 0~${BRIEFING.IMPACT_MAX_CORE}줄 — 대상(target ${BRIEFING.IMPACT_TARGET_MAX_CHARS}자 이내) · 방향(direction) · 한 문장(${BRIEFING.IMPACT_TEXT_MAX_CHARS}자 이내, "~할 수 있다" 어미) · 근거 기호 하나(src). 재료가 그 방향을 직접 말했을 때만 up/down/mixed, 재료에서 짚어낸 것이면 unclear. 왜 중요한가·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 재료 밖 연쇄 추론(금리 → 내 대출)은 쓰지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다.`,
+    `- 해설(explain): 기사가 아니라 AI가 푸는 글이라 따로 표시된다. "해설 없음"이 적힌 기사는 전부 빈 값. 말뜻(terms)은 기사 속 제도·전문용어 0~${BRIEFING.EXPLAIN_TERMS_MAX}개를 초심자 눈높이 한 줄로 — 이 칸만은 기사 밖 지식을 써도 되지만 수치·날짜·금액·면적 같은 현행 기준은 쓰지 않는다(제도는 바뀐다). 왜 이렇게 됐나(why)는 원인·배경 1~2문장 — 재료에 있으면 whySrc에 기호를, 재료 밖 배경지식이면 whySrc를 비운다(그때는 숫자·날짜·고유명사를 쓰지 않는다). 그래서 어떻게 되나(effect)는 재료에 근거가 있을 때만, 대상을 가계·대출자·세입자처럼 사람까지 내려 1~2문장("~할 수 있다"). 한 단계 결과만 쓰고 그 결과의 결과(금리 → 내 대출 → 소비)는 쓰지 않는다. "해설 효과 칸 없음"이 적힌 기사는 빈 문자열. 다음에 볼 것(watch)은 "…되면 …"처럼 조건문으로, 이 신호가 나오면 흐름을 안다는 식 1~2문장 — 전망·예상은 쓰지 않고 날짜·일정은 재료에 있는 것만. 왜 중요한가·영향·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다. 모르면 비운다.`,
+    '- 길이: 기사마다 적힌 목표 글자 수(리드+왜 중요한가+칸 합계) 안에서. 재료가 짧으면 짧게 쓴다. 해설은 목표 길이에 넣지 않는다.',
+    '- 수치·날짜·고유명사는 재료에 있는 것만. 재료 밖의 배경지식을 사실처럼 쓰지 않는다. 원문 문장을 베끼지 말고 새로 쓴다.',
+    NO_META_RULE,
+  ];
+}
+
+/** 모델이 쓴 기사 하나를 검증해 Written으로 — 전부 코드, AI 없음. 구독 생성 방식의 세션도 같은 함수로 검증한다(설계 "정확도 — 다섯 겹" 3번). 제목이 비면 싣지 않는다(null) */
+export function finalizeItem(it: SummaryItem, p: Picked, evidence: Evidence[], target: [number, number], eligible: boolean, explainOn: { on: boolean; effect: boolean }): Written | null {
+  if (!it.title.trim()) return null;
+  const valid = new Set(evidence.map((e) => e.id));
+  let drops = 0;
+  const clean = (text: string, from: string[]) => {
+    const r = checkNumbers(stripMeta(text), materialText(evidence, from));
+    drops += r.dropped;
+    return r.text;
+  };
+  const summaryFrom = parseSrc(it.leadSrc, valid);
+  const whyFrom = parseSrc(it.whySrc, valid);
+  const summary = clean(it.lead, summaryFrom);
+  // 왜 중요한가 — 근거 기호가 없거나 일반론이면 비운다(조립 단계가 핵심→주요로 내린다)
+  let why = whyFrom.length ? clean(it.why, whyFrom) : '';
+  if (isGenericWhy(why)) why = '';
+
+  const blocks: Block[] = [];
+  for (const b of it.blocks) {
+    if (blocks.length >= BRIEFING.BLOCKS_MAX) break;
+    const kind = b.kind.trim() as BlockKind;
+    if (!BLOCK_KINDS.includes(kind)) continue;
+    const from = parseSrc(b.src, valid);
+    if (from.length === 0) continue; // 근거 없는 칸은 버린다
+    const mat = materialText(evidence, from);
+    if (kind === 'numbers') {
+      const pairs = b.pairs.filter((x) => x.label.trim() && x.value.trim()).filter((x) => {
+        const ok = pairSupported(x.value, mat);
+        if (!ok) drops++;
+        return ok;
+      });
+      if (pairs.length >= 1) blocks.push({ kind, pairs: pairs.slice(0, 4), from });
+    } else if (kind === 'timeline') {
+      const items = b.items.filter((x) => x.date.trim() && x.text.trim()).map((x) => ({ date: x.date.trim(), text: clean(x.text, from) })).filter((x) => x.text);
+      if (items.length >= 2) blocks.push({ kind, items: items.slice(0, 5), from });
+    } else {
+      const text = clean(b.text, from);
+      if (text) blocks.push({ kind, text, from });
+    }
+  }
+
+  let sides: Sides | undefined;
+  const sk = it.sidesKind.trim();
+  if ((sk === 'dispute' || sk === 'emphasis') && p.importance === 3) {
+    const items = it.sides
+      .map((s) => ({ label: s.label.trim(), text: '', from: parseSrc(s.src, valid)[0] ?? '', raw: s.text }))
+      .filter((s) => s.label && s.from)
+      .map((s) => ({ label: s.label, text: clean(s.raw, [s.from]), from: s.from }))
+      .filter((s) => s.text)
+      .slice(0, BRIEFING.ANGLES_MAX);
+    // 한쪽뿐이면 양쪽 시각이 아니다
+    if (items.length >= 2 && new Set(items.map((s) => s.from)).size >= 2) sides = { kind: sk, items };
+  }
+  const changed = p.prevStoryId ? clean(it.changed, summaryFrom) : '';
+
+  // 5W — 근거 기호가 없으면 리드의 근거로. 칸마다 숫자 대조, 길이 상한. what이 없으면 5W 자체가 없다
+  const w5From = parseSrc(it.w5.src, valid);
+  const w5Base = w5From.length ? w5From : summaryFrom;
+  const w5: W5 = {};
+  for (const key of W5_KEYS) {
+    const text = clean(it.w5[key], w5Base).trim();
+    if (text && text.length <= BRIEFING.W5_TEXT_MAX_CHARS) w5[key] = { text, from: w5Base };
+  }
+
+  // 영향 — 자격이 있는 기사만, 검증을 통과한 줄만 (impactEligible·verifyImpact)
+  let impact: ImpactLine[] | undefined;
+  let impactDrops = 0;
+  if (eligible) {
+    const max = p.importance === 3 ? BRIEFING.IMPACT_MAX_CORE : BRIEFING.IMPACT_MAX_MAJOR;
+    const r = verifyImpact(it.impact, evidence, valid, [why, ...(sides?.items.map((s) => s.text) ?? [])], max);
+    impactDrops = r.dropped;
+    if (r.lines.length > 0) impact = r.lines;
+  }
+
+  // 해설 — 핵심·주요 전부. 왜 중요한가·영향·양쪽 시각과 겹치는 칸은 지운다 (verifyExplain)
+  let explain: ExplainBlock[] | undefined;
+  let explainDrops = 0;
+  if (explainOn.on) {
+    const r = verifyExplain(it.explain, evidence, valid, [why, ...(impact?.map((l) => l.text) ?? []), ...(sides?.items.map((s) => s.text) ?? [])], explainOn.effect);
+    explainDrops = r.dropped;
+    if (r.blocks.length > 0) explain = r.blocks;
+  }
+
+  const total = summary.length + why.length + blocks.reduce((n, b) => n + (b.text?.length ?? 0) + (b.pairs?.length ?? 0) * 12 + (b.items?.reduce((m, x) => m + x.text.length, 0) ?? 0), 0);
+  return {
+    title: it.title.trim(),
+    summary,
+    summaryFrom,
+    why,
+    whyFrom: why ? whyFrom : [],
+    blocks,
+    ...(sides ? { sides } : {}),
+    ...(changed ? { changed } : {}),
+    ...(w5.what ? { w5 } : {}),
+    ...(impact ? { impact } : {}),
+    ...(explain ? { explain } : {}),
+    numberDrops: drops,
+    overrun: total > target[1] * BRIEFING.LENGTH_OVERRUN_RATIO,
+    impactDrops,
+    explainDrops,
+  };
+}
+
 export async function summarize(
   picked: Picked[],
   materials: Map<number, Material[]>,
@@ -373,26 +502,7 @@ export async function summarize(
       model: core ? BRIEFING.SUMMARY_MODEL_CORE : BRIEFING.SUMMARY_MODEL,
       stage: core ? 'summarize-core' : 'summarize',
       system: SYSTEM_BASE,
-      user: [
-        '아래 기사마다 브리핑 글을 한국어로 써라. 해외 기사도 한국어로. 기사마다 재료에 [기호 언론사]가 붙어 있다.',
-        `- 제목: ${BRIEFING.TITLE_MAX_CHARS}자 이내. 핵심 수치나 주체가 보이게.`,
-        '- 리드(lead): 무슨 일인지 2~3문장. 첫 문장은 주어를 다시 써도 된다. 대신 제목에 없는 구체 사실을 둘 이상 넣는다.',
-        '- 왜 중요한가(why): 시장·정책·생활에 어떤 영향인지. 재료에서 근거를 댈 수 있을 때만. "관심이 쏠린다", "귀추가 주목된다" 같은 일반론은 쓰지 말고 빈 문자열로.',
-        `- 골라 쓰는 칸(blocks): ${BLOCK_KINDS.map((k) => `${k}(${KIND_LABEL[k]})`).join(' · ')} 중 **재료가 있는 것만 0~${BRIEFING.BLOCKS_MAX}개**. 없으면 빈 배열. 칸을 채우려고 일반론을 쓰지 않는다. 리드에 쓴 사실을 칸에서 되풀이하지 않는다.`,
-        '  · numbers: pairs에 항목·값 2~4개, 값은 재료 표기 그대로. text는 빈 문자열.  · timeline: items에 날짜·한 줄 2~5개, 재료에 날짜가 있을 때만.',
-        '  · terms: 재료에 나온 어려운 용어를 한 줄로 풀이. 수치·날짜·사람 이름은 쓰지 않는다.  · next: 재료에 나온 일정·후속 조치만, 짐작하지 않는다.',
-        '- 근거 기호(leadSrc·whySrc·src): 그 글을 어느 재료에서 썼는지 기호를 적는다. 재료 기호가 아닌 것은 적지 않는다. 재료가 없는 칸은 만들지 않는다.',
-        '- 언론사마다 수치가 다르면 평균 내지 말고 "A 기준 x, B 기준 y"로 나란히 쓴다.',
-        '- 양쪽 시각(sides): 재료가 2곳 이상인 핵심 기사에서, 찬반이 갈리는 쟁점이면 dispute로 양쪽 주장을, 언론사마다 강조한 점이 실제로 다르면 emphasis로 2~3개. 각 항목의 src는 재료 하나. 한쪽만 있거나 다 같은 내용이면 빈 배열 — 억지로 맞추지 않는다. 편향·왜곡 같은 평가어는 쓰지 않는다.',
-        '- changed: "직전 회차 요약"이 붙은 기사만, 그 요약에 없던 새 사실을 한 줄로. 새 사실이 없으면 빈 문자열.',
-        `- 5W(w5): 누가·무엇을·언제·어디서·왜를 재료에 있는 것만 칸당 한 줄(${BRIEFING.W5_TEXT_MAX_CHARS}자 이내). 날짜·장소는 재료 표기 그대로. 재료에 없는 칸은 빈 문자열로 둔다 — 채우지 않는다. src에 근거 기호.`,
-        `- 영향(impact): "영향 칸 없음"이 적힌 기사는 빈 배열. 나머지는 이 일이 누구에게 어떤 영향인지 0~${BRIEFING.IMPACT_MAX_CORE}줄 — 대상(target ${BRIEFING.IMPACT_TARGET_MAX_CHARS}자 이내) · 방향(direction) · 한 문장(${BRIEFING.IMPACT_TEXT_MAX_CHARS}자 이내, "~할 수 있다" 어미) · 근거 기호 하나(src). 재료가 그 방향을 직접 말했을 때만 up/down/mixed, 재료에서 짚어낸 것이면 unclear. 왜 중요한가·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 재료 밖 연쇄 추론(금리 → 내 대출)은 쓰지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다.`,
-        `- 해설(explain): 기사가 아니라 AI가 푸는 글이라 따로 표시된다. "해설 없음"이 적힌 기사는 전부 빈 값. 말뜻(terms)은 기사 속 제도·전문용어 0~${BRIEFING.EXPLAIN_TERMS_MAX}개를 초심자 눈높이 한 줄로 — 이 칸만은 기사 밖 지식을 써도 되지만 수치·날짜·금액·면적 같은 현행 기준은 쓰지 않는다(제도는 바뀐다). 왜 이렇게 됐나(why)는 원인·배경 1~2문장 — 재료에 있으면 whySrc에 기호를, 재료 밖 배경지식이면 whySrc를 비운다(그때는 숫자·날짜·고유명사를 쓰지 않는다). 그래서 어떻게 되나(effect)는 재료에 근거가 있을 때만, 대상을 가계·대출자·세입자처럼 사람까지 내려 1~2문장("~할 수 있다"). 한 단계 결과만 쓰고 그 결과의 결과(금리 → 내 대출 → 소비)는 쓰지 않는다. "해설 효과 칸 없음"이 적힌 기사는 빈 문자열. 다음에 볼 것(watch)은 "…되면 …"처럼 조건문으로, 이 신호가 나오면 흐름을 안다는 식 1~2문장 — 전망·예상은 쓰지 않고 날짜·일정은 재료에 있는 것만. 왜 중요한가·영향·양쪽 시각에 쓴 문장을 되풀이하지 않는다. 주가·매수·매도·호재·악재·확실·반드시 같은 말은 쓰지 않는다. 모르면 비운다.`,
-        '- 길이: 기사마다 적힌 목표 글자 수(리드+왜 중요한가+칸 합계) 안에서. 재료가 짧으면 짧게 쓴다. 해설은 목표 길이에 넣지 않는다.',
-        '- 수치·날짜·고유명사는 재료에 있는 것만. 재료 밖의 배경지식을 사실처럼 쓰지 않는다. 원문 문장을 베끼지 말고 새로 쓴다.',
-        NO_META_RULE,
-        `\n<기사>\n${lines}\n</기사>`,
-      ].join('\n'),
+      user: [...summaryRules(), `\n<기사>\n${lines}\n</기사>`].join('\n'),
       schema: SummarySchema,
       maxTokens: BRIEFING.SUMMARY_MAX_OUTPUT_TOKENS,
       signal: opts.signal,
@@ -401,107 +511,9 @@ export async function summarize(
     for (const it of out.items) {
       const j = it.k - 1;
       const idx = batch[j];
-      if (idx === undefined || !it.title.trim()) continue;
-      const evidence = ev[j]!;
-      const target = targets[j]!;
-      const valid = new Set(evidence.map((e) => e.id));
-      let drops = 0;
-      const clean = (text: string, from: string[]) => {
-        const r = checkNumbers(stripMeta(text), materialText(evidence, from));
-        drops += r.dropped;
-        return r.text;
-      };
-      const summaryFrom = parseSrc(it.leadSrc, valid);
-      const whyFrom = parseSrc(it.whySrc, valid);
-      const summary = clean(it.lead, summaryFrom);
-      // 왜 중요한가 — 근거 기호가 없거나 일반론이면 비운다(조립 단계가 핵심→주요로 내린다)
-      let why = whyFrom.length ? clean(it.why, whyFrom) : '';
-      if (isGenericWhy(why)) why = '';
-
-      const blocks: Block[] = [];
-      for (const b of it.blocks) {
-        if (blocks.length >= BRIEFING.BLOCKS_MAX) break;
-        const kind = b.kind.trim() as BlockKind;
-        if (!BLOCK_KINDS.includes(kind)) continue;
-        const from = parseSrc(b.src, valid);
-        if (from.length === 0) continue; // 근거 없는 칸은 버린다
-        const mat = materialText(evidence, from);
-        if (kind === 'numbers') {
-          const pairs = b.pairs.filter((x) => x.label.trim() && x.value.trim()).filter((x) => {
-            const ok = pairSupported(x.value, mat);
-            if (!ok) drops++;
-            return ok;
-          });
-          if (pairs.length >= 1) blocks.push({ kind, pairs: pairs.slice(0, 4), from });
-        } else if (kind === 'timeline') {
-          const items = b.items.filter((x) => x.date.trim() && x.text.trim()).map((x) => ({ date: x.date.trim(), text: clean(x.text, from) })).filter((x) => x.text);
-          if (items.length >= 2) blocks.push({ kind, items: items.slice(0, 5), from });
-        } else {
-          const text = clean(b.text, from);
-          if (text) blocks.push({ kind, text, from });
-        }
-      }
-
-      let sides: Sides | undefined;
-      const sk = it.sidesKind.trim();
-      if ((sk === 'dispute' || sk === 'emphasis') && picked[idx]!.importance === 3) {
-        const items = it.sides
-          .map((s) => ({ label: s.label.trim(), text: '', from: parseSrc(s.src, valid)[0] ?? '', raw: s.text }))
-          .filter((s) => s.label && s.from)
-          .map((s) => ({ label: s.label, text: clean(s.raw, [s.from]), from: s.from }))
-          .filter((s) => s.text)
-          .slice(0, BRIEFING.ANGLES_MAX);
-        // 한쪽뿐이면 양쪽 시각이 아니다
-        if (items.length >= 2 && new Set(items.map((s) => s.from)).size >= 2) sides = { kind: sk, items };
-      }
-      const changed = picked[idx]!.prevStoryId ? clean(it.changed, summaryFrom) : '';
-
-      // 5W — 근거 기호가 없으면 리드의 근거로. 칸마다 숫자 대조, 길이 상한. what이 없으면 5W 자체가 없다
-      const w5From = parseSrc(it.w5.src, valid);
-      const w5Base = w5From.length ? w5From : summaryFrom;
-      const w5: W5 = {};
-      for (const key of W5_KEYS) {
-        const text = clean(it.w5[key], w5Base).trim();
-        if (text && text.length <= BRIEFING.W5_TEXT_MAX_CHARS) w5[key] = { text, from: w5Base };
-      }
-
-      // 영향 — 자격이 있는 기사만, 검증을 통과한 줄만 (impactEligible·verifyImpact)
-      let impact: ImpactLine[] | undefined;
-      let impactDrops = 0;
-      if (eligible[j]) {
-        const max = picked[idx]!.importance === 3 ? BRIEFING.IMPACT_MAX_CORE : BRIEFING.IMPACT_MAX_MAJOR;
-        const r = verifyImpact(it.impact, evidence, valid, [why, ...(sides?.items.map((s) => s.text) ?? [])], max);
-        impactDrops = r.dropped;
-        if (r.lines.length > 0) impact = r.lines;
-      }
-
-      // 해설 — 핵심·주요 전부. 왜 중요한가·영향·양쪽 시각과 겹치는 칸은 지운다 (verifyExplain)
-      let explain: ExplainBlock[] | undefined;
-      let explainDrops = 0;
-      if (explains[j]!.on) {
-        const r = verifyExplain(it.explain, evidence, valid, [why, ...(impact?.map((l) => l.text) ?? []), ...(sides?.items.map((s) => s.text) ?? [])], explains[j]!.effect);
-        explainDrops = r.dropped;
-        if (r.blocks.length > 0) explain = r.blocks;
-      }
-
-      const total = summary.length + why.length + blocks.reduce((n, b) => n + (b.text?.length ?? 0) + (b.pairs?.length ?? 0) * 12 + (b.items?.reduce((m, x) => m + x.text.length, 0) ?? 0), 0);
-      written.set(idx, {
-        title: it.title.trim(),
-        summary,
-        summaryFrom,
-        why,
-        whyFrom: why ? whyFrom : [],
-        blocks,
-        ...(sides ? { sides } : {}),
-        ...(changed ? { changed } : {}),
-        ...(w5.what ? { w5 } : {}),
-        ...(impact ? { impact } : {}),
-        ...(explain ? { explain } : {}),
-        numberDrops: drops,
-        overrun: total > target[1] * BRIEFING.LENGTH_OVERRUN_RATIO,
-        impactDrops,
-        explainDrops,
-      });
+      if (idx === undefined) continue;
+      const w = finalizeItem(it, picked[idx]!, ev[j]!, targets[j]!, eligible[j]!, explains[j]!);
+      if (w) written.set(idx, w);
     }
   });
   const failed = results.find((r) => !r.ok);

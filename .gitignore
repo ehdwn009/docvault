@@ -19,3 +19,6 @@ backups/
 
 # personal study materials (textbook PDFs etc.) — never committed
 docs/data_ignored/
+
+# 구독 생성 방식 작업 폴더 — 세션이 쓰는 중간 파일(원문 재료 포함). 시험 결과는 스킬이 -f로 골라 커밋한다
+.briefing-job/

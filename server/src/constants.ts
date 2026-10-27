@@ -409,4 +409,44 @@ export const BRIEFING = {
   READER_CACHE_MS: 10 * 60 * 1000,
   READER_CACHE_MAX: 20,
   READER_MAX_PARAGRAPHS: 80,
+
+  // ---- 구독 생성 방식 (v0.50 설계, 뉴스 브리핑 설계 "구독 생성 방식"·"정한 값") — 회차를 서버가 켠 claude.ai 예약 작업이 만든다.
+  //      값의 근거는 설계 문서 표에. 1주 실측 뒤 조정 ----
+  /** 회차 시작 시각 이만큼 전에 트리거 — 세션 기동 5~10분 + 수집·원문 20분 + 요약·검수 40~50분 어림 */
+  SUB_LEAD_MS: 90 * 60 * 1000,
+  /** 마감 = 회차 시작 + 30분 (발행 목표 07·12·18시). 지나면 running 구독 실행을 missing으로 닫는다 */
+  SUB_DEADLINE_AFTER_MS: 30 * 60 * 1000,
+  /** 스킬은 마감 이만큼 전이 되면 남은 기사를 줄이고 마무리해 보낸다 — 빈손보다 얇은 회차 */
+  SUB_WRAPUP_BEFORE_MS: 20 * 60 * 1000,
+  /** 서버가 꺼져 있다 켜졌을 때 늦게라도 트리거하는 한계 — 마감이 이만큼은 남아 있어야 */
+  SUB_MIN_LEAD_MS: 60 * 60 * 1000,
+  /** 트리거 HTTP 호출 — 실패하면 그 자리에서 error */
+  SUB_TRIGGER_TIMEOUT_MS: 10_000,
+  SUB_TRIGGER_RETRIES: 1,
+  /** 완성본 본문 상한 — Hono·Node는 기본 제한이 없어 1GB 서버가 메모리 부족으로 죽을 수 있다. 회차 JSON 실측 뒤 조정 */
+  SUB_RESULT_MAX_BYTES: 2 * 1024 * 1024,
+  /** 검사에서 뺀 기사가 이 비율을 넘으면 통째로 거절 — 150건 중 45건이 빠지면 회차가 아니다 */
+  SUB_DROP_REJECT_RATIO: 0.3,
+  /** 거절 뒤 스킬이 고쳐 다시 보내는 횟수 */
+  SUB_RESEND_MAX: 2,
+  /** 완성본 log 상한 — 줄 수·줄 길이 */
+  SUB_LOG_MAX_LINES: 30,
+  /** 진행 보고 한 줄 길이·job당 분당 건수 — 열어 둔 주소라 상한이 "없음"이면 안 된다 */
+  SUB_PROGRESS_MAX_CHARS: 200,
+  SUB_PROGRESS_PER_MINUTE: 20,
+  /** 연결 열쇠 — dvt_ 접두어는 로그·커밋에서 눈에 띄고 secret scanning에 걸리게 */
+  SUB_TOKEN_PREFIX: 'dvt_',
+  SUB_TOKEN_BYTES: 32,
+  /** [연결 확인] ping job 수명과 "아직 연결 기록 없음" 판정 시간 */
+  SUB_PING_TTL_MS: 10 * 60 * 1000,
+  SUB_PING_NO_REQUEST_MS: 5 * 60 * 1000,
+  /** 설정 화면의 최근 요약·시각 조정 힌트 */
+  SUB_RECENT_RUNS: 7,
+  SUB_HINT_LATER_RATIO: 0.5,
+  SUB_HINT_EARLIER_MARGIN_MS: 10 * 60 * 1000,
+  SUB_HINT_EARLIER_MISSING: 2,
+  /** 지시서의 직전 회차 사건 상한 — 응답 크기 */
+  SUB_PREV_STORIES_MAX: 200,
+  /** 완성본 검사용 허용 도메인에 늘 들어가는 것 — 통신사(WEB_FILL_WIRES)와 Google 뉴스 링크(검색 기사가 그대로 남는다) */
+  SUB_CHECK_EXTRA_DOMAINS: ['news.google.com'],
 } as const;

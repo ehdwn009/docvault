@@ -43,6 +43,27 @@ function keepSupported(text: string, base: string): { text: string; dropped: num
   return { text: kept.join(' '), dropped: sentences.length - kept.length };
 }
 
+/** 글머리표 지시문 — 글머리표 호출과 구독 생성 방식의 스킬(`briefing:job rules`)이 같은 글자를 쓴다 */
+export const LENS_RULES = [
+  '아래 요약 글을 글머리표로 다시 써라. 재료는 이 요약뿐이다 — 요약에 없는 사실·숫자·이름은 절대 넣지 않는다.',
+  '- bullets: 핵심을 3~5줄 글머리표로. 한 줄에 하나씩, 짧게. 숫자는 요약에 있는 것만 그대로.',
+];
+
+/** 모델이 쓴 글머리표를 검증해 남길 것만 — 요약에 없는 숫자가 든 줄은 지우고, 2줄 미만이면 보기를 만들지 않는다(null). 구독 생성 방식의 세션도 같은 함수를 쓴다 */
+export function finalizeBullets(raw: string[], w: Written): { bullets: string[] | null; dropped: number } {
+  const base = summaryText(w);
+  let dropped = 0;
+  const bullets = raw
+    .map((b) => keepSupported(stripMeta(b), base))
+    .map((r) => {
+      dropped += r.dropped;
+      return r.text;
+    })
+    .filter(Boolean)
+    .slice(0, 5);
+  return { bullets: bullets.length >= 2 ? bullets : null, dropped };
+}
+
 /** 열쇠는 written과 같은 picked 위치. 돌려주는 dropped는 실행 기록용(stats.lensDrops) */
 export async function writeLenses(
   written: Map<number, Written>,
@@ -63,11 +84,7 @@ export async function writeLenses(
       model: BRIEFING.SELECT_MODEL,
       stage: 'lens',
       system: SYSTEM_BASE,
-      user: [
-        '아래 요약 글을 글머리표로 다시 써라. 재료는 이 요약뿐이다 — 요약에 없는 사실·숫자·이름은 절대 넣지 않는다.',
-        '- bullets: 핵심을 3~5줄 글머리표로. 한 줄에 하나씩, 짧게. 숫자는 요약에 있는 것만 그대로.',
-        `\n<기사>\n${lines}\n</기사>`,
-      ].join('\n'),
+      user: [...LENS_RULES, `\n<기사>\n${lines}\n</기사>`].join('\n'),
       schema: LensSchema,
       maxTokens: BRIEFING.SUMMARY_MAX_OUTPUT_TOKENS,
       signal: opts.signal,
@@ -76,16 +93,9 @@ export async function writeLenses(
     for (const it of out.items) {
       const idx = batch[it.k - 1];
       if (idx === undefined) continue;
-      const base = summaryText(written.get(idx)!);
-      const bullets = it.bullets
-        .map((b) => keepSupported(stripMeta(b), base))
-        .map((r) => {
-          dropped += r.dropped;
-          return r.text;
-        })
-        .filter(Boolean)
-        .slice(0, 5);
-      if (bullets.length >= 2) lenses.set(idx, { bullets });
+      const r = finalizeBullets(it.bullets, written.get(idx)!);
+      dropped += r.dropped;
+      if (r.bullets) lenses.set(idx, { bullets: r.bullets });
     }
   });
   const failed = results.find((r) => !r.ok);
