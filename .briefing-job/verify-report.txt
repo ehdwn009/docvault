@@ -1,0 +1,23 @@
+실린 기사 179건 (핵심 22 · 주요 58 · 참고 99), 싣지 않은 것 0건
+주소 검사에서 걸린 주소 0개
+result.json 크기 380KB (상한 2MB)
+후보 출처 44곳 중 받아진 곳 18곳: 한국경제 정치, 한국경제 국제, 한국경제 부동산, 머니투데이, 아시아경제, 경향신문 경제, SBS 뉴스, 뉴시스 경제, 블로터, NPR News, France 24, SCMP, Japan Times, Nikkei Asia, Axios, CNBC World, CNBC Technology, MIT Technology Review
+
+story 81: 숫자 대조에 걸린 문장 3개 (NUMBER_CHECK_MODE=log)
+story 85: 숫자 대조에 걸린 문장 3개 (NUMBER_CHECK_MODE=log)
+story 90: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 95: 숫자 대조에 걸린 문장 3개 (NUMBER_CHECK_MODE=log)
+story 107: 숫자 대조에 걸린 문장 5개 (NUMBER_CHECK_MODE=log)
+story 114: 숫자 대조에 걸린 문장 2개 (NUMBER_CHECK_MODE=log)
+story 122: 숫자 대조에 걸린 문장 3개 (NUMBER_CHECK_MODE=log)
+story 123: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 127: 숫자 대조에 걸린 문장 9개 (NUMBER_CHECK_MODE=log)
+story 128: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 129: 숫자 대조에 걸린 문장 2개 (NUMBER_CHECK_MODE=log)
+story 138: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 142: 숫자 대조에 걸린 문장 6개 (NUMBER_CHECK_MODE=log)
+story 143: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 145: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 149: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 157: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 161: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
