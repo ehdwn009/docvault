@@ -12,7 +12,7 @@ import { titleOverlap } from './verify.js';
 // 검색 범위는 수집 목록의 언론사 도메인 + 통신사로 좁힌다. 찾은 글은 원문 본문과 같이 요약에만 쓰고 저장하지 않는다
 
 /** 찾은 보도가 같은 사건인지 — 제목 핵심어가 인용 글에 이만큼은 겹쳐야 한다 (본문 검사보다 느슨하게: 짧은 인용이라) */
-const WEB_TITLE_OVERLAP_MIN = 0.25;
+export const WEB_TITLE_OVERLAP_MIN = 0.25;
 
 /** 수집 목록의 언론사 주소에서 도메인만 — 검색 허용 범위. 통신사 + 목록 앞쪽 언론사 순으로 WEB_FILL_DOMAINS_MAX곳까지 —
     목록이 길면(후보 43곳을 켜면 70개) 검색 도구가 요청을 거부한다(request_too_large). 수집 재설계 토론 2026-10-11 */

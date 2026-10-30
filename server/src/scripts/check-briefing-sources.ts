@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { fetchSource } from '../lib/briefing/collect.js';
 import { parseFeed } from '../lib/briefing/rss.js';
 import { errorText, mapLimit } from '../lib/briefing/limit.js';
-import { defaultSourcesDoc, parseSourcesDoc, toSources } from '../lib/briefing/sources.js';
+import { defaultSourcesDoc, parseSourcesDoc, toSources } from '../lib/briefing/sourcesDoc.js';
 import { BRIEFING } from '../constants.js';
 
 // 수집 목록의 주소가 실제로 열리는지 한 번에 점검한다 — 서버에서:

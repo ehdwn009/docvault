@@ -11,10 +11,13 @@ import { needsDemotion } from '../lib/briefing/fallback.js';
 import { checkDomainsOf, checkUrl } from '../lib/briefing/jobDomains.js';
 import { finalizeBullets, LENS_RULES } from '../lib/briefing/lenses.js';
 import { HANGUL, MAX_INPUT_PER_SUB, pickForSelect, selectRules, type Picked, type PrevStory } from '../lib/briefing/select.js';
-import { defaultSourcesDoc, parseSourcesDoc, toSources, type SourcesDoc } from '../lib/briefing/sourcesDoc.js';
+import { CANDIDATE_FEEDS, defaultSourcesDoc, parseSourcesDoc, toSources, type SourcesDoc } from '../lib/briefing/sourcesDoc.js';
 import { describe, evidenceOf, explainEligible, finalizeItem, impactEligible, lengthTarget, SummaryItemSchema, summaryRules, type Evidence, type Written } from '../lib/briefing/summarize.js';
 import { findSubById, SUBS, subPath, type BriefingSub } from '../lib/briefing/taxonomy.js';
 import { kstParts } from '../lib/briefing/time.js';
+import { outletName } from '../lib/briefing/outlets.js';
+import { titleOverlap } from '../lib/briefing/verify.js';
+import { WEB_TITLE_OVERLAP_MIN } from '../lib/briefing/webfill.js';
 
 // 구독 생성 방식의 "기계가 하는 일" (뉴스 브리핑 설계 "구독 생성 방식", v0.50) — claude.ai 세션이 저장소를 받아 이 명령을 돌린다.
 // 수집·선별 입력 자르기·원문 읽기·숫자 검사·건강 숫자는 서버와 **같은 코드**로 하고, 판단과 글쓰기(분류·선별·요약·검수)만 에이전트가 한다.
@@ -24,7 +27,8 @@ import { kstParts } from '../lib/briefing/time.js';
 //   npm run briefing:job -w server -- instruction <dir> [옵션]        시험용 지시서 만들기 (실전에서는 API-151이 준다)
 //   npm run briefing:job -w server -- collect <dir>                   지시서 → candidates.json + classify-NN.txt
 //   npm run briefing:job -w server -- group <dir>                     classified.json → groups.json + select/<분야>.txt
-//   npm run briefing:job -w server -- read <dir>                      selected.json → materials.json + summarize/*.txt + fallback.txt
+//   npm run briefing:job -w server -- read <dir>                      selected.json → materials.json + summarize/*.txt + fallback.txt + webfill-targets.txt
+//   npm run briefing:job -w server -- webfill <dir>                   webfill.json(웹 검색으로 찾은 보도) → materials.json에 W 재료 + 요약 입력 다시 쓰기
 //   npm run briefing:job -w server -- verify <dir>                    written.json → result.json(완성본, API-153 본문) + verify-report.txt
 
 const [cmd, dirArg, ...rest] = process.argv.slice(2);
@@ -119,7 +123,7 @@ const SelectedSchema = z.object({
 const EvidenceSchema = z.object({ id: z.string(), source: z.string(), url: z.string(), text: z.string(), via: z.enum(['body', 'feed', 'web', 'lede']) });
 
 const MaterialsFileSchema = z.object({
-  stats: z.object({ bodiesRead: z.number(), fromFeed: z.number(), extractRejected: z.number() }),
+  stats: z.object({ bodiesRead: z.number(), fromFeed: z.number(), extractRejected: z.number(), webFilled: z.number().default(0) }),
   stories: z.array(
     z.object({
       story: z.number(),
@@ -202,19 +206,31 @@ function cmdRules(): void {
 
 function cmdInstruction(dir: string): void {
   const sourcesFile = flag('sources');
-  const doc: SourcesDoc = sourcesFile ? parseSourcesDoc(fs.readFileSync(sourcesFile, 'utf8')) : defaultSourcesDoc();
+  const base: SourcesDoc = sourcesFile ? parseSourcesDoc(fs.readFileSync(sourcesFile, 'utf8')) : defaultSourcesDoc();
+  // --all-candidates: 꺼 둔 후보 출처까지 켠다 — 구독 환경에서 어디가 열리는지 재 보려고(verify 보고에 성공한 후보가 나온다)
+  const doc: SourcesDoc = rest.includes('--all-candidates') ? { ...base, disabled: [] } : base;
   const hours = Math.min(24, Math.max(1, Number(flag('hours') ?? 24) || 24));
   const slot = (flag('slot') ?? 'adhoc') as Instruction['slot'];
   const config = flag('config') ?? 'A';
   const now = Date.now();
-  const since = now - hours * 60 * 60 * 1000;
+  // --since/--until(ISO, 예 2026-10-29T06:30+09:00): API 회차와 같은 시간 범위로 비교하려고. 없으면 지금부터 --hours 전까지
+  const parseTime = (name: string): number | undefined => {
+    const v = flag(name);
+    if (v === undefined) return undefined;
+    const t = Date.parse(v);
+    if (Number.isNaN(t)) throw new Error(`--${name} "${v}"를 시각으로 읽을 수 없습니다 — 예: 2026-10-29T06:30+09:00`);
+    return t;
+  };
+  const until = parseTime('until') ?? now;
+  const since = parseTime('since') ?? until - hours * 60 * 60 * 1000;
+  if (since >= until || until - since > BRIEFING.MAX_RANGE_MS) throw new Error(`범위가 맞지 않습니다 — since < until, 길이는 ${BRIEFING.MAX_RANGE_MS / 3_600_000}시간 이하`);
   const instruction: Instruction & { taxonomy: unknown; limits: unknown } = {
     kind: 'edition',
     jobId: `test-${new Date(now).toISOString().replace(/[:.]/g, '-')}`,
     slot,
     editionDate: kstParts(now).date,
     since,
-    until: now,
+    until,
     // 시험에서는 리드 90분이 곧 마감까지의 시간 — 실전은 "회차 시작 + 30분"을 서버가 적어 준다
     deadline: now + BRIEFING.SUB_LEAD_MS,
     wrapUpBefore: BRIEFING.SUB_WRAPUP_BEFORE_MS,
@@ -228,7 +244,7 @@ function cmdInstruction(dir: string): void {
   };
   writeJson(path.join(dir, 'instruction.json'), instruction);
   const k = kstParts(now);
-  console.log(`지시서 → ${path.join(dir, 'instruction.json')} — ${slot} · 범위 ${hours}시간 · 출처 ${toSources(doc).length}곳 · 허용 도메인 ${instruction.allowedDomains.length}개 · 마감 ${kstParts(instruction.deadline).hour}:${pad2(kstParts(instruction.deadline).minute)} KST (지금 ${k.hour}:${pad2(k.minute)}) · 구성 ${config}`);
+  console.log(`지시서 → ${path.join(dir, 'instruction.json')} — ${slot} · 범위 ${kstParts(since).date} ${kstParts(since).hour}:${pad2(kstParts(since).minute)} ~ ${kstParts(until).date} ${kstParts(until).hour}:${pad2(kstParts(until).minute)} KST · 출처 ${toSources(doc).length}곳 · 허용 도메인 ${instruction.allowedDomains.length}개 · 마감 ${kstParts(instruction.deadline).hour}:${pad2(kstParts(instruction.deadline).minute)} KST (지금 ${k.hour}:${pad2(k.minute)}) · 구성 ${config}`);
 }
 
 async function cmdCollect(dir: string): Promise<void> {
@@ -310,6 +326,65 @@ function cmdGroup(dir: string): void {
   console.log(`분류 반영 끝 — ${bySub.size}개 분야, 뺀 기사 ${excluded}건 → select/<분야>.txt ${groups.length}개 (분야당 입력 최대 ${MAX_INPUT_PER_SUB}건)`);
 }
 
+/** 핵심 기사가 재료를 낸 서로 다른 언론사 수 — 교차 확인 대상(2곳 미만)을 고르는 기준 (설계 "구독 생성 방식 — 정확도") */
+function materialOutlets(evidence: Evidence[]): number {
+  return new Set(evidence.filter((e) => e.via !== 'lede').map((e) => e.source.trim().toLowerCase())).size;
+}
+
+/**
+ * materials.json → 요약 입력(summarize/*.txt), 참고로 내려간 기사(fallback.txt), 웹 검색 대상(webfill-targets.txt).
+ * read 뒤에, 그리고 webfill로 재료를 더한 뒤에 다시 부른다 — 지난 파일이 남아 섞이지 않게 먼저 지운다
+ */
+function writeSummarizeInputs(dir: string, ins: Instruction, picked: Picked[], mat: z.infer<typeof MaterialsFileSchema>): void {
+  fs.rmSync(path.join(dir, 'summarize'), { recursive: true, force: true });
+  fs.rmSync(path.join(dir, 'fallback.txt'), { force: true });
+  fs.rmSync(path.join(dir, 'webfill-targets.txt'), { force: true });
+  const prevSummary = new Map(ins.prevStories.map((p) => [p.storyId, p.summary]));
+  const core: string[] = [];
+  const major: string[] = [];
+  const fallbackLines: string[] = [];
+  const targetLines: string[] = [];
+  for (const m of mat.stories) {
+    const p = picked[m.story];
+    if (!p || p.importance < 2) continue;
+    const outlets = materialOutlets(m.evidence);
+    // 웹 검색 대상 — ① 재료가 없어 참고로 내려간 핵심·주요(A: 재료 채우기) ② 재료가 2곳 미만인 핵심(D: 교차 확인)
+    if (m.demoted || (p.importance === 3 && outlets < 2)) {
+      const why = m.demoted ? '재료 없음 — 같은 사건 보도를 찾아 재료로' : `핵심인데 재료 ${outlets}곳 — 다른 언론 보도로 교차 확인`;
+      const others = p.related.slice(0, 4).map((r) => `(${r.source}) ${r.title}`).join(' / ');
+      targetLines.push(`${m.story}. [${subPath(p.sub)}] 중요도 ${p.importance} · ${why}\n   (${p.main.source}) ${p.main.title}\n   원 주소: ${p.main.url}${others ? `\n   같은 사건 다른 보도 제목: ${others}` : ''}`);
+    }
+    if (m.demoted) {
+      fallbackLines.push(`${m.story}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title}${p.main.snippet ? ` — 발췌: ${p.main.snippet}` : ' — 발췌 없음(제목만: summary는 빈 문자열, title은 한국어 번역만)'}`);
+      continue;
+    }
+    (p.importance === 3 ? core : major).push(describe(p, m.story, m.evidence, m.target, p.prevStoryId ? prevSummary.get(p.prevStoryId) : undefined, m.impact, m.explain));
+  }
+  // 요약 입력 — 서버와 같은 묶음 크기(핵심 3·주요 6). 파일 하나가 요약 호출 하나다
+  const rulesHead = [...summaryRules(), '번호는 선별 번호(story)다 — written.json의 story에 그대로 쓴다.', ''].join('\n');
+  const batch = (list: string[], size: number, name: string) => {
+    let n = 0;
+    for (let k = 0; k < list.length; k += size) writeText(path.join(dir, 'summarize', `${name}-${pad2(++n)}.txt`), `${rulesHead}\n<기사>\n${list.slice(k, k + size).join('\n')}\n</기사>`);
+    return n;
+  };
+  const coreFiles = batch(core, BRIEFING.SUMMARY_CHUNK_CORE, 'core');
+  const majorFiles = batch(major, BRIEFING.SUMMARY_CHUNK, 'major');
+  if (fallbackLines.length) writeText(path.join(dir, 'fallback.txt'), ['재료가 없어 참고로 내려간 핵심·주요 기사. 기사마다 한국어 제목(원문을 베끼지 말고 새로)과, 발췌가 있으면 무슨 일인지 한 문장을 쓴다 → written.json의 fallbacks[{story,title,summary}].', ...fallbackLines].join('\n'));
+  if (targetLines.length)
+    writeText(
+      path.join(dir, 'webfill-targets.txt'),
+      [
+        `웹 검색으로 재료를 붙일 기사 ${targetLines.length}건. 같은 사건을 다룬 보도를 허용 도메인(instruction.json allowedDomains) 안에서만 찾는다.`,
+        `범위: ${new Date(ins.since - BRIEFING.WEB_FILL_DATE_SLACK_MS).toISOString().slice(0, 10)} ~ ${new Date(ins.until + BRIEFING.WEB_FILL_DATE_SLACK_MS).toISOString().slice(0, 10)} 사이의 보도만. 같은 발표·결정·사고·수치일 때만 — 비슷한 다른 날 기사는 쓰지 않는다.`,
+        'text에는 그 페이지에 적힌 문장을 **그대로 옮겨** 적는다(요약·번역·의견 금지). 결과는 webfill.json의 stories[{story, materials:[{source,url,title,publishedAt?,text}]}].',
+        '',
+        ...targetLines,
+      ].join('\n'),
+    );
+  const files = (name: string, n: number) => (n === 0 ? '없음' : n === 1 ? `${name}-01.txt` : `${name}-01~${pad2(n)}.txt`);
+  console.log(`요약 입력: 핵심 ${core.length}건 → ${files('core', coreFiles)}, 주요 ${major.length}건 → ${files('major', majorFiles)}${fallbackLines.length ? `, 참고로 내려감 ${fallbackLines.length}건 → fallback.txt` : ''}${targetLines.length ? `, 웹 검색 대상 ${targetLines.length}건 → webfill-targets.txt` : ''}`);
+}
+
 async function cmdRead(dir: string): Promise<void> {
   const ins = readJson(path.join(dir, 'instruction.json'), InstructionSchema);
   const cands = readJson(path.join(dir, 'candidates.json'), CandidatesFileSchema);
@@ -328,41 +403,102 @@ async function cmdRead(dir: string): Promise<void> {
       }
     },
   });
-  const prevSummary = new Map(ins.prevStories.map((p) => [p.storyId, p.summary]));
-  const stories: z.infer<typeof MaterialsFileSchema>['stories'] = [];
-  const core: string[] = [];
-  const major: string[] = [];
-  const fallbackLines: string[] = [];
-  picked.forEach((p, i) => {
+  const stories: z.infer<typeof MaterialsFileSchema>['stories'] = picked.map((p, i) => {
     const materials: Material[] | undefined = read.materials.get(i);
     const evidence = evidenceOf(p, materials);
-    const target = lengthTarget(p, evidence);
-    const impact = impactEligible(p, evidence);
-    const explain = explainEligible(p);
-    // 재료 보장(S0) — 핵심·주요인데 본문도 피드 본문도 없으면 참고로 내린다. 에이전트가 fallback.txt를 보고 한국어 제목(과 한 문장)을 쓴다
-    const demoted = needsDemotion(p, materials);
-    stories.push({ story: i, evidence, target, impact, explain, demoted });
-    if (p.importance < 2) return;
-    if (demoted) {
-      fallbackLines.push(`${i}. [${subPath(p.sub)}] (${p.main.source}) ${p.main.title}${p.main.snippet ? ` — 발췌: ${p.main.snippet}` : ' — 발췌 없음(제목만: summary는 빈 문자열, title은 한국어 번역만)'}`);
-      return;
-    }
-    (p.importance === 3 ? core : major).push(describe(p, i, evidence, target, p.prevStoryId ? prevSummary.get(p.prevStoryId) : undefined, impact, explain));
+    // 재료 보장(S0) — 핵심·주요인데 본문도 피드 본문도 없으면 참고로 내린다. 웹 검색(webfill)으로 재료가 붙으면 다시 올라간다
+    return { story: i, evidence, target: lengthTarget(p, evidence), impact: impactEligible(p, evidence), explain: explainEligible(p), demoted: needsDemotion(p, materials) };
   });
-  writeJson(path.join(dir, 'materials.json'), { stats: { bodiesRead: read.materials.size, fromFeed: read.fromFeed, extractRejected: read.rejected }, stories });
+  const mat = { stats: { bodiesRead: read.materials.size, fromFeed: read.fromFeed, extractRejected: read.rejected, webFilled: 0 }, stories };
+  writeJson(path.join(dir, 'materials.json'), mat);
+  console.log(`원문 읽기 끝 — 재료 있는 기사 ${read.materials.size}건${read.fromFeed ? ` (피드 본문 ${read.fromFeed})` : ''}${read.rejected ? `, 제목과 안 맞아 버림 ${read.rejected}` : ''}`);
+  writeSummarizeInputs(dir, ins, picked, mat);
+}
 
-  // 요약 입력 — 서버와 같은 묶음 크기(핵심 3·주요 6). 파일 하나가 요약 호출 하나다
-  const rulesHead = [...summaryRules(), '번호는 선별 번호(story)다 — written.json의 story에 그대로 쓴다.', ''].join('\n');
-  const batch = (list: string[], size: number, name: string) => {
-    let n = 0;
-    for (let k = 0; k < list.length; k += size) writeText(path.join(dir, 'summarize', `${name}-${pad2(++n)}.txt`), `${rulesHead}\n<기사>\n${list.slice(k, k + size).join('\n')}\n</기사>`);
-    return n;
+/** 웹 검색 답 — 세션이 웹 검색·읽기 도구로 찾은 같은 사건 보도. text는 페이지 문장을 그대로 옮긴 것이어야 한다 */
+const WebfillSchema = z.object({
+  stories: z.array(
+    z.object({
+      story: z.number(),
+      materials: z.array(z.object({ source: z.string(), url: z.string(), title: z.string().default(''), publishedAt: z.number().optional(), text: z.string() })).default([]),
+    }),
+  ),
+});
+
+/**
+ * 웹 검색 재료 붙이기 (A·D) — 서버의 웹 검색 보강(webfill.ts)과 같은 규칙으로 받는다: 허용 도메인 안, 날짜가 범위 ±24시간,
+ * 원 제목 핵심어 겹침 25% 이상. 서버는 검색 도구의 인용(페이지 글 그대로)만 재료로 쓰는데, 세션은 페이지를 직접 받을 수 없는 곳이 많아
+ * 에이전트가 옮겨 적은 글을 받는다 — 그래서 기호를 W로 달아 회차에 "웹 검색 보도"로 드러나고(basis web), 검수 에이전트가 다시 본다
+ */
+function cmdWebfill(dir: string): void {
+  const ins = readJson(path.join(dir, 'instruction.json'), InstructionSchema);
+  const cands = readJson(path.join(dir, 'candidates.json'), CandidatesFileSchema);
+  const selected = readJson(path.join(dir, 'selected.json'), SelectedSchema);
+  const mat = readJson(path.join(dir, 'materials.json'), MaterialsFileSchema);
+  const fill = readJson(path.join(dir, 'webfill.json'), WebfillSchema);
+  const byIndex = new Map(cands.candidates.map((s) => [s.i, toCandidate(s)]));
+  const { picked } = toPicked(selected, byIndex, new Set(ins.prevStories.map((p) => p.storyId)));
+  const byStory = new Map(mat.stories.map((m) => [m.story, m]));
+  const rejected: Record<string, number> = {};
+  const reject = (why: string, line: string) => {
+    rejected[why] = (rejected[why] ?? 0) + 1;
+    console.log(`  버림(${why}): ${line}`);
   };
-  const coreFiles = batch(core, BRIEFING.SUMMARY_CHUNK_CORE, 'core');
-  const majorFiles = batch(major, BRIEFING.SUMMARY_CHUNK, 'major');
-  if (fallbackLines.length) writeText(path.join(dir, 'fallback.txt'), ['재료가 없어 참고로 내려간 핵심·주요 기사. 기사마다 한국어 제목(원문을 베끼지 말고 새로)과, 발췌가 있으면 무슨 일인지 한 문장을 쓴다 → written.json의 fallbacks[{story,title,summary}].', ...fallbackLines].join('\n'));
-  const files = (name: string, n: number) => (n === 0 ? '없음' : n === 1 ? `${name}-01.txt` : `${name}-01~${pad2(n)}.txt`);
-  console.log(`원문 읽기 끝 — 재료 있는 기사 ${read.materials.size}건${read.fromFeed ? ` (피드 본문 ${read.fromFeed})` : ''}${read.rejected ? `, 제목과 안 맞아 버림 ${read.rejected}` : ''}. 요약 입력: 핵심 ${core.length}건 → ${files('core', coreFiles)}, 주요 ${major.length}건 → ${files('major', majorFiles)}${fallbackLines.length ? `, 참고로 내려감 ${fallbackLines.length}건 → fallback.txt` : ''}`);
+  let filled = 0;
+  let raised = 0;
+  for (const f of fill.stories) {
+    const m = byStory.get(f.story);
+    const p = picked[f.story];
+    if (!m || !p) {
+      reject('번호', `story ${f.story} — selected.json·materials.json에 없음`);
+      continue;
+    }
+    const maxChars = p.importance === 3 ? BRIEFING.BODY_OTHER_CHARS_CORE : BRIEFING.BODY_OTHER_CHARS_MAJOR;
+    const seen = new Set(m.evidence.map((e) => e.url));
+    let added = 0;
+    for (const w of f.materials) {
+      if (m.evidence.filter((e) => e.via === 'web').length >= BRIEFING.SUB_WEB_MATERIALS_MAX) break;
+      const text = w.text.trim().slice(0, maxChars);
+      const where = `story ${f.story} ${w.url}`;
+      if (seen.has(w.url)) continue;
+      const u = checkUrl(w.url, ins.allowedDomains);
+      if (!u.ok) {
+        reject(`주소 ${u.reason}`, where);
+        continue;
+      }
+      if (text.length < BRIEFING.SUB_WEB_TEXT_MIN_CHARS) {
+        reject('글이 짧음', where);
+        continue;
+      }
+      if (w.publishedAt !== undefined && (w.publishedAt < ins.since - BRIEFING.WEB_FILL_DATE_SLACK_MS || w.publishedAt > ins.until + BRIEFING.WEB_FILL_DATE_SLACK_MS)) {
+        reject('날짜 범위 밖', where);
+        continue;
+      }
+      // 같은 사건인가 — 원 제목의 핵심어가 찾은 글에 있어야 한다 (서버 webfill과 같은 기준)
+      if (titleOverlap(p.main.title, `${w.title}\n${text}`) < WEB_TITLE_OVERLAP_MIN) {
+        reject('제목과 안 겹침', where);
+        continue;
+      }
+      const n = m.evidence.filter((e) => e.via === 'web').length + 1;
+      const host = new URL(w.url).hostname.replace(/^(www|m)\./, '');
+      m.evidence.push({ id: `W${n}`, source: outletName(w.source.trim() || host), url: w.url, text, via: 'web' });
+      seen.add(w.url);
+      added++;
+    }
+    if (added === 0) continue;
+    filled++;
+    m.target = lengthTarget(p, m.evidence);
+    m.impact = impactEligible(p, m.evidence);
+    if (m.demoted) {
+      m.demoted = false;
+      raised++;
+    }
+  }
+  mat.stats.webFilled = mat.stories.filter((m) => m.evidence.some((e) => e.via === 'web')).length;
+  writeJson(path.join(dir, 'materials.json'), mat);
+  const rej = Object.entries(rejected);
+  console.log(`웹 검색 재료 — ${filled}건에 붙임 (참고에서 다시 올라감 ${raised}건)${rej.length ? `, 버림 ${rej.map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`);
+  writeSummarizeInputs(dir, ins, picked, mat);
 }
 
 type ResultItem = {
@@ -516,7 +652,7 @@ function cmdVerify(dir: string): void {
     bodiesRead: materials.stats.bodiesRead,
     fromFeed: materials.stats.fromFeed,
     extractRejected: materials.stats.extractRejected,
-    webFilled: 0,
+    webFilled: materials.stats.webFilled,
     lensDrops: counters.lensDrops,
     numberDrops: counters.numberDrops,
     demoted: counters.demoted,
@@ -536,10 +672,18 @@ function cmdVerify(dir: string): void {
   writeJson(path.join(dir, 'result.json'), result);
 
   const urlDropTotal = Object.values(urlDrops).reduce((a, b) => a + b, 0);
+  // 후보 출처 중 이 환경에서 받아진 것 — 수집 목록 문서의 disabled에서 이 이름들을 지우면 켜진다 (C)
+  const doc = parseSourcesDoc(JSON.stringify(ins.sources));
+  const failed = new Set(cands.stats.failedSources);
+  const candidateNames = new Set(CANDIDATE_FEEDS.map((f) => f.name));
+  const triedCandidates = doc.feeds.filter((f) => candidateNames.has(f.name) && !doc.disabled.includes(f.name));
+  const okCandidates = triedCandidates.filter((f) => !failed.has(f.name)).map((f) => f.name);
+  const candidateLine = triedCandidates.length ? `후보 출처 ${triedCandidates.length}곳 중 받아진 곳 ${okCandidates.length}곳: ${okCandidates.join(', ') || '없음'}` : '';
   const head = [
     `실린 기사 ${items.length}건 (핵심 ${byImportance[0]} · 주요 ${byImportance[1]} · 참고 ${byImportance[2]}), 싣지 않은 것 ${counters.skipped}건`,
     `주소 검사에서 걸린 주소 ${urlDropTotal}개${urlDropTotal ? ` (${Object.entries(urlDrops).map(([k, v]) => `${k} ${v}`).join(', ')}) — 서버는 그 기사를 뺀다. 전체의 ${BRIEFING.SUB_DROP_REJECT_RATIO * 100}%를 넘으면 통째로 거절된다` : ''}`,
     `result.json 크기 ${(Buffer.byteLength(JSON.stringify(result), 'utf8') / 1024).toFixed(0)}KB (상한 ${BRIEFING.SUB_RESULT_MAX_BYTES / 1024 / 1024}MB)`,
+    candidateLine,
     '',
   ];
   writeText(path.join(dir, 'verify-report.txt'), [...head, ...report].join('\n'));
@@ -562,10 +706,12 @@ async function main(): Promise<void> {
       return cmdGroup(dir);
     case 'read':
       return cmdRead(dir);
+    case 'webfill':
+      return cmdWebfill(dir);
     case 'verify':
       return cmdVerify(dir);
     default:
-      throw new Error(`모르는 명령 "${cmd}" — rules · instruction · collect · group · read · verify 중 하나`);
+      throw new Error(`모르는 명령 "${cmd}" — rules · instruction · collect · group · read · webfill · verify 중 하나`);
   }
 }
 

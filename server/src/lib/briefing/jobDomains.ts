@@ -13,6 +13,12 @@ const FEED_HOST_PREFIX = /^(www|rss|feeds?|m)\./;
 /** 두 라벨이 하나의 "접미사"인 공용 2단계 도메인 — co.kr의 등록 도메인은 세 라벨(yna.co.kr)이다 */
 const TWO_LABEL_SUFFIX = new Set(['co.kr', 'or.kr', 'go.kr', 'ne.kr', 're.kr', 'pe.kr', 'ac.kr', 'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'co.jp', 'ne.jp', 'or.jp', 'com.cn', 'com.tw', 'com.hk', 'co.in', 'com.br', 'com.sg']);
 
+/** 피드 주소와 기사 주소의 도메인이 다른 출처 — 피드를 중계 서비스(feedburner 등)로 내는 곳. 1회 시험에서 지디넷코리아 기사 10건이
+    피드 주소(feeds.feedburner.com)만 목록에 들어가 주소 검사에 걸렸다 (2026-10-30). 열쇠는 "호스트 + 경로" */
+const FEED_ARTICLE_DOMAINS: Record<string, string[]> = {
+  'feeds.feedburner.com/zdkorea': ['zdnet.co.kr'],
+};
+
 /** 호스트를 비교 가능한 모양으로 — 소문자, 끝 점 제거. URL 객체가 이미 punycode로 바꿔 준다 */
 export function normalizeHost(host: string): string {
   return host.toLowerCase().replace(/\.$/, '');
@@ -31,9 +37,11 @@ export function checkDomainsOf(doc: SourcesDoc): string[] {
   const set = new Set<string>([...BRIEFING.WEB_FILL_WIRES, ...BRIEFING.SUB_CHECK_EXTRA_DOMAINS]);
   for (const f of doc.feeds) {
     try {
-      const host = normalizeHost(new URL(f.url).hostname);
+      const u = new URL(f.url);
+      const host = normalizeHost(u.hostname);
       set.add(host.replace(FEED_HOST_PREFIX, ''));
       set.add(registrableDomain(host));
+      for (const d of FEED_ARTICLE_DOMAINS[`${host}${u.pathname.replace(/\/$/, '')}`] ?? []) set.add(d);
     } catch {
       // 주소가 아니면 건너뛴다 — parseSourcesDoc이 이미 걸렀을 것이다
     }

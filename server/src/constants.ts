@@ -447,6 +447,10 @@ export const BRIEFING = {
   SUB_HINT_EARLIER_MISSING: 2,
   /** 지시서의 직전 회차 사건 상한 — 응답 크기 */
   SUB_PREV_STORIES_MAX: 200,
+  /** 세션의 웹 검색 재료(W) — 기사당 최대 수와 최소 글자. 재료가 없는 핵심·주요 전부와 재료 2곳 미만인 핵심이 대상이다
+      (서버는 비용 때문에 회차당 WEB_FILL_MAX건이지만 구독은 추가 비용이 없다 — 1회 시험 뒤 결정 2026-10-30) */
+  SUB_WEB_MATERIALS_MAX: 3,
+  SUB_WEB_TEXT_MIN_CHARS: 200,
   /** 완성본 검사용 허용 도메인에 늘 들어가는 것 — 통신사(WEB_FILL_WIRES)와 Google 뉴스 링크(검색 기사가 그대로 남는다) */
   SUB_CHECK_EXTRA_DOMAINS: ['news.google.com'],
 } as const;
