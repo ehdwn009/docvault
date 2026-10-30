@@ -550,7 +550,9 @@ function cmdVerify(dir: string): void {
 async function main(): Promise<void> {
   if (cmd === 'rules') return cmdRules();
   if (!dirArg) throw new Error('작업 폴더를 지정하세요 — 예: npm run briefing:job -w server -- collect .briefing-job');
-  const dir = path.resolve(dirArg);
+  // `npm run -w server`는 작업 폴더를 server/로 바꾼다 — 명령을 친 곳(INIT_CWD, 보통 저장소 루트) 기준으로 풀어야
+  // 스킬의 `.briefing-job`이 루트에 생긴다. 1회 시험에서 server/.briefing-job에 생겨 커밋 경로가 어긋났다 (2026-10-30)
+  const dir = path.resolve(process.env.INIT_CWD ?? process.cwd(), dirArg);
   switch (cmd) {
     case 'instruction':
       return cmdInstruction(dir);
