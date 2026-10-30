@@ -58,10 +58,38 @@ export function sameValue(a: number, b: number): boolean {
   return scale > 0 && Math.abs(a - b) / scale < 1e-6;
 }
 
+// 영어 재료에서 글자로 쓴 숫자 — "third-quarter"·"a year ago"·"eight"·"Nov. 10"을 한국어로 옮기면 3분기·1년 전·8·11월이 되는데,
+// 숫자만 보던 대조가 이것들을 "재료에 없는 숫자"로 세었다(구독 시험 구성 B에서 걸린 45문장 중 표본 전부가 이 경우, 2026-10-30).
+// 재료 쪽에만 더한다 — 요약 쪽 숫자를 너그럽게 읽으면 지어낸 숫자가 통과할 틈이 생긴다
+const WORD_NUMBERS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+  thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, dozen: 12,
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12,
+  january: 1, february: 2, march: 3, april: 4, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
+};
+// may는 조동사와 같은 글자라 넣지 않는다
+
+export function wordNumbers(text: string): { value: number; kind: 'pct' | 'plain'; raw: string }[] {
+  const out: { value: number; kind: 'pct' | 'plain'; raw: string }[] = [];
+  for (const m of text.toLowerCase().matchAll(/\b([a-z]+)\b/g)) {
+    const v = WORD_NUMBERS[m[1]!];
+    if (v !== undefined) out.push({ value: v, kind: 'plain', raw: m[1]! });
+  }
+  // "a year ago", "a month", "a quarter" → 1
+  for (const m of text.toLowerCase().matchAll(/\ban? (year|month|week|day|quarter|decade)\b/g)) out.push({ value: 1, kind: 'plain', raw: m[0] });
+  // Q3·H1 같은 분기·반기 표기
+  for (const m of text.matchAll(/\b[QH]([1-4])\b/g)) out.push({ value: Number(m[1]), kind: 'plain', raw: m[0] });
+  // percent는 %와 같다 — "4 percent"는 extractNumbers가 plain으로 읽으니 pct로 한 번 더
+  for (const m of text.matchAll(/(\d+(?:\.\d+)?)\s*percent(?!age)/gi)) out.push({ value: Number(m[1]), kind: 'pct', raw: m[0] });
+  return out;
+}
+
 export function sentenceNumbersSupported(sentence: string, material: string): boolean {
   const nums = extractNumbers(sentence);
   if (nums.length === 0) return true;
-  const pool = extractNumbers(material);
+  const pool = [...extractNumbers(material), ...wordNumbers(material)];
   const approx = /약|가량|안팎|쯤|near|about|around|roughly/i.test(sentence);
   return nums.every((n) =>
     pool.some((p) => {
