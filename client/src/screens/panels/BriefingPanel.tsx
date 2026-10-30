@@ -285,8 +285,9 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           {!running && admin.subscription?.missing && (
             <div className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
               <span className="flex-1">
-                {SLOT_FULL[admin.subscription.missing.slot]}이 도착하지 않았어요
-                {admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}
+                {admin.subscription.missing.status === 'error'
+                  ? `${SLOT_FULL[admin.subscription.missing.slot]}의 예약 작업을 켜지 못했어요${admin.subscription.missing.message ? ` — ${admin.subscription.missing.message}` : ''}`
+                  : `${SLOT_FULL[admin.subscription.missing.slot]}이 도착하지 않았어요${admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}`}
               </span>
               <button
                 onClick={() => void start(false, admin.subscription?.missing?.slot === 'adhoc' ? undefined : admin.subscription?.missing?.slot)}

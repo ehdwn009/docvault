@@ -273,8 +273,8 @@ export type SubscriptionStatus = {
   /** 트리거를 저장했지만 읽을 수 없다(서버 비밀키 변경) — "다시 넣어 주세요" */
   triggerBroken: boolean;
   lastPingAt: number | null;
-  /** 오늘 마감까지 안 온 회차 — 아직 대체되지 않은 것만. 패널의 알림 띠 */
-  missing: { runId: number; slot: Slot; deadlineAt: number | null } | null;
+  /** 오늘 받지 못한 구독 회차 — 마감까지 안 옴(missing) 또는 예약 작업을 켜지 못함(error), 아직 대체되지 않은 것만. 패널의 알림 띠 */
+  missing: { runId: number; slot: Slot; deadlineAt: number | null; status: 'missing' | 'error'; message: string | null } | null;
 };
 export type PingResult = 'fired' | 'ok' | 'trigger_failed' | 'token_invalid' | 'no_request';
 /** API-143 — 설정 화면의 구독 상태 */

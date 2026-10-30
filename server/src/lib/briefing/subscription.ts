@@ -617,16 +617,16 @@ export function subscriptionSummary(userId: number, now = Date.now()): Subscript
   };
 }
 
-/** 오늘 마감까지 안 온 회차 — 아직 대체되지 않은 것만. 패널의 알림 띠 */
-export function missingToday(userId: number, now = Date.now()): { runId: number; slot: Slot; deadlineAt: number | null } | null {
+/** 오늘 받지 못한 구독 회차 — 마감까지 안 온 것(missing)과 예약 작업을 켜지 못한 것(error), 아직 대체되지 않은 것만. 패널의 알림 띠(설계 결함 표 "트리거 호출 실패 → 알림 띠") */
+export function missingToday(userId: number, now = Date.now()): { runId: number; slot: Slot; deadlineAt: number | null; status: 'missing' | 'error'; message: string | null } | null {
   const date = kstParts(now).date;
   const rows = db
     .select()
     .from(briefingRuns)
-    .where(and(eq(briefingRuns.ownerId, userId), eq(briefingRuns.editionDate, date), eq(briefingRuns.status, 'missing')))
+    .where(and(eq(briefingRuns.ownerId, userId), eq(briefingRuns.editionDate, date), eq(briefingRuns.trigger, 'subscription'), inArray(briefingRuns.status, ['missing', 'error'])))
     .orderBy(desc(briefingRuns.startedAt))
     .all();
-  for (const r of rows) if (!laterRunBlocks(r)) return { runId: r.id, slot: r.slot, deadlineAt: r.deadlineAt };
+  for (const r of rows) if (!laterRunBlocks(r)) return { runId: r.id, slot: r.slot, deadlineAt: r.deadlineAt, status: r.status === 'error' ? 'error' : 'missing', message: r.message };
   return null;
 }
 

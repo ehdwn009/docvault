@@ -621,12 +621,12 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "monthFlagCount": 2,
   "nextSinceAt": 1790837540572,
   "mode": "subscription",
-  "subscription": { "tokenPrefix": "dvt_8f3k", "tokenLastUsedAt": 1790841060000, "triggerSet": true, "triggerBroken": false, "lastPingAt": 1790780000000, "missing": { "runId": 43, "slot": "morning", "deadlineAt": 1790845200000 } }
+  "subscription": { "tokenPrefix": "dvt_8f3k", "tokenLastUsedAt": 1790841060000, "triggerSet": true, "triggerBroken": false, "lastPingAt": 1790780000000, "missing": { "runId": 43, "slot": "morning", "deadlineAt": 1790845200000, "status": "missing", "message": "마감까지 완성본이 오지 않았어요" } }
 }
 ```
-`mode`(v0.50)는 생성 방식 `api` | `subscription`(USER_SETTINGS.briefing_mode, 기본 `api`). `subscription`은 모드가 구독일 때만 — 화면이 알림 띠·열쇠 상태를 그리는 최소치이고, 자세한 것은 API-143. `triggerBroken`은 트리거가 저장돼 있는데 복호화에 실패한 상태(`JWT_SECRET` 변경) — 그때 `triggerSet`은 false이고 화면은 "트리거를 다시 넣어 주세요". `missing`은 오늘 마감까지 안 온 회차가 있을 때(그 실행 뒤에 시작된 `ok`·`running` 실행이 없을 때 — 아직 대체되지 않았을 때)만 — 패널이 "아침판이 도착하지 않았어요 [지금 만들기]" 띠를 띄운다. `running`은 서버 안 실행이 없으면 **도는 구독 실행**이다(`runningRun() ?? runningSubscriptionRun()` — 둘이 동시에 있을 수 없다, [지금 만들기]가 구독 실행을 먼저 닫는다). `nextAutoAt`은 구독 모드에서는 지금 이후의 다음 **트리거 시각**(회차 시작 − 90분)이다 — 트리거가 나간 뒤 회차 시작 전까지는 다음 회차의 트리거 시각을 가리킨다(`nextTrigger`).
+`mode`(v0.50)는 생성 방식 `api` | `subscription`(USER_SETTINGS.briefing_mode, 기본 `api`). `subscription`은 모드가 구독일 때만 — 화면이 알림 띠·열쇠 상태를 그리는 최소치이고, 자세한 것은 API-143. `triggerBroken`은 트리거가 저장돼 있는데 복호화에 실패한 상태(`JWT_SECRET` 변경) — 그때 `triggerSet`은 false이고 화면은 「트리거를 읽을 수 없어요(서버 비밀키가 바뀜) — 다시 넣어 주세요」. `missing`은 오늘 받지 못한 구독 회차가 있을 때(`status: "missing"` 마감까지 안 옴, 또는 `"error"` 예약 작업을 켜지 못함 — 설계 결함 표 "트리거 호출 실패 → 알림 띠"; 그 실행 뒤에 시작된 `ok`·`running` 실행이 없을 때 — 아직 대체되지 않았을 때)만 — 패널이 「아침판이 도착하지 않았어요 (마감 07:00) [지금 만들기]」 또는 「아침판의 예약 작업을 켜지 못했어요 — <message> [지금 만들기]」 띠를 띄운다(`missing.deadlineAt`·`missing.message`; 어떤 실행이든 도는 중이면 띠는 숨긴다). `running`은 서버 안 실행이 없으면 **도는 구독 실행**이다(`runningRun() ?? runningSubscriptionRun()` — 둘이 동시에 있을 수 없다, [지금 만들기]가 구독 실행을 먼저 닫는다). `nextAutoAt`은 구독 모드에서는 지금 이후의 다음 **트리거 시각**(회차 시작 − 90분)이다 — 트리거가 나간 뒤 회차 시작 전까지는 다음 회차의 트리거 시각을 가리킨다(`nextTrigger`).
 `budgetWarnRatio`(v0.45)는 비용이 한도의 이 비율에 닿으면 패널 바닥의 비용 줄을 노랗게 — 값은 서버 상수. `readerEnabled`는 이 관리자의 앱 안 원문 보기 설정(USER_SETTINGS.briefing_reader, v0.45) — 회차 화면이 [앱에서 보기] 단추를 보일지 정한다. `monthFlagCount`는 이번 달(한국시간) 틀린 곳 알리기 수(v0.45).
-`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 [브리핑 만들기]를 잠근다(구독 모드의 트리거·마감·자동 생성 켜기는 키 없이도 돈다, v0.50). `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`·`nextAutoSlot`은 자동이 켜져 있을 때 다음으로 켜진 회차의 시작 시각(unix ms)과 그 회차, 꺼져 있거나 켜진 회차가 없으면 null — 화면은 시각으로 회차를 짐작하지 않는다(사람마다 시각이 다르다). `schedule`은 회차별 켜기·시작 시각(한국시간 "HH:MM"), 저장된 것이 없으면 기본값(v0.43). `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
+`configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 [브리핑 만들기]를 잠근다(구독 모드의 트리거·마감·자동 생성 켜기는 키 없이도 돈다, v0.50). `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만; 구독 실행 — `stage: remote` — 은 **15초**, `BRIEFING_REMOTE_POLL_MS`. 한두 시간 돌고 진행 보고도 드물다, v0.50). `nextAutoAt`·`nextAutoSlot`은 자동이 켜져 있을 때 다음으로 켜진 회차의 시작 시각(unix ms)과 그 회차, 꺼져 있거나 켜진 회차가 없으면 null — 화면은 시각으로 회차를 짐작하지 않는다(사람마다 시각이 다르다). `schedule`은 회차별 켜기·시작 시각(한국시간 "HH:MM"), 저장된 것이 없으면 기본값(v0.43). `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
 
 ### API-132 — POST /briefing/runs
 **Body** `{ "force"?: boolean, "slot"?: "morning"|"noon"|"evening" }` — `force`는 월 한도를 넘었을 때 사용자가 확인했다는 표시. `slot`(v0.50)은 알림 띠의 [지금 만들기]가 보내는 회차 — 수동 실행이 수시판이 아니라 그 회차("아침판")로 이름 붙는다. 없으면 지금처럼 `adhoc`.
@@ -639,7 +639,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 | BRIEFING_RUNNING | 409 | 이미 도는 실행이 있음. body에 `run`(지금 실행)이 함께 온다 |
 | BRIEFING_BUDGET_EXCEEDED | 409 | 이번 달 한도 도달 + `force` 없음. body에 `monthCostUsd`·`monthBudgetUsd` |
 
-구독 모드(v0.50)에서 이 API는 **[지금 만들기]**다 — 항상 앱이 직접(API) 만든다. `running`인 구독 실행이 있으면 `cancelled`("직접 만들기로 대체")로 닫고 시작하며(BRIEFING_RUNNING을 내지 않는다), 늦게 오는 완성본은 거절된다. `missing`이면 그대로 시작한다 — 이 수동 실행이 "그 뒤에 시작된 `ok` 실행"이 되어 늦게 오는 완성본을 막는다. 키가 없으면 지금처럼 503.
+구독 모드(v0.50)에서 이 API는 **[지금 만들기]**다 — 항상 앱이 직접(API) 만든다. 화면에서는 알림 띠의 [지금 만들기]와 진행 카드의 **[직접 만들기로 대체]**(도는 구독 실행이 있을 때, [중지] 자리)가 이 API를 부른다. `running`인 구독 실행이 있으면 `cancelled`("직접 만들기로 대체")로 닫고 시작하며(BRIEFING_RUNNING을 내지 않는다), 늦게 오는 완성본은 거절된다. `missing`이면 그대로 시작한다 — 이 수동 실행이 "그 뒤에 시작된 `ok` 실행"이 되어 늦게 오는 완성본을 막는다. 키가 없으면 지금처럼 503.
 
 ### API-133 — GET /briefing/runs?limit=30
 **200** `{ "runs": [ 실행 객체 ] }` — 최근 시작순, limit 최대 100. 자동 실행이 한도로 건너뛴 기록(`skipped`)도 여기 보인다.
@@ -681,20 +681,20 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md) "구독 생성 방식". 두 묶음이다 — **API-141~144는 관리자가 쿠키로**(설정 화면), **API-151~153은 claude.ai 예약 작업이 연결 열쇠(Bearer)로** 부른다. 열쇠로는 이 세 주소 외 어디에도 못 들어간다(공통 규약).
 
 ### API-141 — POST /briefing/token
-**200** `{ "token": "dvt_…", "prefix": "dvt_8f3k", "createdAt": 1790780000000 }` — 열쇠 원문은 **이 응답에 한 번만**. 서버는 SHA-256 해시와 앞 8자만 남긴다(USER_SETTINGS.briefing_token_hash·_prefix). 이미 있으면 재발급이고 이전 열쇠는 즉시 무효 — 마감 전 도는 예약 작업이 있으면 그 완성본은 401이 되므로 화면이 한 번 묻는다("열쇠가 샌 것 같을 때만 — 새면 가짜 회차가 만들어질 수 있습니다"). 만료 없음, 비밀번호 변경과도 무관.
+**200** `{ "token": "dvt_…", "prefix": "dvt_8f3k", "createdAt": 1790780000000 }` — 열쇠 원문은 **이 응답에 한 번만**. 서버는 SHA-256 해시와 앞 8자만 남긴다(USER_SETTINGS.briefing_token_hash·_prefix). 이미 있으면 재발급이고 이전 열쇠는 즉시 무효 — 마감 전 도는 예약 작업이 있으면 그 완성본은 401이 되므로 화면이 한 번 묻는다(「열쇠가 샌 것 같을 때만 하세요 — 새면 남이 가짜 회차를 보낼 수 있어요. 지금 열쇠는 바로 쓸 수 없게 되고, claude.ai 환경의 DOCVAULT_TOKEN도 새 값으로 바꿔야 해요.」, 도는 예약 작업이 있으면 「지금 도는 예약 작업은 옛 열쇠라 완성본을 보내지 못해요.」가 붙는다). 만료 없음, 비밀번호 변경과도 무관.
 
 ### API-142 — DELETE /briefing/token
 **204**. 생성 방식이 `subscription`이면 함께 `api`로 돌린다(열쇠 없는 구독은 돌 수 없다).
 
 ### API-143 — GET /briefing/subscription
 **200** `{ "mode", "tokenPrefix": string | null, "tokenCreatedAt", "tokenLastUsedAt", "triggerSet": boolean, "triggerBroken": boolean, "lastPingAt": number | null, "lastPingResult": "fired" | "ok" | "trigger_failed" | "token_invalid" | "no_request" | null, "leadMs": 5400000, "deadlineAfterMs": 1800000, "triggerTimes": { "morning": "05:00", "noon": "10:00", "evening": "16:00" }, "recent": { "ok": 6, "missing": 1, "error": 0, "avgMinutes": 48, "hint": "later" | "earlier" | null }, "allowedDomains": ["yna.co.kr", "…"], "checklist": { "docvaultUrl": "https://…", "envNames": ["DOCVAULT_URL", "DOCVAULT_TOKEN"], "taskPrompt": "…" } }`
-- `triggerTimes`는 켜진 회차의 시작 시각 − 리드 — 설정 화면의 "이 시각에 트리거합니다" 안내. 꺼진 회차는 없다.
-- `recent`는 최근 7회(`SUB_RECENT_RUNS`) 구독 실행 요약. `hint`는 평균 소요가 리드의 절반 아래면 `later`, 마감 10분 안쪽이거나 `missing`이 2회 이상이면 `earlier`(`SUB_HINT_*`).
-- `lastPingResult`는 `fired`가 트리거 성공 직후("켰어요 — 세션을 기다리는 중"), `ok`가 세션이 지시서를 받아 감, `trigger_failed`는 트리거 호출 거절, `token_invalid`는 ping 뒤 `dvt_`로 시작하는 틀린 열쇠로 요청이 옴(빈 요청·스캐너는 세지 않는다), `no_request`는 `fired`인 채 5분(`SUB_PING_NO_REQUEST_MS`)이 지남(저장값은 `fired` 그대로, 읽을 때 바꾼다). `triggerSet`은 복호화에 실패하면(`JWT_SECRET` 변경) false이고 그때 `triggerBroken`이 true — 화면은 "트리거를 다시 넣어 주세요". `checklist.taskPrompt`는 예약 작업에 저장할 지시문 한 줄("routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL과 DOCVAULT_TOKEN은 환경에 있어.") — 트리거 본문의 `text`가 그 블록에 담겨 "신뢰하지 않는 데이터"로 들어가므로 지시문이 그것을 읽으라고 적혀 있어야 한다.
+- `triggerTimes`는 켜진 회차의 시작 시각 − 리드 — 설정 화면의 「예약 작업은 회차 90분 전에 켜지고, 마감은 회차 30분 뒤예요 — 아침 06:30 → 05:00 켜기 · …」 안내(`leadMs`·`deadlineAfterMs`와 함께). 꺼진 회차는 없다.
+- `recent`는 최근 7회(`SUB_RECENT_RUNS`) 구독 실행 요약. `avgMinutes`는 지시서를 받아 간 때(`remote_started_at`)부터 완성본까지 — 세션 기동 대기는 빼고 일한 시간만(패널 실행 기록의 "52분"과 같은 기준). `hint`는 평균 소요가 리드의 절반 아래면 `later`(화면 「넉넉히 끝나요. 회차 시각을 30분 늦추면 …」), 마감 10분 안쪽이거나 `missing`이 2회 이상이면 `earlier`(화면 「마감에 자주 몰려요. 수집 목록의 출처나 켜 둔 분야를 줄여 보세요」 — 리드가 상수라 시각을 앞당기라고는 하지 않는다)(`SUB_HINT_*`).
+- `lastPingResult`는 `fired`가 트리거 성공 직후("켰어요 — 세션을 기다리는 중"), `ok`가 세션이 지시서를 받아 감, `trigger_failed`는 트리거 호출 거절(화면 「예약 작업을 켜지 못했어요 — 트리거 주소·토큰을 확인하세요」), `token_invalid`는 ping 뒤 `dvt_`로 시작하는 틀린 열쇠로 요청이 옴(빈 요청·스캐너는 세지 않는다), `no_request`는 `fired`인 채 5분(`SUB_PING_NO_REQUEST_MS`)이 지남(저장값은 `fired` 그대로, 읽을 때 바꾼다). `triggerSet`은 복호화에 실패하면(`JWT_SECRET` 변경) false이고 그때 `triggerBroken`이 true — 화면은 「트리거를 읽을 수 없어요(서버 비밀키가 바뀜) — 다시 넣어 주세요」. `checklist.taskPrompt`는 예약 작업에 저장할 지시문 한 줄("routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL과 DOCVAULT_TOKEN은 환경에 있어.") — 트리거 본문의 `text`가 그 블록에 담겨 "신뢰하지 않는 데이터"로 들어가므로 지시문이 그것을 읽으라고 적혀 있어야 한다.
 - `allowedDomains`는 **검사용 목록**(수집 목록 전체 언론사 + 통신사 + `news.google.com`) — 지시서의 것과 같다. `checklist`는 설정 체크리스트의 복사 버튼 재료. 열쇠·트리거 값은 실리지 않는다.
 
 ### API-144 — POST /briefing/subscription/ping
-[연결 확인]. 트리거가 없으면 409 BRIEFING_TRIGGER_NOT_SET. `kind='ping'`인 job(id는 `ping-` + uuid, `SUB_PING_ID_PREFIX`)을 **서버 메모리에** 만들고(실행 기록에는 남기지 않는다 — 회차가 아니다; 10분 `SUB_PING_TTL_MS` 뒤 사라져 그 뒤 API-151은 404) 트리거를 쏜다 → **202** `{ "jobId" }`, briefing_last_ping은 `fired`. 호출이 거절되면 502 BRIEFING_TRIGGER_FAILED(`trigger_failed`로 기록). 그 뒤 세션이 API-151로 지시서를 받아 가면 결과(`ok`)를 USER_SETTINGS.briefing_last_ping에 적는다 — 화면은 2초마다(실행 중 폴링과 같은 주기) API-143을 다시 읽어 "연결 확인됨 (14:12)"로 바꾼다. ping job의 지시서는 `kind: "ping"`만 있고, 세션은 그걸 보면 바로 끝낸다.
+[연결 확인]. 트리거가 없으면 409 BRIEFING_TRIGGER_NOT_SET. `kind='ping'`인 job(id는 `ping-` + uuid, `SUB_PING_ID_PREFIX`)을 **서버 메모리에** 만들고(실행 기록에는 남기지 않는다 — 회차가 아니다; 10분 `SUB_PING_TTL_MS` 뒤 사라져 그 뒤 API-151은 404) 트리거를 쏜다 → **202** `{ "jobId" }`, briefing_last_ping은 `fired`. 호출이 거절되면 502 BRIEFING_TRIGGER_FAILED(`trigger_failed`로 기록). 그 뒤 세션이 API-151로 지시서를 받아 가면 결과(`ok`)를 USER_SETTINGS.briefing_last_ping에 적는다 — 화면은 **5초마다 최대 6분**(`BRIEFING_PING_POLL_MS`·`BRIEFING_PING_WAIT_MS` — 서버가 5분 뒤 `no_request`로 굳히는 것보다 조금 길게) API-143을 다시 읽어 「연결 확인됨 (14:12)」로 바꾸고, 결과가 `fired`에서 벗어나면 멈춘다. 화면을 떠나면 타이머를 끊는다. ping job의 지시서는 `kind: "ping"`만 있고, 세션은 그걸 보면 바로 끝낸다.
 
 ### API-151 — GET /briefing/jobs/{jobId} (Bearer)
 **200** 지시서:
