@@ -154,9 +154,10 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
 
   // 실행 중일 때만 다시 읽는다 — 평소에는 한 번 읽고 끝
   const running = status?.running ?? null;
+  const runningId = running?.id ?? null;
   const remote = running?.stage === 'remote';
   useEffect(() => {
-    if (!running) return;
+    if (runningId === null) return;
     // 구독 실행은 한두 시간 돌고 보고도 드물다 — 느리게 읽는다
     const id = window.setInterval(() => void load(), remote ? BRIEFING_REMOTE_POLL_MS : BRIEFING_STATUS_POLL_MS);
     const tick = window.setInterval(() => setTick((t) => t + 1), 1000);
@@ -164,7 +165,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
       window.clearInterval(id);
       window.clearInterval(tick);
     };
-  }, [running, remote, load]);
+  }, [runningId, remote, load]);
 
   /** slot은 알림 띠의 [지금 만들기] — 안 온 회차 이름을 물려받는다(수시판 대신). 늘 API 방식으로 만든다 (v0.50) */
   async function start(force = false, slot?: AutoSlot) {
@@ -277,9 +278,9 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
                 {admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}
               </span>
               <button
-                onClick={() => void start(false, admin.subscription?.missing?.slot)}
+                onClick={() => void start(false, admin.subscription?.missing?.slot === 'adhoc' ? undefined : admin.subscription?.missing?.slot)}
                 disabled={!admin.configured || starting}
-                className="shrink-0 rounded-md border border-amber-600/60 px-2.5 py-1.5 font-semibold text-amber-100 transition hover:bg-amber-800/40 disabled:opacity-40"
+                className="min-h-9 shrink-0 rounded-md border border-amber-600/60 px-2.5 font-semibold text-amber-100 transition hover:bg-amber-800/40 disabled:opacity-40"
               >
                 지금 만들기
               </button>

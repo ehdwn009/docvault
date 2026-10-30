@@ -11,6 +11,8 @@ const TRIGGER_URL_HINT = 'https://api.anthropic.com/v1/claude_code/routines/<id>
 type Props = {
   mode: BriefingMode;
   schedule: AutoSchedule;
+  /** 지금 예약 작업이 일하는 중인가 — 방식을 바꾸면 그 실행이 취소되므로 한 번 묻는다 */
+  remoteRunning: boolean;
   /** 생성 방식이 바뀌었다 — 부모(자동 생성 설정)가 상태를 다시 읽는다 */
   onModeChange: (mode: BriefingMode) => void;
 };
@@ -18,9 +20,11 @@ type Props = {
 // SCR-147 "생성 방식" 블록 (v0.50) — 회차를 앱이 직접(API) 만들지, 서버가 켠 claude.ai 예약 작업(사용자의 Claude 구독)이 만들지.
 // 열쇠 두 개는 반대 방향이다: 연결 열쇠(예약 작업 → docvault, 발급 때 한 번만 보임)와 트리거 토큰(docvault → claude.ai, 저장 뒤 "설정됨"만).
 // 설계: 뉴스브리핑 문서 "구독 생성 방식", IA SCR-147
-export default function BriefingSubscriptionSettings({ mode, schedule, onModeChange }: Props) {
+export default function BriefingSubscriptionSettings({ mode, schedule, remoteRunning, onModeChange }: Props) {
   const [info, setInfo] = useState<SubscriptionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** API-143을 못 읽었다(수집 목록 문서가 깨졌을 때 500) — 블록이 말없이 사라지지 않게 */
+  const [loadError, setLoadError] = useState<string | null>(null);
   /** 라디오에서 고른 것 — 열쇠·트리거가 없어 서버가 거절해도 블록은 펼쳐 두어 준비하게 */
   const [want, setWant] = useState<BriefingMode>(mode);
   /** 발급 직후 한 번만 보이는 열쇠 원문 — 닫으면 다시 볼 수 없다(서버는 해시만 둔다) */
@@ -31,28 +35,57 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [pinging, setPinging] = useState(false);
   const pingTimer = useRef<number | null>(null);
+  /** 화면을 떠난 뒤 폴링이 이어지지 않게 — 기다리던 응답이 돌아와도 버린다 */
+  const alive = useRef(true);
 
   const load = useCallback(async () => {
-    const r = await api<SubscriptionInfo>('/briefing/subscription').catch(() => null);
-    if (r) setInfo(r);
+    try {
+      const r = await api<SubscriptionInfo>('/briefing/subscription');
+      if (!alive.current) return;
+      setInfo(r);
+      setLoadError(null);
+    } catch (err) {
+      if (!alive.current) return;
+      setLoadError(err instanceof ApiError ? err.message : '구독 상태를 불러오지 못했어요');
+    }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
   useEffect(() => setWant(mode), [mode]);
-  useEffect(() => () => { if (pingTimer.current) window.clearTimeout(pingTimer.current); }, []);
+  useEffect(
+    () => () => {
+      alive.current = false;
+      if (pingTimer.current) window.clearTimeout(pingTimer.current);
+    },
+    [],
+  );
 
   const ready = !!info?.tokenPrefix && !!info?.triggerSet;
+  const showBlock = want === 'subscription' || mode === 'subscription';
+  // 열쇠 원문은 블록을 접는 순간 버린다 — [닫기]를 안 누르고 라디오를 바꿔도 다음에 다시 보이지 않게
+  useEffect(() => {
+    if (!showBlock) setFreshToken(null);
+  }, [showBlock]);
 
   /** 방식 저장 — 구독은 열쇠·트리거가 있어야 받아 준다(409). 바꾸는 순간 도는 구독 실행은 멈춘다 */
   async function saveMode(next: BriefingMode) {
     setError(null);
     setWant(next);
     if (next === mode) return;
-    if (next === 'subscription' && !ready) {
-      setError('연결 열쇠를 발급하고 예약 작업 트리거를 넣으면 구독으로 바꿀 수 있어요');
-      return;
+    // 준비가 안 됐으면 라디오만 바꿔 두고 블록을 펼친다 — 안내는 라디오 아래 한 줄이 한다
+    if (next === 'subscription' && !ready) return;
+    if (next === 'api' && remoteRunning) {
+      const ok = await confirmDialog('앱이 직접 만들기로 바꿀까요?', {
+        message: '지금 도는 예약 작업은 취소로 기록되고 완성본을 받지 않아요. claude.ai의 세션은 스스로 멈추지 않으니 거기서도 꺼 두세요.',
+        confirmLabel: '바꾸기',
+        danger: true,
+      });
+      if (!ok) {
+        setWant(mode);
+        return;
+      }
     }
     try {
       await api('/briefing/settings', { method: 'PUT', body: JSON.stringify({ mode: next }) });
@@ -67,7 +100,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
   async function issueToken() {
     if (info?.tokenPrefix) {
       const ok = await confirmDialog('연결 열쇠를 다시 발급할까요?', {
-        message: '지금 열쇠는 바로 쓸 수 없게 되고, claude.ai 환경의 DOCVAULT_TOKEN도 새 값으로 바꿔야 해요. 도는 구독 실행이 있으면 완성본을 보내지 못합니다.',
+        message: `지금 열쇠는 바로 쓸 수 없게 되고, claude.ai 환경의 DOCVAULT_TOKEN도 새 값으로 바꿔야 해요.${remoteRunning ? ' 지금 도는 예약 작업은 옛 열쇠라 완성본을 보내지 못해요.' : ''}`,
         confirmLabel: '다시 발급',
         danger: true,
       });
@@ -85,7 +118,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
 
   async function revokeToken() {
     const ok = await confirmDialog('연결 열쇠를 삭제할까요?', {
-      message: '예약 작업이 더는 docvault에 들어올 수 없고, 생성 방식은 "앱이 직접 만들기"로 돌아갑니다.',
+      message: `예약 작업이 더는 docvault에 들어올 수 없고, 생성 방식은 "앱이 직접 만들기"로 돌아갑니다.${remoteRunning ? ' 지금 도는 예약 작업은 취소로 기록돼요.' : ''}`,
       confirmLabel: '삭제',
       danger: true,
     });
@@ -101,7 +134,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
     }
   }
 
-  /** 트리거 저장 — 값은 서버가 암호화해 두고 다시 내려오지 않는다. 라디오가 구독이면 저장과 함께 방식도 바꾼다 */
+  /** 트리거 저장 — 값은 서버가 암호화해 두고 다시 내려오지 않는다. 방식은 여기서 바꾸지 않는다 — [연결 확인]을 거쳐 사람이 [구독으로 바꾸기]를 누른다 */
   async function saveTrigger() {
     const url = triggerUrl.trim();
     const token = triggerToken.trim();
@@ -112,11 +145,9 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
     setSavingTrigger(true);
     setError(null);
     try {
-      const switching = want === 'subscription' && mode !== 'subscription' && !!info?.tokenPrefix;
-      await api('/briefing/settings', { method: 'PUT', body: JSON.stringify({ trigger: { url, token }, ...(switching ? { mode: 'subscription' } : {}) }) });
+      await api('/briefing/settings', { method: 'PUT', body: JSON.stringify({ trigger: { url, token } }) });
       setTriggerUrl('');
       setTriggerToken('');
-      if (switching) onModeChange('subscription');
       await load();
       toast('트리거를 저장했어요 — [연결 확인]으로 시험해 보세요', 'success');
     } catch (err) {
@@ -127,7 +158,11 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
   }
 
   async function clearTrigger() {
-    const ok = await confirmDialog('예약 작업 트리거를 지울까요?', { message: '서버가 예약 작업을 켤 수 없게 되고, 생성 방식은 "앱이 직접 만들기"로 돌아갑니다.', confirmLabel: '지우기', danger: true });
+    const ok = await confirmDialog('예약 작업 트리거를 지울까요?', {
+      message: `서버가 예약 작업을 켤 수 없게 되고, 생성 방식은 "앱이 직접 만들기"로 돌아갑니다.${remoteRunning ? ' 지금 도는 예약 작업은 취소로 기록돼요.' : ''}`,
+      confirmLabel: '지우기',
+      danger: true,
+    });
     if (!ok) return;
     setError(null);
     try {
@@ -149,6 +184,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
       const startedAt = Date.now();
       const poll = async () => {
         const r = await api<SubscriptionInfo>('/briefing/subscription').catch(() => null);
+        if (!alive.current) return;
         if (r) setInfo(r);
         const settled = r && r.lastPingResult !== 'fired';
         if (settled || Date.now() - startedAt > BRIEFING_PING_WAIT_MS) {
@@ -165,10 +201,11 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
     }
   }
 
-  const copy = (text: string, what: string) => void navigator.clipboard.writeText(text).then(() => toast(`${what}을(를) 복사했어요`), () => toast('복사하지 못했어요', 'error'));
+  const copy = (text: string, what: string) => void navigator.clipboard.writeText(text).then(() => toast(`${what} 복사했어요`), () => toast('복사하지 못했어요', 'error'));
 
-  const showBlock = want === 'subscription' || mode === 'subscription';
   const recent = info?.recent;
+  const btn = 'min-h-9 rounded-md border border-slate-700 px-3 text-slate-300 hover:bg-slate-800 disabled:opacity-50';
+  const smallBtn = 'min-h-9 rounded border border-slate-700 px-2 text-[11px] text-slate-300 hover:bg-slate-800';
 
   return (
     <div className="mt-4 text-xs text-slate-400">
@@ -189,11 +226,27 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
           </label>
         ))}
       </div>
-      {want !== mode && want === 'subscription' && (
-        <p className="mt-1 pl-6 text-[11px] text-amber-400">아래 열쇠와 트리거를 준비하면 구독으로 바뀌어요. 그동안은 앱이 직접 만들어요</p>
+      {want === 'subscription' && mode !== 'subscription' && (
+        <div className="mt-1 flex flex-wrap items-center gap-2 pl-6 text-[11px] text-amber-400">
+          {ready ? (
+            <>
+              <span>열쇠와 트리거가 준비됐어요 — [연결 확인]이 "연결 확인됨"이면 바꾸세요</span>
+              <button onClick={() => void saveMode('subscription')} className="min-h-9 rounded-md border border-amber-600/60 px-3 text-xs font-semibold text-amber-100 hover:bg-amber-800/40">
+                구독으로 바꾸기
+              </button>
+            </>
+          ) : (
+            <span>아래 열쇠와 트리거를 준비하면 바꿀 수 있어요. 그동안은 앱이 직접 만들어요</span>
+          )}
+        </div>
       )}
-      <p className="mt-1 pl-6 text-[11px] text-slate-600">방식을 바꾸면 그 순간 도는 구독 실행은 멈춰요. 회차 켜기·시각은 두 방식이 함께 써요</p>
+      <p className="mt-1 pl-6 text-[11px] text-slate-600">
+        {mode === 'subscription'
+          ? '앱이 직접 만들기로 바꾸면 지금 도는 예약 작업은 취소로 기록되고 더 켜지지 않아요 — claude.ai의 예약 작업도 꺼 두세요. 열쇠·트리거는 남아 있어 다시 구독으로 바꾸면 바로 이어서 써요'
+          : '회차 켜기·시각은 두 방식이 함께 써요'}
+      </p>
 
+      {showBlock && !info && loadError && <p className="mt-2 text-xs text-red-400">구독 상태를 불러오지 못했어요 — {loadError}</p>}
       {showBlock && info && (
         <div className="mt-3 space-y-4 rounded-lg border border-slate-800 p-3">
           {/* ① 연결 열쇠 — 예약 작업 → docvault */}
@@ -204,10 +257,10 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
                 <p className="text-[11px]">이 창을 닫으면 다시 볼 수 없어요 — claude.ai 환경의 비밀값 <code>DOCVAULT_TOKEN</code>에 넣어 두세요</p>
                 <code className="mt-1 block break-all rounded bg-slate-950 px-2 py-1 text-[11px] text-slate-200">{freshToken}</code>
                 <div className="mt-1.5 flex gap-2">
-                  <button onClick={() => copy(freshToken, '연결 열쇠')} className="min-h-8 rounded border border-amber-600/60 px-2.5 text-[11px] font-semibold hover:bg-amber-800/40">
+                  <button onClick={() => copy(freshToken, '연결 열쇠를')} className="min-h-9 rounded border border-amber-600/60 px-2.5 text-[11px] font-semibold hover:bg-amber-800/40">
                     복사
                   </button>
-                  <button onClick={() => setFreshToken(null)} className="min-h-8 rounded border border-slate-700 px-2.5 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <button onClick={() => setFreshToken(null)} className="min-h-9 rounded border border-slate-700 px-2.5 text-[11px] text-slate-300 hover:bg-slate-800">
                     닫기
                   </button>
                 </div>
@@ -222,7 +275,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
               <p className="mt-1 text-slate-600">아직 발급하지 않았어요</p>
             )}
             <div className="mt-1.5 flex gap-2">
-              <button onClick={() => void issueToken()} className="min-h-9 rounded-md border border-slate-700 px-3 text-slate-300 hover:bg-slate-800">
+              <button onClick={() => void issueToken()} className={btn}>
                 {info.tokenPrefix ? '다시 발급' : '발급'}
               </button>
               {info.tokenPrefix && (
@@ -259,7 +312,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
                 className="min-h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-200 placeholder:text-slate-700"
               />
               <div className="flex gap-2">
-                <button onClick={() => void saveTrigger()} disabled={savingTrigger} className="min-h-9 rounded-md border border-slate-700 px-3 text-slate-300 hover:bg-slate-800 disabled:opacity-50">
+                <button onClick={() => void saveTrigger()} disabled={savingTrigger} className={btn}>
                   {savingTrigger ? '저장하는 중…' : info.triggerSet ? '바꾸기' : '저장'}
                 </button>
                 {info.triggerSet && (
@@ -287,7 +340,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
                     {info.checklist.envNames.map((n) => (
                       <code key={n} className="rounded bg-slate-900 px-1.5 py-0.5 text-slate-300">{n}</code>
                     ))}
-                    <button onClick={() => copy(info.checklist.docvaultUrl, 'docvault 주소')} className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800">
+                    <button onClick={() => copy(info.checklist.docvaultUrl, 'docvault 주소를')} className={smallBtn}>
                       docvault 주소 복사
                     </button>
                   </span>
@@ -295,19 +348,19 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
                 </li>
                 <li>
                   같은 환경의 네트워크 허용 목록에 docvault 주소와 수집 목록의 언론사 도메인을 넣어요
-                  <button onClick={() => copy(info.allowedDomains.join('\n'), `허용 도메인 ${info.allowedDomains.length}곳`)} className="ml-1.5 rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <button onClick={() => copy(info.allowedDomains.join('\n'), `허용 도메인 ${info.allowedDomains.length}곳을`)} className={`ml-1.5 ${smallBtn}`}>
                     도메인 {info.allowedDomains.length}곳 복사
                   </button>
                 </li>
                 <li>
                   예약 작업을 만들어요 — 저장소는 docvault, 일정은 비워 두고(서버가 켜요), 지시문은 아래 한 줄:
                   <code className="mt-1 block rounded bg-slate-900 px-2 py-1 text-[11px] text-slate-300">{info.checklist.taskPrompt}</code>
-                  <button onClick={() => copy(info.checklist.taskPrompt, '지시문')} className="mt-1 rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <button onClick={() => copy(info.checklist.taskPrompt, '지시문을')} className={`mt-1 ${smallBtn}`}>
                     지시문 복사
                   </button>
                 </li>
                 <li>예약 작업의 트리거 주소와 토큰을 위 칸에 저장해요</li>
-                <li>[연결 확인]을 눌러 "연결 확인됨"이 나오면 생성 방식을 "구독으로 받기"로 바꿔요</li>
+                <li>[연결 확인]을 눌러 "연결 확인됨"이 나오면 위의 [구독으로 바꾸기]를 눌러요</li>
               </ol>
             )}
           </div>
@@ -315,7 +368,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
           {/* ④ 연결 확인 — 회차를 만들지 않고 왕복만 확인한다 */}
           <div>
             <div className="flex items-center gap-2">
-              <button onClick={() => void ping()} disabled={!info.triggerSet || pinging} className="min-h-9 rounded-md border border-slate-700 px-3 text-slate-300 hover:bg-slate-800 disabled:opacity-50">
+              <button onClick={() => void ping()} disabled={!info.triggerSet || pinging} className={btn}>
                 {pinging ? '확인하는 중…' : '연결 확인'}
               </button>
               {info.lastPingResult && (
@@ -341,8 +394,8 @@ export default function BriefingSubscriptionSettings({ mode, schedule, onModeCha
               <p className="mt-1">
                 최근 {recent.ok + recent.missing + recent.error}회: 성공 {recent.ok} · 도착 안 함 {recent.missing} · 실패 {recent.error}
                 {recent.avgMinutes !== null ? ` · 평균 ${recent.avgMinutes}분` : ''}
-                {recent.hint === 'earlier' && <span className="text-amber-400"> — 마감에 자주 몰려요. 회차 시각을 늦추거나 켜 둔 분야를 줄여 보세요</span>}
-                {recent.hint === 'later' && <span> — 넉넉히 끝나요. 회차 시각을 앞당겨도 돼요</span>}
+                {recent.hint === 'earlier' && <span className="text-amber-400"> — 마감에 자주 몰려요. 수집 목록의 출처나 켜 둔 분야를 줄여 보세요</span>}
+                {recent.hint === 'later' && <span> — 넉넉히 끝나요. 회차 시각을 30분 늦추면 더 최근 기사까지 담을 수 있어요</span>}
               </p>
             )}
           </div>

@@ -545,8 +545,11 @@ export function readLastPing(userId: number): { at: number; result: PingResult }
   }
 }
 
+/** ping 결과는 설정 행에 적지만 updated_at은 건드리지 않는다 — 그 시각은 tickSubscription이 "설정을 바꾼 때"로 쓴다(검수 2026-10-30) */
 function writeLastPing(userId: number, result: PingResult, now: number): void {
-  upsertSettings(userId, { briefingLastPing: JSON.stringify({ at: now, result }) }, now);
+  const value = JSON.stringify({ at: now, result });
+  const changed = db.update(userSettings).set({ briefingLastPing: value }).where(eq(userSettings.userId, userId)).run().changes;
+  if (!changed) upsertSettings(userId, { briefingLastPing: value }, now);
 }
 
 /** API-144 — ping job을 만들고 트리거를 쏜다. 세션이 지시서를 받아 가면 ok */
@@ -639,7 +642,8 @@ export function recentSubscription(userId: number): { ok: number; missing: numbe
   const ok = rows.filter((r) => r.status === 'ok');
   const missing = rows.filter((r) => r.status === 'missing').length;
   const error = rows.filter((r) => r.status === 'error').length;
-  const durations = ok.filter((r) => r.finishedAt).map((r) => (r.finishedAt! - r.startedAt) / 60_000);
+  // 걸린 시간은 지시서를 받아 간 때부터 — 패널의 실행 기록 줄과 같은 기준
+  const durations = ok.filter((r) => r.finishedAt).map((r) => (r.finishedAt! - (r.remoteStartedAt ?? r.startedAt)) / 60_000);
   const avgMinutes = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null;
   let hint: 'later' | 'earlier' | null = null;
   const leadMin = BRIEFING.SUB_LEAD_MS / 60_000;

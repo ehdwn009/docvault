@@ -120,6 +120,7 @@ export default function BriefingSettings({ onOpenSources }: Props) {
           <BriefingSubscriptionSettings
             mode={status.mode ?? 'api'}
             schedule={status.schedule}
+            remoteRunning={status.running?.stage === 'remote'}
             onModeChange={() => void api<BriefingStatus>('/briefing/status').then(setStatus, () => {})}
           />
           {/* 앱 안 원문 보기 — 기본 꺼짐. 서버에서 추출 품질을 잰 뒤 켠다 (개선 합의안 7장) */}

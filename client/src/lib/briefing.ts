@@ -274,7 +274,7 @@ export type SubscriptionStatus = {
   triggerBroken: boolean;
   lastPingAt: number | null;
   /** 오늘 마감까지 안 온 회차 — 아직 대체되지 않은 것만. 패널의 알림 띠 */
-  missing: { runId: number; slot: AutoSlot; deadlineAt: number | null } | null;
+  missing: { runId: number; slot: Slot; deadlineAt: number | null } | null;
 };
 export type PingResult = 'fired' | 'ok' | 'trigger_failed' | 'token_invalid' | 'no_request';
 /** API-143 — 설정 화면의 구독 상태 */
@@ -357,13 +357,13 @@ export const STAGE_LABEL: Record<NonNullable<BriefingRun['stage']>, string> = {
 
 /** 구독 실행의 세부 단계 순서와 이름 — 예약 작업이 보고하는 단계(서버 단계와 달리 저장이 없고 검수가 있다) */
 export const REMOTE_STAGE_ORDER: readonly RemoteStage[] = ['collect', 'classify', 'select', 'read', 'fill', 'summarize', 'lens', 'verify'];
-export const REMOTE_STAGE_LABEL: Record<RemoteStage, string> = { ...STAGE_LABEL, verify: '검수' } as Record<RemoteStage, string>;
+export const REMOTE_STAGE_LABEL: Record<RemoteStage, string> = { collect: '수집', classify: '분류', select: '선별', read: '원문 읽기', fill: '웹 검색', summarize: '요약', lens: '보기 쓰기', verify: '검수' };
 
 /** 설정 화면의 [연결 확인] 결과 다섯 상태 (IA SCR-147) */
 export const PING_LABEL: Record<PingResult, string> = {
   fired: '켰어요 — 세션을 기다리는 중',
   ok: '연결 확인됨',
-  trigger_failed: '트리거 토큰이 맞지 않습니다',
+  trigger_failed: '예약 작업을 켜지 못했어요 — 트리거 주소·토큰을 확인하세요',
   token_invalid: '연결 열쇠가 맞지 않습니다',
   no_request: '아직 연결 기록 없음 — 세션이 docvault를 부르지 않았어요 (네트워크 허용 목록·환경변수를 확인)',
 };
