@@ -1,0 +1,29 @@
+실린 기사 205건 (핵심 13 · 주요 27 · 참고 165), 싣지 않은 것 1건
+주소 검사에서 걸린 주소 16개 (domain 16) — 서버는 그 기사를 뺀다. 전체의 30%를 넘으면 통째로 거절된다
+result.json 크기 330KB (상한 2MB)
+
+story 2: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030155039 — 서버가 이 기사를 뺀다
+story 6: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030144620 — 서버가 이 기사를 뺀다
+story 6: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030144620 — 서버가 이 기사를 뺀다
+story 9: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030150303 — 서버가 이 기사를 뺀다
+story 29: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 43: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030141506 — 서버가 이 기사를 뺀다
+story 43: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030161215 — 서버가 이 기사를 뺀다
+story 43: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030141506 — 서버가 이 기사를 뺀다
+story 43: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030161215 — 서버가 이 기사를 뺀다
+story 45: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030145309 — 서버가 이 기사를 뺀다
+story 45: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030145309 — 서버가 이 기사를 뺀다
+story 48: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030151804 — 서버가 이 기사를 뺀다
+story 49: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030161556 — 서버가 이 기사를 뺀다
+story 52: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030155323 — 서버가 이 기사를 뺀다
+story 56: 숫자 대조에 걸린 문장 2개 (NUMBER_CHECK_MODE=log)
+story 65: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030150038 — 서버가 이 기사를 뺀다
+story 65: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030150038 — 서버가 이 기사를 뺀다
+story 95: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 116: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 155: written.json에 요약이 없음 — 싣지 않음(핵심·주요는 요약 없이 싣지 않는다)
+story 159: 숫자 대조에 걸린 문장 5개 (NUMBER_CHECK_MODE=log)
+story 169: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 171: 숫자 대조에 걸린 문장 1개 (NUMBER_CHECK_MODE=log)
+story 180: 숫자 대조에 걸린 문장 4개 (NUMBER_CHECK_MODE=log)
+story 189: 주소 검사 실패(domain) https://zdnet.co.kr/view/?no=20261030134541 — 서버가 이 기사를 뺀다

@@ -1,0 +1,911 @@
+{
+  "kind": "edition",
+  "jobId": "test-2026-10-30T08-25-16-273Z",
+  "slot": "morning",
+  "editionDate": "2026-10-30",
+  "since": 1793262316273,
+  "until": 1793348716273,
+  "deadline": 1793354116273,
+  "wrapUpBefore": 1200000,
+  "sources": {
+    "feeds": [
+      {
+        "name": "연합뉴스 정치",
+        "url": "https://www.yna.co.kr/rss/politics.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "연합뉴스 북한",
+        "url": "https://www.yna.co.kr/rss/northkorea.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "연합뉴스 경제",
+        "url": "https://www.yna.co.kr/rss/economy.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "연합뉴스 마켓",
+        "url": "https://www.yna.co.kr/rss/market.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "연합뉴스 산업",
+        "url": "https://www.yna.co.kr/rss/industry.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "연합뉴스 사회",
+        "url": "https://www.yna.co.kr/rss/society.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "연합뉴스 국제",
+        "url": "https://www.yna.co.kr/rss/international.xml",
+        "publisher": "연합뉴스",
+        "region": "세계"
+      },
+      {
+        "name": "한국경제 경제",
+        "url": "https://www.hankyung.com/feed/economy",
+        "publisher": "한국경제",
+        "region": "국내"
+      },
+      {
+        "name": "한국경제 증권",
+        "url": "https://www.hankyung.com/feed/finance",
+        "publisher": "한국경제",
+        "region": "국내"
+      },
+      {
+        "name": "한국경제 IT",
+        "url": "https://www.hankyung.com/feed/it",
+        "publisher": "한국경제",
+        "region": "국내"
+      },
+      {
+        "name": "동아일보 정치",
+        "url": "https://rss.donga.com/politics.xml",
+        "publisher": "동아일보",
+        "region": "국내"
+      },
+      {
+        "name": "동아일보 경제",
+        "url": "https://rss.donga.com/economy.xml",
+        "publisher": "동아일보",
+        "region": "국내"
+      },
+      {
+        "name": "경향신문 전체",
+        "url": "https://www.khan.co.kr/rss/rssdata/total_news.xml",
+        "publisher": "경향신문",
+        "region": "국내"
+      },
+      {
+        "name": "전자신문",
+        "url": "https://rss.etnews.com/Section901.xml",
+        "region": "국내"
+      },
+      {
+        "name": "ZDNet Korea",
+        "url": "https://feeds.feedburner.com/zdkorea",
+        "region": "국내"
+      },
+      {
+        "name": "BBC World",
+        "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+        "publisher": "BBC",
+        "region": "세계"
+      },
+      {
+        "name": "BBC Business",
+        "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "publisher": "BBC",
+        "region": "세계"
+      },
+      {
+        "name": "BBC Technology",
+        "url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
+        "publisher": "BBC",
+        "region": "세계"
+      },
+      {
+        "name": "NYT World",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+        "publisher": "New York Times",
+        "region": "세계"
+      },
+      {
+        "name": "NYT Business",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+        "publisher": "New York Times",
+        "region": "세계"
+      },
+      {
+        "name": "NYT Technology",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+        "publisher": "New York Times",
+        "region": "세계"
+      },
+      {
+        "name": "Guardian World",
+        "url": "https://www.theguardian.com/world/rss",
+        "publisher": "The Guardian",
+        "region": "세계"
+      },
+      {
+        "name": "Al Jazeera",
+        "url": "https://www.aljazeera.com/xml/rss/all.xml",
+        "region": "세계"
+      },
+      {
+        "name": "CNBC Top News",
+        "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "publisher": "CNBC",
+        "region": "세계"
+      },
+      {
+        "name": "TechCrunch",
+        "url": "https://techcrunch.com/feed/",
+        "region": "세계"
+      },
+      {
+        "name": "The Verge",
+        "url": "https://www.theverge.com/rss/index.xml",
+        "region": "세계"
+      },
+      {
+        "name": "Ars Technica",
+        "url": "https://feeds.arstechnica.com/arstechnica/index",
+        "region": "세계"
+      },
+      {
+        "name": "연합뉴스 전체",
+        "url": "https://www.yna.co.kr/rss/news.xml",
+        "publisher": "연합뉴스",
+        "region": "국내"
+      },
+      {
+        "name": "한국경제 정치",
+        "url": "https://www.hankyung.com/feed/politics",
+        "publisher": "한국경제",
+        "region": "국내"
+      },
+      {
+        "name": "한국경제 국제",
+        "url": "https://www.hankyung.com/feed/international",
+        "publisher": "한국경제",
+        "region": "세계"
+      },
+      {
+        "name": "한국경제 부동산",
+        "url": "https://www.hankyung.com/feed/realestate",
+        "publisher": "한국경제",
+        "region": "국내"
+      },
+      {
+        "name": "매일경제 경제",
+        "url": "https://www.mk.co.kr/rss/30100041/",
+        "publisher": "매일경제",
+        "region": "국내"
+      },
+      {
+        "name": "매일경제 증권",
+        "url": "https://www.mk.co.kr/rss/50200011/",
+        "publisher": "매일경제",
+        "region": "국내"
+      },
+      {
+        "name": "매일경제 기업",
+        "url": "https://www.mk.co.kr/rss/50100032/",
+        "publisher": "매일경제",
+        "region": "국내"
+      },
+      {
+        "name": "매일경제 IT",
+        "url": "https://www.mk.co.kr/rss/50300009/",
+        "publisher": "매일경제",
+        "region": "국내"
+      },
+      {
+        "name": "머니투데이",
+        "url": "https://rss.mt.co.kr/mt_news.xml",
+        "publisher": "머니투데이",
+        "region": "국내"
+      },
+      {
+        "name": "이데일리 경제",
+        "url": "https://www.edaily.co.kr/rss/economy.xml",
+        "publisher": "이데일리",
+        "region": "국내"
+      },
+      {
+        "name": "서울경제",
+        "url": "https://www.sedaily.com/RSS/S1N1.xml",
+        "publisher": "서울경제",
+        "region": "국내"
+      },
+      {
+        "name": "아시아경제",
+        "url": "https://www.asiae.co.kr/rss/economy.htm",
+        "publisher": "아시아경제",
+        "region": "국내"
+      },
+      {
+        "name": "조선일보",
+        "url": "https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml",
+        "publisher": "조선일보",
+        "region": "국내"
+      },
+      {
+        "name": "조선비즈",
+        "url": "https://biz.chosun.com/arc/outboundfeeds/rss/?outputType=xml",
+        "publisher": "조선비즈",
+        "region": "국내"
+      },
+      {
+        "name": "중앙일보",
+        "url": "https://rss.joins.com/joins_news_list.xml",
+        "publisher": "중앙일보",
+        "region": "국내"
+      },
+      {
+        "name": "한겨레",
+        "url": "https://www.hani.co.kr/rss/",
+        "publisher": "한겨레",
+        "region": "국내"
+      },
+      {
+        "name": "경향신문 경제",
+        "url": "https://www.khan.co.kr/rss/rssdata/economy_news.xml",
+        "publisher": "경향신문",
+        "region": "국내"
+      },
+      {
+        "name": "동아일보 국제",
+        "url": "https://rss.donga.com/international.xml",
+        "publisher": "동아일보",
+        "region": "세계"
+      },
+      {
+        "name": "SBS 뉴스",
+        "url": "https://news.sbs.co.kr/news/newsflashRssFeed.do?plink=RSSREADER",
+        "publisher": "SBS",
+        "region": "국내"
+      },
+      {
+        "name": "KBS 뉴스",
+        "url": "https://news.kbs.co.kr/rss/news.xml",
+        "publisher": "KBS",
+        "region": "국내"
+      },
+      {
+        "name": "MBC 뉴스",
+        "url": "https://imnews.imbc.com/rss/news/news_00.xml",
+        "publisher": "MBC",
+        "region": "국내"
+      },
+      {
+        "name": "YTN",
+        "url": "https://www.ytn.co.kr/_comm/rss.php?mcd=0102",
+        "publisher": "YTN",
+        "region": "국내"
+      },
+      {
+        "name": "뉴시스 경제",
+        "url": "https://newsis.com/RSS/economy.xml",
+        "publisher": "뉴시스",
+        "region": "국내"
+      },
+      {
+        "name": "뉴스1 경제",
+        "url": "https://www.news1.kr/rss/economy.xml",
+        "publisher": "뉴스1",
+        "region": "국내"
+      },
+      {
+        "name": "디지털데일리",
+        "url": "https://www.ddaily.co.kr/rss/S1N1.xml",
+        "publisher": "디지털데일리",
+        "region": "국내"
+      },
+      {
+        "name": "아이뉴스24",
+        "url": "https://www.inews24.com/rss/news.xml",
+        "publisher": "아이뉴스24",
+        "region": "국내"
+      },
+      {
+        "name": "블로터",
+        "url": "https://www.bloter.net/rss/allArticle.xml",
+        "publisher": "블로터",
+        "region": "국내"
+      },
+      {
+        "name": "Guardian Business",
+        "url": "https://www.theguardian.com/uk/business/rss",
+        "publisher": "The Guardian",
+        "region": "세계"
+      },
+      {
+        "name": "Guardian Technology",
+        "url": "https://www.theguardian.com/uk/technology/rss",
+        "publisher": "The Guardian",
+        "region": "세계"
+      },
+      {
+        "name": "NPR News",
+        "url": "https://feeds.npr.org/1001/rss.xml",
+        "publisher": "NPR",
+        "region": "세계"
+      },
+      {
+        "name": "DW",
+        "url": "https://rss.dw.com/rdf/rss-en-all",
+        "publisher": "DW",
+        "region": "세계"
+      },
+      {
+        "name": "France 24",
+        "url": "https://www.france24.com/en/rss",
+        "publisher": "France 24",
+        "region": "세계"
+      },
+      {
+        "name": "SCMP",
+        "url": "https://www.scmp.com/rss/91/feed",
+        "publisher": "South China Morning Post",
+        "region": "세계"
+      },
+      {
+        "name": "Japan Times",
+        "url": "https://www.japantimes.co.jp/feed/",
+        "publisher": "The Japan Times",
+        "region": "세계"
+      },
+      {
+        "name": "Nikkei Asia",
+        "url": "https://asia.nikkei.com/rss/feed/nar",
+        "publisher": "Nikkei Asia",
+        "region": "세계"
+      },
+      {
+        "name": "Axios",
+        "url": "https://api.axios.com/feed/",
+        "publisher": "Axios",
+        "region": "세계"
+      },
+      {
+        "name": "Politico",
+        "url": "https://rss.politico.com/politics-news.xml",
+        "publisher": "Politico",
+        "region": "세계"
+      },
+      {
+        "name": "CNBC World",
+        "url": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+        "publisher": "CNBC",
+        "region": "세계"
+      },
+      {
+        "name": "CNBC Technology",
+        "url": "https://www.cnbc.com/id/19854910/device/rss/rss.html",
+        "publisher": "CNBC",
+        "region": "세계"
+      },
+      {
+        "name": "BBC Science",
+        "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+        "publisher": "BBC",
+        "region": "세계"
+      },
+      {
+        "name": "NYT Science",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
+        "publisher": "New York Times",
+        "region": "세계"
+      },
+      {
+        "name": "The Register",
+        "url": "https://www.theregister.com/headlines.atom",
+        "publisher": "The Register",
+        "region": "세계"
+      },
+      {
+        "name": "Wired",
+        "url": "https://www.wired.com/feed/rss",
+        "publisher": "Wired",
+        "region": "세계"
+      },
+      {
+        "name": "MIT Technology Review",
+        "url": "https://www.technologyreview.com/feed/",
+        "publisher": "MIT Technology Review",
+        "region": "세계"
+      }
+    ],
+    "searches": [
+      {
+        "sub": "국내/정치/국회·정당·정부",
+        "query": "국회 OR 대통령실 OR 여당 OR 야당"
+      },
+      {
+        "sub": "국내/정치/북한·외교·안보",
+        "query": "북한 OR 외교부 OR 국방부 OR 한미"
+      },
+      {
+        "sub": "국내/정치/사법·수사",
+        "query": "검찰 OR 법원 판결 OR 경찰 수사"
+      },
+      {
+        "sub": "국내/경제/증시",
+        "query": "코스피 OR 코스닥"
+      },
+      {
+        "sub": "국내/경제/환율·금리·통화정책",
+        "query": "환율 OR 한국은행 금리 OR 국고채"
+      },
+      {
+        "sub": "국내/경제/부동산",
+        "query": "아파트값 OR 부동산 대책 OR 주택 공급"
+      },
+      {
+        "sub": "국내/경제/산업·기업",
+        "query": "삼성 OR 현대차 OR SK OR LG 기업"
+      },
+      {
+        "sub": "국내/경제/수출·무역",
+        "query": "수출 OR 무역수지 OR 관세"
+      },
+      {
+        "sub": "국내/경제/가상자산·핀테크",
+        "query": "비트코인 OR 가상자산 OR 핀테크"
+      },
+      {
+        "sub": "국내/경제/실적·공시",
+        "query": "실적 발표 OR 영업이익 OR 공시"
+      },
+      {
+        "sub": "국내/IT·과학/AI·플랫폼",
+        "query": "인공지능 OR 네이버 OR 카카오 AI"
+      },
+      {
+        "sub": "국내/IT·과학/반도체·전자",
+        "query": "반도체 OR HBM OR 삼성전자 OR SK하이닉스"
+      },
+      {
+        "sub": "국내/IT·과학/통신·모바일",
+        "query": "통신사 OR 5G OR 스마트폰"
+      },
+      {
+        "sub": "국내/IT·과학/게임·콘텐츠",
+        "query": "게임사 OR 넥슨 OR 엔씨소프트 OR 웹툰"
+      },
+      {
+        "sub": "국내/IT·과학/스타트업·투자",
+        "query": "스타트업 투자 유치 OR 벤처"
+      },
+      {
+        "sub": "국내/IT·과학/과학·우주",
+        "query": "과학기술 OR 누리호 OR 우주항공청"
+      },
+      {
+        "sub": "국내/IT·과학/바이오·헬스",
+        "query": "바이오 OR 신약 OR 의료"
+      },
+      {
+        "sub": "국내/사회/사건·사고",
+        "query": "사고 OR 화재 OR 사건"
+      },
+      {
+        "sub": "국내/사회/노동·교육·복지",
+        "query": "노동 OR 교육부 OR 복지"
+      },
+      {
+        "sub": "국내/사회/생활·안전",
+        "query": "안전 OR 생활 물가 OR 교통"
+      },
+      {
+        "sub": "세계/국제정치/미국",
+        "query": "White House OR Congress (site:reuters.com OR site:apnews.com OR site:bloomberg.com)"
+      },
+      {
+        "sub": "세계/국제정치/중국·일본·아시아",
+        "query": "China OR Japan OR Taiwan (site:reuters.com OR site:apnews.com OR site:bloomberg.com)"
+      },
+      {
+        "sub": "세계/국제정치/유럽·러시아·우크라이나",
+        "query": "Ukraine OR Russia OR EU (site:reuters.com OR site:apnews.com OR site:bloomberg.com)"
+      },
+      {
+        "sub": "세계/국제정치/중동·아프리카·중남미",
+        "query": "Middle East OR Israel OR Iran OR Africa (site:reuters.com OR site:apnews.com OR site:bloomberg.com)"
+      },
+      {
+        "sub": "세계/세계경제/미국 증시·기업",
+        "query": "Wall Street stocks OR S&P 500 OR Nasdaq"
+      },
+      {
+        "sub": "세계/세계경제/유럽·아시아 증시",
+        "query": "European stocks OR Nikkei OR Hang Seng"
+      },
+      {
+        "sub": "세계/세계경제/금리·중앙은행·통화",
+        "query": "Federal Reserve OR ECB OR Bank of Japan rates"
+      },
+      {
+        "sub": "세계/세계경제/유가·원자재",
+        "query": "oil prices OR gold prices OR commodities"
+      },
+      {
+        "sub": "세계/세계경제/무역·관세",
+        "query": "tariffs OR trade deal"
+      },
+      {
+        "sub": "세계/세계경제/가상자산",
+        "query": "bitcoin OR crypto"
+      },
+      {
+        "sub": "세계/세계경제/경제지표",
+        "query": "inflation data OR jobs report OR GDP"
+      },
+      {
+        "sub": "세계/테크·과학/AI",
+        "query": "artificial intelligence OR OpenAI OR Anthropic OR Google AI"
+      },
+      {
+        "sub": "세계/테크·과학/빅테크",
+        "query": "Apple OR Microsoft OR Amazon OR Meta OR Alphabet"
+      },
+      {
+        "sub": "세계/테크·과학/반도체",
+        "query": "Nvidia OR TSMC OR semiconductor OR Micron"
+      },
+      {
+        "sub": "세계/테크·과학/스타트업·투자·M&A",
+        "query": "startup funding OR acquisition tech"
+      },
+      {
+        "sub": "세계/테크·과학/규제·정책",
+        "query": "tech regulation OR antitrust OR AI policy"
+      },
+      {
+        "sub": "세계/테크·과학/과학·우주",
+        "query": "NASA OR SpaceX OR science study"
+      },
+      {
+        "sub": "세계/테크·과학/에너지·기후테크",
+        "query": "clean energy OR battery OR climate tech"
+      },
+      {
+        "sub": "세계/사회·재난/재난·기후",
+        "query": "earthquake OR hurricane OR wildfire OR flood"
+      },
+      {
+        "sub": "세계/사회·재난/사회·인권·보건",
+        "query": "human rights OR WHO OR public health"
+      }
+    ],
+    "disabled": [
+      "연합뉴스 전체",
+      "한국경제 정치",
+      "한국경제 국제",
+      "한국경제 부동산",
+      "매일경제 경제",
+      "매일경제 증권",
+      "매일경제 기업",
+      "매일경제 IT",
+      "머니투데이",
+      "이데일리 경제",
+      "서울경제",
+      "아시아경제",
+      "조선일보",
+      "조선비즈",
+      "중앙일보",
+      "한겨레",
+      "경향신문 경제",
+      "동아일보 국제",
+      "SBS 뉴스",
+      "KBS 뉴스",
+      "MBC 뉴스",
+      "YTN",
+      "뉴시스 경제",
+      "뉴스1 경제",
+      "디지털데일리",
+      "아이뉴스24",
+      "블로터",
+      "Guardian Business",
+      "Guardian Technology",
+      "NPR News",
+      "DW",
+      "France 24",
+      "SCMP",
+      "Japan Times",
+      "Nikkei Asia",
+      "Axios",
+      "Politico",
+      "CNBC World",
+      "CNBC Technology",
+      "BBC Science",
+      "NYT Science",
+      "The Register",
+      "Wired",
+      "MIT Technology Review"
+    ]
+  },
+  "allowedDomains": [
+    "afp.com",
+    "aljazeera.com",
+    "api.axios.com",
+    "apnews.com",
+    "arstechnica.com",
+    "asia.nikkei.com",
+    "asiae.co.kr",
+    "axios.com",
+    "bbci.co.uk",
+    "biz.chosun.com",
+    "bloomberg.com",
+    "bloter.net",
+    "chosun.com",
+    "cnbc.com",
+    "ddaily.co.kr",
+    "donga.com",
+    "dw.com",
+    "edaily.co.kr",
+    "etnews.com",
+    "feedburner.com",
+    "france24.com",
+    "hani.co.kr",
+    "hankyung.com",
+    "imbc.com",
+    "imnews.imbc.com",
+    "inews24.com",
+    "japantimes.co.jp",
+    "joins.com",
+    "kbs.co.kr",
+    "khan.co.kr",
+    "mk.co.kr",
+    "mt.co.kr",
+    "news.google.com",
+    "news.kbs.co.kr",
+    "news.sbs.co.kr",
+    "news1.kr",
+    "newsis.com",
+    "nikkei.com",
+    "npr.org",
+    "nytimes.com",
+    "politico.com",
+    "reuters.com",
+    "sbs.co.kr",
+    "scmp.com",
+    "sedaily.com",
+    "techcrunch.com",
+    "technologyreview.com",
+    "theguardian.com",
+    "theregister.com",
+    "theverge.com",
+    "wired.com",
+    "yna.co.kr",
+    "ytn.co.kr"
+  ],
+  "excludeUrls": [],
+  "prevStories": [],
+  "generator": {
+    "config": "A"
+  },
+  "taxonomy": [
+    {
+      "id": "kr.pol.gov",
+      "path": "국내/정치/국회·정당·정부",
+      "max": 5
+    },
+    {
+      "id": "kr.pol.nk",
+      "path": "국내/정치/북한·외교·안보",
+      "max": 5
+    },
+    {
+      "id": "kr.pol.law",
+      "path": "국내/정치/사법·수사",
+      "max": 5
+    },
+    {
+      "id": "kr.econ.stock",
+      "path": "국내/경제/증시",
+      "max": 7
+    },
+    {
+      "id": "kr.econ.rate",
+      "path": "국내/경제/환율·금리·통화정책",
+      "max": 7
+    },
+    {
+      "id": "kr.econ.estate",
+      "path": "국내/경제/부동산",
+      "max": 7
+    },
+    {
+      "id": "kr.econ.biz",
+      "path": "국내/경제/산업·기업",
+      "max": 7
+    },
+    {
+      "id": "kr.econ.trade",
+      "path": "국내/경제/수출·무역",
+      "max": 7
+    },
+    {
+      "id": "kr.econ.crypto",
+      "path": "국내/경제/가상자산·핀테크",
+      "max": 7
+    },
+    {
+      "id": "kr.econ.earn",
+      "path": "국내/경제/실적·공시",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.ai",
+      "path": "국내/IT·과학/AI·플랫폼",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.chip",
+      "path": "국내/IT·과학/반도체·전자",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.telco",
+      "path": "국내/IT·과학/통신·모바일",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.game",
+      "path": "국내/IT·과학/게임·콘텐츠",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.startup",
+      "path": "국내/IT·과학/스타트업·투자",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.sci",
+      "path": "국내/IT·과학/과학·우주",
+      "max": 7
+    },
+    {
+      "id": "kr.tech.bio",
+      "path": "국내/IT·과학/바이오·헬스",
+      "max": 7
+    },
+    {
+      "id": "kr.soc.case",
+      "path": "국내/사회/사건·사고",
+      "max": 5
+    },
+    {
+      "id": "kr.soc.labor",
+      "path": "국내/사회/노동·교육·복지",
+      "max": 5
+    },
+    {
+      "id": "kr.soc.life",
+      "path": "국내/사회/생활·안전",
+      "max": 5
+    },
+    {
+      "id": "w.pol.us",
+      "path": "세계/국제정치/미국",
+      "max": 5
+    },
+    {
+      "id": "w.pol.asia",
+      "path": "세계/국제정치/중국·일본·아시아",
+      "max": 5
+    },
+    {
+      "id": "w.pol.eu",
+      "path": "세계/국제정치/유럽·러시아·우크라이나",
+      "max": 5
+    },
+    {
+      "id": "w.pol.mea",
+      "path": "세계/국제정치/중동·아프리카·중남미",
+      "max": 5
+    },
+    {
+      "id": "w.econ.usstock",
+      "path": "세계/세계경제/미국 증시·기업",
+      "max": 7
+    },
+    {
+      "id": "w.econ.stock",
+      "path": "세계/세계경제/유럽·아시아 증시",
+      "max": 7
+    },
+    {
+      "id": "w.econ.cb",
+      "path": "세계/세계경제/금리·중앙은행·통화",
+      "max": 7
+    },
+    {
+      "id": "w.econ.oil",
+      "path": "세계/세계경제/유가·원자재",
+      "max": 7
+    },
+    {
+      "id": "w.econ.trade",
+      "path": "세계/세계경제/무역·관세",
+      "max": 7
+    },
+    {
+      "id": "w.econ.crypto",
+      "path": "세계/세계경제/가상자산",
+      "max": 7
+    },
+    {
+      "id": "w.econ.data",
+      "path": "세계/세계경제/경제지표",
+      "max": 7
+    },
+    {
+      "id": "w.tech.ai",
+      "path": "세계/테크·과학/AI",
+      "max": 7
+    },
+    {
+      "id": "w.tech.bigtech",
+      "path": "세계/테크·과학/빅테크",
+      "max": 7
+    },
+    {
+      "id": "w.tech.chip",
+      "path": "세계/테크·과학/반도체",
+      "max": 7
+    },
+    {
+      "id": "w.tech.startup",
+      "path": "세계/테크·과학/스타트업·투자·M&A",
+      "max": 7
+    },
+    {
+      "id": "w.tech.reg",
+      "path": "세계/테크·과학/규제·정책",
+      "max": 7
+    },
+    {
+      "id": "w.tech.sci",
+      "path": "세계/테크·과학/과학·우주",
+      "max": 7
+    },
+    {
+      "id": "w.tech.energy",
+      "path": "세계/테크·과학/에너지·기후테크",
+      "max": 7
+    },
+    {
+      "id": "w.soc.disaster",
+      "path": "세계/사회·재난/재난·기후",
+      "max": 5
+    },
+    {
+      "id": "w.soc.rights",
+      "path": "세계/사회·재난/사회·인권·보건",
+      "max": 5
+    }
+  ],
+  "limits": {
+    "titleMaxChars": 40,
+    "blocksMax": 3,
+    "relatedMax": 5,
+    "resultMaxBytes": 2097152,
+    "resendMax": 2
+  }
+}
