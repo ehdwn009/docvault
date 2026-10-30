@@ -205,6 +205,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
   const copy = (text: string, what: string) => void navigator.clipboard.writeText(text).then(() => toast(`${what} 복사했어요`), () => toast('복사하지 못했어요', 'error'));
 
   const recent = info?.recent;
+  // 앰버 램프는 앱 테마가 재정의하지 않는다(index.css) — 밝은 테마에서 amber-100 글자가 안 보여 버튼·상자 글자는 amber-500 (첫 실전 2026-10-30)
   const btn = 'min-h-9 rounded-md border border-slate-700 px-3 text-slate-300 hover:bg-slate-800 disabled:opacity-50';
   const smallBtn = 'min-h-9 rounded border border-slate-700 px-2 text-[11px] text-slate-300 hover:bg-slate-800';
 
@@ -232,7 +233,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
           {ready ? (
             <>
               <span>열쇠와 트리거가 준비됐어요 — [연결 확인]이 "연결 확인됨"이면 바꾸세요</span>
-              <button onClick={() => void saveMode('subscription')} className="min-h-9 rounded-md border border-amber-600/60 px-3 text-xs font-semibold text-amber-100 hover:bg-amber-800/40">
+              <button onClick={() => void saveMode('subscription')} className="min-h-9 rounded-md border border-amber-600/60 px-3 text-xs font-semibold text-amber-500 hover:bg-amber-800/40">
                 구독으로 바꾸기
               </button>
             </>
@@ -254,11 +255,11 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
           <div>
             <p className="font-semibold text-slate-300">연결 열쇠 (예약 작업이 docvault에 들어올 때)</p>
             {freshToken ? (
-              <div className="mt-1.5 rounded-md border border-amber-700/50 bg-amber-900/20 p-2 text-amber-100">
+              <div className="mt-1.5 rounded-md border border-amber-700/50 bg-amber-900/20 p-2 text-amber-500">
                 <p className="text-[11px]">이 창을 닫으면 다시 볼 수 없어요 — claude.ai 환경의 네트워크 시크릿(Bearer)의 헤더 값에 넣어 두세요(체크리스트 ②)</p>
                 <code className="mt-1 block break-all rounded bg-slate-950 px-2 py-1 text-[11px] text-slate-200">{freshToken}</code>
                 <div className="mt-1.5 flex gap-2">
-                  <button onClick={() => copy(freshToken, '연결 열쇠를')} className="min-h-9 rounded border border-amber-600/60 px-2.5 text-[11px] font-semibold hover:bg-amber-800/40">
+                  <button onClick={() => copy(freshToken, '연결 열쇠를')} className="min-h-9 rounded border border-amber-600/60 px-2.5 text-[11px] font-semibold text-amber-500 hover:bg-amber-800/40">
                     복사
                   </button>
                   <button onClick={() => setFreshToken(null)} className="min-h-9 rounded border border-slate-700 px-2.5 text-[11px] text-slate-300 hover:bg-slate-800">

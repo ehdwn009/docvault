@@ -292,7 +292,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
               <button
                 onClick={() => void start(false, admin.subscription?.missing?.slot === 'adhoc' ? undefined : admin.subscription?.missing?.slot)}
                 disabled={!admin.configured || starting}
-                className="min-h-9 shrink-0 rounded-md border border-amber-600/60 px-2.5 font-semibold text-amber-100 transition hover:bg-amber-800/40 disabled:opacity-40"
+                className="min-h-9 shrink-0 rounded-md border border-amber-600/60 px-2.5 font-semibold text-amber-500 transition hover:bg-amber-800/40 disabled:opacity-40"
               >
                 지금 만들기
               </button>
