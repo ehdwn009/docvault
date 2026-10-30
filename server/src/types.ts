@@ -10,5 +10,7 @@ export type SessionUser = {
 export type AppEnv = {
   Variables: {
     user: SessionUser;
+    /** 어떻게 들어왔나 — 쿠키 세션(사람) 또는 구독 연결 열쇠(claude.ai 예약 작업, /briefing/jobs/* 만). v0.50 */
+    authKind: 'session' | 'token';
   };
 };

@@ -72,7 +72,16 @@ export type EditionItem = {
 
 export type Edition = {
   version: number;
-  edition: { date: string; slot: Slot; label: string; since: number; until: number; createdAt: number };
+  edition: {
+    date: string;
+    slot: Slot;
+    label: string;
+    since: number;
+    until: number;
+    createdAt: number;
+    /** 구독 생성 방식으로 만든 회차 — 누가 만들었나 (v0.50). API 방식 회차에는 없다 */
+    generator?: { mode: 'subscription'; config?: string; models?: string[]; skillVersion?: string };
+  };
   stats: {
     sources: number;
     sourcesFailed: number;
@@ -136,6 +145,14 @@ export function editionFileName(date: string, label: string): string {
   return `${BRIEFING.FOLDER_NAME} ${date} ${label}.json`;
 }
 
+/** 조립에 넣는 기사 하나 — EditionItem에서 서버가 붙이는 칸(id·storyId·status)을 뺀 것. 어느 분야인지와 이어받은 이슈 id를 따로 든다 */
+export type ItemDraft = { subId: string; prevStoryId: string | null; item: Omit<EditionItem, 'id' | 'storyId' | 'status'> };
+
+/** 기사마다 Written을 보고 세는 검증 카운터 — 기존 파이프라인은 buildItem에서, 구독 경로는 완성본 stats에서 온다 (설계 "완성본") */
+export type VerifyCounters = { numberDrops: number; demoted: number; overruns: number; impactDrops: number; explainDrops: number; titleMismatch: number };
+
+export type EditionMeta = { slot: Slot; since: number; until: number; createdAt: number };
+
 export function assembleEdition(args: {
   picked: Picked[];
   written: Map<number, Written>;
@@ -150,18 +167,8 @@ export function assembleEdition(args: {
   stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number };
   usage: Usage;
 }): Edition {
-  const { date } = kstParts(args.createdAt);
-  const counter = new Map<string, number>();
-  const bySub = new Map<string, EditionItem[]>();
-
-  const basisCount = { body: 0, lede: 0, title: 0, web: 0 };
-  let numberDrops = 0;
-  let demotedCount = 0;
-  let overruns = 0;
-  const impactCount = { stated: 0, inferred: 0, dropped: 0 };
-  const explainCount = { items: 0, outside: 0, dropped: 0 };
-  const coreDeep = { deep: 0, core: 0 };
-  let titleMismatch = 0;
+  const drafts: ItemDraft[] = [];
+  const counters: VerifyCounters = { numberDrops: 0, demoted: 0, overruns: 0, impactDrops: 0, explainDrops: 0, titleMismatch: 0 };
 
   args.picked.forEach((p, i) => {
     const w = p.importance >= 2 ? args.written.get(i) : undefined;
@@ -176,70 +183,110 @@ export function assembleEdition(args: {
     } else if (fallback) {
       text = { title: fallback.title, summary: fallback.summary, why: '' };
       importance = 1;
-      demotedCount++;
+      counters.demoted++;
     } else if (p.importance === 1 && p.brief) {
       text = p.brief;
     }
     if (!text) return;
     // 제목뿐인 참고 — AI 문장 없이 제목만 (재료 보장 규칙)
     const titleOnly = fallback ? fallback.titleOnly : importance === 1 && !text.summary;
-    const n = (counter.get(p.sub.id) ?? 0) + 1;
-    counter.set(p.sub.id, n);
-    const id = `${p.sub.id}.${String(n).padStart(3, '0')}`;
     const others = otherOutlets(p);
     const materials = args.materials.get(i);
-    const basis = basisOf(p, materials);
-    basisCount[basis]++;
     const evidence = w ? evidenceOf(p, materials) : [];
     const readUrl = materials?.find((m) => m.via === 'body')?.url;
     if (w) {
-      numberDrops += w.numberDrops;
-      if (w.overrun) overruns++;
-      impactCount.dropped += w.impactDrops;
-      for (const line of w.impact ?? []) impactCount[line.kind]++;
-      explainCount.dropped += w.explainDrops;
-      if (w.explain) {
-        explainCount.items++;
-        explainCount.outside += w.explain.filter((b) => b.basis === 'outside').length;
-      }
-      if (importance === 3) {
-        coreDeep.core++;
-        if (evidence.filter((e) => e.via !== 'lede').length >= 2) coreDeep.deep++;
-      }
+      counters.numberDrops += w.numberDrops;
+      if (w.overrun) counters.overruns++;
+      counters.impactDrops += w.impactDrops;
+      counters.explainDrops += w.explainDrops;
       // AI 제목에 원 제목에 없는 숫자가 들어오면 과장이거나 오기다 — 세기만 한다 (원 제목의 숫자를 덜 쓴 것은 괜찮다)
       const orig = numberSet(p.main.title);
-      if (numberSet(w.title).some((n) => !orig.includes(n))) titleMismatch++;
+      if (numberSet(w.title).some((n) => !orig.includes(n))) counters.titleMismatch++;
     }
     const lenses = args.lenses.get(i);
-    const item: EditionItem = {
-      id,
-      title: text.title,
-      summary: text.summary,
-      why: text.why,
-      importance,
-      source: p.main.source,
-      url: p.main.url,
-      publishedAt: p.main.publishedAt,
-      // 이어받은 이슈는 직전 id 그대로 — 다음 회차·2차 이슈 타임라인이 같은 열쇠로 묶는다
-      storyId: p.prevStoryId ?? `${p.sub.id}.${date}.${args.slot}.${n}`,
-      status: p.prevStoryId ? 'updated' : 'new',
-      basis,
-      related: others.slice(0, BRIEFING.MAX_RELATED),
-      outlets: 1 + others.length,
-      originalTitle: p.main.title,
-      ...(evidence.length ? { sources: evidence.map((e) => ({ id: e.id, source: e.source, url: e.url, via: e.via })) } : {}),
-      ...(w ? { summaryFrom: w.summaryFrom, whyFrom: w.whyFrom, blocks: w.blocks } : {}),
-      ...(w?.sides ? { sides: w.sides } : {}),
-      ...(lenses ? { lenses } : {}),
-      ...(w?.w5 ? { w5: w.w5 } : {}),
-      ...(w?.impact ? { impact: w.impact } : {}),
-      ...(w?.explain ? { explain: w.explain } : {}),
-      ...(readUrl ? { readUrl } : {}),
-      ...(w?.changed ? { changed: w.changed } : {}),
-      ...(titleOnly ? { titleOnly: true } : {}),
-    };
-    bySub.set(p.sub.id, [...(bySub.get(p.sub.id) ?? []), item]);
+    drafts.push({
+      subId: p.sub.id,
+      prevStoryId: p.prevStoryId,
+      item: {
+        title: text.title,
+        summary: text.summary,
+        why: text.why,
+        importance,
+        source: p.main.source,
+        url: p.main.url,
+        publishedAt: p.main.publishedAt,
+        basis: basisOf(p, materials),
+        related: others.slice(0, BRIEFING.MAX_RELATED),
+        outlets: 1 + others.length,
+        originalTitle: p.main.title,
+        ...(evidence.length ? { sources: evidence.map((e) => ({ id: e.id, source: e.source, url: e.url, via: e.via })) } : {}),
+        ...(w ? { summaryFrom: w.summaryFrom, whyFrom: w.whyFrom, blocks: w.blocks } : {}),
+        ...(w?.sides ? { sides: w.sides } : {}),
+        ...(lenses ? { lenses } : {}),
+        ...(w?.w5 ? { w5: w.w5 } : {}),
+        ...(w?.impact ? { impact: w.impact } : {}),
+        ...(w?.explain ? { explain: w.explain } : {}),
+        ...(readUrl ? { readUrl } : {}),
+        ...(w?.changed ? { changed: w.changed } : {}),
+        ...(titleOnly ? { titleOnly: true } : {}),
+      },
+    });
   });
+
+  return layoutEdition(drafts, { slot: args.slot, since: args.since, until: args.until, createdAt: args.createdAt }, args.stats, counters, {
+    usd: costOf(args.usage),
+    haiku: { input: args.usage.haikuInput, output: args.usage.haikuOutput },
+    sonnet: { input: args.usage.sonnetInput, output: args.usage.sonnetOutput },
+    opus: { input: args.usage.opusInput, output: args.usage.opusOutput },
+    webSearches: args.usage.webSearches,
+  }, args.usage.byStage);
+}
+
+/**
+ * 기사 목록 → 회차 — id·storyId·status 붙이기, 분야 묶기, 오늘의 핵심, 건강 숫자 합산. 기사 칸만 보는 순수 코드라
+ * 기존 파이프라인(위)과 구독 경로(subscription.ts — 세션이 보낸 완성본)가 같은 함수를 쓴다 (설계 "구독 생성 방식 — 완성본").
+ * 기사에서 셀 수 있는 것(basis·impact 종류·해설 outside·coreDeep)은 여기서 세고, Written에서만 알 수 있는 것은 counters로 받는다
+ */
+export function layoutEdition(
+  drafts: ItemDraft[],
+  meta: EditionMeta,
+  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number },
+  counters: VerifyCounters,
+  cost: Edition['cost'],
+  byStage: Edition['stats']['byStage'],
+  generator?: Edition['edition']['generator'],
+): Edition {
+  const { date } = kstParts(meta.createdAt);
+  const counter = new Map<string, number>();
+  const bySub = new Map<string, EditionItem[]>();
+  const basisCount = { body: 0, lede: 0, title: 0, web: 0 };
+  const impactCount = { stated: 0, inferred: 0, dropped: counters.impactDrops };
+  const explainCount = { items: 0, outside: 0, dropped: counters.explainDrops };
+  const coreDeep = { deep: 0, core: 0 };
+
+  for (const d of drafts) {
+    const n = (counter.get(d.subId) ?? 0) + 1;
+    counter.set(d.subId, n);
+    const item: EditionItem = {
+      id: `${d.subId}.${String(n).padStart(3, '0')}`,
+      // 이어받은 이슈는 직전 id 그대로 — 다음 회차·2차 이슈 타임라인이 같은 열쇠로 묶는다
+      storyId: d.prevStoryId ?? `${d.subId}.${date}.${meta.slot}.${n}`,
+      status: d.prevStoryId ? 'updated' : 'new',
+      ...d.item,
+    };
+    if (item.basis) basisCount[item.basis]++;
+    for (const line of item.impact ?? []) impactCount[line.kind]++;
+    if (item.explain) {
+      explainCount.items++;
+      explainCount.outside += item.explain.filter((b) => b.basis === 'outside').length;
+    }
+    if (item.importance === 3 && item.summaryFrom) {
+      coreDeep.core++;
+      if ((item.sources ?? []).filter((e) => e.via !== 'lede').length >= 2) coreDeep.deep++;
+    }
+    bySub.set(d.subId, [...(bySub.get(d.subId) ?? []), item]);
+  }
+
 
   let total = 0;
   const sections = SECTIONS.map((section) => ({
@@ -267,30 +314,24 @@ export function assembleEdition(args: {
   return {
     version: BRIEFING.EDITION_VERSION,
     lead,
-    edition: { date, slot: args.slot, label: slotLabel(args.slot, args.createdAt), since: args.since, until: args.until, createdAt: args.createdAt },
+    edition: { date, slot: meta.slot, label: slotLabel(meta.slot, meta.createdAt), since: meta.since, until: meta.until, createdAt: meta.createdAt, ...(generator ? { generator } : {}) },
     stats: {
-      ...args.stats,
+      ...stats,
       items: total,
       basis: basisCount,
-      numberDrops,
-      demoted: demotedCount,
-      overruns,
+      numberDrops: counters.numberDrops,
+      demoted: counters.demoted,
+      overruns: counters.overruns,
       impact: impactCount,
       explain: explainCount,
       coreDeep,
-      slotGaps: slotGapsOf(allItems.map((x) => x.it.publishedAt), args.since, args.until),
+      slotGaps: slotGapsOf(allItems.map((x) => x.it.publishedAt), meta.since, meta.until),
       worldShare: { items: allItems.filter((x) => x.world).length, lead: allItems.filter((x) => x.world && leadSet.has(x.it.id)).length },
       emptySubs: SUBS.length - bySub.size,
-      titleMismatch,
-      byStage: args.usage.byStage,
+      titleMismatch: counters.titleMismatch,
+      ...(byStage ? { byStage } : {}),
     },
-    cost: {
-      usd: costOf(args.usage),
-      haiku: { input: args.usage.haikuInput, output: args.usage.haikuOutput },
-      sonnet: { input: args.usage.sonnetInput, output: args.usage.sonnetOutput },
-      opus: { input: args.usage.opusInput, output: args.usage.opusOutput },
-      webSearches: args.usage.webSearches,
-    },
+    cost,
     ...(BRIEFING.IMPACT_MODE === 'show' ? { impactVisible: true } : {}),
     ...(BRIEFING.EXPLAIN_MODE === 'show' ? { explainVisible: true } : {}),
     sections,

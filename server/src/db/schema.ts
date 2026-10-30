@@ -168,6 +168,18 @@ export const userSettings = sqliteTable('user_settings', {
   /** 이 사용자가 함께 보는 브리핑의 주인(관리자). null=안 봄. 관리자가 설정 → 뉴스 브리핑에서 계정을 고른다 (v0.49).
       is_shared(전체 공개)와 달리 사람을 고르는 공유라 파일이 아니라 사람에 붙인다 — 앞으로 생길 회차까지 한 번에 열린다 */
   briefingOwnerId: integer('briefing_owner_id').references(() => users.id, { onDelete: 'set null' }),
+  /** 회차를 누가 만드느냐 — api(서버가 Anthropic API로) · subscription(서버가 트리거한 claude.ai 예약 작업이 사용자 구독으로). 관리자만 의미 (v0.50) */
+  briefingMode: text('briefing_mode', { enum: ['api', 'subscription'] }).notNull().default('api'),
+  /** 구독 연결 열쇠 — 예약 작업이 /briefing/jobs/* 를 부를 때 쓰는 Bearer 토큰의 SHA-256. 원문은 발급 응답에 한 번만 (v0.50) */
+  briefingTokenHash: text('briefing_token_hash'),
+  /** 열쇠 앞 8자 평문 — 설정 화면에 "어느 열쇠가 쓰였나" */
+  briefingTokenPrefix: text('briefing_token_prefix'),
+  briefingTokenCreatedAt: integer('briefing_token_created_at'),
+  briefingTokenLastUsedAt: integer('briefing_token_last_used_at'),
+  /** claude.ai 예약 작업 트리거 주소·토큰 JSON을 AES-256-GCM으로 암호화(키는 JWT_SECRET 파생) — 서버가 다시 보내야 해서 해시가 아니다 (v0.50) */
+  briefingTriggerEnc: text('briefing_trigger_enc'),
+  /** 마지막 [연결 확인] 결과 JSON {at, result} — ping job은 메모리라 결과만 남긴다 (v0.50) */
+  briefingLastPing: text('briefing_last_ping'),
   updatedAt: integer('updated_at').notNull(),
 });
 
@@ -239,13 +251,26 @@ export const briefingRuns = sqliteTable(
     ownerId: integer('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    trigger: text('trigger', { enum: ['manual', 'auto'] }).notNull(),
+    /** subscription = 서버가 트리거한 claude.ai 예약 작업이 만든 회차 (v0.50) */
+    trigger: text('trigger', { enum: ['manual', 'auto', 'subscription'] }).notNull(),
     slot: text('slot', { enum: ['morning', 'noon', 'evening', 'adhoc'] }).notNull(),
     /** 한국시간 날짜 YYYY-MM-DD — 자동 회차가 하루에 한 번만 돌게 하는 기준 */
     editionDate: text('edition_date').notNull(),
     /** cancelled = 사람이 [중지]로 멈춤 (2026-10-02). 실패(error)와 나눠 화면이 빨갛게 보이지 않게 */
-    status: text('status', { enum: ['running', 'ok', 'error', 'skipped', 'cancelled'] }).notNull(),
-    stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'fill', 'summarize', 'lens', 'save'] }),
+    /** missing = 구독 실행이 마감까지 완성본을 보내지 않음 (v0.50) */
+    status: text('status', { enum: ['running', 'ok', 'error', 'skipped', 'cancelled', 'missing'] }).notNull(),
+    /** remote = 구독 — 예약 작업이 일하는 중. 세부 단계는 서버 메모리(live)에만 (v0.50) */
+    stage: text('stage', { enum: ['collect', 'classify', 'select', 'read', 'fill', 'summarize', 'lens', 'save', 'remote'] }),
+    /** 구독 실행의 uuid — 예약 작업이 지시서·진행·완성본을 부르는 열쇠. 숫자 id를 밖에 내지 않으려고 (v0.50) */
+    jobId: text('job_id').unique(),
+    /** 구독 실행 마감(회차 시작 + 30분) — tick이 이 시각을 넘긴 running을 missing으로 닫는다 */
+    deadlineAt: integer('deadline_at'),
+    /** 예약 작업이 지시서를 받아 간 시각 — 걸린 시간의 시작점 */
+    remoteStartedAt: integer('remote_started_at'),
+    /** 완성본 검사에서 뺀 기사 수 JSON {이유: 수} */
+    droppedItems: text('dropped_items'),
+    /** 회차를 만든 것 JSON {mode, config?, models?, skillVersion?} — 모델 구성 비교의 열쇠 */
+    generator: text('generator'),
     progressDone: integer('progress_done').notNull().default(0),
     progressTotal: integer('progress_total').notNull().default(0),
     sinceAt: integer('since_at').notNull(),

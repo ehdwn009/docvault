@@ -100,6 +100,14 @@ export const DEFAULT_USER_SETTINGS = {
   briefingReader: 0,
   /** 함께 보는 브리핑의 주인(관리자 id) — 관리자가 고른 일반 계정에만 값이 생긴다 (v0.49) */
   briefingOwnerId: null as number | null,
+  /** 회차 생성 방식 — api(지금 방식) · subscription(구독으로 받기) (v0.50) */
+  briefingMode: 'api' as 'api' | 'subscription',
+  briefingTokenHash: null as string | null,
+  briefingTokenPrefix: null as string | null,
+  briefingTokenCreatedAt: null as number | null,
+  briefingTokenLastUsedAt: null as number | null,
+  briefingTriggerEnc: null as string | null,
+  briefingLastPing: null as string | null,
 };
 
 /** 질문(배움 카드 1판) — 값의 근거는 docs/design/배움카드_docvault_20260918.md "정한 값" */
@@ -454,6 +462,17 @@ export const BRIEFING = {
   /** verify 보고의 "중복 의심" — 핵심·주요끼리 제목 글자 묶음 겹침이 이 이상이면 적는다(경고만, 빼지 않는다).
       구성 B에서 같은 사건(알파벳 폭락) 두 줄이 0.47, 다른 사건끼리는 최대 0.35였다 */
   SUB_DUP_TITLE_SIMILARITY: 0.4,
+  /** 완성본 글자 상한 — zod가 본다. 제목은 TITLE_MAX_CHARS(40)보다 넉넉히(초과는 세기만 한다), 글은 칸 하나 */
+  SUB_TITLE_MAX_CHARS: 120,
+  SUB_TEXT_MAX_CHARS: 2000,
+  SUB_URL_MAX_CHARS: 2048,
+  /** 완성본 기사 수 상한과 기사당 related 입력 상한(저장은 MAX_RELATED로 자른다) */
+  SUB_ITEMS_MAX: 400,
+  SUB_RELATED_MAX_IN: 100,
+  /** 연결 열쇠로만 들어오는 주소의 접두어 — 인증 미들웨어가 이 접두어(끝 슬래시 포함)에서만 Bearer를 받고, 그 밖에서는 무시한다 */
+  SUB_JOBS_PATH_PREFIX: '/api/v1/briefing/jobs/',
+  /** 열쇠 앞 몇 자를 평문으로 두나 — "어느 열쇠가 쓰였나" 표시용 */
+  SUB_TOKEN_PREFIX_CHARS: 8,
   /** 완성본 검사용 허용 도메인에 늘 들어가는 것 — 통신사(WEB_FILL_WIRES)와 Google 뉴스 링크(검색 기사가 그대로 남는다) */
   SUB_CHECK_EXTRA_DOMAINS: ['news.google.com'],
 } as const;

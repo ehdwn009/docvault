@@ -13,6 +13,7 @@ import { authGuard } from './middleware/auth.js';
 import { adminRoutes } from './routes/admin.js';
 import { askRoutes, purgeExpiredThreads } from './routes/ask.js';
 import { briefingRoutes } from './routes/briefing.js';
+import { briefingJobRoutes } from './routes/briefingJobs.js';
 import { recoverStaleRuns } from './lib/briefing/run.js';
 import { startScheduler } from './lib/briefing/schedule.js';
 import { cardRoutes } from './routes/cards.js';
@@ -93,6 +94,8 @@ api.get('/changelog', (c) => {
 });
 api.route('/admin', adminRoutes);
 api.route('/ask', askRoutes);
+// 구독 연결 열쇠(Bearer)로만 들어오는 세 주소 — /briefing보다 먼저. 뒤에 두면 briefingRoutes의 가드가 쿠키 user를 요구해 터진다 (v0.50)
+api.route('/briefing/jobs', briefingJobRoutes);
 api.route('/briefing', briefingRoutes);
 api.route('/cards', cardRoutes);
 api.route('/auth', authRoutes);

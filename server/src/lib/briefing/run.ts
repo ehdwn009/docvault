@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ne, sql } from 'drizzle-orm';
 import { config } from '../../config.js';
 import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
@@ -32,8 +32,14 @@ export function isConfigured(): boolean {
   return config.anthropicApiKey !== '';
 }
 
+/** 서버 안에서 도는 실행 — 구독 실행(세션이 일한다, 60~90분)은 이 잠금에 안 걸린다 (설계 "기존 가정과의 충돌" 3) */
 export function runningRun(): RunRow | null {
-  return db.select().from(briefingRuns).where(eq(briefingRuns.status, 'running')).orderBy(desc(briefingRuns.startedAt)).get() ?? null;
+  return db.select().from(briefingRuns).where(and(eq(briefingRuns.status, 'running'), ne(briefingRuns.trigger, 'subscription'))).orderBy(desc(briefingRuns.startedAt)).get() ?? null;
+}
+
+/** 이 관리자의 도는 구독 실행 — [지금 만들기]·방식 변경이 먼저 닫는다 */
+export function runningSubscriptionRun(ownerId: number): RunRow | null {
+  return db.select().from(briefingRuns).where(and(eq(briefingRuns.ownerId, ownerId), eq(briefingRuns.status, 'running'), eq(briefingRuns.trigger, 'subscription'))).orderBy(desc(briefingRuns.startedAt)).get() ?? null;
 }
 
 /** 이번 달(한국시간) 브리핑 추정 비용 합계 — 문서를 지워도 줄지 않는다(실행 기록에서 센다) */
@@ -93,16 +99,28 @@ function closeRun(runId: number, status: 'error' | 'cancelled', message: string)
   return r.changes > 0;
 }
 
+/** 구독 실행을 닫는다 — missing(마감까지 안 옴)·cancelled(사람이 대체·방식 변경)·error(트리거 실패). 아직 running일 때만 */
+export function closeSubscriptionRun(runId: number, status: 'missing' | 'cancelled' | 'error', message: string): boolean {
+  const r = db
+    .update(briefingRuns)
+    .set({ status, message, finishedAt: Date.now() })
+    .where(and(eq(briefingRuns.id, runId), eq(briefingRuns.status, 'running'), eq(briefingRuns.trigger, 'subscription')))
+    .run();
+  closeLive(runId);
+  return r.changes > 0;
+}
+
 /** API-137 중지 — 이미 쓴 AI 비용은 그 일이 끝나는 대로 기록에 더해진다 */
 export function cancelRun(runId: number): boolean {
   return closeRun(runId, 'cancelled', '직접 멈췄어요');
 }
 
-/** 기동 시: running으로 남은 실행은 끝난 것이다 — 남겨 두면 영원히 "만드는 중"으로 보이고 새 실행을 막는다 */
+/** 기동 시: running으로 남은 실행은 끝난 것이다 — 남겨 두면 영원히 "만드는 중"으로 보이고 새 실행을 막는다.
+    구독 실행은 남긴다 — 일하는 쪽은 claude.ai 세션이라 재시작과 무관하고, 닫으면 뒤에 오는 완성본이 거절된다 (설계 "충돌" 2) */
 export function recoverStaleRuns(): void {
   db.update(briefingRuns)
     .set({ status: 'error', message: '서버 재시작으로 중단됐어요', finishedAt: Date.now() })
-    .where(eq(briefingRuns.status, 'running'))
+    .where(and(eq(briefingRuns.status, 'running'), ne(briefingRuns.trigger, 'subscription')))
     .run();
 }
 
@@ -115,6 +133,9 @@ export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; sl
   // 잠금은 DB의 running 행 하나 — better-sqlite3는 동기라 이 검사와 아래 insert 사이에 다른 요청이 끼어들 수 없다
   const busy = runningRun();
   if (busy) throw new BriefingBusyError(busy);
+  // 구독 모드의 [지금 만들기] — 도는 구독 실행은 "직접 만들기로 대체"로 닫는다. 늦게 오는 완성본은 거절된다 (설계 "늦게 오거나")
+  const remote = runningSubscriptionRun(args.ownerId);
+  if (remote) closeSubscriptionRun(remote.id, 'cancelled', '직접 만들기로 대체했어요');
   const spent = monthCostUsd(args.ownerId, now);
   if (spent >= BRIEFING.MONTHLY_BUDGET_USD && !args.force) throw new BriefingBudgetError(spent);
 
@@ -263,9 +284,19 @@ export function toRunDto(r: RunRow) {
     message: r.message,
     startedAt: r.startedAt,
     finishedAt: r.finishedAt,
+    // 구독 실행 (v0.50) — 마감·지시서 받아 간 시각·검사에서 뺀 수·누가 만들었나
+    jobId: r.jobId,
+    deadlineAt: r.deadlineAt,
+    remoteStartedAt: r.remoteStartedAt,
+    droppedItems: parseJsonObject(r.droppedItems),
+    generator: parseJsonObject(r.generator),
     // 도는 중일 때만 — 진행 기록과 오래 기다리는 출처 (설계 "실행 관리 — 진행 기록")
     live: r.status === 'running' ? liveView(r.id) : null,
   };
+}
+
+function parseJsonObject(raw: string | null): Record<string, unknown> | null {
+  return parseStageUsage(raw);
 }
 
 function parseStageUsage(raw: string | null): Record<string, unknown> | null {

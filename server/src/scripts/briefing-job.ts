@@ -9,7 +9,9 @@ import { REGION_RULE, SUB_LIST, SUB_RULE } from '../lib/briefing/classify.js';
 import { stripMeta } from '../lib/briefing/clean.js';
 import { bigramSimilarity, collect, numberSet, titleKey, type Candidate } from '../lib/briefing/collect.js';
 import { needsDemotion } from '../lib/briefing/fallback.js';
-import { checkDomainsOf, checkUrl } from '../lib/briefing/jobDomains.js';
+import { checkUrl } from '../lib/briefing/jobDomains.js';
+import { buildInstruction } from '../lib/briefing/jobInstruction.js';
+import { checkItems, ResultSchema, tooManyDropped } from '../lib/briefing/jobResult.js';
 import { finalizeBullets, LENS_RULES } from '../lib/briefing/lenses.js';
 import { HANGUL, MAX_INPUT_PER_SUB, pickForSelect, selectRules, type Picked, type PrevStory } from '../lib/briefing/select.js';
 import { CANDIDATE_FEEDS, defaultSourcesDoc, parseSourcesDoc, toSources, type SourcesDoc } from '../lib/briefing/sourcesDoc.js';
@@ -225,24 +227,8 @@ function cmdInstruction(dir: string): void {
   const until = parseTime('until') ?? now;
   const since = parseTime('since') ?? until - hours * 60 * 60 * 1000;
   if (since >= until || until - since > BRIEFING.MAX_RANGE_MS) throw new Error(`범위가 맞지 않습니다 — since < until, 길이는 ${BRIEFING.MAX_RANGE_MS / 3_600_000}시간 이하`);
-  const instruction: Instruction & { taxonomy: unknown; limits: unknown } = {
-    kind: 'edition',
-    jobId: `test-${new Date(now).toISOString().replace(/[:.]/g, '-')}`,
-    slot,
-    editionDate: kstParts(now).date,
-    since,
-    until,
-    // 시험에서는 리드 90분이 곧 마감까지의 시간 — 실전은 "회차 시작 + 30분"을 서버가 적어 준다
-    deadline: now + BRIEFING.SUB_LEAD_MS,
-    wrapUpBefore: BRIEFING.SUB_WRAPUP_BEFORE_MS,
-    sources: doc,
-    allowedDomains: checkDomainsOf(doc),
-    excludeUrls: [],
-    prevStories: [],
-    generator: { config },
-    taxonomy: SUBS.map((s) => ({ id: s.id, path: subPath(s), max: s.wide ? BRIEFING.MAX_ITEMS_WIDE : BRIEFING.MAX_ITEMS_NARROW })),
-    limits: { titleMaxChars: BRIEFING.TITLE_MAX_CHARS, blocksMax: BRIEFING.BLOCKS_MAX, relatedMax: BRIEFING.MAX_RELATED, resultMaxBytes: BRIEFING.SUB_RESULT_MAX_BYTES, resendMax: BRIEFING.SUB_RESEND_MAX },
-  };
+  // 서버(subscription.ts)와 같은 함수로 — 시험에서는 리드 90분이 곧 마감까지의 시간. 실전은 "회차 시작 + 30분"을 서버가 적어 준다
+  const instruction = buildInstruction({ jobId: `test-${new Date(now).toISOString().replace(/[:.]/g, '-')}`, slot, since, until, deadline: now + BRIEFING.SUB_LEAD_MS, doc, excludeUrls: [], prevStories: [], config });
   writeJson(path.join(dir, 'instruction.json'), instruction);
   const k = kstParts(now);
   console.log(`지시서 → ${path.join(dir, 'instruction.json')} — ${slot} · 범위 ${kstParts(since).date} ${kstParts(since).hour}:${pad2(kstParts(since).minute)} ~ ${kstParts(until).date} ${kstParts(until).hour}:${pad2(kstParts(until).minute)} KST · 출처 ${toSources(doc).length}곳 · 허용 도메인 ${instruction.allowedDomains.length}개 · 마감 ${kstParts(instruction.deadline).hour}:${pad2(kstParts(instruction.deadline).minute)} KST (지금 ${k.hour}:${pad2(k.minute)}) · 구성 ${config}`);
@@ -561,16 +547,7 @@ function cmdVerify(dir: string): void {
   const items: ResultItem[] = [];
   const report: string[] = [];
   const counters = { numberDrops: 0, overruns: 0, demoted: 0, impactDrops: 0, explainDrops: 0, titleMismatch: 0, lensDrops: 0, skipped: 0, titleTooLong: 0 };
-  const urlDrops: Record<string, number> = {};
-  const checkAll = (i: number, urls: string[]) => {
-    for (const u of urls) {
-      const r = checkUrl(u, ins.allowedDomains);
-      if (!r.ok) {
-        urlDrops[r.reason] = (urlDrops[r.reason] ?? 0) + 1;
-        report.push(`story ${i}: 주소 검사 실패(${r.reason}) ${u} — 서버가 이 기사를 뺀다`);
-      }
-    }
-  };
+  const storyOf: number[] = [];
 
   picked.forEach((p, i) => {
     const m = matOf.get(i);
@@ -613,7 +590,7 @@ function cmdVerify(dir: string): void {
       const summary = stripMeta(brief.summary);
       const hasSnippet = [p.main, ...p.related].some((c) => c.snippet || c.feedText);
       items.push({ ...base, title, summary, why: p.importance === 1 ? p.brief!.why : '', importance: 1, summaryFrom: [], whyFrom: [], blocks: [], sides: null, lenses: null, w5: null, impact: null, explain: null, changed: null, titleOnly: !summary && !hasSnippet });
-      checkAll(i, [p.main.url, ...p.related.map((r) => r.url), ...(readUrl ? [readUrl] : [])]);
+      storyOf.push(i);
       return;
     }
 
@@ -661,7 +638,7 @@ function cmdVerify(dir: string): void {
       changed: w.changed ?? null,
       titleOnly: false,
     });
-    checkAll(i, [p.main.url, ...p.related.map((r) => r.url), ...(readUrl ? [readUrl] : []), ...evidence.map((e) => e.url)]);
+    storyOf.push(i);
   });
 
   const generator = { mode: 'subscription', config: ins.generator.config ?? 'A', models: (flag('models') ?? '').split(',').map((s) => s.trim()).filter(Boolean), skillVersion: flag('skill-version') ?? '1' };
@@ -689,6 +666,16 @@ function cmdVerify(dir: string): void {
   const result = { generator, items, stats, log };
   writeJson(path.join(dir, 'result.json'), result);
 
+  // 서버가 받으면 어떻게 되나 — 같은 코드(jobResult.ts)로 미리 본다: 형식(zod) → 기사마다 주소·범위·중복 → 30% 거절선
+  const parsed = ResultSchema.safeParse(result);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    report.unshift(`형식 오류 — 서버가 400으로 거절한다: ${issue?.path.map((p) => String(p)).join('.')}: ${issue?.message}`);
+  }
+  const checked = parsed.success ? checkItems(parsed.data.items, { allowedDomains: ins.allowedDomains, excludeUrls: new Set(ins.excludeUrls), since: ins.since, until: ins.until, knownSubIds: new Set(SUBS.map((s) => s.id)) }) : null;
+  const urlDrops: Record<string, number> = checked?.dropped ?? {};
+  for (const r of checked?.reasons ?? []) report.push(`story ${storyOf[r.index]}: 서버 검사에서 빠짐(${r.reason}) ${r.detail}`);
+  const wouldReject = checked ? tooManyDropped(parsed.success ? parsed.data.items.length : 0, checked.kept.length) : false;
   const urlDropTotal = Object.values(urlDrops).reduce((a, b) => a + b, 0);
   // 같은 사건이 두 번 실렸나 — 핵심·주요끼리 제목 글자 묶음이 많이 겹치면 의심으로 적는다. 구성 B에서 알파벳 폭락이 핵심·주요에 따로 실렸다
   const dupes: string[] = [];
@@ -708,7 +695,7 @@ function cmdVerify(dir: string): void {
   const candidateLine = triedCandidates.length ? `후보 출처 ${triedCandidates.length}곳 중 받아진 곳 ${okCandidates.length}곳: ${okCandidates.join(', ') || '없음'}` : '';
   const head = [
     `실린 기사 ${items.length}건 (핵심 ${byImportance[0]} · 주요 ${byImportance[1]} · 참고 ${byImportance[2]}), 싣지 않은 것 ${counters.skipped}건`,
-    `주소 검사에서 걸린 주소 ${urlDropTotal}개${urlDropTotal ? ` (${Object.entries(urlDrops).map(([k, v]) => `${k} ${v}`).join(', ')}) — 서버는 그 기사를 뺀다. 전체의 ${BRIEFING.SUB_DROP_REJECT_RATIO * 100}%를 넘으면 통째로 거절된다` : ''}`,
+    `서버 검사에서 빠질 기사 ${urlDropTotal}건${urlDropTotal ? ` (${Object.entries(urlDrops).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}${wouldReject ? ` — 전체의 ${BRIEFING.SUB_DROP_REJECT_RATIO * 100}%를 넘어 서버가 통째로 거절한다(422)` : ''}`,
     `result.json 크기 ${(Buffer.byteLength(JSON.stringify(result), 'utf8') / 1024).toFixed(0)}KB (상한 ${BRIEFING.SUB_RESULT_MAX_BYTES / 1024 / 1024}MB)`,
     candidateLine,
     ...dupes,

@@ -11,12 +11,13 @@ set -euo pipefail
 PROFILE="${DOCVAULT_PROFILE:-edge}"
 
 # 뉴스 브리핑이 만들어지는 중인가 — 그때 컨테이너를 갈아 끼우면 그 실행이 "서버 재시작으로 중단"으로 끝난다.
-# 앱 컨테이너 안의 DB를 읽기 전용으로 본다. 물어볼 수 없으면(컨테이너가 꺼져 있는 등) 도는 중이 아니라고 본다
+# 앱 컨테이너 안의 DB를 읽기 전용으로 본다. 물어볼 수 없으면(컨테이너가 꺼져 있는 등) 도는 중이 아니라고 본다.
+# 구독 실행(trigger=subscription)은 세지 않는다 — 일하는 쪽은 claude.ai 세션이라 재시작과 무관하고, 60~90분씩 하루 3번이면 배포 창이 막힌다 (v0.50)
 briefing_running() {
   local n
   n=$(docker compose exec -T app node -e "
     const db = new (require('better-sqlite3'))('data/docvault.db', { readonly: true });
-    console.log(db.prepare(\"select count(*) as n from briefing_runs where status = 'running'\").get().n);
+    console.log(db.prepare(\"select count(*) as n from briefing_runs where status = 'running' and trigger != 'subscription'\").get().n);
   " 2>/dev/null) || return 1
   [ "${n:-0}" -gt 0 ]
 }

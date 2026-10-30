@@ -17,12 +17,30 @@ import {
   monthCostUsd,
   nextSinceAt,
   runningRun,
+  runningSubscriptionRun,
   startRun,
   toRunDto,
 } from '../lib/briefing/run.js';
 import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
 import { nextAuto, readSchedule, scheduleSchema, type AutoSchedule } from '../lib/briefing/autoSchedule.js';
 import { briefingOwnerOf, listReaderCandidates, setReader } from '../lib/briefing/readers.js';
+import {
+  assertTriggerUrl,
+  createPing,
+  issueToken,
+  JobError,
+  missingToday,
+  readMode,
+  recentSubscription,
+  revokeToken,
+  setMode,
+  setTrigger,
+  subscriptionSummary,
+  triggerSet,
+  triggerTimesOf,
+} from '../lib/briefing/subscription.js';
+import { checkDomainsOf } from '../lib/briefing/jobDomains.js';
+import { loadSourcesDoc } from '../lib/briefing/sources.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
@@ -85,8 +103,13 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const user = c.get('user');
     const auto = autoEnabled(user.id);
     const schedule = readSchedule(user.id);
-    const next = auto ? nextAuto(schedule, Date.now()) : null;
-    const running = runningRun();
+    const mode = readMode(user.id);
+    // 구독 모드의 "다음 자동"은 트리거 시각(회차 시작 − 리드) (v0.50)
+    const nextRaw = auto ? nextAuto(schedule, Date.now()) : null;
+    const next = nextRaw && mode === 'subscription' ? { ...nextRaw, at: nextRaw.at - BRIEFING.SUB_LEAD_MS } : nextRaw;
+    // 구독 실행이 돌면 그것이 "지금 실행" — 서버 안 실행과 동시에 있을 수 없다(startRun이 먼저 닫는다)
+    const running = runningRun() ?? runningSubscriptionRun(user.id);
+    const sub = mode === 'subscription' ? subscriptionSummary(user.id) : null;
     const last = db
       .select()
       .from(briefingRuns)
@@ -109,7 +132,58 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       nextSinceAt: nextSinceAt(user.id),
       readerEnabled: readerEnabled(user.id),
       monthFlagCount: monthFlagCount(user.id),
+      mode,
+      ...(sub
+        ? { subscription: { tokenPrefix: sub.tokenPrefix, tokenLastUsedAt: sub.tokenLastUsedAt, triggerSet: sub.triggerSet, triggerBroken: sub.triggerBroken, lastPingAt: sub.lastPingAt, missing: missingToday(user.id) } }
+        : {}),
     });
+  })
+
+  // API-141: 구독 연결 열쇠 발급·재발급 — 원문은 이 응답에 한 번만, 이전 열쇠는 즉시 무효 (v0.50)
+  .post('/token', (c) => {
+    const { token, prefix, createdAt } = issueToken(c.get('user').id);
+    c.header('Cache-Control', 'no-store');
+    return c.json({ token, prefix, createdAt });
+  })
+
+  // API-142: 열쇠 폐기 — 구독 모드였으면 api로 돌아간다
+  .delete('/token', (c) => {
+    revokeToken(c.get('user').id);
+    return c.body(null, 204);
+  })
+
+  // API-143: 구독 방식 상태 — 설정 화면이 읽는다
+  .get('/subscription', (c) => {
+    const userId = c.get('user').id;
+    const sub = subscriptionSummary(userId);
+    const schedule = readSchedule(userId);
+    const { doc } = loadSourcesDoc(userId);
+    const origin = new URL(c.req.url).origin;
+    return c.json({
+      ...sub,
+      leadMs: BRIEFING.SUB_LEAD_MS,
+      deadlineAfterMs: BRIEFING.SUB_DEADLINE_AFTER_MS,
+      triggerTimes: triggerTimesOf(schedule),
+      recent: recentSubscription(userId),
+      allowedDomains: checkDomainsOf(doc),
+      checklist: {
+        docvaultUrl: origin,
+        envNames: ['DOCVAULT_URL', 'DOCVAULT_TOKEN'],
+        taskPrompt: 'routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL과 DOCVAULT_TOKEN은 환경에 있어.',
+      },
+    });
+  })
+
+  // API-144: [연결 확인] — ping job으로 트리거를 쏜다. 회차는 만들지 않는다
+  .post('/subscription/ping', async (c) => {
+    const userId = c.get('user').id;
+    if (!triggerSet(userId)) return fail(c, 409, 'BRIEFING_TRIGGER_NOT_SET', '예약 작업 트리거가 설정되지 않았어요');
+    try {
+      return c.json({ jobId: await createPing(userId) }, 202);
+    } catch (e) {
+      if (e instanceof JobError) return c.json({ code: e.code, message: e.message }, e.status);
+      throw e;
+    }
   })
 
   // API-138: 앱 안 원문 보기 — 기사 id만 받고 서버가 회차에서 readUrl을 찾는다(열린 프록시 금지). 받은 글은 저장하지 않는다 (v0.45)
@@ -163,12 +237,13 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     return c.json({ users: listReaderCandidates(c.get('user').id) });
   })
 
-  // API-132: 만들기 시작 — 202로 곧바로 답하고 만드는 일은 뒤에서
-  .post('/runs', jsonBody(z.object({ force: z.boolean().optional() })), (c) => {
+  // API-132: 만들기 시작 — 202로 곧바로 답하고 만드는 일은 뒤에서. 구독 모드에서는 [지금 만들기] — 항상 앱이 직접(API) 만들고,
+  // 도는 구독 실행은 startRun이 "직접 만들기로 대체"로 닫는다. slot은 알림 띠가 보내는 회차(수시판 대신 그 회차 이름으로) (v0.50)
+  .post('/runs', jsonBody(z.object({ force: z.boolean().optional(), slot: z.enum(['morning', 'noon', 'evening']).optional() })), (c) => {
     if (!isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
-    const { force } = c.req.valid('json');
+    const { force, slot } = c.req.valid('json');
     try {
-      const run = startRun({ ownerId: c.get('user').id, trigger: 'manual', slot: 'adhoc', force });
+      const run = startRun({ ownerId: c.get('user').id, trigger: 'manual', slot: slot ?? 'adhoc', force });
       return c.json({ run: toRunDto(run) }, 202);
     } catch (e) {
       if (e instanceof BriefingBusyError) return c.json({ code: 'BRIEFING_RUNNING', message: e.message, run: toRunDto(e.run) }, 409);
@@ -200,11 +275,36 @@ export const briefingRoutes = new Hono<BriefingEnv>()
 
   // API-134: 자동 생성 설정 — 전체 켜기/끄기와 회차별 켜기·시각(v0.43). 둘 중 보낸 것만 바꾼다.
   // 키 없이 켜 두면 매번 조용히 실패하므로 켜기는 막는다 (자동 백업과 같은 이유)
-  .put('/settings', jsonBody(z.object({ autoEnabled: z.boolean().optional(), schedule: scheduleSchema.optional(), readerEnabled: z.boolean().optional() })), (c) => {
+  .put(
+    '/settings',
+    jsonBody(
+      z.object({
+        autoEnabled: z.boolean().optional(),
+        schedule: scheduleSchema.optional(),
+        readerEnabled: z.boolean().optional(),
+        mode: z.enum(['api', 'subscription']).optional(),
+        trigger: z.object({ url: z.string().trim().max(BRIEFING.SUB_URL_MAX_CHARS), token: z.string().trim().min(1).max(512) }).nullable().optional(),
+      }),
+    ),
+    async (c) => {
     const body = c.req.valid('json');
-    if (body.autoEnabled && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
     const userId = c.get('user').id;
     const now = Date.now();
+    // 구독 모드 (v0.50): 트리거는 암호화해 두고 값은 다시 내려오지 않는다. 구독으로 바꾸려면 열쇠와 트리거가 있어야 한다
+    if (body.trigger) {
+      const bad = await assertTriggerUrl(body.trigger.url);
+      if (bad) return fail(c, 400, 'VALIDATION_ERROR', `trigger.url: ${bad}`);
+      setTrigger(userId, body.trigger, now);
+    } else if (body.trigger === null) {
+      setTrigger(userId, null, now);
+    }
+    if (body.mode === 'subscription' && !(subscriptionSummary(userId).tokenPrefix && triggerSet(userId))) {
+      return fail(c, 409, 'BRIEFING_TRIGGER_NOT_SET', '연결 열쇠를 발급하고 예약 작업 트리거를 넣어야 구독으로 받을 수 있어요');
+    }
+    if (body.mode) setMode(userId, body.mode, now);
+    const modeNow = readMode(userId);
+    // 키 없이 켜 두면 매번 조용히 실패하므로 켜기는 막는다 — api 모드만. 구독 모드는 키 없이 트리거·마감이 돈다
+    if (body.autoEnabled && modeNow === 'api' && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
     const set = {
       ...(body.autoEnabled !== undefined ? { briefingAuto: body.autoEnabled ? 1 : 0 } : {}),
       ...(body.schedule ? { briefingSchedule: JSON.stringify(body.schedule) } : {}),
@@ -217,6 +317,8 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       .run();
     const auto = autoEnabled(userId);
     const schedule: AutoSchedule = readSchedule(userId);
-    const next = auto ? nextAuto(schedule, now) : null;
-    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId) });
-  });
+    const nextRaw = auto ? nextAuto(schedule, now) : null;
+    const next = nextRaw && modeNow === 'subscription' ? { ...nextRaw, at: nextRaw.at - BRIEFING.SUB_LEAD_MS } : nextRaw;
+    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId) });
+    },
+  );

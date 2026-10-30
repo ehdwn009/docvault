@@ -3,7 +3,7 @@ import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { files, folders } from '../../db/schema.js';
 import type { DbOrTx } from '../content.js';
-import { parseSourcesDoc, toSources, defaultSourcesDoc, type Source } from './sourcesDoc.js';
+import { parseSourcesDoc, toSources, defaultSourcesDoc, type Source, type SourcesDoc } from './sourcesDoc.js';
 
 // 수집 목록 — 코드가 아니라 "뉴스 브리핑/수집 목록.json" 문서다. 폰 편집기로 고치고 버전 기록으로 되돌릴 수 있게
 // (뉴스 브리핑 설계 "수집 목록"). 문서가 없으면 기본값으로 만든다. 형식이 틀리면 어디가 틀렸는지 알리고 실행을 멈춘다.
@@ -33,6 +33,12 @@ export function briefingFolderId(tx: DbOrTx, ownerId: number): number {
 
 /** 수집 목록 문서를 읽는다. 없으면 기본값으로 만든다(지웠어도 다시 생긴다) */
 export function loadSources(ownerId: number): { sources: Source[]; fileId: number; created: boolean } {
+  const { doc, fileId, created } = loadSourcesDoc(ownerId);
+  return { sources: toSources(doc), fileId, created };
+}
+
+/** 문서 그대로(feeds·searches·disabled) — 구독 생성 방식의 지시서가 세션에 넘긴다(세션이 같은 toSources로 받는다, v0.50) */
+export function loadSourcesDoc(ownerId: number): { doc: SourcesDoc; fileId: number; created: boolean } {
   return db.transaction((tx) => {
     const folderId = briefingFolderId(tx, ownerId);
     const existing = tx
@@ -40,7 +46,7 @@ export function loadSources(ownerId: number): { sources: Source[]; fileId: numbe
       .from(files)
       .where(and(eq(files.ownerId, ownerId), eq(files.folderId, folderId), eq(files.name, BRIEFING.SOURCES_FILE_NAME), isNull(files.deletedAt)))
       .get();
-    if (existing) return { sources: toSources(parseSourcesDoc(existing.contentText ?? '')), fileId: existing.id, created: false };
+    if (existing) return { doc: parseSourcesDoc(existing.contentText ?? ''), fileId: existing.id, created: false };
 
     const doc = defaultSourcesDoc();
     const content = JSON.stringify(doc, null, 2) + '\n';
@@ -62,6 +68,6 @@ export function loadSources(ownerId: number): { sources: Source[]; fileId: numbe
       })
       .returning({ id: files.id })
       .get();
-    return { sources: toSources(doc), fileId: row.id, created: true };
+    return { doc, fileId: row.id, created: true };
   });
 }

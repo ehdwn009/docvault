@@ -2,10 +2,12 @@ import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { createMiddleware } from 'hono/factory';
-import { HEALTH_PATH, SESSION_COOKIE } from '../constants.js';
+import { BRIEFING, HEALTH_PATH, SESSION_COOKIE } from '../constants.js';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
+import { findTokenOwner, notePingAuthFailure, touchToken } from '../lib/briefing/subscription.js';
 import { fail } from '../lib/errors.js';
+import { clearLoginAttempts, hitLoginAttempt } from '../lib/ratelimit.js';
 import { verifySessionToken } from '../lib/session.js';
 import type { AppEnv } from '../types.js';
 
@@ -39,8 +41,45 @@ export async function resolveSessionUser(c: Context): Promise<SessionResolution>
   return { ok: true, user };
 }
 
+/** 요청을 보낸 IP — 프록시(Caddy) 뒤라 헤더를 먼저 본다. 로그인 제한과 같은 규칙 (routes/auth.ts) */
+function clientIp(c: Context): string {
+  return c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? 'local';
+}
+
+/**
+ * 구독 연결 열쇠(Bearer) — `/api/v1/briefing/jobs/` 접두어에서만 받고 쿠키는 거절한다(브라우저의 관리자가 실수로 치지 못하게).
+ * 그 밖의 경로에서는 Bearer를 아예 보지 않는다 — "쿠키가 없으면 Bearer도 봐 준다" 식이면 열쇠가 전체 API의 관리자 통행증이 된다
+ * (뉴스 브리핑 설계 "보안 — 구독 연결 열쇠"). 틀린 열쇠는 IP + 열쇠 앞 8자로 묶어 로그인과 같은 제한을 건다 —
+ * 클라우드 세션은 공용 나가는 IP를 쓸 수 있어 IP만으로 묶으면 남의 틀린 열쇠가 내 실행을 막는다
+ */
+async function tokenGuard(c: Context<AppEnv>, next: () => Promise<void>) {
+  const raw = c.req.header('authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1] ?? '';
+  const key = `${clientIp(c)}|${raw.slice(0, BRIEFING.SUB_TOKEN_PREFIX_CHARS)}`;
+  const owner = raw ? findTokenOwner(raw) : null;
+  if (!owner) {
+    notePingAuthFailure();
+    const wait = hitLoginAttempt(key);
+    console.log(`[briefing] 연결 열쇠 거절 — ${clientIp(c)} ${raw ? raw.slice(0, BRIEFING.SUB_TOKEN_PREFIX_CHARS) + '…' : '(없음)'}`);
+    if (wait !== null) {
+      c.header('Retry-After', String(wait));
+      return fail(c, 429, 'TOO_MANY_ATTEMPTS', `잠시 후 다시 시도하세요 (${wait}초)`);
+    }
+    return fail(c, 401, 'BRIEFING_TOKEN_INVALID', '연결 열쇠가 없거나 맞지 않습니다');
+  }
+  // 열쇠 주인도 세션과 같은 조건 — 매 요청 DB에서 관리자·활성 확인
+  const user = db.select().from(users).where(eq(users.id, owner.userId)).get();
+  if (!user || !user.isActive || user.role !== 'admin') return fail(c, 403, 'FORBIDDEN', '이 열쇠의 계정으로는 들어올 수 없습니다');
+  clearLoginAttempts(key);
+  touchToken(owner.userId);
+  c.set('user', { id: user.id, username: user.username, displayName: user.displayName, role: user.role });
+  c.set('authKind', 'token');
+  return next();
+}
+
 export const authGuard = createMiddleware<AppEnv>(async (c, next) => {
   if (PUBLIC_PATHS.has(c.req.path)) return next();
+  // 접두어 분기 — 끝 슬래시까지 포함해 /briefing/jobsXYZ 같은 변형이 Bearer 경로가 되지 않게
+  if (c.req.path.startsWith(BRIEFING.SUB_JOBS_PATH_PREFIX)) return tokenGuard(c, next);
 
   const session = await resolveSessionUser(c);
   if (!session.ok) {
@@ -64,5 +103,6 @@ export const authGuard = createMiddleware<AppEnv>(async (c, next) => {
     displayName: user.displayName,
     role: user.role,
   });
+  c.set('authKind', 'session');
   return next();
 });
