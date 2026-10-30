@@ -100,7 +100,8 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
   async function issueToken() {
     if (info?.tokenPrefix) {
       const ok = await confirmDialog('연결 열쇠를 다시 발급할까요?', {
-        message: `지금 열쇠는 바로 쓸 수 없게 되고, claude.ai 환경의 DOCVAULT_TOKEN도 새 값으로 바꿔야 해요.${remoteRunning ? ' 지금 도는 예약 작업은 옛 열쇠라 완성본을 보내지 못해요.' : ''}`,
+        // 열쇠가 새면 남이 완성본을 보내 가짜 회차를 만들 수 있다 — 재발급은 그럴 때 하는 것(설계 "보안 — 구독 연결 열쇠")
+        message: `열쇠가 샌 것 같을 때만 하세요 — 새면 남이 가짜 회차를 보낼 수 있어요. 지금 열쇠는 바로 쓸 수 없게 되고, claude.ai 환경의 DOCVAULT_TOKEN도 새 값으로 바꿔야 해요.${remoteRunning ? ' 지금 도는 예약 작업은 옛 열쇠라 완성본을 보내지 못해요.' : ''}`,
         confirmLabel: '다시 발급',
         danger: true,
       });

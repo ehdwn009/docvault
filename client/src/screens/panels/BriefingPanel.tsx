@@ -191,6 +191,17 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
     }
   }
 
+  /** 도는 예약 작업을 기다리지 않고 직접 만들기 — 서버가 그 구독 실행을 "직접 만들기로 대체"로 닫고 API 실행을 시작한다 (API-132, IA SCR-190) */
+  async function replaceRemote(run: BriefingRun) {
+    const ok = await confirmDialog('예약 작업을 기다리지 않고 직접 만들까요?', {
+      message: `지금 도는 예약 작업은 취소로 기록되고 늦게 온 완성본은 받지 않아요. ${SLOT_FULL[run.slot]}을 앱이 API로 만들어요(이 회차만 비용). claude.ai의 세션은 스스로 멈추지 않으니 거기서도 꺼 두세요.`,
+      confirmLabel: '직접 만들기',
+      danger: true,
+    });
+    if (!ok) return;
+    await start(false, run.slot === 'adhoc' ? undefined : run.slot);
+  }
+
   async function loadMore() {
     if (!page?.nextBefore) return;
     setLoadingMore(true);
@@ -287,7 +298,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             </div>
           )}
           {running && running.stage === 'remote' ? (
-            <RemoteProgressCard run={running} />
+            <RemoteProgressCard run={running} canReplace={admin.configured && !starting} onReplace={() => void replaceRemote(running)} />
           ) : running ? (
             <ProgressCard run={running} onStopped={() => void load()} />
           ) : (
@@ -473,7 +484,7 @@ function SlotChip({ label, accent = false }: { label: string; accent?: boolean }
 }
 
 /** 구독 실행의 진행 카드 — 예약 작업이 보낸 진행 기록(API-152)과 시작·마감. [중지]는 없다 — docvault가 claude.ai 세션을 멈출 수 없다(멈추려면 claude.ai에서) (IA SCR-190, v0.50) */
-function RemoteProgressCard({ run }: { run: BriefingRun }) {
+function RemoteProgressCard({ run, canReplace, onReplace }: { run: BriefingRun; canReplace: boolean; onReplace: () => void }) {
   const [showLog, setShowLog] = useState(true);
   const remote = run.live?.remote ?? null;
   const log = run.live?.log ?? [];
@@ -505,11 +516,22 @@ function RemoteProgressCard({ run }: { run: BriefingRun }) {
       <p className="text-[11px] text-slate-500">
         구독 작업 중 · {kstTime(run.startedAt, false)} 시작{run.deadlineAt ? ` · 마감 ${kstTime(run.deadlineAt, false)}` : ''} · 마감까지 안 오면 알려 드려요. 멈추려면 claude.ai의 예약 작업에서
       </p>
-      {log.length > 0 && (
-        <button onClick={() => setShowLog((v) => !v)} className="min-h-9 text-[11px] text-slate-400 underline hover:text-slate-200">
-          진행 기록 {showLog ? '접기' : '보기'}
+      <div className="flex items-center gap-2">
+        {log.length > 0 && (
+          <button onClick={() => setShowLog((v) => !v)} className="min-h-9 text-[11px] text-slate-400 underline hover:text-slate-200">
+            진행 기록 {showLog ? '접기' : '보기'}
+          </button>
+        )}
+        {/* [중지] 대신 — 기다리지 않고 API로 대체. 오른쪽 끝, 진행 기록이 없을 때도 같은 자리 */}
+        <button
+          onClick={onReplace}
+          disabled={!canReplace}
+          title={canReplace ? undefined : 'AI 키가 없어 직접 만들 수 없어요'}
+          className="ml-auto flex min-h-9 shrink-0 items-center rounded-lg border border-slate-700 px-3 text-xs text-slate-300 transition hover:border-amber-700 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          직접 만들기로 대체
         </button>
-      )}
+      </div>
       {showLog && log.length > 0 && (
         <ol className="m-0 max-h-40 list-none space-y-0.5 overflow-y-auto p-0 text-[11px] text-slate-400">
           {log.map((l, i) => (
