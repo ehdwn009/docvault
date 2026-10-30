@@ -53,6 +53,11 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
   useEffect(() => {
     void load();
   }, [load]);
+  // 회차 시각을 바꾸면 켜지는 시각(triggerTimes)도 바뀐다 — 부모가 schedule을 새로 주면 다시 읽는다(첫 실전에서 옛 값이 남았다, 2026-10-30)
+  const scheduleKey = JSON.stringify(schedule);
+  useEffect(() => {
+    void load();
+  }, [scheduleKey, load]);
   useEffect(() => setWant(mode), [mode]);
   useEffect(
     () => () => {
