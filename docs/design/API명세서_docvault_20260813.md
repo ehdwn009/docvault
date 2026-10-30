@@ -4,7 +4,7 @@
 
 ## 공통 규약
 
-- **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50 설계)**: `/briefing/jobs/*` 세 주소(API-151~153)는 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
+- **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50)**: `/briefing/jobs/*` 세 주소(API-151~153)는 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
 - **권한 등급**: 공개(로그인 불필요) 없음 — 로그인 화면 외 전 API가 인증 필수. `관리자` 표시 API는 role=admin만 호출 가능.
 - **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가).
 - **공통 에러 응답**: `{ "code": "ERROR_CODE", "message": "설명" }`
@@ -14,11 +14,11 @@
 |---|---|---|
 | VALIDATION_ERROR | 400 | 입력값 오류 (zod 검증 실패) |
 | UNAUTHORIZED | 401 | 미로그인 / 세션 만료 |
-| FORBIDDEN | 403 | 권한 없음 (관리자 전용, 비활성 계정, **열람은 되지만 수정 권한이 없는 경우**) |
-| TOO_MANY_ATTEMPTS | 429 | 로그인 시도 초과 (Retry-After 헤더에 대기 초) |
-| NOT_FOUND | 404 | 대상 없음, **또는 열람 권한이 없는 자원** (403은 존재를 알려 주므로 통일 — 정보 노출 방지) |
+| FORBIDDEN | 403 | 권한 없음 (관리자 전용, 비활성 계정, **열람은 되지만 수정 권한이 없는 경우**). `/briefing/jobs/*`에서는 연결 열쇠의 주인이 비활성·비관리자인 경우 (v0.50) |
+| TOO_MANY_ATTEMPTS | 429 | 로그인 시도 초과 (Retry-After 헤더에 대기 초). 연결 열쇠 실패 초과, 진행 보고(API-152) job당 분당 20건 초과도 같은 코드·헤더 (v0.50) |
+| NOT_FOUND | 404 | 대상 없음, **또는 열람 권한이 없는 자원** (403은 존재를 알려 주므로 통일 — 정보 노출 방지). `/briefing/jobs/*`에서는 jobId가 없음·남의 것·80자 초과·ping 만료(10분) (v0.50) |
 | CONFLICT | 409 | 중복 (username, 같은 폴더 내 동일 이름 등) |
-| PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과 |
+| PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과. 구독 완성본(API-153) 2MB·진행 보고(API-152) 16KB 초과 (v0.50) |
 | GOOGLE_NOT_CONNECTED | 409 | 구글 계정 미연결 (클라이언트는 연결 화면으로 유도) |
 | GOOGLE_ERROR | 502 | 구글 API 호출 실패 — 토큰 만료·사용자가 권한 회수·드라이브 장애. message에 사람이 읽을 사유 |
 | ASK_NOT_CONFIGURED | 503 | 서버에 LLM API 키(`ANTHROPIC_API_KEY`)가 없음. 질문 기능만 막히고 나머지는 정상 |
@@ -31,9 +31,9 @@
 | BRIEFING_READER_UNREADABLE | 422 | 받긴 했지만 본문을 뽑지 못함(유료벽·짧게 뽑힘·제목과 안 맞음). 우회하지 않고 사이트로 보낸다 (v0.45) |
 | BRIEFING_READER_FETCH_FAILED | 422 | 원문 페이지를 받지 못함(시간 초과·차단) (v0.45) |
 | ASK_UPSTREAM_ERROR | 502 | LLM 호출 실패 (인증·과부하·시간 초과). 스트리밍 중이면 `error` 이벤트로 옴. 사용자 질문은 저장돼 있어 다시 시도 가능 |
-| BRIEFING_TOKEN_INVALID | 401 | 연결 열쇠가 없거나 틀림 (`/briefing/jobs/*`만, v0.50). 서버 로그에 IP와 함께 남고, 횟수가 넘으면 로그인과 같은 TOO_MANY_ATTEMPTS(열쇠는 IP + 열쇠 앞 8자) |
-| BRIEFING_JOB_CLOSED | 409 | 그 구독 실행이 이미 닫혔음(`ok`·`cancelled`·`error`, 또는 `missing`인데 그 뒤에 시작된 `ok` 실행이 있음), 또는 지시서를 받아 간 적이 없음. 완성본·진행 보고를 받지 않는다 (v0.50) |
-| BRIEFING_JOB_REJECTED | 422 | 완성본 검사에서 뺀 기사가 30%를 넘음 — 통째로 거절, 구독 실행은 `running` 유지. `dropped`에 이유별 수 (v0.50) |
+| BRIEFING_TOKEN_INVALID | 401 | 연결 열쇠가 없거나 틀림 (`/briefing/jobs/*`만, v0.50). 서버 로그에 IP와 함께 남고, 횟수가 넘으면 로그인과 같은 TOO_MANY_ATTEMPTS — 묶는 열쇠는 IP가 기본, 보내온 열쇠의 앞 8자가 발급된 열쇠와 같을 때만 `IP\|앞8자`(아무 글자나 키에 넣으면 버킷이 끝없이 늘어난다). 쿠키로 들어와도 이 코드(jobs 라우트의 `tokenOnly`) |
+| BRIEFING_JOB_CLOSED | 409 | 그 구독 실행이 이미 닫혔음(`cancelled`·`error`, 또는 `missing`인데 그 뒤에 시작된 `ok`·`running` 실행이 있음), 지시서를 받아 간 적이 없음, 저장 직전 재확인에서 그사이 닫힘, 또는 수집 목록 문서가 틀려 서버가 이 실행을 `error`로 닫음. 완성본·진행 보고를 받지 않는다 (v0.50). 이미 `ok`인 job의 완성본 재전송은 409가 아니라 200(멱등) |
+| BRIEFING_JOB_REJECTED | 422 | 완성본 검사에서 뺀 기사가 30%를 넘음, 또는 기사가 0건 — 통째로 거절, 구독 실행은 `running` 유지. 본문 `{ code, message, dropped }`, `dropped`는 이유별 수 (v0.50) |
 | BRIEFING_TRIGGER_FAILED | 502 | claude.ai 예약 작업 트리거 호출 실패 (주소·토큰 틀림, 네트워크). [연결 확인]과 자동 트리거 둘 다 (v0.50) |
 | BRIEFING_TRIGGER_NOT_SET | 409 | 생성 방식이 구독인데 트리거 주소·토큰이 없음 (v0.50) |
 
@@ -117,23 +117,23 @@
 | API-117 | POST | /cards/batch | 묶음 저장 — 개념 카드 N장(새로/이어쓰기) + 주제 카드 1장을 한 트랜잭션으로. LLM 없음. 되돌리기 재료 반환 | 소유자 |
 | API-119 | GET | /cards/review | 오늘 복습할 카드 (예정 시각이 지난 것, 오래된 순, 하루 20장) + 내일 장수 | 로그인 |
 | API-120 | POST | /cards/{id}/review | 채점 — again(내일) / ok(간격 두 배, 60일 상한). USER_FILE_STATE의 복습 칸만 갱신 | 소유자 |
-| API-131 | GET | /briefing/status | 뉴스 브리핑 상태 — 키 설정 여부·자동 생성 여부와 다음 시각·지금 실행·최근 결과·이번 달 비용/한도·최근 회차 10개 | 관리자 |
+| API-131 | GET | /briefing/status | 뉴스 브리핑 상태 — 키 설정 여부·자동 생성 여부와 다음 시각·지금 실행·최근 결과·이번 달 비용/한도·생성 방식(`mode`)·구독 상태(`subscription`, v0.50) | 관리자 |
 | API-132 | POST | /briefing/runs | 브리핑 만들기 시작 (직전 회차 이후 기사로 수시판). 곧바로 202 + 실행, 만드는 일은 뒤에서 | 관리자 |
 | API-133 | GET | /briefing/runs | 실행 기록 (최근순, 상태·건수·비용·걸린 시간·실패 이유·실패 출처) | 관리자 |
-| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기와 회차별 켜기·시각 `{ autoEnabled?, schedule? }` | 관리자 |
+| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기·회차별 켜기·시각·앱 안 원문 보기·생성 방식·트리거 `{ autoEnabled?, schedule?, readerEnabled?, mode?, trigger? }` | 관리자 |
 | API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43). 열람 계정은 함께 보는 관리자의 회차 + `ownerName` (v0.49) | 관리자, 열람 계정 |
 | API-137 | POST | /briefing/runs/{id}/cancel | 도는 실행 중지 — 진행 카드의 [중지] (2026-10-02) | 관리자 |
 | API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자, 열람 계정 |
 | API-138 | GET | /briefing/editions/{fileId}/items/{itemId}/reader | 브리핑 기사 앱 안 원문 보기 — 기사 id만 받아 그때 받아 문단으로 (v0.45) | 관리자, 설정으로 켠 경우 |
 | API-139 | GET | /briefing/readers | 열람 계정 후보 — 일반 계정 전부와 지금 내 브리핑을 함께 보는지 (v0.49) | 관리자 |
 | API-140 | PUT | /briefing/readers/{userId} | 열람 계정 켜기/끄기 `{ on }` — 그 계정의 briefing_owner_id를 나로 두거나 지운다 (v0.49) | 관리자 |
-| API-141 | POST | /briefing/token | 구독 연결 열쇠 발급·재발급 — 원문은 이 응답에 한 번만, 이전 열쇠는 즉시 무효 (v0.50 설계) | 관리자 |
-| API-142 | DELETE | /briefing/token | 연결 열쇠 폐기 (v0.50 설계) | 관리자 |
-| API-143 | GET | /briefing/subscription | 구독 방식 상태 — 열쇠 앞 8자·마지막 사용·트리거 설정 여부·마지막 연결 확인·최근 7회 요약 (v0.50 설계) | 관리자 |
-| API-144 | POST | /briefing/subscription/ping | [연결 확인] — `kind='ping'` job으로 트리거를 쏜다. 회차는 만들지 않는다 (v0.50 설계) | 관리자 |
-| API-151 | GET | /briefing/jobs/{jobId} | 지시서 — 예약 작업이 일할 재료(범위·마감·수집 목록·허용 도메인·직전 회차) (v0.50 설계) | **연결 열쇠(Bearer)** |
-| API-152 | POST | /briefing/jobs/{jobId}/progress | 진행 보고 한 줄 — 화면 [진행 기록]에 실시간 (v0.50 설계) | **연결 열쇠(Bearer)** |
-| API-153 | POST | /briefing/jobs/{jobId}/result | 완성본 — 기사 목록 + 건강 숫자. 서버가 검사·조립·저장 (v0.50 설계) | **연결 열쇠(Bearer)** |
+| API-141 | POST | /briefing/token | 구독 연결 열쇠 발급·재발급 — 원문은 이 응답에 한 번만, 이전 열쇠는 즉시 무효 (v0.50) | 관리자 |
+| API-142 | DELETE | /briefing/token | 연결 열쇠 폐기 (v0.50) | 관리자 |
+| API-143 | GET | /briefing/subscription | 구독 방식 상태 — 열쇠 앞 8자·마지막 사용·트리거 설정 여부·마지막 연결 확인·최근 7회 요약 (v0.50) | 관리자 |
+| API-144 | POST | /briefing/subscription/ping | [연결 확인] — `kind='ping'` job으로 트리거를 쏜다. 회차는 만들지 않는다 (v0.50) | 관리자 |
+| API-151 | GET | /briefing/jobs/{jobId} | 지시서 — 예약 작업이 일할 재료(범위·마감·수집 목록·허용 도메인·직전 회차) (v0.50) | **연결 열쇠(Bearer)** |
+| API-152 | POST | /briefing/jobs/{jobId}/progress | 진행 보고 한 줄 — 화면 [진행 기록]에 실시간 (v0.50) | **연결 열쇠(Bearer)** |
+| API-153 | POST | /briefing/jobs/{jobId}/result | 완성본 — 기사 목록 + 건강 숫자. 서버가 검사·조립·저장 (v0.50) | **연결 열쇠(Bearer)** |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -602,7 +602,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "live": { "log": [ { "at": 1790847001000, "text": "수집 시작 — 출처 67곳" } ], "waiting": [ { "name": "한겨레 경제", "seconds": 12 } ] }
 }
 ```
-`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02) | **missing**(구독 실행이 마감까지 안 옴, v0.50). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | fill(웹 검색 보강, v0.45) | summarize | lens(글머리표 다시 쓰기, v0.45) | save | **remote**(구독 — 예약 작업이 일하는 중, v0.50). `trigger`: manual | auto | **subscription**(v0.50). 구독 실행(v0.50)에는 `jobId`(uuid)·`deadlineAt`·`remoteStartedAt`·`droppedItems`(`{ 이유: 수 }` 또는 null)·`generator`(`{ mode, config?, models?, skillVersion? }`)가 더 실리고, 토큰·`costUsd`는 0이다. 구독 실행의 `live.log`는 API-152로 받은 진행 보고, `live.stage`는 세션이 보고한 세부 단계(DB `stage`는 `remote` 그대로)다. `opusInputTokens`·`opusOutputTokens`는 핵심 요약(Opus 5.5, v0.46) 토큰, `stageUsage`는 단계별 비용 분해(`{단계: {model, calls, input, output, webSearches, usd}}`, 끝난 실행만, 없으면 null) — "어느 단계가 돈을 먹나"의 실측. `webSearches`는 웹 검색 보강에 쓴 검색 수(v0.45) — 토큰과 따로 과금(1,000회당 $10)되어 따로 센다. `costUsd`에는 이미 들어 있다. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
+`status`: running | ok | error | skipped | cancelled(사람이 [중지]로 멈춤, 2026-10-02) | **missing**(구독 실행이 마감까지 안 옴, v0.50). `stage`: collect | classify | select | read(핵심·주요 기사 원문 읽기, v0.43) | fill(웹 검색 보강, v0.45) | summarize | lens(글머리표 다시 쓰기, v0.45) | save | **remote**(구독 — 예약 작업이 일하는 중, v0.50). `trigger`: manual | auto | **subscription**(v0.50). 구독 실행(v0.50)에는 `jobId`(uuid)·`deadlineAt`·`remoteStartedAt`·`droppedItems`(`{ 이유: 수 }` 또는 null)·`generator`(`{ mode, config?, models?, skillVersion? }`)가 더 실리고, 토큰·`costUsd`는 0이다. 구독 실행의 `live.log`는 API-152로 받은 진행 보고, `live.remote = { stage, done, total }`은 세션이 보고한 세부 단계와 진행 숫자(DB `stage`는 `remote` 그대로, `done`·`total`은 `progressDone`·`progressTotal`에도 적힌다)다. `live.remote`는 구독 실행에만 있다. `opusInputTokens`·`opusOutputTokens`는 핵심 요약(Opus 5.5, v0.46) 토큰, `stageUsage`는 단계별 비용 분해(`{단계: {model, calls, input, output, webSearches, usd}}`, 끝난 실행만, 없으면 null) — "어느 단계가 돈을 먹나"의 실측. `webSearches`는 웹 검색 보강에 쓴 검색 수(v0.45) — 토큰과 따로 과금(1,000회당 $10)되어 따로 센다. `costUsd`에는 이미 들어 있다. `live`는 도는 중일 때만 — 진행 기록(최근 30줄)과 8초 넘게 응답이 없는 출처(오래된 것부터 5개). 서버 메모리에만 있어 끝난 실행은 null. `costUsd`는 실행 중에도 그때까지 쓴 만큼 늘어난다.
 
 ### API-131 Response — GET /briefing/status
 ```json
@@ -621,10 +621,10 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "monthFlagCount": 2,
   "nextSinceAt": 1790837540572,
   "mode": "subscription",
-  "subscription": { "tokenPrefix": "dvt_8f3k", "tokenLastUsedAt": 1790841060000, "triggerSet": true, "lastPingAt": 1790780000000, "missing": { "runId": 43, "slot": "morning", "deadlineAt": 1790845200000 } }
+  "subscription": { "tokenPrefix": "dvt_8f3k", "tokenLastUsedAt": 1790841060000, "triggerSet": true, "triggerBroken": false, "lastPingAt": 1790780000000, "missing": { "runId": 43, "slot": "morning", "deadlineAt": 1790845200000 } }
 }
 ```
-`mode`(v0.50)는 생성 방식 `api` | `subscription`(USER_SETTINGS.briefing_mode, 기본 `api`). `subscription`은 모드가 구독일 때만 — 화면이 알림 띠·열쇠 상태를 그리는 최소치이고, 자세한 것은 API-143. `missing`은 오늘 마감까지 안 온 회차가 있을 때(그 실행이 아직 대체되지 않았을 때)만 — 패널이 "아침판이 도착하지 않았어요 [지금 만들기]" 띠를 띄운다. `nextAutoAt`은 구독 모드에서는 **트리거 시각**(회차 시작 − 90분)이다.
+`mode`(v0.50)는 생성 방식 `api` | `subscription`(USER_SETTINGS.briefing_mode, 기본 `api`). `subscription`은 모드가 구독일 때만 — 화면이 알림 띠·열쇠 상태를 그리는 최소치이고, 자세한 것은 API-143. `triggerBroken`은 트리거가 저장돼 있는데 복호화에 실패한 상태(`JWT_SECRET` 변경) — 그때 `triggerSet`은 false이고 화면은 "트리거를 다시 넣어 주세요". `missing`은 오늘 마감까지 안 온 회차가 있을 때(그 실행 뒤에 시작된 `ok`·`running` 실행이 없을 때 — 아직 대체되지 않았을 때)만 — 패널이 "아침판이 도착하지 않았어요 [지금 만들기]" 띠를 띄운다. `running`은 서버 안 실행이 없으면 **도는 구독 실행**이다(`runningRun() ?? runningSubscriptionRun()` — 둘이 동시에 있을 수 없다, [지금 만들기]가 구독 실행을 먼저 닫는다). `nextAutoAt`은 구독 모드에서는 지금 이후의 다음 **트리거 시각**(회차 시작 − 90분)이다 — 트리거가 나간 뒤 회차 시작 전까지는 다음 회차의 트리거 시각을 가리킨다(`nextTrigger`).
 `budgetWarnRatio`(v0.45)는 비용이 한도의 이 비율에 닿으면 패널 바닥의 비용 줄을 노랗게 — 값은 서버 상수. `readerEnabled`는 이 관리자의 앱 안 원문 보기 설정(USER_SETTINGS.briefing_reader, v0.45) — 회차 화면이 [앱에서 보기] 단추를 보일지 정한다. `monthFlagCount`는 이번 달(한국시간) 틀린 곳 알리기 수(v0.45).
 `configured=false`면 `ANTHROPIC_API_KEY`가 없다 — 패널은 [브리핑 만들기]를 잠근다(구독 모드의 트리거·마감·자동 생성 켜기는 키 없이도 돈다, v0.50). `running`이 있으면 화면은 2초마다 이 API를 다시 읽는다(실행 중일 때만). `nextAutoAt`·`nextAutoSlot`은 자동이 켜져 있을 때 다음으로 켜진 회차의 시작 시각(unix ms)과 그 회차, 꺼져 있거나 켜진 회차가 없으면 null — 화면은 시각으로 회차를 짐작하지 않는다(사람마다 시각이 다르다). `schedule`은 회차별 켜기·시작 시각(한국시간 "HH:MM"), 저장된 것이 없으면 기본값(v0.43). `nextSinceAt`은 지금 만들면 모을 기사의 시작 시각(직전 성공 실행의 끝, 최대 24시간 전) — 버튼 아래 "14:53 이후 새 기사로" (v0.43). 회차 목록은 API-135로 따로 받는다(v0.43에 `recent`를 뺐다).
 
@@ -647,7 +647,8 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ### API-134 — PUT /briefing/settings
 **Body** `{ "autoEnabled"?: boolean, "schedule"?: { "morning"|"noon"|"evening": { "on": boolean, "at": "HH:MM" } }, "readerEnabled"?: boolean, "mode"?: "api"|"subscription", "trigger"?: { "url": string, "token": string } | null }` — 보낸 것만 바꾼다 → **200** `{ "autoEnabled", "schedule", "nextAutoAt", "nextAutoSlot", "readerEnabled", "mode", "triggerSet" }`.
 - `mode`(v0.50): 생성 방식. `subscription`으로 바꾸려면 연결 열쇠(API-141)와 트리거가 있어야 한다 — 없으면 409 BRIEFING_TRIGGER_NOT_SET. 바꾸는 순간 `running`인 구독 실행은 `cancelled`("방식 변경")로 닫히고, 그 뒤 스케줄러는 그 방식만 돈다. 자동 생성 스위치(`autoEnabled`)는 두 방식이 공유한다 — 구독 트리거도 스위치가 켜져 있어야 돈다. `autoEnabled: true`가 키 없음으로 503이 나는 규칙은 **`api` 모드에서만** — 구독 모드는 키 없이 켤 수 있다(v0.50).
-- `trigger`(v0.50): claude.ai 예약 작업의 트리거 주소·토큰. USER_SETTINGS.briefing_trigger_enc에 암호화해 둔다(ERD 관계 설명). 응답과 API-131·143에는 **`triggerSet: true/false`만** 실리고 값은 어떤 경로로도 다시 내려오지 않는다. `null`이면 지운다. `https`가 아니거나 사설 IP로 풀리는 주소면 400. USER_SETTINGS.briefing_auto·briefing_schedule·briefing_reader에 저장한다. `readerEnabled`(v0.45)는 앱 안 원문 보기 — 기본 꺼짐이고, 켜기 전에 서버에서 `briefing:readcheck`로 추출 품질을 재는 것이 설계다. `schedule`은 세 회차를 다 보내야 하고, 시각은 아침 < 점심 < 저녁 순서이며 21:59까지 — 어기면 400 VALIDATION_ERROR(v0.43). 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
+- `trigger`(v0.50): claude.ai 예약 작업의 트리거 주소·토큰(`url` ≤2,048자, `token` 1~512자). USER_SETTINGS.briefing_trigger_enc에 암호화해 둔다(ERD 관계 설명). 응답과 API-131·143에는 **`triggerSet`·`triggerBroken`만** 실리고 값은 어떤 경로로도 다시 내려오지 않는다. `null`이면 지우고 **생성 방식도 `api`로 돌린다**(트리거 없는 구독은 돌 수 없다). 주소는 `https://api.anthropic.com/v1/claude_code/routines/<id>/fire` 모양만(호스트·경로 고정, 포트·`아이디:비밀번호@` 불가) — 아니거나 사설 IP로 풀리면 400 VALIDATION_ERROR(`trigger.url: <이유>`). 임의의 https를 받으면 서버가 트리거 토큰을 아무 데나 보내는 SSRF 통로가 된다(보안 검토 2026-10-30).
+- **검사를 전부 먼저, 저장은 그 뒤** — 순서는 `trigger.url`(400) → `mode: subscription`인데 열쇠·트리거가 없음(409) → `autoEnabled: true`인데 api 모드에 키 없음(503). 거절 응답을 받았는데 방식·트리거만 바뀌어 있으면 화면과 서버가 어긋나기 때문. 같은 요청에 `trigger`와 `mode: "subscription"`을 함께 보내면 그 트리거를 인정한다(이미 저장된 것이 없어도 409가 아니다). `trigger: null`과 함께 온 `autoEnabled: true`는 api 모드로 보고 키 검사를 한다. USER_SETTINGS.briefing_auto·briefing_schedule·briefing_reader에 저장한다. `readerEnabled`(v0.45)는 앱 안 원문 보기 — 기본 꺼짐이고, 켜기 전에 서버에서 `briefing:readcheck`로 추출 품질을 재는 것이 설계다. `schedule`은 세 회차를 다 보내야 하고, 시각은 아침 < 점심 < 저녁 순서이며 21:59까지 — 어기면 400 VALIDATION_ERROR(v0.43). 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
 
 ### API-135 — GET /briefing/editions?before=YYYY-MM-DD&days=7 (v0.43)
 **200** `{ "editions": [ { "fileId", "editionDate", "slot", "label", "createdAt", "itemCount", "leadCount", "leadRead", "readCount", "state": "unread"|"partial"|"done" } ], "nextBefore": "YYYY-MM-DD" | null, "ownerName": string | null }`
@@ -675,7 +676,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ### API-140 — PUT /briefing/readers/{userId} (v0.49)
 **Body** `{ "on": boolean }` → **200** API-139와 같은 목록. 켜면 그 계정의 briefing_owner_id를 나로, 끄면 **내가 주인일 때만** null로(다른 관리자가 열어 준 것을 내가 닫지 않는다). 대상이 없거나 일반 계정이 아니면 404 NOT_FOUND. 효과는 즉시 — 그 계정의 다음 `/me/settings`에 `briefingOwnerId`가 실려 레일 버튼이 생기고, 회차 파일 읽기가 `canReadFile`에서 열린다.
 
-## API-141 ~ API-153: 뉴스 브리핑 구독 생성 방식 (v0.50 설계, 미구현)
+## API-141 ~ API-153: 뉴스 브리핑 구독 생성 방식 (v0.50 — 서버 2026-10-30 구현, 화면 미구현)
 
 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md) "구독 생성 방식". 두 묶음이다 — **API-141~144는 관리자가 쿠키로**(설정 화면), **API-151~153은 claude.ai 예약 작업이 연결 열쇠(Bearer)로** 부른다. 열쇠로는 이 세 주소 외 어디에도 못 들어간다(공통 규약).
 
@@ -686,14 +687,14 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 **204**. 생성 방식이 `subscription`이면 함께 `api`로 돌린다(열쇠 없는 구독은 돌 수 없다).
 
 ### API-143 — GET /briefing/subscription
-**200** `{ "mode", "tokenPrefix": string | null, "tokenCreatedAt", "tokenLastUsedAt", "triggerSet": boolean, "lastPingAt": number | null, "lastPingResult": "ok" | "trigger_failed" | "token_invalid" | "no_request" | null, "leadMs": 5400000, "deadlineAfterMs": 1800000, "triggerTimes": { "morning": "05:00", "noon": "10:00", "evening": "16:00" }, "recent": { "ok": 6, "missing": 1, "error": 0, "avgMinutes": 48, "hint": "later" | "earlier" | null }, "allowedDomains": ["yna.co.kr", "…"], "checklist": { "docvaultUrl": "https://…", "envNames": ["DOCVAULT_URL", "DOCVAULT_TOKEN"], "taskPrompt": "…" } }`
+**200** `{ "mode", "tokenPrefix": string | null, "tokenCreatedAt", "tokenLastUsedAt", "triggerSet": boolean, "triggerBroken": boolean, "lastPingAt": number | null, "lastPingResult": "fired" | "ok" | "trigger_failed" | "token_invalid" | "no_request" | null, "leadMs": 5400000, "deadlineAfterMs": 1800000, "triggerTimes": { "morning": "05:00", "noon": "10:00", "evening": "16:00" }, "recent": { "ok": 6, "missing": 1, "error": 0, "avgMinutes": 48, "hint": "later" | "earlier" | null }, "allowedDomains": ["yna.co.kr", "…"], "checklist": { "docvaultUrl": "https://…", "envNames": ["DOCVAULT_URL", "DOCVAULT_TOKEN"], "taskPrompt": "…" } }`
 - `triggerTimes`는 켜진 회차의 시작 시각 − 리드 — 설정 화면의 "이 시각에 트리거합니다" 안내. 꺼진 회차는 없다.
 - `recent`는 최근 7회(`SUB_RECENT_RUNS`) 구독 실행 요약. `hint`는 평균 소요가 리드의 절반 아래면 `later`, 마감 10분 안쪽이거나 `missing`이 2회 이상이면 `earlier`(`SUB_HINT_*`).
-- `lastPingResult`가 `trigger_failed`는 트리거 호출 거절, `token_invalid`는 ping 뒤 틀린 열쇠로 요청이 옴, `no_request`는 5분(`SUB_PING_NO_REQUEST_MS`) 동안 요청 없음. `triggerSet`은 복호화에 실패하면(`JWT_SECRET` 변경) false.
+- `lastPingResult`는 `fired`가 트리거 성공 직후("켰어요 — 세션을 기다리는 중"), `ok`가 세션이 지시서를 받아 감, `trigger_failed`는 트리거 호출 거절, `token_invalid`는 ping 뒤 `dvt_`로 시작하는 틀린 열쇠로 요청이 옴(빈 요청·스캐너는 세지 않는다), `no_request`는 `fired`인 채 5분(`SUB_PING_NO_REQUEST_MS`)이 지남(저장값은 `fired` 그대로, 읽을 때 바꾼다). `triggerSet`은 복호화에 실패하면(`JWT_SECRET` 변경) false이고 그때 `triggerBroken`이 true — 화면은 "트리거를 다시 넣어 주세요". `checklist.taskPrompt`는 예약 작업에 저장할 지시문 한 줄("routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL과 DOCVAULT_TOKEN은 환경에 있어.") — 트리거 본문의 `text`가 그 블록에 담겨 "신뢰하지 않는 데이터"로 들어가므로 지시문이 그것을 읽으라고 적혀 있어야 한다.
 - `allowedDomains`는 **검사용 목록**(수집 목록 전체 언론사 + 통신사 + `news.google.com`) — 지시서의 것과 같다. `checklist`는 설정 체크리스트의 복사 버튼 재료. 열쇠·트리거 값은 실리지 않는다.
 
 ### API-144 — POST /briefing/subscription/ping
-[연결 확인]. 트리거가 없으면 409 BRIEFING_TRIGGER_NOT_SET. `kind='ping'`인 job을 **서버 메모리에** 만들고(실행 기록에는 남기지 않는다 — 회차가 아니다; 10분 `SUB_PING_TTL_MS` 뒤 사라져 그 뒤 API-151은 404) 트리거를 쏜다 → **202** `{ "jobId" }`. 호출이 거절되면 502 BRIEFING_TRIGGER_FAILED. 그 뒤 세션이 API-151로 지시서를 받아 가면 결과를 USER_SETTINGS.briefing_last_ping에 적는다 — 화면은 2초마다(실행 중 폴링과 같은 주기) API-143을 다시 읽어 "연결 확인됨 (14:12)"로 바꾼다. ping job의 지시서는 `kind: "ping"`만 있고, 세션은 그걸 보면 바로 끝낸다.
+[연결 확인]. 트리거가 없으면 409 BRIEFING_TRIGGER_NOT_SET. `kind='ping'`인 job(id는 `ping-` + uuid, `SUB_PING_ID_PREFIX`)을 **서버 메모리에** 만들고(실행 기록에는 남기지 않는다 — 회차가 아니다; 10분 `SUB_PING_TTL_MS` 뒤 사라져 그 뒤 API-151은 404) 트리거를 쏜다 → **202** `{ "jobId" }`, briefing_last_ping은 `fired`. 호출이 거절되면 502 BRIEFING_TRIGGER_FAILED(`trigger_failed`로 기록). 그 뒤 세션이 API-151로 지시서를 받아 가면 결과(`ok`)를 USER_SETTINGS.briefing_last_ping에 적는다 — 화면은 2초마다(실행 중 폴링과 같은 주기) API-143을 다시 읽어 "연결 확인됨 (14:12)"로 바꾼다. ping job의 지시서는 `kind: "ping"`만 있고, 세션은 그걸 보면 바로 끝낸다.
 
 ### API-151 — GET /briefing/jobs/{jobId} (Bearer)
 **200** 지시서:
@@ -709,21 +710,21 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
   "prevStories": [{ "subId": "kr.econ.stock", "storyId": "kr.econ.stock.2026-10-26.evening.3", "title": "…", "summary": "…" }],
   "generator": { "config": "B" },
   "taxonomy": [{ "id": "kr.econ.stock", "path": "국내/경제/증시", "max": 7 }],
-  "limits": { "titleMaxChars": 40, "blocksMax": 3, "relatedMax": 5, "resultMaxBytes": 2097152, "resendMax": 2 }
+  "limits": { "titleMaxChars": 40, "blocksMax": 3, "relatedMax": 5, "resultMaxBytes": 2097152, "resendMax": 2, "itemsMax": 400 }
 }
 ```
-- `sources`는 수집 목록 문서 그대로(`SourcesDoc`) — 세션은 저장소의 `toSources()`로 받는다. `allowedDomains`는 **검사용 목록**(수집 목록 전체 언론사 도메인 + 통신사 + `news.google.com`, 상한 없음 — 검색 보강용 `allowedDomainsOf` 20곳과 다르다; 설계 "지시서"). `until`은 **트리거 시각**(실행 행을 만든 때). `taxonomy`·`limits`는 저장소 상수의 사본 — 스킬이 받은 저장소 버전과 서버 버전이 다를 때 서버 값을 따르게.
-- 받아 가면 `remote_started_at`과 열쇠의 `last_used_at`을 찍는다. 두 번 받아도 같은 지시서(멱등 — 같은 요청이 두 번 와도 결과는 한 번과 같다). 닫힌 구독 실행이면 409 BRIEFING_JOB_CLOSED, 남의 것·없는 것이면 404.
+- `sources`는 수집 목록 문서 그대로(`SourcesDoc`) — 세션은 저장소의 `toSources()`로 받는다. `allowedDomains`는 **검사용 목록**(수집 목록 전체 언론사 도메인 + 통신사 + `news.google.com`, 상한 없음 — 검색 보강용 `allowedDomainsOf` 20곳과 다르다; 설계 "지시서"). `until`은 **트리거 시각**(실행 행을 만든 때), `editionDate`는 회차 날짜(00:30 회차의 지시서가 전날 23:00에 나가도 다음 날 날짜). `excludeUrls`·`prevStories`의 "직전 회차"는 끝 시각이 가장 늦은 `ok` 실행 — 완성본 검사(API-153)도 같은 회차를 본다. `taxonomy`·`limits`는 저장소 상수의 사본 — 스킬이 받은 저장소 버전과 서버 버전이 다를 때 서버 값을 따르게. `limits.itemsMax`(400, `SUB_ITEMS_MAX`)는 완성본 기사 수 상한, `wrapUpBefore`는 마감 몇 ms 전에 마무리를 시작하나.
+- 받아 가면 `remote_started_at`과 열쇠의 `last_used_at`을 찍고 진행 기록에 "예약 작업이 지시서를 받아 갔어요"를 남긴다. 두 번 받아도 같은 지시서(멱등 — 같은 요청이 두 번 와도 결과는 한 번과 같다). 닫힌 구독 실행이면 409 BRIEFING_JOB_CLOSED, 남의 것·없는 것·80자 초과 id면 404. 수집 목록 문서가 그사이 틀려졌으면 실행을 `error`로 닫고 409 BRIEFING_JOB_CLOSED(세션이 고칠 문제가 아니다).
 - `kind: "ping"`이면 위 칸 없이 `{ "kind": "ping", "jobId" }`만.
 
 ### API-152 — POST /briefing/jobs/{jobId}/progress (Bearer)
-**Body** `{ "text": string, "stage"?: "collect"|"classify"|"select"|"read"|"fill"|"summarize"|"lens"|"verify", "done"?: number, "total"?: number }` → **204**. `text`는 200자로 자르고 제어문자를 지운다. `stage`·`done`·`total`은 **`live.stage`·`live.done`·`live.total`**(서버 메모리)로만 들어가 진행 카드가 따라간다 — DB의 `stage`는 `remote` 그대로다(구독 실행의 식별자라 덮어쓰지 않는다). `verify`는 세션 안 숫자 검사 단계로 DB enum에는 없다. job당 분당 20건 넘으면 429 TOO_MANY_ATTEMPTS. 닫힌 구독 실행은 409.
+**Body** `{ "text": string, "stage"?: "collect"|"classify"|"select"|"read"|"fill"|"summarize"|"lens"|"verify", "done"?: number, "total"?: number }` → **204**. `text`는 800자(200×4)까지 받아(넘으면 400 VALIDATION_ERROR) 제어문자를 지우고 200자(`SUB_PROGRESS_MAX_CHARS`)로 자른다; 본문 전체가 16KB(`SUB_PROGRESS_MAX_BYTES`)를 넘으면 413 PAYLOAD_TOO_LARGE. `stage`·`done`·`total`은 **`live.remote = { stage, done, total }`**(서버 메모리)로 들어가 진행 카드가 따라가고, `done`·`total`은 DB `progress_done`·`progress_total`에도 적힌다 — DB의 `stage`는 `remote` 그대로다(구독 실행의 식별자라 덮어쓰지 않는다). `verify`는 세션 안 숫자 검사 단계로 DB enum에는 없다. job당 분당 20건 넘으면 429 TOO_MANY_ATTEMPTS(Retry-After). 모르는 job·남의 job은 404, 닫힌 구독 실행은 409.
 
 ### API-153 — POST /briefing/jobs/{jobId}/result (Bearer)
-**Body** 완성본 — 설계 문서 "완성본" JSON(`items[]`·`stats`·`generator`·`log?`; `jobId`는 주소에 있어 본문에 없다). 본문 2MB 초과는 413 PAYLOAD_TOO_LARGE.
-→ **200** `{ "fileId": 123, "itemCount": 158, "dropped": { "domain": 2, "duplicate": 1, "range": 1 } }`
-- 검사 순서: zod 형식(글자 상한·`log` 30줄×200자·`generator.models` 개수 포함) → 기사마다 모든 주소 칸(`url`·`related[].url`·`readUrl`·`sources[].url`) 허용 도메인·`http(s)`·`아이디:비밀번호@` 금지, `publishedAt` 범위, `sources[].via` enum → `excludeUrls` 중복 → 뺀 비율 30% 초과면 422 BRIEFING_JOB_REJECTED → `layoutEdition` 조립 → 파일 만들기 + 실행 기록 `ok`(`cost_usd` 0, `dropped_items`, `generator`, `lead_ids`, `failed_sources`) **한 트랜잭션**, 저장 직전에 "아직 `running`인가" 재확인.
-- 형식 오류(400)·30% 초과(422)는 응답만 내고 **구독 실행은 `running` 그대로** — 스킬은 마감 전이면 고쳐 최대 2번 다시 보낸다. 끝내 안 오면 마감에 `missing`.
-- 같은 job에 다시 오면(이미 `ok`) **200 + 같은 fileId**. `missing`이면 **그 구독 실행이 시작된 뒤에 시작된 `ok` 실행이 하나도 없을 때만** 받아 `ok`로, 있으면 409 BRIEFING_JOB_CLOSED. `cancelled`·`error`, 지시서를 받아 간 적 없음(`remote_started_at` 없음)도 409.
+**Body** 완성본 — 설계 문서 "완성본" JSON(`items[]`·`stats`·`generator`·`log?`; `jobId`는 주소에 있어 본문에 없다). 본문 2MB 초과는 413 PAYLOAD_TOO_LARGE, JSON이 아니면 400 VALIDATION_ERROR("JSON 본문이 아니에요").
+→ **200** `{ "fileId": 123, "itemCount": 158, "dropped": { "domain": 2, "duplicate": 1, "range": 1 }, "already": false }` — `already`는 이미 `ok`였던 job의 재전송(아래 멱등).
+- 검사 순서: zod 형식(글자 상한 — 제목 120자·글 칸 2,000자·주소 2,048자, 기사 ≤400건(`SUB_ITEMS_MAX`), 기사당 `related` ≤100개(`SUB_RELATED_MAX_IN`, 저장은 5개), `log` ≤30줄(줄은 2,000자까지 받고 넣을 때 제어문자 제거 후 200자), `generator.config` 20자·`models` 6개×60자·`skillVersion` 20자, `stats`는 `sources`·`sourcesFailed`·`candidates`만 필수) — 틀리면 400 VALIDATION_ERROR, message는 "<경로>: <이유>"(예 `items.3.url: …`) → 기사 0건이면 422 → 기사마다 모르는 분야 id(`subId`) → `excludeUrls` 중복(`duplicate`) → `publishedAt` 범위 ±24시간(`range`) → 모든 주소 칸(`url`·`related[].url`·`readUrl`·`sources[].url`) 허용 도메인(`domain`)·`http(s)`(`scheme`)·`아이디:비밀번호@`(`userinfo`)·기본 아닌 포트(`port`)·주소 형식 아님(`invalid`) — 이 8가지 이유로 **그 기사만** 빼고 `dropped`에 센다 → 뺀 비율 30% 초과면 422 BRIEFING_JOB_REJECTED(본문 `{ code, message, dropped }`) → `prevStoryId`가 직전 회차(끝 시각이 가장 늦은 `ok` 실행 — 지시서와 같은 회차)에 없는 id면 null(새 사건)로 바꾸고 진행 기록에 "직전 회차에 없는 사건 id n건은 새 사건으로 바꿨어요" → `layoutEdition` 조립 → 파일 만들기 + 실행 기록 `ok`(`cost_usd` 0, `dropped_items`, `generator`, `lead_ids`, `failed_sources`) **한 트랜잭션**, 저장 직전에 "아직 `running` 또는 `missing`인가" 재확인(그사이 [지금 만들기]·방식 변경으로 닫혔으면 파일을 만들지 않고 409).
+- 형식 오류(400)·0건·30% 초과(422)는 응답만 내고 **구독 실행은 `running` 그대로** — 스킬은 마감 전이면 고쳐 최대 2번 다시 보낸다. 끝내 안 오면 마감에 `missing`. 수집 목록 문서가 그사이 틀려졌으면 실행을 `error`로 닫고 409.
+- 같은 job에 다시 오면(이미 `ok`) **200 + 같은 fileId**(`already: true`, 본문은 보지 않는다). `missing`이면 **그 구독 실행이 시작된 뒤에 시작된 `ok` 또는 `running` 실행이 하나도 없을 때만** 받아 `ok`로, 있으면 409 BRIEFING_JOB_CLOSED(`running`도 보는 이유 — [지금 만들기]가 도는 중에 받으면 같은 시간대 회차가 둘 생긴다). `cancelled`·`error`, 지시서를 받아 간 적 없음(`remote_started_at` 없음)도 409.
 - 서버는 이 경로에서 **AI를 부르지 않는다**(글머리표까지 완성본에 들어 있어야 한다 — 없으면 그 기사는 글머리표 없이 실린다).
 

@@ -116,13 +116,13 @@ erDiagram
         text briefing_schedule "nullable, 자동 생성 회차별 켜기·시각 JSON (v0.43)"
         integer briefing_reader "0|1 브리핑 앱 안 원문 보기 (기본 0, 관리자만 의미, v0.45)"
         integer briefing_owner_id FK "nullable, 함께 보는 브리핑의 주인(관리자) — 관리자가 고른 일반 계정에만 값, SET NULL (v0.49)"
-        text briefing_mode "api|subscription 회차 생성 방식 (기본 api, 관리자만 의미, v0.50 설계)"
-        text briefing_token_hash "nullable, 구독 연결 열쇠의 SHA-256 — 원문은 저장하지 않는다 (v0.50 설계)"
-        text briefing_token_prefix "nullable, 열쇠 앞 8자 평문 — 어느 열쇠가 쓰였는지 표시용 (v0.50 설계)"
-        integer briefing_token_created_at "nullable (v0.50 설계)"
-        integer briefing_token_last_used_at "nullable, 열쇠로 들어온 마지막 요청 시각 — 설정 화면의 '마지막 사용' (v0.50 설계)"
-        text briefing_trigger_enc "nullable, claude.ai 예약 작업 트리거 주소·토큰 JSON을 AES-256-GCM 암호화 (키는 JWT_SECRET 파생 — 구글 토큰 보관 설계와 같은 방식, 도우미 lib/crypto.ts는 새로 만든다, v0.50 설계)"
-        text briefing_last_ping "nullable, 마지막 [연결 확인] 결과 JSON {at, result} — ping job은 메모리라 결과만 남긴다 (v0.50 설계)"
+        text briefing_mode "api|subscription 회차 생성 방식 (기본 api, 관리자만 의미, v0.50)"
+        text briefing_token_hash "nullable, 구독 연결 열쇠의 SHA-256 — 원문은 저장하지 않는다 (v0.50)"
+        text briefing_token_prefix "nullable, 열쇠 앞 8자 평문 — 어느 열쇠가 쓰였는지 표시용 (v0.50)"
+        integer briefing_token_created_at "nullable (v0.50)"
+        integer briefing_token_last_used_at "nullable, 열쇠로 들어온 마지막 요청 시각 — 설정 화면의 '마지막 사용' (v0.50)"
+        text briefing_trigger_enc "nullable, claude.ai 예약 작업 트리거 주소·토큰 JSON을 AES-256-GCM 암호화 (키는 JWT_SECRET에서 용도별 HKDF 파생 — 구글 토큰 보관 설계와 같은 방식, 도우미 lib/crypto.ts, 값 형식 v1.(iv).(tag).(암호문); 복호화 실패는 triggerBroken, v0.50)"
+        text briefing_last_ping "nullable, 마지막 [연결 확인] 결과 JSON {at, result} — ping job은 메모리라 결과만 남긴다 (v0.50)"
         integer updated_at
     }
     GOOGLE_ACCOUNTS {
@@ -188,16 +188,16 @@ erDiagram
     BRIEFING_RUNS {
         integer id PK
         integer owner_id FK "만든 관리자"
-        text trigger "manual|auto|subscription — subscription은 claude.ai 예약 작업이 만든 회차 (v0.50 설계)"
+        text trigger "manual|auto|subscription — subscription은 claude.ai 예약 작업이 만든 회차 (v0.50)"
         text slot "morning|noon|evening|adhoc"
         text edition_date "YYYY-MM-DD (한국시간) — 자동 회차 중복 방지 기준"
-        text status "running|ok|error|skipped|cancelled|missing — missing은 구독 실행이 마감까지 안 옴 (v0.50 설계)"
-        text stage "collect|classify|select|read|fill|summarize|lens|save|remote — 진행 표시용 (read는 v0.43, fill·lens는 v0.45, remote는 구독 — 예약 작업이 일하는 중, v0.50 설계)"
-        text job_id "nullable UK, 구독 실행의 uuid — 예약 작업이 지시서·진행·완성본을 부르는 열쇠. 숫자 id를 밖에 내지 않으려고 (v0.50 설계)"
-        integer deadline_at "nullable, 구독 실행 마감(회차 시작 + 30분) — tick이 이 시각을 넘긴 running을 missing으로 닫는다 (v0.50 설계)"
-        integer remote_started_at "nullable, 예약 작업이 지시서를 받아 간 시각 — 걸린 시간의 시작점 (v0.50 설계)"
-        text dropped_items "nullable, 완성본 검사에서 뺀 기사 수 JSON {이유: 수} (v0.50 설계)"
-        text generator "nullable, 회차를 만든 것 JSON {mode, config?, models?, skillVersion?} — 모델 구성 A/B 비교의 열쇠 (v0.50 설계)"
+        text status "running|ok|error|skipped|cancelled|missing — missing은 구독 실행이 마감까지 안 옴 (v0.50)"
+        text stage "collect|classify|select|read|fill|summarize|lens|save|remote — 진행 표시용 (read는 v0.43, fill·lens는 v0.45, remote는 구독 — 예약 작업이 일하는 중, v0.50)"
+        text job_id "nullable UK, 구독 실행의 uuid — 예약 작업이 지시서·진행·완성본을 부르는 열쇠. 숫자 id를 밖에 내지 않으려고. 트리거를 쏘지 못한 missing 행은 NULL (v0.50)"
+        integer deadline_at "nullable, 구독 실행 마감(회차 시작 + 30분) — tick이 이 시각을 넘긴 running을 missing으로 닫는다 (v0.50)"
+        integer remote_started_at "nullable, 예약 작업이 지시서를 받아 간 시각 — 걸린 시간의 시작점 (v0.50)"
+        text dropped_items "nullable, 완성본 검사에서 뺀 기사 수 JSON {이유: 수} (v0.50)"
+        text generator "nullable, 회차를 만든 것 JSON {mode, config?, models?, skillVersion?} — 모델 구성 A/B 비교의 열쇠 (v0.50)"
         integer progress_done
         integer progress_total
         integer since_at "다룬 기사 범위 시작 (unix ms)"
@@ -270,7 +270,7 @@ erDiagram
   - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다. v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
   - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·영향 판단이 이상함·해설이 이상함(v0.48)·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).
   - **읽음 기록 (v0.43)**: USER_FILE_STATE.read_items는 그 회차에서 읽은 기사 id 목록이다. 즐겨찾기·읽던 위치와 같은 "이 사람 × 이 파일" 사실이라 같은 표에 둔다 — 폰에서 읽은 것이 PC에서도 흐리게 보인다. 더하기만 한다(API-073 `markRead`). BRIEFING_RUNS.lead_ids는 그 회차의 "오늘의 핵심" 목록 사본이다 — 회차 JSON에도 `lead`로 있지만, 패널이 회차 수십 개의 "핵심 n 남음"을 세려고 JSON을 매번 여는 것은 무겁다. 같은 사실이 두 군데라 저장할 때 한 번에 같이 쓰고 고치지 않는다(회차는 편집 불가). v0.43 이전 회차는 처음 패널에 나올 때 JSON에서 읽어 채운다.
-  - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot, trigger='auto') 행이 이미 있으면 다시 돌지 않는다 — 실패했어도 재시도하지 않는다(비용 폭주 방지).
+  - BRIEFING_RUNS는 실행 기록이다. 다음 회차의 범위는 **직전 `ok` 실행의 until_at부터** — 문서를 지우거나 옮겨도 범위 계산이 흔들리지 않도록 파일이 아니라 실행 기록에서 읽는다. 자동 생성은 (owner_id, edition_date, slot)에 trigger가 `auto` **또는** `subscription`인 행이 이미 있으면 다시 돌지 않는다(v0.50 — 방식을 바꾼 날 같은 회차가 두 번 생기지 않게 두 trigger를 함께 본다, `hasRunFor`) — 실패했어도 재시도하지 않는다(비용 폭주 방지).
   - file_id는 **SET NULL**: 회차 문서를 지워도 실행 기록(비용)은 남는다 — 이번 달 비용 합계가 문서 삭제로 줄어들면 안 된다. 소유자 삭제 시 CASCADE.
   - BRIEFING_RUNS.opus_input_tokens·opus_output_tokens(v0.46)는 핵심 요약에 쓰는 Opus 5.5의 토큰이다 — 단가가 Sonnet의 2배라 따로 센다. stage_usage(v0.46)는 단계별 분해(분류·선별·합치기·웹 보강·요약·핵심 요약·글머리표)의 JSON 사본이다 — 회차 JSON `stats.byStage`에도 같은 값이 있지만 회차를 지워도 비용 근거가 남아야 하고, 2주 실측이 "어느 단계가 돈을 먹나"를 실행 기록만 읽어 셀 수 있어야 해서 둘 다 둔다.
   - BRIEFING_RUNS.web_searches(v0.45)는 웹 검색 보강(설계 ③-3)에 쓴 검색 수다. 토큰이 아니라 검색 횟수로 과금(1,000회당 $10)되는 비용이라 토큰 칸과 따로 두고, cost_usd에는 합쳐 넣는다. stage의 `fill`(웹 검색 보강)·`lens`(요약 보기 다시 쓰기)도 v0.45.
@@ -280,11 +280,11 @@ erDiagram
   - USER_SETTINGS.briefing_owner_id(v0.49)는 **열람 계정** 칸이다 — 이 사용자가 함께 보는 브리핑의 주인(관리자) id, null이면 안 본다. 관리자가 설정 → 뉴스 브리핑에서 일반 계정을 골라 넣는다(API-140). 권한은 `canReadFile`이 "kind=briefing이고 FILES.owner_id가 내 briefing_owner_id면 읽기"로 본다 — 쓰기는 열리지 않는다. 사람에 붙인 이유는 위 공유 항목에: 회차는 매일 생기므로 파일마다 공유를 켜는 구조로는 "자동"이 되지 않는다. 주인 관리자가 지워지면 SET NULL로 저절로 닫힌다. 스케줄러·비용·실행 기록은 이 칸과 무관하다(만드는 사람은 그대로 관리자 한 명).
   - 인덱스 `briefing_runs_owner_started_idx (owner_id, started_at)` — 패널의 최근 실행·실행 기록·이번 달 비용 합계가 전부 "이 사람의 최근 실행부터" 읽는다.
   - `running` 행은 기동 시 `error`("서버 재시작으로 중단")로 정리한다 — 한 번에 하나만 돈다는 잠금이 DB 행에도 걸려 있어, 남겨 두면 영원히 실행 중으로 보인다. **단 `trigger='subscription'`인 running은 남긴다**(v0.50) — 일하는 쪽은 claude.ai 세션이라 서버 재시작과 무관하고, 닫아 버리면 뒤에 오는 완성본이 거절된다. 구독 행은 20분 실행 한도·BUSY 잠금·배포 스크립트의 "running이면 미룸"에서도 빠진다 — 60~90분 도는 실행이라 네 곳 모두 그대로 두면 어긋난다(설계 "구독 생성 방식 — 기존 가정과의 충돌").
-  - **구독 생성 방식 (v0.50 설계, 미구현)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md) "구독 생성 방식".
+  - **구독 생성 방식 (v0.50, 서버 2026-10-30 구현)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md) "구독 생성 방식".
     - USER_SETTINGS.briefing_mode는 회차를 **누가 만드느냐**(`api` = 서버가 Anthropic API로, `subscription` = 서버가 트리거한 claude.ai 예약 작업이 사용자의 구독으로). 스케줄러는 `api`인 관리자만 `startRun`하고, `subscription`인 관리자에게는 회차 시작 90분 전에 트리거를 쏘고 마감만 본다 — 한 칸이 두 길을 가르므로 같은 회차가 두 번 생기지 않는다. 바꾸는 순간 `running`인 구독 실행은 `cancelled`("방식 변경")로 닫는다. 회차별 켜기·시각(briefing_schedule)과 자동 생성 스위치(briefing_auto)는 두 방식이 공유한다.
     - USER_SETTINGS.briefing_token_hash·_prefix·_created_at·_last_used_at은 **연결 열쇠**다 — 예약 작업이 `/briefing/jobs/*` 세 주소를 부를 때 쓰는 Bearer 토큰. 원문은 발급 응답에 한 번만 나가고 DB에는 해시만(비밀번호와 같은 이유 — `data/`가 백업으로 밖에 나간다). 재발급하면 덮어써 이전 열쇠가 즉시 죽는다. 만료 칸이 없는 것은 결정 사항(혼자 쓰는 앱에서 만료로 아침 브리핑이 끊기는 쪽이 더 나쁘다) — 대신 last_used_at을 화면에 보인다. 비밀번호 변경(sessionEpoch 갱신)과는 무관하다(결정 사항 — 클라우드 환경이 옛 열쇠를 들고 있어 조용히 `missing`이 되는 쪽이 더 나쁘다; 열쇠를 바꾸는 길은 재발급·삭제뿐).
-    - USER_SETTINGS.briefing_trigger_enc는 반대 방향 열쇠 — **서버가 예약 작업을 켤 때** 쓰는 claude.ai 트리거 주소·토큰. 서버가 다시 보내야 하므로 해시가 아니라 암호화(구글 토큰 보관 **설계**의 열쇠·자물쇠 분리: 값은 `data/`, 키는 환경변수 `JWT_SECRET` 파생 — 그 설계는 아직 코드가 없어 도우미 `lib/crypto.ts`를 이번에 만든다). 복호화에 실패하면(`JWT_SECRET` 변경) 값을 없는 것으로 보고 설정 화면이 다시 넣으라고 알린다. 환경변수가 아니라 DB에 둔 이유는 수집 목록을 문서로 둔 것과 같다 — 폰의 설정 화면에서 넣고, SSH·재배포 없이 바꾼다. 어떤 API 응답에도 값은 실리지 않는다(`triggerSet` 불리언만). briefing_last_ping은 [연결 확인]의 마지막 결과 — ping job 자체는 회차가 아니라 실행 기록에 두지 않고 메모리(10분)에만 두므로, 재시작 뒤에도 화면에 보일 결과만 여기 남긴다.
-    - BRIEFING_RUNS의 구독 실행은 `trigger='subscription'`·`stage='remote'`로 시작하고 `job_id`(uuid)·`deadline_at`을 함께 적는다. 예약 작업이 지시서를 받아 가면 `remote_started_at`, 완성본이 통과하면 `ok`(+ `dropped_items`·`generator`·`lead_ids`, `cost_usd`와 토큰 칸은 0 — 구독 회차는 월 예산에 쌓이지 않는다), 마감까지 안 오면 tick이 `missing`. 완성본이 검사에서 거절돼도 행은 `running` 그대로다(재전송을 받기 위해). `job_id`가 UK인 이유: 예약 작업이 가진 유일한 식별자이고, 같은 job에 완성본이 두 번 와도(재전송) 같은 `file_id`를 돌려줘야 한다(멱등). `missing` 뒤 늦게 온 완성본은 **그 행의 started_at 이후에 시작된 `ok` 행이 없을 때만** 받는다 — [지금 만들기]로 대체했거나 다음 회차가 먼저 돈 경우를 한 조회로 막는다. 하루 한 번 규칙은 (owner_id, edition_date, slot)에 `trigger`가 `auto` **또는** `subscription`인 행이 있으면 다시 돌지 않는다(방식을 바꾼 날 같은 회차가 두 번 생기지 않게), `missing`·`error` 뒤에도 다시 켜지 않는다.
+    - USER_SETTINGS.briefing_trigger_enc는 반대 방향 열쇠 — **서버가 예약 작업을 켤 때** 쓰는 claude.ai 트리거 주소·토큰. 서버가 다시 보내야 하므로 해시가 아니라 암호화(구글 토큰 보관 **설계**의 열쇠·자물쇠 분리: 값은 `data/`, 키는 환경변수 `JWT_SECRET` 파생 — 도우미 `lib/crypto.ts`가 그 설계의 첫 구현이다: AES-256-GCM, 키는 `JWT_SECRET`에서 용도별 HKDF로 뽑고, 값은 `v1.<iv>.<tag>.<암호문>`(base64url)로 버전을 앞에 두어 방식을 바꿔도 옛 값을 읽는다). 복호화에 실패하면(`JWT_SECRET` 변경) `readTrigger()`가 `'broken'`을 돌려 API-131·143이 `triggerSet: false`·`triggerBroken: true`로 답하고 설정 화면이 다시 넣으라고 알린다 — "없음"과 "읽을 수 없음"을 가르는 이유는 화면 문구가 다르기 때문("넣어 주세요" / "다시 넣어 주세요"). 저장 주소는 `https://api.anthropic.com/v1/claude_code/routines/<id>/fire` 모양만 받는다(서버가 토큰을 들고 나가는 주소라 사용자 입력이면 SSRF, 보안 검토 2026-10-30). 환경변수가 아니라 DB에 둔 이유는 수집 목록을 문서로 둔 것과 같다 — 폰의 설정 화면에서 넣고, SSH·재배포 없이 바꾼다. 어떤 API 응답에도 값은 실리지 않는다(`triggerSet` 불리언만). briefing_last_ping은 [연결 확인]의 마지막 결과 — ping job 자체는 회차가 아니라 실행 기록에 두지 않고 메모리(10분)에만 두므로, 재시작 뒤에도 화면에 보일 결과만 여기 남긴다.
+    - BRIEFING_RUNS의 구독 실행은 `trigger='subscription'`·`stage='remote'`로 시작하고 `job_id`(uuid)·`deadline_at`을 함께 적는다(`since_at`은 직전 `ok`의 끝, `until_at`은 트리거 시각). 예약 작업이 지시서를 받아 가면 `remote_started_at`, 진행 보고(API-152)의 `done`·`total`은 `progress_done`·`progress_total`에(세부 단계는 메모리 `live.remote`에만 — `stage`는 `remote` 그대로), 완성본이 통과하면 `ok`(+ `dropped_items`·`generator`·`lead_ids`·`failed_sources`, `cost_usd`와 토큰 칸은 0 — 구독 회차는 월 예산에 쌓이지 않는다), 마감까지 안 오면 tick이 `missing`(방식·자동 켬과 무관하게 매 틱 — 돌던 중 자동을 꺼도 닫혀야 한다). **트리거를 쏘지 못한 회차**(서버가 꺼져 있다 마감 60분 안쪽에 켜짐, 또는 마감이 이미 지남)도 `missing` 행을 적되 `job_id`는 NULL이고 `since_at`=`until_at`=`started_at`=`finished_at`=그 시각, `message`에 이유 — "안 왔다"가 기록에 남게. 단 USER_SETTINGS.updated_at(설정을 마지막으로 저장한 시각)이 그 회차의 트리거 시각보다 뒤면 이 `missing`을 적지 않는다 — 저녁에 구독을 켰다고 아침·점심이 `missing`으로 쌓이면 안 된다(서버가 꺼져 있던 사이에 설정을 건드린 드문 경우는 기록되지 않음을 감수). 트리거 전에 수집 목록 문서가 틀리면 트리거 없이 `error`, 지시서·완성본 처리 중 틀리면 `error`로 닫는다. 완성본이 검사에서 거절돼도(400·422) 행은 `running` 그대로다(재전송을 받기 위해). `job_id`가 UK인 이유: 예약 작업이 가진 유일한 식별자이고, 같은 job에 완성본이 두 번 와도(재전송) 같은 `file_id`를 돌려줘야 한다(멱등). `missing` 뒤 늦게 온 완성본은 **그 행의 started_at 이후에 시작된 `ok`·`running` 행이 없을 때만** 받는다 — [지금 만들기]로 대체했거나(도는 중 포함 — 받으면 같은 시간대 회차가 둘 생긴다) 다음 회차가 먼저 돈 경우를 한 조회로 막고, 패널의 알림 띠(`missingToday`)도 같은 조회로 "아직 대체되지 않은" `missing`만 고른다. 지시서의 `excludeUrls`·`prevStories`와 완성본의 중복·`prevStoryId` 검사는 같은 "직전 회차"(`until_at`이 가장 늦은 `ok` 행)를 본다. 하루 한 번 규칙은 (owner_id, edition_date, slot)에 `trigger`가 `auto` **또는** `subscription`인 행이 있으면 다시 돌지 않는다(방식을 바꾼 날 같은 회차가 두 번 생기지 않게 — 위 BRIEFING_RUNS 설명과 같은 규칙), `missing`·`error` 뒤에도 다시 켜지 않는다. 틱은 "오늘"과 "지금 + 90분"의 날짜 둘을 보므로 00:30 회차의 행은 전날 23:00에 생기고 `edition_date`는 그 회차의 날짜다.
     - `generator`는 회차 JSON `edition.generator`의 사본이다 — 회차를 지워도 "모델 구성 A와 B 중 어느 쪽이 나았나"를 실행 기록만 읽어 셀 수 있어야 한다(stage_usage를 둔 것과 같은 이유).
 - **전량 수용 정책 (2026-08-27)**: 업로드는 확장자를 거절하지 않고 **분류**합니다. 아는 텍스트 확장자(md/html/코드류/txt) → 해당 타입, 모르는 확장자는 내용을 검사해(UTF-8 · NUL 없음 · 10MB 이하) 텍스트면 text, 아니면 binary. 오디오·비디오는 audio/video 타입으로 디스크 저장. binary는 미리보기 없이 보관·다운로드만 지원합니다. file_type의 enum은 Drizzle 스키마의 TS 타입 제약이며 SQLite에는 CHECK 제약을 두지 않으므로 값 추가에 마이그레이션이 필요 없습니다.
 
