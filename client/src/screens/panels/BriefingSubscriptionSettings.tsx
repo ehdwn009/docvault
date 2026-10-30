@@ -255,7 +255,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
             <p className="font-semibold text-slate-300">연결 열쇠 (예약 작업이 docvault에 들어올 때)</p>
             {freshToken ? (
               <div className="mt-1.5 rounded-md border border-amber-700/50 bg-amber-900/20 p-2 text-amber-100">
-                <p className="text-[11px]">이 창을 닫으면 다시 볼 수 없어요 — claude.ai 환경의 비밀값 <code>DOCVAULT_TOKEN</code>에 넣어 두세요</p>
+                <p className="text-[11px]">이 창을 닫으면 다시 볼 수 없어요 — claude.ai 환경의 네트워크 시크릿(Bearer)의 헤더 값에 넣어 두세요(체크리스트 ②)</p>
                 <code className="mt-1 block break-all rounded bg-slate-950 px-2 py-1 text-[11px] text-slate-200">{freshToken}</code>
                 <div className="mt-1.5 flex gap-2">
                   <button onClick={() => copy(freshToken, '연결 열쇠를')} className="min-h-9 rounded border border-amber-600/60 px-2.5 text-[11px] font-semibold hover:bg-amber-800/40">
@@ -340,16 +340,27 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
                   위에서 연결 열쇠를 발급해 두세요 (한 번만 보여요)
                 </li>
                 <li>
-                  claude.ai → 설정 → Claude Code → 환경을 만들고 비밀값 두 개를 넣어요:
-                  <span className="mt-1 flex flex-wrap gap-1.5">
+                  claude.ai → 설정 → Claude Code → 환경(기본 브랜치 main)에 두 가지를 넣어요:
+                  <span className="mt-1 block">
+                    <b className="text-slate-300">네트워크 시크릿</b> — [시크릿 추가] → 유형 <code>{info.checklist.secret.prefix}</code> · 허용된 웹사이트{' '}
+                    <code className="text-slate-300">{info.checklist.secret.host}</code>
+                    <button onClick={() => copy(info.checklist.secret.host, '호스트를')} className={`ml-1 ${smallBtn}`}>복사</button>
+                    {' · '}경로 접두사 <code className="text-slate-300">{info.checklist.secret.pathPrefix}</code>
+                    <button onClick={() => copy(info.checklist.secret.pathPrefix, '경로 접두사를')} className={`ml-1 ${smallBtn}`}>복사</button>
+                    {' · '}헤더 <code>{info.checklist.secret.header}</code> / 접두사 <code>{info.checklist.secret.prefix}</code> / 값 = 발급한 열쇠
+                  </span>
+                  <span className="mt-1 block">
+                    <b className="text-slate-300">환경 변수</b> —{' '}
                     {info.checklist.envNames.map((n) => (
                       <code key={n} className="rounded bg-slate-900 px-1.5 py-0.5 text-slate-300">{n}</code>
                     ))}
-                    <button onClick={() => copy(info.checklist.docvaultUrl, 'docvault 주소를')} className={smallBtn}>
-                      docvault 주소 복사
+                    {' = '}
+                    <code className="text-slate-300">{info.checklist.docvaultUrl}</code>
+                    <button onClick={() => copy(`${info.checklist.envNames[0]}=${info.checklist.docvaultUrl}`, '환경 변수 한 줄을')} className={`ml-1 ${smallBtn}`}>
+                      한 줄 복사
                     </button>
                   </span>
-                  <span className="block text-slate-600">DOCVAULT_URL은 이 주소, DOCVAULT_TOKEN은 발급한 열쇠</span>
+                  <span className="block text-slate-600">열쇠는 환경 변수에 넣지 않아요 — 그 화면은 환경을 쓰는 모두가 값을 볼 수 있어요</span>
                 </li>
                 <li>
                   같은 환경의 네트워크 허용 목록에 docvault 주소와 수집 목록의 언론사 도메인을 넣어요

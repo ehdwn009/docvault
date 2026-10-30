@@ -293,7 +293,7 @@ export type SubscriptionInfo = {
   triggerTimes: Partial<Record<AutoSlot, string>>;
   recent: { ok: number; missing: number; error: number; avgMinutes: number | null; hint: 'later' | 'earlier' | null };
   allowedDomains: string[];
-  checklist: { docvaultUrl: string; envNames: string[]; taskPrompt: string };
+  checklist: { docvaultUrl: string; envNames: string[]; secret: { host: string; pathPrefix: string; header: string; prefix: string }; taskPrompt: string };
 };
 
 export type AutoSlot = 'morning' | 'noon' | 'evening';

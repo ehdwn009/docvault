@@ -168,8 +168,10 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       allowedDomains: checkDomainsOf(doc),
       checklist: {
         docvaultUrl: origin,
-        envNames: ['DOCVAULT_URL', 'DOCVAULT_TOKEN'],
-        taskPrompt: 'routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL과 DOCVAULT_TOKEN은 환경에 있어.',
+        // 열쇠는 claude.ai 환경의 네트워크 시크릿(Bearer)이 붙인다 — 세션이 값을 못 보는 쪽이 설계 1순위(첫 실전 2026-10-30에서 확인: 환경 변수 화면은 "시크릿을 넣지 마세요")
+        envNames: ['DOCVAULT_URL'],
+        secret: { host: new URL(origin).host, pathPrefix: BRIEFING.SUB_JOBS_PATH_PREFIX, header: 'Authorization', prefix: 'Bearer' },
+        taskPrompt: 'routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL은 환경 변수에 있고, docvault 연결 열쇠는 네트워크 시크릿이 붙여 줘.',
       },
     });
   })
