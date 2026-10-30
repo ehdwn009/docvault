@@ -14,6 +14,11 @@ export const BRIEFING_FOLDER_NAME = '뉴스 브리핑';
 export const BRIEFING_SOURCES_FILE_NAME = '수집 목록.json';
 /** 실행 중 상태를 다시 읽는 주기 — 서버 BRIEFING.STATUS_POLL_MS와 같은 값 */
 export const BRIEFING_STATUS_POLL_MS = 2000;
+/** 구독 실행(예약 작업이 일하는 중)은 한두 시간 돌고 진행 보고도 단계마다 한 줄이라 2초는 과하다 — 15초 (v0.50) */
+export const BRIEFING_REMOTE_POLL_MS = 15_000;
+/** [연결 확인] 결과를 다시 읽는 주기와 기다리는 한도 — 서버 SUB_PING_NO_REQUEST_MS(5분) 뒤에는 "아직 연결 기록 없음"으로 굳는다 */
+export const BRIEFING_PING_POLL_MS = 5000;
+export const BRIEFING_PING_WAIT_MS = 6 * 60 * 1000;
 
 export type Importance = 1 | 2 | 3;
 
@@ -217,13 +222,19 @@ export function kstToday(now = Date.now()): string {
 
 // ---- 패널(SCR-190) API 응답 ----
 
+/** 구독 실행의 세부 단계 — 예약 작업이 진행 보고(API-152)로 알린 것. 서버 live.ts의 RemoteStage와 같아야 한다 (v0.50) */
+export type RemoteStage = 'collect' | 'classify' | 'select' | 'read' | 'fill' | 'summarize' | 'lens' | 'verify';
+
 export type BriefingRun = {
   id: number;
-  trigger: 'manual' | 'auto';
+  /** subscription = 서버가 켠 claude.ai 예약 작업이 만든 회차 (v0.50) */
+  trigger: 'manual' | 'auto' | 'subscription';
   slot: Edition['edition']['slot'];
   editionDate: string;
-  status: 'running' | 'ok' | 'error' | 'skipped' | 'cancelled';
-  stage: 'collect' | 'classify' | 'select' | 'read' | 'fill' | 'summarize' | 'lens' | 'save' | null;
+  /** missing = 구독 실행이 마감까지 안 옴 (v0.50) */
+  status: 'running' | 'ok' | 'error' | 'skipped' | 'cancelled' | 'missing';
+  /** remote = 예약 작업이 일하는 중 — 세부 단계는 live.remote에 (v0.50) */
+  stage: 'collect' | 'classify' | 'select' | 'read' | 'fill' | 'summarize' | 'lens' | 'save' | 'remote' | null;
   progressDone: number;
   progressTotal: number;
   sinceAt: number;
@@ -240,8 +251,49 @@ export type BriefingRun = {
   message: string | null;
   startedAt: number;
   finishedAt: number | null;
-  /** 도는 중일 때만 — 진행 기록과 오래 기다리는 출처(8초 이상). 끝난 실행은 null (API-131, 2026-10-02) */
-  live?: { log: { at: number; text: string }[]; waiting: { name: string; seconds: number }[] } | null;
+  // ---- 구독 실행 (v0.50) — 다른 실행은 null ----
+  jobId?: string | null;
+  /** 마감(회차 시작 + 30분) — 지나면 missing */
+  deadlineAt?: number | null;
+  /** 예약 작업이 지시서를 받아 간 시각 — 걸린 시간의 시작점 */
+  remoteStartedAt?: number | null;
+  /** 완성본 검사에서 뺀 기사 수 {이유: 수} */
+  droppedItems?: Record<string, number> | null;
+  generator?: { mode?: string; config?: string; models?: string[]; skillVersion?: string } | null;
+  /** 도는 중일 때만 — 진행 기록과 오래 기다리는 출처(8초 이상). 끝난 실행은 null (API-131, 2026-10-02). remote는 구독 실행의 세부 단계 */
+  live?: { log: { at: number; text: string }[]; waiting: { name: string; seconds: number }[]; remote?: { stage: RemoteStage | null; done: number; total: number } } | null;
+};
+
+export type BriefingMode = 'api' | 'subscription';
+/** API-131의 subscription — 구독 모드일 때만 온다 */
+export type SubscriptionStatus = {
+  tokenPrefix: string | null;
+  tokenLastUsedAt: number | null;
+  triggerSet: boolean;
+  /** 트리거를 저장했지만 읽을 수 없다(서버 비밀키 변경) — "다시 넣어 주세요" */
+  triggerBroken: boolean;
+  lastPingAt: number | null;
+  /** 오늘 마감까지 안 온 회차 — 아직 대체되지 않은 것만. 패널의 알림 띠 */
+  missing: { runId: number; slot: AutoSlot; deadlineAt: number | null } | null;
+};
+export type PingResult = 'fired' | 'ok' | 'trigger_failed' | 'token_invalid' | 'no_request';
+/** API-143 — 설정 화면의 구독 상태 */
+export type SubscriptionInfo = {
+  mode: BriefingMode;
+  tokenPrefix: string | null;
+  tokenCreatedAt: number | null;
+  tokenLastUsedAt: number | null;
+  triggerSet: boolean;
+  triggerBroken: boolean;
+  lastPingAt: number | null;
+  lastPingResult: PingResult | null;
+  leadMs: number;
+  deadlineAfterMs: number;
+  /** 켜 둔 회차마다 예약 작업을 켜는 시각 "05:00" */
+  triggerTimes: Partial<Record<AutoSlot, string>>;
+  recent: { ok: number; missing: number; error: number; avgMinutes: number | null; hint: 'later' | 'earlier' | null };
+  allowedDomains: string[];
+  checklist: { docvaultUrl: string; envNames: string[]; taskPrompt: string };
 };
 
 export type AutoSlot = 'morning' | 'noon' | 'evening';
@@ -267,6 +319,9 @@ export type BriefingStatus = {
   readerEnabled?: boolean;
   /** 이번 달 "틀린 곳 알리기" 수 (v0.45) */
   monthFlagCount?: number;
+  /** 회차를 누가 만드나 — api(앱이 직접) · subscription(서버가 켠 claude.ai 예약 작업) (v0.50) */
+  mode?: BriefingMode;
+  subscription?: SubscriptionStatus | null;
 };
 
 /** API-135 회차 목록 한 줄 */
@@ -297,4 +352,18 @@ export const STAGE_LABEL: Record<NonNullable<BriefingRun['stage']>, string> = {
   summarize: '요약',
   lens: '보기 쓰기',
   save: '저장',
+  remote: '예약 작업',
+};
+
+/** 구독 실행의 세부 단계 순서와 이름 — 예약 작업이 보고하는 단계(서버 단계와 달리 저장이 없고 검수가 있다) */
+export const REMOTE_STAGE_ORDER: readonly RemoteStage[] = ['collect', 'classify', 'select', 'read', 'fill', 'summarize', 'lens', 'verify'];
+export const REMOTE_STAGE_LABEL: Record<RemoteStage, string> = { ...STAGE_LABEL, verify: '검수' } as Record<RemoteStage, string>;
+
+/** 설정 화면의 [연결 확인] 결과 다섯 상태 (IA SCR-147) */
+export const PING_LABEL: Record<PingResult, string> = {
+  fired: '켰어요 — 세션을 기다리는 중',
+  ok: '연결 확인됨',
+  trigger_failed: '트리거 토큰이 맞지 않습니다',
+  token_invalid: '연결 열쇠가 맞지 않습니다',
+  no_request: '아직 연결 기록 없음 — 세션이 docvault를 부르지 않았어요 (네트워크 허용 목록·환경변수를 확인)',
 };

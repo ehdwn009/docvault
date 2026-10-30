@@ -3,15 +3,19 @@ import Icon from '../../components/Icon';
 import { api, ApiError } from '../../lib/api';
 import {
   BRIEFING_READ_EVENT,
+  BRIEFING_REMOTE_POLL_MS,
   BRIEFING_STATUS_POLL_MS,
   kstTime,
   kstToday,
   longDate,
+  REMOTE_STAGE_LABEL,
+  REMOTE_STAGE_ORDER,
   shortDate,
   SLOT_SHORT,
   slotName,
   STAGE_LABEL,
   STAGE_ORDER,
+  type AutoSlot,
   type BriefingRun,
   type BriefingStatus,
   type EditionSummary,
@@ -34,14 +38,24 @@ type EditionPage = { editions: EditionSummary[]; nextBefore: string | null; owne
 
 const SLOT_FULL: Record<BriefingRun['slot'], string> = { morning: '아침판', noon: '점심판', evening: '저녁판', adhoc: '수시판' };
 
+/** 구독 성공 한 줄 — 비용 대신 걸린 시간과 검사에서 뺀 수 (IA SCR-190 "구독 생성 · $0 · 52분 · 검사에서 3건 뺌") */
+function subscriptionOkLine(r: BriefingRun): string {
+  const minutes = r.finishedAt ? Math.round((r.finishedAt - (r.remoteStartedAt ?? r.startedAt)) / 60_000) : null;
+  const dropped = Object.values(r.droppedItems ?? {}).reduce((a, b) => a + b, 0);
+  return [`${SLOT_FULL[r.slot]} ${r.itemCount ?? 0}건`, '구독 생성 · $0', minutes !== null ? `${minutes}분` : null, dropped > 0 ? `검사에서 ${dropped}건 뺌` : null].filter(Boolean).join(' · ');
+}
+
 function runLine(r: BriefingRun): string {
   const when = kstTime(r.finishedAt ?? r.startedAt);
-  if (r.status === 'ok') return `${SLOT_FULL[r.slot]} ${r.itemCount ?? 0}건 · ≈ $${r.costUsd.toFixed(2)} · ${when}`;
+  if (r.status === 'ok') return r.trigger === 'subscription' ? `${subscriptionOkLine(r)} · ${when}` : `${SLOT_FULL[r.slot]} ${r.itemCount ?? 0}건 · ≈ $${r.costUsd.toFixed(2)} · ${when}`;
   if (r.status === 'skipped') return `${r.message ?? '건너뜀'} · ${when}`;
-  if (r.status === 'cancelled') return `멈춤 · ${when}`;
+  if (r.status === 'cancelled') return `${r.message ?? '멈춤'} · ${when}`;
   if (r.status === 'error') return `실패: ${r.message ?? '알 수 없는 오류'} · ${when}`;
-  return `만드는 중 · ${when}`;
+  if (r.status === 'missing') return `${SLOT_FULL[r.slot]} 도착 안 함${r.message ? ` — ${r.message}` : ''} · ${when}`;
+  return r.trigger === 'subscription' ? `예약 작업이 만드는 중 · ${when}` : `만드는 중 · ${when}`;
 }
+
+const TRIGGER_LABEL: Record<BriefingRun['trigger'], string> = { auto: '자동', manual: '버튼', subscription: '구독' };
 
 const STATUS_COLOR: Record<BriefingRun['status'], string> = {
   ok: 'text-slate-300',
@@ -49,6 +63,7 @@ const STATUS_COLOR: Record<BriefingRun['status'], string> = {
   cancelled: 'text-slate-500',
   error: 'text-red-400',
   running: 'text-sky-300',
+  missing: 'text-amber-400',
 };
 
 function elapsedText(sec: number): string {
@@ -111,6 +126,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
         toast('브리핑 만들기를 멈췄어요', 'info');
       } else if (last.status === 'skipped') {
         toast(last.message ?? '새 기사가 없어요', 'info');
+      } else if (last.status === 'missing') {
+        toast(`${SLOT_FULL[last.slot]}이 마감까지 도착하지 않았어요 — [지금 만들기]로 만들 수 있어요`, 'error');
       }
       setRuns(null); // 실행 기록을 펼쳐 둔 상태였으면 다시 받게
     }
@@ -137,20 +154,23 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
 
   // 실행 중일 때만 다시 읽는다 — 평소에는 한 번 읽고 끝
   const running = status?.running ?? null;
+  const remote = running?.stage === 'remote';
   useEffect(() => {
     if (!running) return;
-    const id = window.setInterval(() => void load(), BRIEFING_STATUS_POLL_MS);
+    // 구독 실행은 한두 시간 돌고 보고도 드물다 — 느리게 읽는다
+    const id = window.setInterval(() => void load(), remote ? BRIEFING_REMOTE_POLL_MS : BRIEFING_STATUS_POLL_MS);
     const tick = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => {
       window.clearInterval(id);
       window.clearInterval(tick);
     };
-  }, [running, load]);
+  }, [running, remote, load]);
 
-  async function start(force = false) {
+  /** slot은 알림 띠의 [지금 만들기] — 안 온 회차 이름을 물려받는다(수시판 대신). 늘 API 방식으로 만든다 (v0.50) */
+  async function start(force = false, slot?: AutoSlot) {
     setStarting(true);
     try {
-      const r = await api<{ run: BriefingRun }>('/briefing/runs', { method: 'POST', body: JSON.stringify(force ? { force: true } : {}) });
+      const r = await api<{ run: BriefingRun }>('/briefing/runs', { method: 'POST', body: JSON.stringify({ ...(force ? { force: true } : {}), ...(slot ? { slot } : {}) }) });
       watchingRef.current = r.run.id;
       await load();
     } catch (err) {
@@ -161,7 +181,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           message: `이번 달 브리핑 비용이 한도${status ? `($${status.monthBudgetUsd})` : ''}에 닿았습니다. 그래도 만들까요?`,
           confirmLabel: '그래도 만들기',
         });
-        if (ok) await start(true);
+        if (ok) await start(true, slot);
       } else {
         toast(err instanceof ApiError ? err.message : '시작하지 못했어요', 'error');
       }
@@ -244,10 +264,30 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
         <section className="space-y-2">
           {!admin.configured && (
             <p className="rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
-              AI 키가 연결되지 않아 브리핑을 만들 수 없어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣고 다시 시작하면 켜집니다.
+              {admin.mode === 'subscription'
+                ? 'AI 키가 없어 [지금 만들기]는 쓸 수 없어요. 구독으로 받는 회차는 그대로 와요.'
+                : 'AI 키가 연결되지 않아 브리핑을 만들 수 없어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣고 다시 시작하면 켜집니다.'}
             </p>
           )}
-          {running ? (
+          {/* 마감까지 안 온 회차 — 앱 안 띠(푸시가 아니다). [지금 만들기]는 API 방식으로 그 회차 이름으로 (IA SCR-190, v0.50) */}
+          {!running && admin.subscription?.missing && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
+              <span className="flex-1">
+                {SLOT_FULL[admin.subscription.missing.slot]}이 도착하지 않았어요
+                {admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}
+              </span>
+              <button
+                onClick={() => void start(false, admin.subscription?.missing?.slot)}
+                disabled={!admin.configured || starting}
+                className="shrink-0 rounded-md border border-amber-600/60 px-2.5 py-1.5 font-semibold text-amber-100 transition hover:bg-amber-800/40 disabled:opacity-40"
+              >
+                지금 만들기
+              </button>
+            </div>
+          )}
+          {running && running.stage === 'remote' ? (
+            <RemoteProgressCard run={running} />
+          ) : running ? (
             <ProgressCard run={running} onStopped={() => void load()} />
           ) : (
             <>
@@ -261,7 +301,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
               <p className="text-center text-xs text-slate-500">{kstTime(admin.nextSinceAt, kstToday(admin.nextSinceAt) !== today)} 이후 새 기사로 · 약 1~2분</p>
             </>
           )}
-          {!running && last && last.status !== 'ok' && (
+          {/* 알림 띠가 같은 실행을 보이고 있으면 "최근" 줄은 겹치니 뺀다 */}
+          {!running && last && last.status !== 'ok' && admin.subscription?.missing?.runId !== last.id && (
             <ClampLine className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</ClampLine>
           )}
           {!running && last && last.failedSources.length > 0 && (
@@ -291,8 +332,12 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
               <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2">
                 <SlotChip label={SLOT_SHORT[admin.nextAutoSlot ?? 'adhoc']} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']} (자동)</span>
-                  <span className="text-xs text-slate-500">{kstTime(admin.nextAutoAt, false)}에 만들기 시작</span>
+                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']} ({admin.mode === 'subscription' ? '구독' : '자동'})</span>
+                  <span className="text-xs text-slate-500">
+                    {admin.mode === 'subscription'
+                      ? `${kstTime(admin.nextAutoAt, false)}에 예약 작업 시작${admin.nextAutoSlot ? ` · ${admin.schedule[admin.nextAutoSlot].at} 회차` : ''}`
+                      : `${kstTime(admin.nextAutoAt, false)}에 만들기 시작`}
+                  </span>
                 </span>
                 <span className="shrink-0 text-xs font-semibold text-slate-500">예정</span>
               </div>
@@ -368,9 +413,11 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
               {runs.map((r) => (
                 <li key={r.id}>
                   <ClampLine className={`text-[11px] leading-snug ${STATUS_COLOR[r.status]}`}>
-                    <span className="text-slate-600">{r.trigger === 'auto' ? '자동' : '버튼'} · </span>
+                    <span className="text-slate-600">{TRIGGER_LABEL[r.trigger]} · </span>
                     {runLine(r)}
-                    {r.finishedAt && r.status !== 'skipped' && r.status !== 'cancelled' && <span className="text-slate-600"> · {Math.round((r.finishedAt - r.startedAt) / 1000)}초</span>}
+                    {r.finishedAt && r.status !== 'skipped' && r.status !== 'cancelled' && r.trigger !== 'subscription' && (
+                      <span className="text-slate-600"> · {Math.round((r.finishedAt - r.startedAt) / 1000)}초</span>
+                    )}
                   </ClampLine>
                 </li>
               ))}
@@ -383,7 +430,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           <button onClick={onOpenSettings} className="block text-left hover:text-slate-300">
             {admin.autoEnabled && admin.nextAutoAt !== null ? (
               <>
-                자동 생성 켜짐 · 다음 <b className="text-slate-300">{kstTime(admin.nextAutoAt, kstToday(admin.nextAutoAt) !== today)} {SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']}</b>
+                {admin.mode === 'subscription' ? '구독으로 받기 · 다음 예약 작업 ' : '자동 생성 켜짐 · 다음 '}
+                <b className="text-slate-300">{kstTime(admin.nextAutoAt, kstToday(admin.nextAutoAt) !== today)} {SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']}</b>
               </>
             ) : admin.autoEnabled ? (
               '자동 생성 켜짐 · 켜 둔 회차가 없어요'
@@ -423,6 +471,58 @@ function SlotChip({ label, accent = false }: { label: string; accent?: boolean }
   );
 }
 
+/** 구독 실행의 진행 카드 — 예약 작업이 보낸 진행 기록(API-152)과 시작·마감. [중지]는 없다 — docvault가 claude.ai 세션을 멈출 수 없다(멈추려면 claude.ai에서) (IA SCR-190, v0.50) */
+function RemoteProgressCard({ run }: { run: BriefingRun }) {
+  const [showLog, setShowLog] = useState(true);
+  const remote = run.live?.remote ?? null;
+  const log = run.live?.log ?? [];
+  const stage = remote?.stage ?? null;
+  const at = stage ? REMOTE_STAGE_ORDER.indexOf(stage) : -1;
+  const pct = remote && remote.total > 0 ? Math.round((remote.done / remote.total) * 100) : at >= 0 ? Math.round(((at + 0.5) / REMOTE_STAGE_ORDER.length) * 100) : 3;
+  const since = run.remoteStartedAt ?? run.startedAt;
+  const elapsed = Math.max(0, Math.round((Date.now() - since) / 1000));
+  const waitingForSession = !run.remoteStartedAt;
+  return (
+    <div className="space-y-2 rounded-xl border border-sky-800 bg-sky-950/40 px-3.5 py-3">
+      <p className="text-sm font-semibold text-sky-200">
+        {waitingForSession ? '예약 작업을 켰어요 — 세션을 기다리는 중' : stage ? REMOTE_STAGE_LABEL[stage] : '구독 작업 중'}
+        {remote && remote.total > 0 && ` ${remote.done}/${remote.total}`}
+        <span className="ml-1 text-xs font-normal text-sky-400/80">· {elapsedText(elapsed)}</span>
+      </p>
+      <div className="h-1.5 overflow-hidden rounded bg-sky-900/60">
+        <div className="h-full bg-sky-400 transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="flex flex-wrap gap-x-1 text-[11px] text-slate-500">
+        {REMOTE_STAGE_ORDER.map((s, i) => (
+          <span key={s} className={i < at ? 'text-sky-400' : i === at ? 'font-bold text-sky-200' : ''}>
+            {REMOTE_STAGE_LABEL[s]}
+            {i < at ? ' ✓' : ''}
+            {i < REMOTE_STAGE_ORDER.length - 1 && <span className="ml-1 text-slate-600">·</span>}
+          </span>
+        ))}
+      </p>
+      <p className="text-[11px] text-slate-500">
+        구독 작업 중 · {kstTime(run.startedAt, false)} 시작{run.deadlineAt ? ` · 마감 ${kstTime(run.deadlineAt, false)}` : ''} · 마감까지 안 오면 알려 드려요. 멈추려면 claude.ai의 예약 작업에서
+      </p>
+      {log.length > 0 && (
+        <button onClick={() => setShowLog((v) => !v)} className="min-h-9 text-[11px] text-slate-400 underline hover:text-slate-200">
+          진행 기록 {showLog ? '접기' : '보기'}
+        </button>
+      )}
+      {showLog && log.length > 0 && (
+        <ol className="m-0 max-h-40 list-none space-y-0.5 overflow-y-auto p-0 text-[11px] text-slate-400">
+          {log.map((l, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="shrink-0 tabular-nums text-slate-600">{kstTime(l.at, false)}</span>
+              <span>{l.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 /** 진행 카드 — 지금 단계와 n/m, 걸린 시간, 막대, 단계 줄 */
 function ProgressCard({ run, onStopped }: { run: BriefingRun; onStopped: () => void }) {
   const [showLog, setShowLog] = useState(false);
@@ -445,7 +545,8 @@ function ProgressCard({ run, onStopped }: { run: BriefingRun; onStopped: () => v
     }
     onStopped();
   }
-  const at = STAGE_ORDER.indexOf(stage);
+  // remote(구독)는 RemoteProgressCard가 그린다 — 여기 오면 서버 단계 줄에 없는 값이라 -1
+  const at = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number]);
   const pct = run.progressTotal > 0 ? Math.round((run.progressDone / run.progressTotal) * 100) : 5;
   const elapsed = Math.max(0, Math.round((Date.now() - run.startedAt) / 1000));
   return (

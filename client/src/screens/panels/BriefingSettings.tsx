@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { kstTime, type AutoSchedule, type AutoSlot, type BriefingStatus } from '../../lib/briefing';
+import BriefingSubscriptionSettings from './BriefingSubscriptionSettings';
 
 const SLOTS: { slot: AutoSlot; label: string }[] = [
   { slot: 'morning', label: '아침' },
@@ -16,7 +17,7 @@ type Props = {
 /** API-139 — 고를 수 있는 일반 계정 한 줄 */
 type ReaderCandidate = { id: number; username: string; displayName: string | null; isActive: number; on: boolean };
 
-// SCR-147: 설정 → 뉴스 브리핑 (관리자만) — 자동 생성 켜기/끄기와 회차별 켜기·시각(v0.43), 이번 달 비용·한도 표시, 함께 보는 계정(v0.49)
+// SCR-147: 설정 → 뉴스 브리핑 (관리자만) — 자동 생성 켜기/끄기와 회차별 켜기·시각(v0.43), 이번 달 비용·한도 표시, 함께 보는 계정(v0.49), 생성 방식 API/구독(v0.50)
 export default function BriefingSettings({ onOpenSources }: Props) {
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export default function BriefingSettings({ onOpenSources }: Props) {
   async function save(patch: { autoEnabled?: boolean; schedule?: AutoSchedule; readerEnabled?: boolean }) {
     setError(null);
     try {
-      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'readerEnabled'>>('/briefing/settings', {
+      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'readerEnabled' | 'mode'>>('/briefing/settings', {
         method: 'PUT',
         body: JSON.stringify(patch),
       });
@@ -69,15 +70,18 @@ export default function BriefingSettings({ onOpenSources }: Props) {
             <input
               type="checkbox"
               checked={status.autoEnabled}
-              disabled={!status.configured}
+              // 구독 모드는 API 키 없이도 돈다(트리거·마감만) — 키 검사는 api 모드만 (v0.50)
+              disabled={!status.configured && status.mode !== 'subscription'}
               onChange={(e) => void save({ autoEnabled: e.target.checked })}
               className="mt-0.5 accent-slate-400"
             />
             <span>
               자동 생성
               <span className="block text-slate-600">
-                아래에서 켠 회차를 정한 시각(한국시간)에 만들기 시작합니다. 서버가 꺼져 있었으면 2시간 안에 늦게라도 시작해요. 실패한 회차는 다시 시도하지 않으니 패널의 버튼으로 만드세요
-                {status.autoEnabled && status.nextAutoAt ? ` · 다음 ${kstTime(status.nextAutoAt)}` : ''}
+                {status.mode === 'subscription'
+                  ? '아래에서 켠 회차의 90분 전에 claude.ai 예약 작업을 켜고, 회차 시각 30분 뒤까지 완성본을 기다려요. 안 오면 패널에 알리고 [지금 만들기]로 만들 수 있어요'
+                  : '아래에서 켠 회차를 정한 시각(한국시간)에 만들기 시작합니다. 서버가 꺼져 있었으면 2시간 안에 늦게라도 시작해요. 실패한 회차는 다시 시도하지 않으니 패널의 버튼으로 만드세요'}
+                {status.autoEnabled && status.nextAutoAt ? ` · 다음 ${status.mode === 'subscription' ? '예약 작업 ' : ''}${kstTime(status.nextAutoAt)}` : ''}
               </span>
             </span>
           </label>
@@ -110,8 +114,14 @@ export default function BriefingSettings({ onOpenSources }: Props) {
             <p className="text-[11px] text-slate-600">아침 → 점심 → 저녁 순서로, 21:59까지 고를 수 있어요</p>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            이번 달 ≈ ${status.monthCostUsd.toFixed(2)} / 한도 ${status.monthBudgetUsd} — 한도에 닿으면 자동 생성이 멈춥니다
+            이번 달 ≈ ${status.monthCostUsd.toFixed(2)} / 한도 ${status.monthBudgetUsd} — 한도에 닿으면 자동 생성이 멈춥니다{status.mode === 'subscription' ? ' (구독 회차는 $0으로, 비용에 쌓이지 않아요)' : ''}
           </p>
+          {/* 생성 방식 — API/구독, 연결 열쇠·트리거·체크리스트·연결 확인 (v0.50). 방식이 바뀌면 상태를 다시 읽어 "다음" 표시를 맞춘다 */}
+          <BriefingSubscriptionSettings
+            mode={status.mode ?? 'api'}
+            schedule={status.schedule}
+            onModeChange={() => void api<BriefingStatus>('/briefing/status').then(setStatus, () => {})}
+          />
           {/* 앱 안 원문 보기 — 기본 꺼짐. 서버에서 추출 품질을 잰 뒤 켠다 (개선 합의안 7장) */}
           <label className="mt-3 flex items-start gap-2 text-xs text-slate-400">
             <input
