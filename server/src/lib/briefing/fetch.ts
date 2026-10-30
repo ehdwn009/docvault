@@ -1,5 +1,5 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { BRIEFING } from '../../constants.js';
 import { errorText, withDeadline } from './limit.js';
 
@@ -8,23 +8,24 @@ import { errorText, withDeadline } from './limit.js';
 
 const MAX_REDIRECTS = 3;
 
-/** 사설·루프백·링크로컬 등 "밖"이 아닌 주소인가 */
+// 사설 범위를 BlockList 하나에 모은다 — 예전엔 v4/v6를 손으로 나눴는데, URL 파서가 IPv4 매핑 주소를 16진수(::ffff:7f00:1)로 내놓아
+// 점 표기만 보던 정규식이 빈손이었다(보안 검토 2026-10-30). NAT64(64:ff9b::/96)·6to4(2002::/16)도 v4를 품은 주소라 함께 막는다
+const PRIVATE = new BlockList();
+for (const [addr, bits] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['127.0.0.0', 8], ['100.64.0.0', 10], ['169.254.0.0', 16],
+  ['172.16.0.0', 12], ['192.168.0.0', 16], ['224.0.0.0', 3],
+] as const) PRIVATE.addSubnet(addr, bits, 'ipv4');
+for (const [addr, bits] of [
+  ['::', 128], ['::1', 128], ['64:ff9b::', 96], ['2002::', 16], ['fc00::', 7], ['fe80::', 10],
+] as const) PRIVATE.addSubnet(addr, bits, 'ipv6');
+
+/** 사설·루프백·링크로컬 등 "밖"이 아닌 주소인가. IP 형식이 아니면 true(모르는 건 막는다) */
 export function isPrivateAddress(ip: string): boolean {
-  const mapped = ip.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped?.[1]) return isPrivateAddress(mapped[1]);
-  if (isIP(ip) === 4) {
-    const [a = 0, b = 0] = ip.split('.').map(Number);
-    return (
-      a === 0 || a === 10 || a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) || // CGNAT
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224 // 멀티캐스트·예약
-    );
-  }
-  const v6 = ip.toLowerCase();
-  return v6 === '::' || v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe8') || v6.startsWith('fe9') || v6.startsWith('fea') || v6.startsWith('feb');
+  const addr = ip.replace(/^\[|\]$/g, '');
+  const family = isIP(addr);
+  if (family === 0) return true;
+  // IPv4 매핑 주소(::ffff:…)는 BlockList가 v4 규칙에 대 본다 — 16진수든 점 표기든
+  return PRIVATE.check(addr, family === 6 ? 'ipv6' : 'ipv4');
 }
 
 /** 신호가 오면 기다리기를 그만둔다 — dns.lookup은 신호를 받지 않아, 응답 없는 이름 하나가 실행 전체를 붙잡았다

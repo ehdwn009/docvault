@@ -36,6 +36,7 @@ import {
   setMode,
   setTrigger,
   subscriptionSummary,
+  nextTrigger,
   triggerSet,
   triggerTimesOf,
 } from '../lib/briefing/subscription.js';
@@ -105,8 +106,7 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const schedule = readSchedule(user.id);
     const mode = readMode(user.id);
     // 구독 모드의 "다음 자동"은 트리거 시각(회차 시작 − 리드) (v0.50)
-    const nextRaw = auto ? nextAuto(schedule, Date.now()) : null;
-    const next = nextRaw && mode === 'subscription' ? { ...nextRaw, at: nextRaw.at - BRIEFING.SUB_LEAD_MS } : nextRaw;
+    const next = auto ? (mode === 'subscription' ? nextTrigger(schedule, Date.now()) : nextAuto(schedule, Date.now())) : null;
     // 구독 실행이 돌면 그것이 "지금 실행" — 서버 안 실행과 동시에 있을 수 없다(startRun이 먼저 닫는다)
     const running = runningRun() ?? runningSubscriptionRun(user.id);
     const sub = mode === 'subscription' ? subscriptionSummary(user.id) : null;
@@ -290,21 +290,24 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const body = c.req.valid('json');
     const userId = c.get('user').id;
     const now = Date.now();
-    // 구독 모드 (v0.50): 트리거는 암호화해 두고 값은 다시 내려오지 않는다. 구독으로 바꾸려면 열쇠와 트리거가 있어야 한다
+    // 검사를 전부 먼저, 저장은 그 뒤 — 거절 응답을 받았는데 방식·트리거만 바뀌어 있으면 화면과 서버가 어긋난다
     if (body.trigger) {
       const bad = await assertTriggerUrl(body.trigger.url);
       if (bad) return fail(c, 400, 'VALIDATION_ERROR', `trigger.url: ${bad}`);
-      setTrigger(userId, body.trigger, now);
-    } else if (body.trigger === null) {
-      setTrigger(userId, null, now);
     }
-    if (body.mode === 'subscription' && !(subscriptionSummary(userId).tokenPrefix && triggerSet(userId))) {
+    // 구독 모드 (v0.50): 트리거는 암호화해 두고 값은 다시 내려오지 않는다. 구독으로 바꾸려면 열쇠와 트리거(이번에 함께 보낸 것도 인정)가 있어야 한다
+    const willHaveTrigger = body.trigger ? true : body.trigger === null ? false : triggerSet(userId);
+    if (body.mode === 'subscription' && !(subscriptionSummary(userId).tokenPrefix && willHaveTrigger)) {
       return fail(c, 409, 'BRIEFING_TRIGGER_NOT_SET', '연결 열쇠를 발급하고 예약 작업 트리거를 넣어야 구독으로 받을 수 있어요');
     }
+    // 키 없이 켜 두면 매번 조용히 실패하므로 켜기는 막는다 — api 모드만. 구독 모드는 키 없이 트리거·마감이 돈다
+    const modeAfter = body.trigger === null ? 'api' : (body.mode ?? readMode(userId));
+    if (body.autoEnabled && modeAfter === 'api' && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
+
+    if (body.trigger) setTrigger(userId, body.trigger, now);
+    else if (body.trigger === null) setTrigger(userId, null, now);
     if (body.mode) setMode(userId, body.mode, now);
     const modeNow = readMode(userId);
-    // 키 없이 켜 두면 매번 조용히 실패하므로 켜기는 막는다 — api 모드만. 구독 모드는 키 없이 트리거·마감이 돈다
-    if (body.autoEnabled && modeNow === 'api' && !isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
     const set = {
       ...(body.autoEnabled !== undefined ? { briefingAuto: body.autoEnabled ? 1 : 0 } : {}),
       ...(body.schedule ? { briefingSchedule: JSON.stringify(body.schedule) } : {}),
@@ -317,8 +320,7 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       .run();
     const auto = autoEnabled(userId);
     const schedule: AutoSchedule = readSchedule(userId);
-    const nextRaw = auto ? nextAuto(schedule, now) : null;
-    const next = nextRaw && modeNow === 'subscription' ? { ...nextRaw, at: nextRaw.at - BRIEFING.SUB_LEAD_MS } : nextRaw;
+    const next = auto ? (modeNow === 'subscription' ? nextTrigger(schedule, now) : nextAuto(schedule, now)) : null;
     return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId) });
     },
   );

@@ -431,6 +431,9 @@ export const BRIEFING = {
   /** 트리거 HTTP 호출 — 실패하면 그 자리에서 error */
   SUB_TRIGGER_TIMEOUT_MS: 10_000,
   SUB_TRIGGER_RETRIES: 1,
+  /** 트리거 주소는 claude.ai 예약 작업 공식 fire 주소만 — 임의의 https면 서버가 트리거 토큰을 아무 데나 보내는 SSRF 통로가 된다(보안 검토 2026-10-30) */
+  SUB_TRIGGER_HOST: 'api.anthropic.com',
+  SUB_TRIGGER_PATH: /^\/v1\/claude_code\/routines\/[A-Za-z0-9_-]+\/fire$/,
   /** 완성본 본문 상한 — Hono·Node는 기본 제한이 없어 1GB 서버가 메모리 부족으로 죽을 수 있다. 회차 JSON 실측 뒤 조정 */
   SUB_RESULT_MAX_BYTES: 2 * 1024 * 1024,
   /** 검사에서 뺀 기사가 이 비율을 넘으면 통째로 거절 — 150건 중 45건이 빠지면 회차가 아니다 */
@@ -442,10 +445,15 @@ export const BRIEFING = {
   /** 진행 보고 한 줄 길이·job당 분당 건수 — 열어 둔 주소라 상한이 "없음"이면 안 된다 */
   SUB_PROGRESS_MAX_CHARS: 200,
   SUB_PROGRESS_PER_MINUTE: 20,
+  /** 진행 보고 본문 크기 상한 — zod 전에 본문을 통째로 읽으므로 크기 상한이 따로 필요하다 */
+  SUB_PROGRESS_MAX_BYTES: 16 * 1024,
+  /** 진행 보고 버킷(job별)이 이 수를 넘으면 지난 것을 정리 — 하루 3개라 작지만 "안 지움"은 두지 않는다 */
+  SUB_PROGRESS_BUCKETS_SWEEP: 50,
   /** 연결 열쇠 — dvt_ 접두어는 로그·커밋에서 눈에 띄고 secret scanning에 걸리게 */
   SUB_TOKEN_PREFIX: 'dvt_',
   SUB_TOKEN_BYTES: 32,
-  /** [연결 확인] ping job 수명과 "아직 연결 기록 없음" 판정 시간 */
+  /** [연결 확인] ping job의 id 접두어·수명과 "아직 연결 기록 없음" 판정 시간 */
+  SUB_PING_ID_PREFIX: 'ping-',
   SUB_PING_TTL_MS: 10 * 60 * 1000,
   SUB_PING_NO_REQUEST_MS: 5 * 60 * 1000,
   /** 설정 화면의 최근 요약·시각 조정 힌트 */

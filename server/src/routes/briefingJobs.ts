@@ -37,7 +37,7 @@ export const briefingJobRoutes = new Hono<AppEnv>()
   .get('/:jobId', (c) => {
     const jobId = c.req.param('jobId');
     const userId = c.get('user').id;
-    if (jobId.startsWith('ping-')) {
+    if (jobId.startsWith(BRIEFING.SUB_PING_ID_PREFIX)) {
       if (!resolvePing(jobId, userId)) return fail(c, 404, 'NOT_FOUND', '연결 확인이 없거나 만료됐어요');
       return c.json({ kind: 'ping', jobId });
     }
@@ -53,6 +53,7 @@ export const briefingJobRoutes = new Hono<AppEnv>()
   // API-152: 진행 보고 한 줄 — 화면 [진행 기록]에 실시간. job당 분당 상한
   .post(
     '/:jobId/progress',
+    bodyLimit({ maxSize: BRIEFING.SUB_PROGRESS_MAX_BYTES, onError: (c) => fail(c, 413, 'PAYLOAD_TOO_LARGE', '진행 보고가 너무 커요') }),
     jsonBody(
       z.object({
         text: z.string().max(BRIEFING.SUB_PROGRESS_MAX_CHARS * 4),
@@ -103,6 +104,7 @@ export const briefingJobRoutes = new Hono<AppEnv>()
 // 진행 보고 상한 — job당 분당 SUB_PROGRESS_PER_MINUTE건. 메모리 고정 창(로그인 제한과 같은 방식, 열어 둔 주소라 "없음"은 안 된다)
 const progressBuckets = new Map<number, { count: number; resetAt: number }>();
 function hitProgress(runId: number, now = Date.now()): number | null {
+  if (progressBuckets.size > BRIEFING.SUB_PROGRESS_BUCKETS_SWEEP) for (const [id, bk] of progressBuckets) if (bk.resetAt <= now) progressBuckets.delete(id);
   const b = progressBuckets.get(runId);
   if (!b || b.resetAt <= now) {
     progressBuckets.set(runId, { count: 1, resetAt: now + 60_000 });

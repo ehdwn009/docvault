@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, users, userSettings } from '../../db/schema.js';
@@ -6,7 +6,7 @@ import type { AiCaller } from './ai.js';
 import type { Slot } from './edition.js';
 import { isConfigured, monthCostUsd, recordSkipped, runningRun, startRun } from './run.js';
 import { activeSlots, parseSchedule } from './autoSchedule.js';
-import { subscriptionOwners, tickSubscription } from './subscription.js';
+import { subscriptionOwners, sweepExpiredSubscriptionRuns, tickSubscription } from './subscription.js';
 import { kstParts } from './time.js';
 
 // 자동 생성 — 1분마다 한국시간을 보고, 켜 둔 관리자의 그날 회차를 한 번씩 시작한다 (뉴스 브리핑 설계 "실행 관리").
@@ -15,6 +15,8 @@ import { kstParts } from './time.js';
 // 실패한 회차는 다시 시도하지 않는다 — 매분 재시도하면 실패가 비용으로 불어난다. 버튼으로 만든다
 
 export function tickScheduler(now = Date.now(), ai?: AiCaller): void {
+  // 마감 지난 구독 실행은 방식·자동 켬과 무관하게 닫는다 — 돌던 중에 자동을 끄면 아무도 닫지 않아 running이 영영 남았다(검토 2026-10-30)
+  sweepExpiredSubscriptionRuns(now);
   // 구독 모드 관리자는 따로 — 트리거 시각·마감만 본다. 키가 없어도 돈다 (v0.50). 비동기지만 틱 안에서 기다리지 않는다(트리거 호출이 10초까지)
   for (const o of subscriptionOwners()) {
     tickSubscription(o.id, o.schedule, now).catch((e: unknown) => console.log(`[briefing] 구독 틱 오류: ${e instanceof Error ? e.message : String(e)}`));
@@ -35,7 +37,8 @@ export function tickScheduler(now = Date.now(), ai?: AiCaller): void {
         !db
           .select({ id: briefingRuns.id })
           .from(briefingRuns)
-          .where(and(eq(briefingRuns.ownerId, id), eq(briefingRuns.editionDate, date), eq(briefingRuns.slot, s), eq(briefingRuns.trigger, 'auto')))
+          // 구독 행도 본다 — 구독으로 받은 아침을 api로 바꾼 직후 또 만들지 않게(설계 "하루 한 번 규칙은 두 trigger를 함께 본다")
+          .where(and(eq(briefingRuns.ownerId, id), eq(briefingRuns.editionDate, date), eq(briefingRuns.slot, s), inArray(briefingRuns.trigger, ['auto', 'subscription'])))
           .get(),
     );
     if (!slot) continue;

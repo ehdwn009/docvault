@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { and, desc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, lte } from 'drizzle-orm';
 import { BRIEFING, DEFAULT_USER_SETTINGS } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, users, userSettings } from '../../db/schema.js';
@@ -15,6 +15,7 @@ import { checkItems, ResultSchema, tooManyDropped, type JobResult, type ResultIt
 import { addLog, closeLive, openRemoteLive, setRemoteStage, type RemoteStage } from './live.js';
 import { closeSubscriptionRun, nextSinceAt, runningSubscriptionRun } from './run.js';
 import { loadSourcesDoc } from './sources.js';
+import { SourcesError } from './sourcesDoc.js';
 import { SUBS } from './taxonomy.js';
 import { kstParts, kstToMs } from './time.js';
 
@@ -98,6 +99,11 @@ export function findTokenOwner(token: string): { userId: number; prefix: string 
   return null;
 }
 
+/** 이 앞 8자로 발급된 열쇠가 있나 — 인증 실패 제한의 묶는 키를 정할 때만 쓴다 */
+export function tokenPrefixKnown(prefix: string): boolean {
+  return prefix.length === BRIEFING.SUB_TOKEN_PREFIX_CHARS && !!db.select({ userId: userSettings.userId }).from(userSettings).where(eq(userSettings.briefingTokenPrefix, prefix)).get();
+}
+
 export function touchToken(userId: number, now = Date.now()): void {
   db.update(userSettings).set({ briefingTokenLastUsedAt: now }).where(eq(userSettings.userId, userId)).run();
 }
@@ -130,7 +136,7 @@ export function triggerSet(userId: number): boolean {
   return t !== null && t !== 'broken';
 }
 
-/** 트리거 주소 검사 — https만, 사설망 거절. 서버가 밖으로 나가는 요청이라 RSS와 같은 선을 지킨다 */
+/** 트리거 주소 검사 — https·공식 호스트·fire 경로만. 그래도 사설망 검사는 남긴다(RSS와 같은 선, 호스트 고정이 풀려도 한 겹 더) */
 export async function assertTriggerUrl(raw: string): Promise<string | null> {
   let url: URL;
   try {
@@ -140,6 +146,8 @@ export async function assertTriggerUrl(raw: string): Promise<string | null> {
   }
   if (url.protocol !== 'https:') return 'https 주소여야 합니다';
   if (url.username || url.password) return '주소에 아이디·비밀번호를 넣을 수 없습니다';
+  if (url.hostname !== BRIEFING.SUB_TRIGGER_HOST || url.port) return `${BRIEFING.SUB_TRIGGER_HOST} 의 주소여야 합니다`;
+  if (!BRIEFING.SUB_TRIGGER_PATH.test(url.pathname)) return '예약 작업의 fire 주소(/v1/claude_code/routines/<id>/fire)가 아닙니다';
   try {
     const host = url.hostname.replace(/^\[|\]$/g, '');
     const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
@@ -196,7 +204,7 @@ function oneSlotStart(schedule: AutoSchedule, slot: AutoSlot, date: string): num
  * 구독 실행 하나를 만들고 예약 작업을 켠다 — 실행 기록(running/remote, jobId, 마감)을 먼저 적고 트리거를 쏜다.
  * 호출이 실패하면 그 자리에서 error. until은 지금(트리거 시각) — 세션이 수집한 범위와 기록이 어긋나면 다음 회차의 since가 틀린다
  */
-export async function createJob(args: { ownerId: number; slot: Slot; deadlineAt: number; now?: number }): Promise<RunRow> {
+export async function createJob(args: { ownerId: number; slot: Slot; editionDate: string; deadlineAt: number; now?: number }): Promise<RunRow> {
   const now = args.now ?? Date.now();
   const run = db
     .insert(briefingRuns)
@@ -204,7 +212,7 @@ export async function createJob(args: { ownerId: number; slot: Slot; deadlineAt:
       ownerId: args.ownerId,
       trigger: 'subscription',
       slot: args.slot,
-      editionDate: kstParts(now).date,
+      editionDate: args.editionDate,
       status: 'running',
       stage: 'remote',
       jobId: randomUUID(),
@@ -216,6 +224,12 @@ export async function createJob(args: { ownerId: number; slot: Slot; deadlineAt:
     .returning()
     .get();
   openRemoteLive(run.id);
+  // 수집 목록 문서가 틀리면 트리거 없이 error — 켜 놓고 지시서에서 터지면 세션이 빈손으로 끝난다(설계 "충돌 — 수집 목록 문서가 잘못된 경우")
+  const badDoc = sourcesDocProblem(args.ownerId);
+  if (badDoc) {
+    closeSubscriptionRun(run.id, 'error', `수집 목록 문서가 잘못되어 예약 작업을 켜지 않았어요 — ${badDoc}`);
+    return db.select().from(briefingRuns).where(eq(briefingRuns.id, run.id)).get() ?? run;
+  }
   const fired = await fireTrigger(args.ownerId, `BRIEFING_JOB_ID=${run.jobId} — docvault 뉴스 브리핑 회차를 만들 차례입니다. briefing-subscription 스킬을 실전 모드로 실행하세요.`);
   if (!fired.ok) {
     closeSubscriptionRun(run.id, 'error', `예약 작업을 켜지 못했어요 — ${fired.reason}`);
@@ -227,14 +241,8 @@ export async function createJob(args: { ownerId: number; slot: Slot; deadlineAt:
 /** API-151 — 지시서. 받아 가면 remote_started_at을 찍는다(두 번 받아도 같은 지시서) */
 export function instructionFor(run: RunRow, now = Date.now()): Instruction {
   if (run.status !== 'running' || !run.jobId) throw new JobError(409, 'BRIEFING_JOB_CLOSED', '이 구독 실행은 이미 닫혔어요');
-  const { doc } = loadSourcesDoc(run.ownerId);
-  const prevRun = db
-    .select({ fileId: briefingRuns.fileId })
-    .from(briefingRuns)
-    .where(and(eq(briefingRuns.ownerId, run.ownerId), eq(briefingRuns.status, 'ok')))
-    .orderBy(desc(briefingRuns.untilAt))
-    .get();
-  const prev = readPrevious(prevRun?.fileId ?? null);
+  const doc = sourcesDocOrClose(run);
+  const prev = readPrevious(prevOkFileId(run.ownerId));
   const prevStories: PrevStoryRef[] = [];
   for (const [subId, list] of prev.storiesBySub) for (const p of list) prevStories.push({ subId, ...p });
   if (!run.remoteStartedAt) {
@@ -244,12 +252,44 @@ export function instructionFor(run: RunRow, now = Date.now()): Instruction {
   return buildInstruction({ jobId: run.jobId, slot: run.slot, since: run.sinceAt, until: run.untilAt, deadline: run.deadlineAt ?? run.untilAt + BRIEFING.SUB_LEAD_MS + BRIEFING.SUB_DEADLINE_AFTER_MS, doc, excludeUrls: prev.urls, prevStories, config: MODEL_CONFIG });
 }
 
+/** 수집 목록 문서를 읽어 틀린 점을 돌려준다(없으면 null) — 트리거 전 검사용 */
+function sourcesDocProblem(ownerId: number): string | null {
+  try {
+    loadSourcesDoc(ownerId);
+    return null;
+  } catch (e) {
+    if (e instanceof SourcesError) return e.message;
+    throw e;
+  }
+}
+
+/** 지시서·완성본 검사가 쓰는 수집 목록 — 트리거 뒤 문서가 고장 났으면(90분 창 안의 편집) 실행을 error로 닫고 세션에는 "닫혔다"로 답한다 */
+function sourcesDocOrClose(run: RunRow) {
+  try {
+    return loadSourcesDoc(run.ownerId).doc;
+  } catch (e) {
+    if (!(e instanceof SourcesError)) throw e;
+    closeSubscriptionRun(run.id, 'error', `수집 목록 문서가 잘못되어 실행을 닫았어요 — ${e.message}`);
+    throw new JobError(409, 'BRIEFING_JOB_CLOSED', `수집 목록 문서가 잘못되어 이 실행을 닫았어요 — ${e.message}`);
+  }
+}
+
+/** 직전 회차 — 끝 시각이 가장 늦은 ok 실행. 지시서(excludeUrls·prevStories)와 완성본 검사(excludeUrls·prevStoryId)가 같은 회차를 보게 한 곳에서 고른다 */
+function prevOkFileId(ownerId: number): number | null {
+  return db.select({ fileId: briefingRuns.fileId }).from(briefingRuns).where(and(eq(briefingRuns.ownerId, ownerId), eq(briefingRuns.status, 'ok'))).orderBy(desc(briefingRuns.untilAt)).get()?.fileId ?? null;
+}
+
+/** 화면 [진행 기록]에 들어가는 한 줄 — 제어문자는 지우고 길이를 맞춘다. 진행 보고와 완성본 log가 같은 손질을 거친다 */
+function cleanLogLine(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, BRIEFING.SUB_PROGRESS_MAX_CHARS);
+}
+
 /** API-152 — 진행 보고 한 줄. 줄은 자르고 제어문자는 지운다. DB의 stage는 remote 그대로, 세부 단계는 메모리에만 */
 export function recordProgress(run: RunRow, body: { text: string; stage?: RemoteStage; done?: number; total?: number }, now = Date.now()): void {
   if (run.status !== 'running') throw new JobError(409, 'BRIEFING_JOB_CLOSED', '이 구독 실행은 이미 닫혔어요');
   const live = openRemoteLive(run.id);
-  // eslint-disable-next-line no-control-regex
-  const text = body.text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, BRIEFING.SUB_PROGRESS_MAX_CHARS);
+  const text = cleanLogLine(body.text);
   if (text) addLog(live, text, now);
   if (body.stage || body.done !== undefined || body.total !== undefined) {
     setRemoteStage(live, body.stage ?? null, body.done ?? live.remote?.done ?? 0, body.total ?? live.remote?.total ?? 0);
@@ -258,7 +298,7 @@ export function recordProgress(run: RunRow, body: { text: string; stage?: Remote
 }
 
 /** 완성본 기사 → 조립 입력. related는 언론사마다 하나, 대표 언론사·포털 재게재는 빼고 MAX_RELATED까지(서버 otherOutlets와 같은 규칙) */
-function toDraft(it: ResultItem): ItemDraft {
+function toDraft(it: ResultItem, knownStoryIds: ReadonlySet<string>): ItemDraft {
   const seen = new Set([it.source.trim().toLowerCase()]);
   const related: { source: string; url: string }[] = [];
   for (const r of it.related) {
@@ -270,7 +310,8 @@ function toDraft(it: ResultItem): ItemDraft {
   const written = it.importance >= 2;
   return {
     subId: it.subId,
-    prevStoryId: it.prevStoryId,
+    // 직전 회차에 없는 사건 id는 새 사건으로 — 세션이 지어낸 id가 "갱신됨"으로 남으면 사건 이어 보기가 깨진다(서버 select와 같은 규칙)
+    prevStoryId: it.prevStoryId && knownStoryIds.has(it.prevStoryId) ? it.prevStoryId : null,
     item: {
       title: it.title,
       summary: it.summary,
@@ -297,12 +338,13 @@ function toDraft(it: ResultItem): ItemDraft {
   };
 }
 
-/** missing 뒤 늦게 온 완성본을 받아도 되나 — 그 실행이 시작된 뒤에 시작된 ok 실행이 하나도 없을 때만 (대체·다음 회차를 한 조회로 막는다) */
-function laterOkRunExists(run: RunRow): boolean {
+/** missing 뒤 늦게 온 완성본을 받아도 되나 — 그 실행 뒤에 시작된 ok·running 실행이 하나도 없을 때만 (대체·다음 회차를 한 조회로 막는다).
+    running도 막는 이유: [지금 만들기]가 돌고 있는데 늦은 완성본을 받으면 같은 시간대 회차가 둘 생긴다 */
+function laterRunBlocks(run: RunRow): boolean {
   return !!db
     .select({ id: briefingRuns.id })
     .from(briefingRuns)
-    .where(and(eq(briefingRuns.ownerId, run.ownerId), eq(briefingRuns.status, 'ok'), gt(briefingRuns.startedAt, run.startedAt)))
+    .where(and(eq(briefingRuns.ownerId, run.ownerId), inArray(briefingRuns.status, ['ok', 'running']), gt(briefingRuns.startedAt, run.startedAt)))
     .get();
 }
 
@@ -316,7 +358,7 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
     return { fileId: run.fileId, itemCount: run.itemCount, dropped, already: true };
   }
   if (run.status === 'missing') {
-    if (laterOkRunExists(run)) throw new JobError(409, 'BRIEFING_JOB_CLOSED', '그 뒤에 다른 회차가 만들어져 이 완성본은 받지 않아요');
+    if (laterRunBlocks(run)) throw new JobError(409, 'BRIEFING_JOB_CLOSED', '그 뒤에 다른 회차가 만들어져 이 완성본은 받지 않아요');
   } else if (run.status !== 'running') {
     throw new JobError(409, 'BRIEFING_JOB_CLOSED', '이 구독 실행은 이미 닫혔어요');
   }
@@ -329,18 +371,21 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
     throw new JobError(400, 'VALIDATION_ERROR', `${where}: ${issue?.message ?? '형식 오류'}`);
   }
   const result: JobResult = parsed.data;
-  const { doc } = loadSourcesDoc(run.ownerId);
+  if (result.items.length === 0) throw new JobError(422, 'BRIEFING_JOB_REJECTED', '기사가 하나도 없는 완성본은 받지 않아요', { dropped: {} });
+  const doc = sourcesDocOrClose(run);
   const { allowedDomains } = buildInstruction({ jobId: run.jobId ?? '', slot: run.slot, since: run.sinceAt, until: run.untilAt, deadline: 0, doc, excludeUrls: [], prevStories: [], config: MODEL_CONFIG });
-  const prevRun = db.select({ fileId: briefingRuns.fileId }).from(briefingRuns).where(and(eq(briefingRuns.ownerId, run.ownerId), eq(briefingRuns.status, 'ok'), eq(briefingRuns.untilAt, run.sinceAt))).get();
-  const excludeUrls = readPrevious(prevRun?.fileId ?? null).urls;
-  const { kept, dropped } = checkItems(result.items, { allowedDomains, excludeUrls, since: run.sinceAt, until: run.untilAt, knownSubIds: new Set(SUBS.map((s) => s.id)) });
+  const prev = readPrevious(prevOkFileId(run.ownerId));
+  const { kept, dropped } = checkItems(result.items, { allowedDomains, excludeUrls: prev.urls, since: run.sinceAt, until: run.untilAt, knownSubIds: new Set(SUBS.map((s) => s.id)) });
   if (tooManyDropped(result.items.length, kept.length)) {
     throw new JobError(422, 'BRIEFING_JOB_REJECTED', `검사에서 뺀 기사가 ${result.items.length - kept.length}/${result.items.length}건 — ${BRIEFING.SUB_DROP_REJECT_RATIO * 100}%를 넘어 받지 않아요`, { dropped });
   }
+  const knownStoryIds = new Set<string>();
+  for (const list of prev.storiesBySub.values()) for (const p of list) knownStoryIds.add(p.storyId);
+  const unknownPrev = kept.filter((it) => it.prevStoryId && !knownStoryIds.has(it.prevStoryId)).length;
 
   const s = result.stats;
   const edition: Edition = layoutEdition(
-    kept.map(toDraft),
+    kept.map((it) => toDraft(it, knownStoryIds)),
     { slot: run.slot, since: run.sinceAt, until: run.untilAt, createdAt: now },
     { sources: s.sources, sourcesFailed: s.sourcesFailed, candidates: s.candidates, attached: s.attached, bodiesRead: s.bodiesRead, fromFeed: s.fromFeed, extractRejected: s.extractRejected, webFilled: s.webFilled, lensDrops: s.lensDrops, wouldMerge: s.wouldMerge },
     { numberDrops: s.numberDrops, demoted: s.demoted, overruns: s.overruns, impactDrops: s.impactDrops, explainDrops: s.explainDrops, titleMismatch: s.titleMismatch },
@@ -377,7 +422,8 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
   });
   if (!saved) throw new JobError(409, 'BRIEFING_JOB_CLOSED', '이 구독 실행은 그사이 닫혔어요');
   const live = openRemoteLive(run.id);
-  for (const line of result.log) addLog(live, line.slice(0, BRIEFING.SUB_PROGRESS_MAX_CHARS), now);
+  for (const line of result.log) addLog(live, cleanLogLine(line), now);
+  if (unknownPrev) addLog(live, `직전 회차에 없는 사건 id ${unknownPrev}건은 새 사건으로 바꿨어요`, now);
   closeLive(run.id);
   console.log(`[briefing] ${edition.edition.date} ${edition.edition.label} ok(구독) ${edition.stats.items}건 ${Math.round((now - run.startedAt) / 60_000)}분 → ${saved.name}`);
   return { fileId: saved.fileId, itemCount: edition.stats.items, dropped, already: false };
@@ -404,10 +450,31 @@ function hasRunFor(ownerId: number, date: string, slot: Slot): boolean {
     .get();
 }
 
-function recordMissing(ownerId: number, slot: Slot, deadlineAt: number, message: string, now: number): void {
+function recordMissing(ownerId: number, slot: Slot, editionDate: string, deadlineAt: number, message: string, now: number): void {
   db.insert(briefingRuns)
-    .values({ ownerId, trigger: 'subscription', slot, editionDate: kstParts(now).date, status: 'missing', stage: 'remote', deadlineAt, message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
+    .values({ ownerId, trigger: 'subscription', slot, editionDate, status: 'missing', stage: 'remote', deadlineAt, message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
     .run();
+}
+
+/** 마감이 지난 running 구독 실행 → missing. 방식·자동 켬과 무관하게 매 틱 — 돌던 중 자동을 꺼도 닫혀야 한다 */
+export function sweepExpiredSubscriptionRuns(now = Date.now()): void {
+  for (const r of db.select({ id: briefingRuns.id }).from(briefingRuns).where(and(eq(briefingRuns.status, 'running'), eq(briefingRuns.trigger, 'subscription'), lte(briefingRuns.deadlineAt, now))).all()) {
+    closeSubscriptionRun(r.id, 'missing', '마감까지 완성본이 오지 않았어요');
+  }
+}
+
+/** 구독 모드에서 "다음 자동"은 트리거 시각(회차 시작 − 리드) — 트리거와 시작 사이에는 다음 회차의 트리거를 가리킨다 */
+export function nextTrigger(schedule: AutoSchedule, now: number): { at: number; slot: AutoSlot } | null {
+  const slots = BRIEFING.AUTO_SLOTS.map((s) => s.slot).filter((slot) => schedule[slot].on);
+  if (slots.length === 0) return null;
+  for (const dayOffset of [0, 1, 2]) {
+    const date = kstParts(now + dayOffset * 24 * 60 * 60 * 1000).date;
+    for (const slot of slots) {
+      const at = oneSlotStart(schedule, slot, date) - BRIEFING.SUB_LEAD_MS;
+      if (at > now) return { at, slot };
+    }
+  }
+  return null;
 }
 
 /**
@@ -416,30 +483,33 @@ function recordMissing(ownerId: number, slot: Slot, deadlineAt: number, message:
  * 다른 구독 실행이 아직 running이면 다음 분에 다시 본다. 실패·missing 뒤 같은 회차는 다시 켜지 않는다
  */
 export async function tickSubscription(ownerId: number, scheduleText: string | null, now = Date.now()): Promise<void> {
-  const date = kstParts(now).date;
   const schedule = parseSchedule(scheduleText);
-  // 마감이 지난 running → missing
-  for (const r of db.select().from(briefingRuns).where(and(eq(briefingRuns.ownerId, ownerId), eq(briefingRuns.status, 'running'), eq(briefingRuns.trigger, 'subscription'))).all()) {
-    if (r.deadlineAt !== null && now >= r.deadlineAt) closeSubscriptionRun(r.id, 'missing', '마감까지 완성본이 오지 않았어요');
-  }
-  for (const def of BRIEFING.AUTO_SLOTS) {
-    const slot = def.slot;
-    if (!schedule[slot].on) continue;
-    const start = oneSlotStart(schedule, slot, date);
-    const triggerAt = start - BRIEFING.SUB_LEAD_MS;
-    const deadlineAt = start + BRIEFING.SUB_DEADLINE_AFTER_MS;
-    if (now < triggerAt || hasRunFor(ownerId, date, slot)) continue;
-    if (now >= deadlineAt) {
-      recordMissing(ownerId, slot, deadlineAt, '예약 작업을 켜지 못한 채 마감이 지났어요(서버가 꺼져 있었을 수 있어요)', now);
-      continue;
+  // 설정을 바꾼 시각 — 그 전에 트리거 시각이 지난 회차는 "놓친 것"이 아니다(저녁에 구독을 켰다고 아침·점심이 missing으로 쌓이면 안 된다).
+  // 설정 저장이면 무엇이든 이 시각이 바뀌므로, 서버가 꺼져 있던 사이에 설정을 건드린 드문 경우는 missing이 기록되지 않는다(감수)
+  const settingsChangedAt = settingsOf(ownerId)?.updatedAt ?? 0;
+  // 오늘과 "지금 + 리드"의 날짜 — 00:30 회차는 전날 23:00에 켜야 하므로 날짜를 넘겨 본다
+  const dates = [...new Set([kstParts(now).date, kstParts(now + BRIEFING.SUB_LEAD_MS).date])];
+  for (const date of dates) {
+    for (const def of BRIEFING.AUTO_SLOTS) {
+      const slot = def.slot;
+      if (!schedule[slot].on) continue;
+      const start = oneSlotStart(schedule, slot, date);
+      const triggerAt = start - BRIEFING.SUB_LEAD_MS;
+      const deadlineAt = start + BRIEFING.SUB_DEADLINE_AFTER_MS;
+      if (now < triggerAt || hasRunFor(ownerId, date, slot)) continue;
+      const enabledBeforeTrigger = settingsChangedAt <= triggerAt;
+      if (now >= deadlineAt) {
+        if (enabledBeforeTrigger) recordMissing(ownerId, slot, date, deadlineAt, '예약 작업을 켜지 못한 채 마감이 지났어요(서버가 꺼져 있었을 수 있어요)', now);
+        continue;
+      }
+      if (now > deadlineAt - BRIEFING.SUB_MIN_LEAD_MS) {
+        if (enabledBeforeTrigger) recordMissing(ownerId, slot, date, deadlineAt, `마감까지 ${BRIEFING.SUB_MIN_LEAD_MS / 60_000}분이 안 남아 예약 작업을 켜지 않았어요`, now);
+        continue;
+      }
+      if (runningSubscriptionRun(ownerId)) return;
+      await createJob({ ownerId, slot, editionDate: date, deadlineAt, now });
+      return;
     }
-    if (now > deadlineAt - BRIEFING.SUB_MIN_LEAD_MS) {
-      recordMissing(ownerId, slot, deadlineAt, `마감까지 ${BRIEFING.SUB_MIN_LEAD_MS / 60_000}분이 안 남아 예약 작업을 켜지 않았어요`, now);
-      continue;
-    }
-    if (runningSubscriptionRun(ownerId)) return;
-    await createJob({ ownerId, slot, deadlineAt, now });
-    return;
   }
 }
 
@@ -482,7 +552,7 @@ function writeLastPing(userId: number, result: PingResult, now: number): void {
 /** API-144 — ping job을 만들고 트리거를 쏜다. 세션이 지시서를 받아 가면 ok */
 export async function createPing(userId: number, now = Date.now()): Promise<string> {
   sweepPings(now);
-  const id = `ping-${randomUUID()}`;
+  const id = `${BRIEFING.SUB_PING_ID_PREFIX}${randomUUID()}`;
   pings.set(id, { ownerId: userId, at: now });
   const fired = await fireTrigger(userId, `BRIEFING_JOB_ID=${id} — docvault 연결 확인입니다. briefing-subscription 스킬을 실행하면 지시서만 받고 바로 끝납니다.`);
   if (!fired.ok) {
@@ -553,7 +623,7 @@ export function missingToday(userId: number, now = Date.now()): { runId: number;
     .where(and(eq(briefingRuns.ownerId, userId), eq(briefingRuns.editionDate, date), eq(briefingRuns.status, 'missing')))
     .orderBy(desc(briefingRuns.startedAt))
     .all();
-  for (const r of rows) if (!laterOkRunExists(r)) return { runId: r.id, slot: r.slot, deadlineAt: r.deadlineAt };
+  for (const r of rows) if (!laterRunBlocks(r)) return { runId: r.id, slot: r.slot, deadlineAt: r.deadlineAt };
   return null;
 }
 

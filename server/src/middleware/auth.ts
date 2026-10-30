@@ -5,7 +5,7 @@ import { createMiddleware } from 'hono/factory';
 import { BRIEFING, HEALTH_PATH, SESSION_COOKIE } from '../constants.js';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
-import { findTokenOwner, notePingAuthFailure, touchToken } from '../lib/briefing/subscription.js';
+import { findTokenOwner, notePingAuthFailure, touchToken, tokenPrefixKnown } from '../lib/briefing/subscription.js';
 import { fail } from '../lib/errors.js';
 import { clearLoginAttempts, hitLoginAttempt } from '../lib/ratelimit.js';
 import { verifySessionToken } from '../lib/session.js';
@@ -49,17 +49,21 @@ function clientIp(c: Context): string {
 /**
  * 구독 연결 열쇠(Bearer) — `/api/v1/briefing/jobs/` 접두어에서만 받고 쿠키는 거절한다(브라우저의 관리자가 실수로 치지 못하게).
  * 그 밖의 경로에서는 Bearer를 아예 보지 않는다 — "쿠키가 없으면 Bearer도 봐 준다" 식이면 열쇠가 전체 API의 관리자 통행증이 된다
- * (뉴스 브리핑 설계 "보안 — 구독 연결 열쇠"). 틀린 열쇠는 IP + 열쇠 앞 8자로 묶어 로그인과 같은 제한을 건다 —
- * 클라우드 세션은 공용 나가는 IP를 쓸 수 있어 IP만으로 묶으면 남의 틀린 열쇠가 내 실행을 막는다
+ * (뉴스 브리핑 설계 "보안 — 구독 연결 열쇠"). 틀린 열쇠는 로그인과 같은 제한을 건다 — 묶는 키는 IP, 단 앞 8자가 발급된 열쇠와 같으면
+ * IP + 앞 8자(클라우드 세션은 공용 나가는 IP를 쓸 수 있어 IP만으로 묶으면 남의 틀린 열쇠가 내 실행을 막는다). 아무 글자나 키에
+ * 넣어 주면 요청마다 새 버킷이 생겨 메모리가 늘고 제한도 안 걸린다(보안 검토 2026-10-30)
  */
 async function tokenGuard(c: Context<AppEnv>, next: () => Promise<void>) {
   const raw = c.req.header('authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1] ?? '';
-  const key = `${clientIp(c)}|${raw.slice(0, BRIEFING.SUB_TOKEN_PREFIX_CHARS)}`;
+  const prefix = raw.slice(0, BRIEFING.SUB_TOKEN_PREFIX_CHARS);
+  const ip = clientIp(c);
+  const key = raw && tokenPrefixKnown(prefix) ? `${ip}|${prefix}` : ip;
   const owner = raw ? findTokenOwner(raw) : null;
   if (!owner) {
-    notePingAuthFailure();
+    // 우리 열쇠 모양(dvt_)으로 틀렸을 때만 [연결 확인]을 "열쇠가 맞지 않습니다"로 — 스캐너·쿠키 브라우저의 빈 요청이 남의 확인을 끝내지 않게
+    if (raw.startsWith(BRIEFING.SUB_TOKEN_PREFIX)) notePingAuthFailure();
     const wait = hitLoginAttempt(key);
-    console.log(`[briefing] 연결 열쇠 거절 — ${clientIp(c)} ${raw ? raw.slice(0, BRIEFING.SUB_TOKEN_PREFIX_CHARS) + '…' : '(없음)'}`);
+    console.log(`[briefing] 연결 열쇠 거절 — ${ip} ${raw ? prefix + '…' : '(없음)'}`);
     if (wait !== null) {
       c.header('Retry-After', String(wait));
       return fail(c, 429, 'TOO_MANY_ATTEMPTS', `잠시 후 다시 시도하세요 (${wait}초)`);
