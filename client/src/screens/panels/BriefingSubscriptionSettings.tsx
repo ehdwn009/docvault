@@ -369,10 +369,11 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
                   <span className="block text-slate-600">열쇠는 환경 변수에 넣지 않아요 — 그 화면은 환경을 쓰는 모두가 값을 볼 수 있어요</span>
                 </li>
                 <li>
-                  같은 환경의 네트워크 허용 목록에 docvault 주소와 수집 목록의 언론사 도메인을 넣어요
-                  <button onClick={() => copy(info.allowedDomains.join('\n'), `허용 도메인 ${info.allowedDomains.length}곳을`)} className={`ml-1.5 ${smallBtn}`}>
-                    도메인 {info.allowedDomains.length}곳 복사
+                  같은 환경의 네트워크 허용 목록(Network access → Custom)에 아래 줄들을 붙여 넣어요 — docvault 주소와 언론사 도메인(맨몸과 <code>*.</code> 둘 다)
+                  <button onClick={() => copy(info.allowlist.join('\n'), `허용 목록 ${info.allowlist.length}줄을`)} className={`ml-1.5 ${smallBtn}`}>
+                    허용 목록 {info.allowlist.length}줄 복사
                   </button>
+                  <span className="block text-slate-600">맨몸 도메인만 넣으면 www.·rss.·feeds. 주소가 막혀 피드와 원문을 못 받아요. 수집 목록을 고치면 다시 복사해 맞추세요</span>
                 </li>
                 <li>
                   예약 작업을 만들어요 — 저장소는 docvault, 일정은 비워 두고(서버가 켜요), 지시문은 아래 한 줄:

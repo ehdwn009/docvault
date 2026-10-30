@@ -293,6 +293,8 @@ export type SubscriptionInfo = {
   triggerTimes: Partial<Record<AutoSlot, string>>;
   recent: { ok: number; missing: number; error: number; avgMinutes: number | null; hint: 'later' | 'earlier' | null };
   allowedDomains: string[];
+  /** 네트워크 허용 목록에 그대로 붙여 넣을 줄들 — docvault 호스트 + 도메인마다 맨몸·`*.` 둘 (v0.50.5) */
+  allowlist: string[];
   checklist: { docvaultUrl: string; envNames: string[]; secret: { host: string; pathPrefix: string; header: string; prefix: string }; taskPrompt: string };
 };
 

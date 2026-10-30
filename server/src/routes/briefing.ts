@@ -40,7 +40,7 @@ import {
   triggerSet,
   triggerTimesOf,
 } from '../lib/briefing/subscription.js';
-import { checkDomainsOf } from '../lib/briefing/jobDomains.js';
+import { checkDomainsOf, networkAllowlistOf } from '../lib/briefing/jobDomains.js';
 import { loadSourcesDoc } from '../lib/briefing/sources.js';
 import { fail } from '../lib/errors.js';
 import { jsonBody, parseId } from '../lib/validate.js';
@@ -166,6 +166,8 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       triggerTimes: triggerTimesOf(schedule),
       recent: recentSubscription(userId),
       allowedDomains: checkDomainsOf(doc),
+      // 허용 목록 복사 버튼용 — 맨몸 + 별표 (jobDomains.ts 주석)
+      allowlist: networkAllowlistOf(doc, new URL(origin).host),
       checklist: {
         docvaultUrl: origin,
         // 열쇠는 claude.ai 환경의 네트워크 시크릿(Bearer)이 붙인다 — 세션이 값을 못 보는 쪽이 설계 1순위(첫 실전 2026-10-30에서 확인: 환경 변수 화면은 "시크릿을 넣지 마세요")

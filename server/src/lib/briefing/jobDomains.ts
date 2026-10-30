@@ -33,6 +33,20 @@ export function registrableDomain(host: string): string {
 }
 
 /** 지시서의 allowedDomains — 피드 주소마다 접두어를 벗긴 호스트와 등록 도메인 둘 다 넣는다(biz.chosun.com 피드만 있어도 www.chosun.com 기사가 통과하게) */
+/**
+ * claude.ai 환경의 네트워크 허용 목록에 붙여 넣을 줄들 — 도메인마다 맨몸(`hankyung.com`)과 별표(`*.hankyung.com`) 둘 다.
+ * 허용 목록은 맨몸 도메인으로 하위 도메인(www.·rss.·feeds.)을 열어 주지 않는다 — 첫 실전(2026-10-31)에서 피드 26/67이 "주소를 찾을 수 없음"으로 실패했다.
+ * docvault 호스트는 맨몸만(지시서·완성본은 그 호스트 하나)
+ */
+export function networkAllowlistOf(doc: SourcesDoc, docvaultHost: string): string[] {
+  const lines = new Set<string>([docvaultHost]);
+  for (const d of checkDomainsOf(doc)) {
+    lines.add(d);
+    lines.add(`*.${d}`);
+  }
+  return [...lines];
+}
+
 export function checkDomainsOf(doc: SourcesDoc): string[] {
   const set = new Set<string>([...BRIEFING.WEB_FILL_WIRES, ...BRIEFING.SUB_CHECK_EXTRA_DOMAINS]);
   for (const f of doc.feeds) {
