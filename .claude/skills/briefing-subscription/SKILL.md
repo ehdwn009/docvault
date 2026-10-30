@@ -3,7 +3,7 @@ name: briefing-subscription
 description: docvault 뉴스 브리핑 회차를 Claude 구독(예약 작업)으로 만든다. 지시서를 받아 저장소 코드로 수집·원문 읽기를 하고, 에이전트가 분류·선별·요약·검수를 쓴 뒤, 같은 코드로 숫자 검사를 거친 완성본을 docvault에 보낸다(시험 모드에서는 브랜치에 커밋). "브리핑 스킬 실행", "뉴스 브리핑 만들어", "briefing-subscription"에 트리거.
 ---
 
-# 뉴스 브리핑 — 구독 생성 방식 (skillVersion 2)
+# 뉴스 브리핑 — 구독 생성 방식 (skillVersion 3)
 
 설계: `docs/design/뉴스브리핑_docvault_20261001.md` "구독 생성 방식". 이 스킬은 **판단과 글쓰기**만 하고, 기계적인 일(수집·입력 자르기·원문 읽기·숫자 검사·건강 숫자)은 저장소의 `npm run briefing:job -w server -- <명령>`이 서버와 **같은 코드**로 한다. 숫자는 코드가 센 값만 쓴다.
 
@@ -59,7 +59,7 @@ npm run briefing:job -w server -- group .briefing-job
 
 ## 3. 선별 (에이전트)
 
-`select/*.txt`마다 파일 머리의 지시대로 고른다. **분야를 넘는 같은 사건**은 분야별로 보면 안 보인다 — 전부 고른 뒤 전체 목록을 한 번 훑어 같은 사건이 두 분야에 있으면 더 맞는 분야 하나만 남기고 나머지의 `main`·`related`를 그쪽 `related`로 합친다(서버의 ③-2 합치기). 결과는 하나의 `selected.json`:
+`select/*.txt`마다 파일 머리의 지시대로 고른다. **분야를 넘는 같은 사건**은 분야별로 보면 안 보인다 — 전부 고른 뒤 전체 목록을 한 번 훑어 같은 사건이 두 분야에 있으면 더 맞는 분야 하나만 남기고 나머지의 `main`·`related`를 그쪽 `related`로 합친다(서버의 ③-2 합치기). 같은 기업·같은 발표·같은 수치를 다룬 기사는 표현이 달라도("알파벳 13% 폭락"과 "알파벳 12% 급락에 나스닥 하락") 같은 사건이다 — 시장 반응을 따로 다룬 기사도 대표 기사의 `related`로 넣는다. 결과는 하나의 `selected.json`:
 
 ```json
 { "stories": [
@@ -88,14 +88,14 @@ npm run briefing:job -w server -- read .briefing-job
 규칙 (서버의 웹 검색 보강과 같다 — 어기면 다음 명령이 버린다):
 - **허용 도메인 안에서만** 찾는다(`instruction.json`의 `allowedDomains`). 검색어에 `site:` 조건을 붙여도 된다.
 - **같은 사건**만: 같은 발표·결정·사고·수치. 파일 머리의 날짜 범위 밖 기사는 쓰지 않는다.
-- `text`에는 페이지에 적힌 문장을 **그대로 옮겨** 적는다. 요약·번역·의견을 섞지 않는다 — 이 글이 요약의 재료이자 숫자 검사의 기준이다. 200자 이상, 기사 핵심 문단 위주로.
+- **주소만 적어도 된다.** 다음 명령이 그 페이지를 서버와 같은 원문 읽기 코드로 직접 받아 재료로 쓴다(웹 읽기 도구는 본문 대신 요약을 돌려줄 때가 있다). 코드가 받지 못한 곳(403 등)만 대신 쓰이도록 `text`에 페이지 문장을 **그대로 옮겨** 적어 둔다 — 요약·번역·의견을 섞지 않는다. 코드가 받은 글이 있으면 그쪽이 우선이다.
 - 기사당 2~3개면 충분하다. 못 찾으면 그 기사는 적지 않는다(참고로 남는다).
 - 페이지가 막혀 못 읽으면 검색 결과에 보이는 문장만 쓰지 말고 다른 언론사를 찾는다.
 
 결과는 `webfill.json`:
 ```json
 { "stories": [ { "story": 12, "materials": [
-  { "source": "경향신문", "url": "https://www.khan.co.kr/article/…", "title": "그 페이지의 제목", "publishedAt": 1793250000000, "text": "페이지 문장 그대로 …" }
+  { "source": "경향신문", "url": "https://www.khan.co.kr/article/…", "title": "그 페이지의 제목", "publishedAt": 1793250000000, "text": "(선택) 코드가 못 받을 때 쓸 페이지 문장 그대로 …" }
 ] } ] }
 ```
 (`publishedAt`은 알면 unix ms, 모르면 빼도 된다.) 하위 에이전트 여러 명에게 대상을 나눠 맡기고 합쳐도 된다.
@@ -103,7 +103,7 @@ npm run briefing:job -w server -- read .briefing-job
 ```
 npm run briefing:job -w server -- webfill .briefing-job
 ```
-→ 허용 도메인·글 길이·날짜·제목 겹침을 검사해 통과한 것만 `W1·W2…` 재료로 붙이고, 요약 입력(`summarize/*.txt`·`fallback.txt`)을 **다시 쓴다.** 버린 것과 이유가 출력된다 — 이유가 "제목과 안 겹침"이면 다른 사건을 가져온 것이다.
+→ 페이지를 직접 받아(못 받으면 `text`로) 허용 도메인·글 길이·날짜·제목 겹침을 검사해 통과한 것만 `W1·W2…` 재료로 붙이고, 요약 입력(`summarize/*.txt`·`fallback.txt`)을 **다시 쓴다.** 버린 것과 이유가 출력된다 — 이유가 "제목과 안 겹침"이면 다른 사건을 가져온 것이다.
 
 ## 4. 요약 (에이전트) — 원문을 보는 유일한 단계
 
@@ -114,7 +114,11 @@ npm run briefing:job -w server -- webfill .briefing-job
 ```json
 { "items": [ {
   "story": 12, "title": "…", "lead": "…", "leadSrc": "A,B", "why": "…", "whySrc": "A",
-  "blocks": [ { "kind": "numbers", "text": "", "pairs": [ { "label": "…", "value": "…" } ], "items": [], "src": "A" } ],
+  "blocks": [
+    { "kind": "numbers", "text": "", "pairs": [ { "label": "…", "value": "…" } ], "items": [], "src": "A" },
+    { "kind": "timeline", "text": "", "pairs": [], "items": [ { "date": "10월 28일", "text": "…" }, { "date": "10월 29일", "text": "…" } ], "src": "A" },
+    { "kind": "background", "text": "1~3문장", "pairs": [], "items": [], "src": "A,B" }
+  ],
   "sidesKind": "", "sides": [], "changed": "",
   "w5": { "who": "…", "what": "…", "when": "", "where": "", "why": "", "src": "A" },
   "impact": [ { "target": "수출 기업", "direction": "down", "text": "…할 수 있다", "src": "A" } ],
@@ -124,14 +128,14 @@ npm run briefing:job -w server -- webfill .briefing-job
 "fallbacks": [ { "story": 55, "title": "한국어 제목", "summary": "발췌가 있으면 한 문장, 없으면 빈 문자열" } ] }
 ```
 
-- 모든 칸을 적는다(없으면 빈 문자열·빈 배열). `fallback.txt`에 적힌 기사는 `fallbacks`에.
+- 모든 칸을 적는다(없으면 빈 문자열·빈 배열). `blocks`의 항목은 **세 칸(`text`·`pairs`·`items`)을 모두** 적는다 — `pairs`는 `{label,value}`, `items`는 `{date,text}` 객체 배열이다(문자열 배열이면 verify가 형식 오류로 멈춘다). `fallback.txt`에 적힌 기사는 `fallbacks`에.
 - **해외 기사 표기**: 금액은 한국어 단위로 바꾼다 — "$6.3 billion" → "63억 달러", "$78,516" → "7만8516달러", "€2.5bn" → "25억 유로"(값이 같으면 숫자 검사를 통과한다). 날짜는 "11월 10일(현지시간)"처럼 한국어로 쓰되 **숫자 칩(numbers)에는 날짜를 넣지 않는다**(칩은 재료 표기와 값이 그대로 같아야 남는다). 원문 영어 표기를 그대로 두지 않는다.
-- **검수 — 핵심·주요 전부**: 요약을 다 쓴 뒤 검수 에이전트(Opus)가 **핵심·주요 기사 전부**를 `summarize/*.txt`의 재료와 문장 단위로 대조한다(10건 표본이 아니다 — 1회 시험에서 10건 중 4문장이 틀렸다). 재료에 없는 사실·인과·수치가 있으면 그 문장을 고치거나 지운다. 재료가 2곳 이상인 기사는 숫자가 서로 맞는지도 본다. 고친 문장 수를 완성본 `log`에 한 줄로 남긴다. 기사가 많으면 검수 에이전트 여러 명에게 나눠 맡긴다.
+- **검수 — 핵심·주요 전부**: 요약을 다 쓴 뒤 검수 에이전트(Opus)가 **핵심·주요 기사 전부**를 `summarize/*.txt`의 재료와 문장 단위로 대조한다(10건 표본이 아니다 — 1회 시험에서 10건 중 4문장이 틀렸다). 재료에 없는 사실·인과·수치가 있으면 그 문장을 고치거나 지운다. 재료가 2곳 이상인 기사는 숫자가 서로 맞는지도 본다. **반응(reactions)·인용·"~라고 했다"는 특히 본다** — 그 사람·그 발언이 재료 본문에 실제로 있어야 한다. 페이지 옆 관련 기사 제목·추천 기사에서 온 말은 재료가 아니다(1회 대조에서 CNBC 기사 본문에 없는 "'빅쇼트' 투자자" 발언이 반응 칸에 들어갔다). 고친 문장 수를 완성본 `log`에 한 줄로 남긴다. 기사가 많으면 검수 에이전트 여러 명에게 나눠 맡긴다.
 
 ```
-npm run briefing:job -w server -- verify .briefing-job --models claude-opus-5-5,claude-sonnet-5-5 --skill-version 2
+npm run briefing:job -w server -- verify .briefing-job --models claude-opus-5-5,claude-sonnet-5-5 --skill-version 3
 ```
-→ `result.json`(완성본, API-153 본문)과 `verify-report.txt`. `--all-candidates`로 돌렸으면 보고 머리에 **받아진 후보 출처 이름**이 나온다 — 완성본 `log`에도 한 줄로 옮겨 적는다(사용자가 수집 목록에서 켤 근거). 보고에 "주소 검사 실패"가 **전체 기사의 30%에 가까우면** 서버가 통째로 거절한다 — 그 기사들의 주소를 확인하고(허용 도메인 밖 출처를 대표로 골랐는지) `selected.json`을 고쳐 3단계부터 다시 한다. "written.json에 요약이 없음"은 그 기사가 빠진다는 뜻이다.
+→ `result.json`(완성본, API-153 본문)과 `verify-report.txt`. 보고에 **"중복 의심"**이 있으면 두 기사가 같은 사건인지 보고, 같으면 `selected.json`에서 하나로 합쳐(대표는 재료가 많은 쪽, 나머지는 `related`) 해당 기사만 written.json에서 정리한 뒤 verify를 다시 돌린다. `--all-candidates`로 돌렸으면 보고 머리에 **받아진 후보 출처 이름**이 나온다 — 완성본 `log`에도 한 줄로 옮겨 적는다(사용자가 수집 목록에서 켤 근거). 보고에 "주소 검사 실패"가 **전체 기사의 30%에 가까우면** 서버가 통째로 거절한다 — 그 기사들의 주소를 확인하고(허용 도메인 밖 출처를 대표로 골랐는지) `selected.json`을 고쳐 3단계부터 다시 한다. "written.json에 요약이 없음"은 그 기사가 빠진다는 뜻이다.
 
 ## 5. 보내기
 

@@ -451,6 +451,9 @@ export const BRIEFING = {
       (서버는 비용 때문에 회차당 WEB_FILL_MAX건이지만 구독은 추가 비용이 없다 — 1회 시험 뒤 결정 2026-10-30) */
   SUB_WEB_MATERIALS_MAX: 3,
   SUB_WEB_TEXT_MIN_CHARS: 200,
+  /** verify 보고의 "중복 의심" — 핵심·주요끼리 제목 글자 묶음 겹침이 이 이상이면 적는다(경고만, 빼지 않는다).
+      구성 B에서 같은 사건(알파벳 폭락) 두 줄이 0.47, 다른 사건끼리는 최대 0.35였다 */
+  SUB_DUP_TITLE_SIMILARITY: 0.4,
   /** 완성본 검사용 허용 도메인에 늘 들어가는 것 — 통신사(WEB_FILL_WIRES)와 Google 뉴스 링크(검색 기사가 그대로 남는다) */
   SUB_CHECK_EXTRA_DOMAINS: ['news.google.com'],
 } as const;

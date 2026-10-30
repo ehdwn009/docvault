@@ -3,10 +3,11 @@ import path from 'node:path';
 import { z } from 'zod/v4';
 import { BRIEFING } from '../constants.js';
 import { SYSTEM_BASE } from '../lib/briefing/ai.js';
-import { basisOf, readBodies, type Material } from '../lib/briefing/body.js';
+import { basisOf, extractArticleText, readBodies, type Material } from '../lib/briefing/body.js';
+import { fetchGuarded } from '../lib/briefing/fetch.js';
 import { REGION_RULE, SUB_LIST, SUB_RULE } from '../lib/briefing/classify.js';
 import { stripMeta } from '../lib/briefing/clean.js';
-import { collect, numberSet, type Candidate } from '../lib/briefing/collect.js';
+import { bigramSimilarity, collect, numberSet, titleKey, type Candidate } from '../lib/briefing/collect.js';
 import { needsDemotion } from '../lib/briefing/fallback.js';
 import { checkDomainsOf, checkUrl } from '../lib/briefing/jobDomains.js';
 import { finalizeBullets, LENS_RULES } from '../lib/briefing/lenses.js';
@@ -420,7 +421,7 @@ const WebfillSchema = z.object({
   stories: z.array(
     z.object({
       story: z.number(),
-      materials: z.array(z.object({ source: z.string(), url: z.string(), title: z.string().default(''), publishedAt: z.number().optional(), text: z.string() })).default([]),
+      materials: z.array(z.object({ source: z.string(), url: z.string(), title: z.string().default(''), publishedAt: z.number().optional(), text: z.string().default('') })).default([]),
     }),
   ),
 });
@@ -430,7 +431,7 @@ const WebfillSchema = z.object({
  * 원 제목 핵심어 겹침 25% 이상. 서버는 검색 도구의 인용(페이지 글 그대로)만 재료로 쓰는데, 세션은 페이지를 직접 받을 수 없는 곳이 많아
  * 에이전트가 옮겨 적은 글을 받는다 — 그래서 기호를 W로 달아 회차에 "웹 검색 보도"로 드러나고(basis web), 검수 에이전트가 다시 본다
  */
-function cmdWebfill(dir: string): void {
+async function cmdWebfill(dir: string): Promise<void> {
   const ins = readJson(path.join(dir, 'instruction.json'), InstructionSchema);
   const cands = readJson(path.join(dir, 'candidates.json'), CandidatesFileSchema);
   const selected = readJson(path.join(dir, 'selected.json'), SelectedSchema);
@@ -446,6 +447,8 @@ function cmdWebfill(dir: string): void {
   };
   let filled = 0;
   let raised = 0;
+  let byCode = 0;
+  let byAgent = 0;
   for (const f of fill.stories) {
     const m = byStory.get(f.story);
     const p = picked[f.story];
@@ -458,13 +461,28 @@ function cmdWebfill(dir: string): void {
     let added = 0;
     for (const w of f.materials) {
       if (m.evidence.filter((e) => e.via === 'web').length >= BRIEFING.SUB_WEB_MATERIALS_MAX) break;
-      const text = w.text.trim().slice(0, maxChars);
       const where = `story ${f.story} ${w.url}`;
       if (seen.has(w.url)) continue;
       const u = checkUrl(w.url, ins.allowedDomains);
       if (!u.ok) {
         reject(`주소 ${u.reason}`, where);
         continue;
+      }
+      // 페이지 글은 코드가 직접 받는다 — 서버 원문 읽기와 같은 장치(사설망 차단·시간·크기 제한). 에이전트가 옮겨 적은 글보다
+      // 지어낼 틈이 없다. 막힌 곳(403)이면 에이전트가 웹 도구로 본 글을 대신 받되 기호는 똑같이 W라 회차에 "웹 검색 보도"로 드러난다.
+      // 1회 시험에서 웹 읽기 도구가 본문 대신 요약을 돌려줘 세션이 이 방식을 임시로 만들어 썼다 (구성 B, 2026-10-30)
+      let text = '';
+      try {
+        const domestic = p.sub.section === '국내';
+        const html = await fetchGuarded('page', w.url, { label: `웹 재료 ${w.source}`, timeoutMs: domestic ? BRIEFING.BODY_FETCH_TIMEOUT_DOMESTIC_MS : BRIEFING.BODY_FETCH_TIMEOUT_MS });
+        text = extractArticleText(html, maxChars);
+        if (text.length >= BRIEFING.SUB_WEB_TEXT_MIN_CHARS) byCode++;
+      } catch {
+        // 받지 못하면 아래에서 에이전트 글로
+      }
+      if (text.length < BRIEFING.SUB_WEB_TEXT_MIN_CHARS) {
+        text = w.text.trim().slice(0, maxChars);
+        if (text) byAgent++;
       }
       if (text.length < BRIEFING.SUB_WEB_TEXT_MIN_CHARS) {
         reject('글이 짧음', where);
@@ -497,7 +515,7 @@ function cmdWebfill(dir: string): void {
   mat.stats.webFilled = mat.stories.filter((m) => m.evidence.some((e) => e.via === 'web')).length;
   writeJson(path.join(dir, 'materials.json'), mat);
   const rej = Object.entries(rejected);
-  console.log(`웹 검색 재료 — ${filled}건에 붙임 (참고에서 다시 올라감 ${raised}건)${rej.length ? `, 버림 ${rej.map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`);
+  console.log(`웹 검색 재료 — ${filled}건에 붙임 (참고에서 다시 올라감 ${raised}건, 글을 코드가 받음 ${byCode} · 에이전트가 옮김 ${byAgent})${rej.length ? `, 버림 ${rej.map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`);
   writeSummarizeInputs(dir, ins, picked, mat);
 }
 
@@ -672,6 +690,15 @@ function cmdVerify(dir: string): void {
   writeJson(path.join(dir, 'result.json'), result);
 
   const urlDropTotal = Object.values(urlDrops).reduce((a, b) => a + b, 0);
+  // 같은 사건이 두 번 실렸나 — 핵심·주요끼리 제목 글자 묶음이 많이 겹치면 의심으로 적는다. 구성 B에서 알파벳 폭락이 핵심·주요에 따로 실렸다
+  const dupes: string[] = [];
+  const top = items.map((it, k) => ({ it, k })).filter(({ it }) => it.importance >= 2);
+  for (let a = 0; a < top.length; a++)
+    for (let b = a + 1; b < top.length; b++) {
+      const x = top[a]!.it;
+      const y = top[b]!.it;
+      if (bigramSimilarity(titleKey(x.title), titleKey(y.title)) >= BRIEFING.SUB_DUP_TITLE_SIMILARITY) dupes.push(`중복 의심: "${x.title}" ↔ "${y.title}" — 같은 사건이면 selected.json에서 하나로 합친다`);
+    }
   // 후보 출처 중 이 환경에서 받아진 것 — 수집 목록 문서의 disabled에서 이 이름들을 지우면 켜진다 (C)
   const doc = parseSourcesDoc(JSON.stringify(ins.sources));
   const failed = new Set(cands.stats.failedSources);
@@ -684,6 +711,7 @@ function cmdVerify(dir: string): void {
     `주소 검사에서 걸린 주소 ${urlDropTotal}개${urlDropTotal ? ` (${Object.entries(urlDrops).map(([k, v]) => `${k} ${v}`).join(', ')}) — 서버는 그 기사를 뺀다. 전체의 ${BRIEFING.SUB_DROP_REJECT_RATIO * 100}%를 넘으면 통째로 거절된다` : ''}`,
     `result.json 크기 ${(Buffer.byteLength(JSON.stringify(result), 'utf8') / 1024).toFixed(0)}KB (상한 ${BRIEFING.SUB_RESULT_MAX_BYTES / 1024 / 1024}MB)`,
     candidateLine,
+    ...dupes,
     '',
   ];
   writeText(path.join(dir, 'verify-report.txt'), [...head, ...report].join('\n'));
