@@ -296,20 +296,24 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
             {info.triggerSet && <p className="mt-1 text-emerald-400/90">설정됨 ✓</p>}
             {info.triggerBroken && <p className="mt-1 text-amber-400">트리거를 읽을 수 없어요(서버 비밀키가 바뀜) — 다시 넣어 주세요</p>}
             <div className="mt-1.5 flex flex-col gap-1.5">
+              {/* 글자 칸 + 비밀번호 칸을 브라우저가 로그인 폼으로 오해해 저장된 아이디·비밀번호를 채워 넣었다(첫 배포 2026-10-30) — autocomplete=off는 비밀번호 칸에 안 먹으므로 new-password와 낯선 name으로 */}
               <input
                 type="url"
+                name="briefing-trigger-fire-url"
                 value={triggerUrl}
                 onChange={(e) => setTriggerUrl(e.target.value)}
                 placeholder={info.triggerSet ? '바꾸려면 새 주소' : TRIGGER_URL_HINT}
                 autoComplete="off"
+                spellCheck={false}
                 className="min-h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-200 placeholder:text-slate-700"
               />
               <input
                 type="password"
+                name="briefing-trigger-secret"
                 value={triggerToken}
                 onChange={(e) => setTriggerToken(e.target.value)}
                 placeholder={info.triggerSet ? '바꾸려면 새 토큰' : '트리거 토큰'}
-                autoComplete="off"
+                autoComplete="new-password"
                 className="min-h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-200 placeholder:text-slate-700"
               />
               <div className="flex gap-2">
