@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getLayout } from '../lib/layout';
 import Icon, { type IconName } from './Icon';
 
 type Props = {
@@ -39,7 +40,7 @@ export default function WelcomeGuide({ touch, onOpenSettings, onClose }: Props) 
       title: '처음 받은 비밀번호를 바꿔 주세요',
       body: [
         '관리자가 알려 준 비밀번호는 나만 아는 것으로 바꾸는 게 안전해요.',
-        '[설정] → 비밀번호 변경에서 바꿀 수 있어요.',
+        `${getLayout() === 'home' ? '[나] → 계정 → 비밀번호' : '[설정] → 비밀번호 변경'}에서 바꿀 수 있어요.`,
       ],
     },
   ];

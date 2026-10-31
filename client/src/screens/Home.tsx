@@ -4,7 +4,8 @@ import ReviewDialog from '../components/ReviewDialog';
 import FileName from '../components/FileName';
 import { api, type AskThread, type ReviewList, type TreeFile, type User, type UserSettings } from '../lib/api';
 import { formatDate, formatDateTime } from '../lib/date';
-import { IS_PC, IS_TOUCH } from '../lib/device';
+import { IS_PC } from '../lib/device';
+import { kstToday, longDate } from '../lib/briefing';
 import { btnClass } from './settings/SettingRow';
 import BriefingPanel from './panels/BriefingPanel';
 
@@ -55,8 +56,8 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
     .sort((a, b) => (b.state.lastOpenedAt ?? 0) - (a.state.lastOpenedAt ?? 0))
     .slice(0, RECENT_FILES);
 
-  const today = new Date();
-  const dateChip = `${today.getMonth() + 1}월 ${today.getDate()}일 (${'일월화수목금토'[today.getDay()]})`;
+  // 아래 "오늘의 브리핑"과 같은 기준(한국 시각) — 자정 전후에 둘이 다른 날짜가 되지 않게
+  const dateChip = longDate(kstToday());
   const sectionTitle = 'mb-2 text-sm font-bold text-slate-200';
 
   const startButtons = (
@@ -87,7 +88,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pc:px-6">
-        <div className={`grid max-w-5xl gap-8 ${IS_TOUCH ? '' : 'pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]'}`}>
+        <div className="grid max-w-5xl gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="space-y-8">
             {hasBriefing && (
               <section>

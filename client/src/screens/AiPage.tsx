@@ -39,34 +39,35 @@ export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onC
     </div>
   );
 
-  if (tab === 'cards') {
-    // 카드 서랍(SCR-181)은 그대로 — 본문은 카드를 고르면 뷰어가 맡는다
-    return (
-      <div className="flex min-h-0 flex-1">
-        <aside className={`flex min-h-0 flex-col ${IS_PC ? 'w-72 shrink-0 border-r border-slate-800' : 'w-full'}`}>
-          {tabs}
-          <div className="h-2" />
-          <CardsPanel selectedId={null} onSelect={onOpenFile} onDeleted={onCardDeleted} />
-        </aside>
-        {IS_PC && (
-          <div className="flex min-w-0 flex-1 items-center justify-center text-sm text-slate-600">카드를 고르면 문서로 열려요</div>
-        )}
-      </div>
-    );
-  }
+  // 대화는 탭을 오가도 내리지 않는다 — 내리면 생성 중인 답이 끊기고 보던 대화·쓰던 초안이 사라진다 (검수 2026-10-31)
   return (
-    <AskPanel
-      file={null}
-      page
-      listTop={tabs}
-      initialThreadId={initialThreadId}
-      seed={null}
-      pendingQuote={null}
-      onConsumePendingQuote={() => {}}
-      onOpenFile={onOpenFile}
-      isPc={IS_PC}
-      onClose={onClose}
-      onViewChange={onViewChange}
-    />
+    <>
+      <div className={tab === 'chat' ? 'contents' : 'hidden'}>
+        <AskPanel
+          file={null}
+          page
+          listTop={tabs}
+          initialThreadId={initialThreadId}
+          seed={null}
+          pendingQuote={null}
+          onConsumePendingQuote={() => {}}
+          onOpenFile={onOpenFile}
+          isPc={IS_PC}
+          onClose={onClose}
+          onViewChange={onViewChange}
+        />
+      </div>
+      {tab === 'cards' && (
+        // 카드 서랍(SCR-181)은 그대로 — 본문은 카드를 고르면 뷰어가 맡는다
+        <div className="flex min-h-0 flex-1">
+          <aside className={`flex min-h-0 flex-col ${IS_PC ? 'w-72 shrink-0 border-r border-slate-800' : 'w-full'}`}>
+            {tabs}
+            <div className="h-2" />
+            <CardsPanel selectedId={null} onSelect={onOpenFile} onDeleted={onCardDeleted} />
+          </aside>
+          {IS_PC && <div className="flex min-w-0 flex-1 items-center justify-center text-sm text-slate-600">카드를 고르면 문서로 열려요</div>}
+        </div>
+      )}
+    </>
   );
 }

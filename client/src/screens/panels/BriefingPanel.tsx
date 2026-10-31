@@ -223,7 +223,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
 
   // 관리자만 상태를 기다린다 — 열람 계정은 회차 목록이 오는 대로 그린다
   const admin = readOnly ? null : status;
-  if (!readOnly && !admin) return <p className="px-4 py-4 text-sm text-slate-600">불러오는 중…</p>;
+  if (!readOnly && !admin) return <p className={`${home ? '' : 'px-4'} py-4 text-sm text-slate-600`}>불러오는 중…</p>;
 
   const today = kstToday();
   const editions = page?.editions ?? [];
@@ -419,8 +419,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           </section>
         )}
 
-        {home && readOnly && pastDays.length > 0 && !pastOpen && (
-          <button onClick={() => setPastOpen(true)} className="text-xs text-slate-500 hover:text-slate-300">지난 브리핑 ›</button>
+        {home && readOnly && pastDays.length > 0 && (
+          <button onClick={() => setPastOpen((v) => !v)} className="text-xs text-slate-500 hover:text-slate-300">{pastOpen ? '지난 브리핑 접기' : '지난 브리핑 ›'}</button>
         )}
         {runs && (
           <section>
@@ -457,10 +457,10 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             </button>
             <span>·</span>
             <span className={admin.monthCostUsd >= admin.monthBudgetUsd * (admin.budgetWarnRatio ?? 0.8) ? 'text-warn-400' : ''}>이번 달 ≈ ${admin.monthCostUsd.toFixed(2)} / ${admin.monthBudgetUsd}</span>
-            {pastDays.length > 0 && !pastOpen && (
+            {pastDays.length > 0 && (
               <>
                 <span>·</span>
-                <button onClick={() => setPastOpen(true)} className="hover:text-slate-300">지난 브리핑 ›</button>
+                <button onClick={() => setPastOpen((v) => !v)} className="hover:text-slate-300">{pastOpen ? '지난 브리핑 접기' : '지난 브리핑 ›'}</button>
               </>
             )}
             {!runs && (

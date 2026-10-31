@@ -184,7 +184,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 레이아웃(홈 중심 / 이전) — 설정의 스위치가 바꾸면 이벤트로 따라간다
   const [layout, setLayoutState] = useState<AppLayout>(getLayout);
   useEffect(() => {
-    const on = () => setLayoutState(getLayout());
+    // 레일에 없는 패널이 남지 않게 — 즐겨찾기·공유·카드는 문서로, 대화↔AI, 브리핑은 홈으로 (검수 2026-10-31)
+    const normalize = (p: Panel, l: AppLayout): Panel =>
+      l === 'home'
+        ? p === 'favorites' || p === 'shared' || p === 'cards' ? 'files' : p === 'chat' ? 'ai' : p === 'briefing' ? 'home' : p
+        : p === 'home' ? 'files' : p === 'ai' ? 'chat' : p;
+    const on = () => {
+      const l = getLayout();
+      setLayoutState(l);
+      setPanel((p) => normalize(p, l));
+      panelBeforePage.current = normalize(panelBeforePage.current, l);
+      returnPanel.current = normalize(returnPanel.current, l);
+    };
     window.addEventListener(LAYOUT_EVENT, on);
     return () => window.removeEventListener(LAYOUT_EVENT, on);
   }, []);
@@ -213,9 +224,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     });
   // 문서 패널 머리의 [+] 메뉴
   const [plusOpen, setPlusOpen] = useState(false);
+  useEffect(() => setPlusOpen(false), [panel]);
   // 설정(SCR-140 개정)과 대화(SCR-188)는 패널이 아니라 본문 전체를 쓰는 "페이지"다 — 닫으면 그 전 패널로 돌아간다
   const [settingsTarget, setSettingsTarget] = useState<SettingsTarget | null>(null);
+  // 두 ref: 문서를 열 때 보일 패널(페이지가 아닌 것만)과, 페이지를 닫으면 돌아갈 곳(홈·AI 같은 페이지여도 된다 — 홈은 "장소")
   const panelBeforePage = useRef<Panel>('files');
+  const returnPanel = useRef<Panel>(getLayout() === 'home' ? 'home' : 'files');
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagFilter, setTagFilter] = useState<number | null>(null);
@@ -687,7 +701,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setPanes(restore.panes);
         setActiveIdx(restore.active);
         if (IS_TOUCH) setTouchList(false); // 폰: 되살린 문서를 바로 보여 준다 — 목록은 탭으로
-        setPanel((p) => (PAGE_PANELS.has(p) ? 'files' : p)); // 문서가 열리면 홈은 본문에서 비켜난다 (IA — 안 B 홈)
+        setPanel((p) => (p === 'home' ? 'files' : p)); // 문서가 열리면 홈은 본문에서 비켜난다 — 그새 연 설정·AI는 그대로 (IA — 안 B 홈)
         if (saved?.ratio) setSplitRatio(saved.ratio);
         return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
       }
@@ -760,8 +774,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   useEffect(() => {
     const handler = () => {
       const id = fileIdFromPath(location.pathname);
-      if (id === null) setPanes([]);
-      else void resolveFile(id).then((f) => f && void selectFile(f, { pushUrl: false }));
+      if (id === null) {
+        setPanes([]);
+        if (getLayout() === 'home') setPanel('home'); // `/`의 첫 화면은 홈 (IA — 안 B 홈)
+      } else void resolveFile(id).then((f) => f && void selectFile(f, { pushUrl: false }));
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
@@ -1378,11 +1394,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   /** 본문 전체 페이지(설정·대화) 열기 — 닫을 때 돌아갈 패널을 기억한다 */
   const openPage = (p: Panel) => {
     if (!PAGE_PANELS.has(panel)) panelBeforePage.current = panel;
+    if (panel !== p) returnPanel.current = panel;
     setPanel(p);
     setPanelCollapsed(false);
   };
   const closePage = () => {
-    setPanel(panelBeforePage.current);
+    setPanel(returnPanel.current);
     setSettingsTarget(null);
   };
   const openSettings = (target: SettingsTarget | null = null) => {
@@ -1640,7 +1657,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                       <span className="flex-1">{label}{n !== null ? ` (${n})` : ''}</span>
                     </ListRow>
                     {fileSections[k] && (
-                      <div className="max-h-64 overflow-y-auto pb-1 pl-2">
+                      <div className="max-h-64 overflow-y-auto">
                         {k === 'favorites' ? (
                           <FavoritesPanel files={tree.files} selectedId={selected?.id ?? null} onSelect={(f) => void selectFile(f)} swipe={fileSwipe} />
                         ) : (
