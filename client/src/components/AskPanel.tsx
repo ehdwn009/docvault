@@ -20,8 +20,10 @@ import { IS_TOUCH, useMinWidth } from '../lib/device';
 import { pushLayer } from '../lib/layers';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
+import { useBottomSlot } from '../lib/bottomBar';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
+import { createPortal } from 'react-dom';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import Group from './ui/Group';
 import GroupRow from './ui/GroupRow';
@@ -237,6 +239,8 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   const sheet = useSheetDrag(expanded ? () => setExpanded(false) : onClose, expanded ? undefined : () => setExpanded(true));
   // 터치: 키보드가 올라오면 보이는 영역이 줄어든다 — 시트를 그 안에 맞춰야 머리와 입력창이 함께 보인다
   const vv = useVisualViewport(!isPc);
+  // 폰 2단계(안 ㄴ): 대화 화면의 입력줄이 곧 아래 바 — 접은 폰은 본문일 때(‹ + 입력줄), 펼친 폰은 늘(탭 넷 옆)
+  const barSlot = useBottomSlot(IS_TOUCH && page && (twoColumn || !showList));
   /** 펼치면 위 여백(안전 영역 + 12px)만 남기고 다 쓴다 */
   const sheetHeight = expanded ? vv.height - SHEET_EXPANDED_TOP_INSET : Math.round(vv.height * SHEET_RATIO);
 
@@ -536,7 +540,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   // 머리: 제목 한 줄 + [카드로] [새 대화] + ⋯(모델·지난 대화·삭제) + ✕ — 버튼 7개가 두 줄로 꺾이던 것을 둘로 (IA — 안 B SCR-188)
   const header = (
     <div className={`relative flex items-center gap-1.5 border-b border-slate-800 py-2 pr-3 [&_button]:whitespace-nowrap ${page && !twoColumn ? 'pl-1' : 'pl-3'}`}>
-      {page && !twoColumn && (
+      {page && !twoColumn && !IS_TOUCH && (
         <button onClick={() => setShowList(true)} className="flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm text-slate-300 hover:bg-slate-800" aria-label="대화 목록으로">
           ‹ 대화
         </button>
@@ -891,8 +895,72 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
         </div>
   );
 
+  // 입력 한 줄(📎 · 입력 · ▲) — 바 슬롯에 들어갈 때는 이 줄만 포털하고, 고른 답 띠·도움말은 본문 바닥에 남는다
+  const inBar = barSlot !== null;
+  const inputRow = (
+        <div className={`flex items-end gap-2 ${inBar ? 'min-w-0 flex-1' : ''}`}>
+          {inBar && !twoColumn && (
+            <button onClick={() => setShowList(true)} aria-label="대화 목록으로" className="grid h-10 w-9 shrink-0 place-items-center rounded-md text-accent-400">
+              <Icon name="chevronLeft" size={24} />
+            </button>
+          )}
+          {chatMode && IS_TOUCH && (
+            <button
+              onClick={toggleMyStuff}
+              aria-pressed={myStuff}
+              aria-label={myStuff ? '내 자료 참고 켬 — 관련 카드·문서 단락을 함께 보냄' : '내 자료 참고 끔 — 질문과 대화만 보냄'}
+              title={myStuff ? '내 자료 참고 켬' : '내 자료 참고 끔'}
+              className={`grid shrink-0 place-items-center rounded-lg border ${inBar ? 'h-10 w-10' : 'h-11 w-11'} ${myStuff ? 'border-accent-500 bg-accent-950/60 text-accent-300' : 'border-slate-700 text-slate-500'}`}
+            >
+              <Icon name="clip" size={18} />
+            </button>
+          )}
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value.slice(0, ASK_QUESTION_MAX_CHARS))}
+            onKeyDown={(e) => {
+              // PC: Enter 보내기 · Shift+Enter 줄바꿈. 터치: 키보드의 Enter는 줄바꿈, 보내기는 버튼으로
+              // (폰에는 Shift+Enter가 없다). 한글 조합 중 Enter는 무시(조합 확정용)
+              if (isPc && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (canSend) void send(input);
+              }
+            }}
+            rows={inBar ? 1 : 2}
+            disabled={limitReached || notConfigured}
+            placeholder={
+              limitReached
+                ? '오늘 질문을 다 썼어요 — 읽기는 계속 됩니다'
+                : isPc
+                  ? `${messages.length ? '꼬리질문' : chatMode ? '무엇이든 물어보세요' : '질문'}… (Enter 보내기 · Shift+Enter 줄바꿈)`
+                  : messages.length ? '꼬리질문…' : chatMode ? '무엇이든 물어보세요' : '질문을 입력하세요'
+            }
+            className={`flex-1 resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-600 focus:outline-none disabled:opacity-50 ${inBar ? 'min-h-10 max-h-24 bg-panel' : 'min-h-[44px]'}`}
+          />
+          {busy ? (
+            <button
+              onClick={() => abortRef.current?.abort()}
+              title="답변 중단"
+              className={`grid shrink-0 place-items-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 ${inBar ? 'h-10 w-10' : 'h-11 w-11'}`}
+            >
+              <Icon name="stop" size={16} />
+            </button>
+          ) : (
+            <button
+              onClick={() => void send(input)}
+              disabled={!canSend}
+              title="보내기 (Enter)"
+              className={`grid shrink-0 place-items-center rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40 ${inBar ? 'h-10 w-10' : 'h-11 w-11'}`}
+            >
+              <Icon name="send" size={18} />
+            </button>
+          )}
+        </div>
+  );
+
   const composer = (
-      <div className="border-t border-slate-800 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pc:pb-2">
+      <div className={inBar ? (picking && thread ? 'p-2' : '') : 'border-t border-slate-800 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pc:pb-2'}>
         <div className={page ? 'mx-auto w-full max-w-3xl' : ''}>
         {picking && thread && (
           <div className="mb-1.5 flex items-center gap-2 rounded-md border border-teal-900 bg-teal-950/40 px-2.5 py-1.5 text-xs">
@@ -954,60 +1022,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
             ))}
           </div>
         )}
-        <div className="flex items-end gap-2">
-          {chatMode && IS_TOUCH && (
-            <button
-              onClick={toggleMyStuff}
-              aria-pressed={myStuff}
-              aria-label={myStuff ? '내 자료 참고 켬 — 관련 카드·문서 단락을 함께 보냄' : '내 자료 참고 끔 — 질문과 대화만 보냄'}
-              title={myStuff ? '내 자료 참고 켬' : '내 자료 참고 끔'}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg border ${myStuff ? 'border-accent-500 bg-accent-950/60 text-accent-300' : 'border-slate-700 text-slate-500'}`}
-            >
-              <Icon name="clip" size={18} />
-            </button>
-          )}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value.slice(0, ASK_QUESTION_MAX_CHARS))}
-            onKeyDown={(e) => {
-              // PC: Enter 보내기 · Shift+Enter 줄바꿈. 터치: 키보드의 Enter는 줄바꿈, 보내기는 버튼으로
-              // (폰에는 Shift+Enter가 없다). 한글 조합 중 Enter는 무시(조합 확정용)
-              if (isPc && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                if (canSend) void send(input);
-              }
-            }}
-            rows={2}
-            disabled={limitReached || notConfigured}
-            placeholder={
-              limitReached
-                ? '오늘 질문을 다 썼어요 — 읽기는 계속 됩니다'
-                : isPc
-                  ? `${messages.length ? '꼬리질문' : chatMode ? '무엇이든 물어보세요' : '질문'}… (Enter 보내기 · Shift+Enter 줄바꿈)`
-                  : messages.length ? '꼬리질문…' : chatMode ? '무엇이든 물어보세요' : '질문을 입력하세요'
-            }
-            className="min-h-[44px] flex-1 resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-600 focus:outline-none disabled:opacity-50"
-          />
-          {busy ? (
-            <button
-              onClick={() => abortRef.current?.abort()}
-              title="답변 중단"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
-            >
-              <Icon name="stop" size={16} />
-            </button>
-          ) : (
-            <button
-              onClick={() => void send(input)}
-              disabled={!canSend}
-              title="보내기 (Enter)"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-40"
-            >
-              <Icon name="send" size={18} />
-            </button>
-          )}
-        </div>
+        {inBar ? createPortal(inputRow, barSlot) : inputRow}
         <p className="mt-1 text-[11px] text-slate-600 touch:hidden">
           {chatMode
             ? myStuff
@@ -1070,7 +1085,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     if (twoColumn) {
       return (
         <div className="flex min-h-0 flex-1">
-          <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800">
+          <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800 touch:w-[300px]">
             {listHeader}
             {historyView}
           </aside>

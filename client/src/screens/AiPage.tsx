@@ -12,7 +12,8 @@ type Props = {
   onOpenFile: (file: TreeFile) => void;
   onCardDeleted: (id: number) => void;
   onClose: () => void;
-  onViewChange: (view: 'list' | 'body') => void;
+  /** 폰 1단계에서 탭 바를 숨기는 데 썼다 — 2단계(바 하나)부터는 안 쓴다 */
+  onViewChange?: (view: 'list' | 'body') => void;
   /** 홈의 복습 띠에서 들어오면 배움 카드 탭 */
   initialTab?: Tab;
   /** 탭 재탭 — 대화 목록(뿌리)으로 */

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SCALE_STEP } from '../lib/constants';
 import { IS_TOUCH } from '../lib/device';
@@ -53,6 +54,8 @@ export default function ViewerMenu({
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  /** 여는 단추 — 시트가 body에 포털되어 ref 밖에 있으므로 바깥 클릭 판정에 단추도 따로 넣는다 */
+  const btnRef = useRef<HTMLButtonElement>(null);
   // 손잡이를 끌어 내리면 닫힌다 (IA — 바텀 시트). PC 팝오버에는 손잡이가 없어 쓰이지 않는다
   const { handleProps, sheetStyle } = useSheetDrag(onClose);
   const sizeRef = useRef<HTMLDivElement>(null);
@@ -62,7 +65,7 @@ export default function ViewerMenu({
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      if (e.target instanceof Node && (ref.current?.contains(e.target) || btnRef.current?.contains(e.target))) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -112,17 +115,15 @@ export default function ViewerMenu({
   const rowClass =
     'block w-full rounded px-2 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800';
 
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={onToggle} className={buttonClass(open)} title="더보기">
-        ⋯
-      </button>
-      {open && IS_TOUCH && (
+  // 터치 시트는 body에 포털한다 — 아래 바(transform으로 접히는 요소) 안에서 fixed를 쓰면 바가 기준이 되어 시트가 바 안에 갇힌다 (폰 2단계)
+  const menu = open && (
+    <>
+      {IS_TOUCH && (
         // 시트의 배경막 — ref 안에 있어서 바깥 클릭 판정을 안 타므로 직접 닫는다
         <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
       )}
-      {open && (
         <div
+          ref={ref}
           className={
             IS_TOUCH
               ? 'fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-slate-700 bg-slate-900 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)]'
@@ -248,7 +249,15 @@ export default function ViewerMenu({
             ),
           )}
         </div>
-      )}
+    </>
+  );
+
+  return (
+    <div className="relative shrink-0">
+      <button ref={btnRef} onClick={onToggle} className={buttonClass(open)} title="더보기" aria-label="더보기">
+        ⋯
+      </button>
+      {IS_TOUCH ? menu && createPortal(menu, document.body) : menu}
     </div>
   );
 }

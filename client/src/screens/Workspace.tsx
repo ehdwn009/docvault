@@ -60,6 +60,8 @@ import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
 import { IS_TOUCH, useWindowClass } from '../lib/device';
+import { BottomSlotContext } from '../lib/bottomBar';
+import { useVisualViewport } from '../lib/visualViewport';
 
 // home·ai·files·settings = 안 B(v0.54) 레일 네 개. favorites·shared·cards·chat·briefing은 "이전 레이아웃"(classic)에서만 레일에 보인다 (IA — 안 B 결정 1)
 type Panel = 'home' | 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'ai' | 'settings';
@@ -176,6 +178,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const chromeHidden = useChromeHidden();
   // 하단 탭 바는 문서를 읽을 때 아래로 비킨다 — 거리는 자기 높이 (IA — 안 B 폰, 패턴 G)
   const tabBarRef = useChromeTarget(IS_TOUCH ? { dir: 'down' } : null);
+  // 폰 2단계(안 ㄴ): 아래 바의 슬롯 — 뷰어 도구막대·대화 입력줄이 포털로 들어온다. 쓰는 쪽 수만 센다 (lib/bottomBar)
+  const [barSlotEl, setBarSlotEl] = useState<HTMLElement | null>(null);
+  const [barSlotOwners, setBarSlotOwners] = useState(0);
+  const claimBarSlot = useCallback(() => {
+    setBarSlotOwners((n) => n + 1);
+    return () => setBarSlotOwners((n) => n - 1);
+  }, []);
+  const barSlot = useMemo(() => ({ el: barSlotEl, claim: claimBarSlot }), [barSlotEl, claimBarSlot]);
+  // 키보드가 올라오면 보이는 영역만 줄어든다 — 바를 그만큼 올려 입력줄이 키보드 위에 앉게
+  const vv = useVisualViewport(IS_TOUCH);
+  const keyboardInset = IS_TOUCH ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
   const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
   // 드래그 중인 탭 — 있으면 본문 위에 드롭 존 오버레이를 깐다 (IA — 탭 드래그 배치)
   const [dragTab, setDragTab] = useState<TreeFile | null>(null);
@@ -267,7 +280,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const touchListRef = useRef(true);
   touchListRef.current = touchList;
   // 터치: 대화 본문을 보는 중 — 키보드와 탭 바가 다투지 않게 탭 바를 숨긴다 (패턴 G)
-  const [chatBody, setChatBody] = useState(false);
   // 터치: 편집기가 열려 있는 동안 탭 바를 숨긴다 — 키보드와 마지막 줄을 가리지 않게 (검수 2026-10-31)
   const [editing, setEditing] = useState(false);
   // 접힌 크롬(탭 바 포함)은 뷰어 스크롤로만 돌아온다 — 문서를 떠나거나 목록·페이지를 열면 되살려 둔다 (검수 2026-10-31)
@@ -1519,22 +1531,25 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     setPanelCollapsed(false);
     setTouchList(true);
   };
-  // 탭 바는 "가는 곳"을 고를 때만 — 문서를 읽거나 대화 본문에 있을 때는 그 화면의 도구막대만 둔다(바 두 겹 금지, 사용자 결정 2026-10-31).
-  // 본문 여백·페이지 바닥도 이 플래그 하나를 따른다 — 어긋나면 숨은 탭 바 자리로 밑의 도구막대가 비친다
-  const readingDoc = narrow && !touchList && panes.length > 0 && !PAGE_PANELS.has(panel);
   // 폰 A안(2026-10-31): 터치의 문서 탭은 FilesBrowser가 머리까지 통째로 그린다 — 큰 제목·[+]·[⋯]·검색 칸·묶음 카드
   const phoneFiles = IS_TOUCH && layout === 'home' && panel === 'files';
-  const tabBarVisible = IS_TOUCH && !immersive && !editing && !readingDoc && !(narrow && (panel === 'chat' || panel === 'ai') && chatBody);
+  // 아래 바는 언제나 한 겹(안 ㄴ, 사용자 결정 2026-10-31): 몰입·편집 말고는 늘 있고, 안에 든 것만 바뀐다 —
+  // 접은 폰은 탭 넷 또는 슬롯(‹ + 열린 화면의 도구), 펼친 폰은 왼쪽 탭 넷(목록 열 너비) + 오른쪽 슬롯.
+  // 본문 여백·페이지 바닥도 이 플래그 하나를 따른다
+  const tabBarVisible = IS_TOUCH && !immersive && !editing;
+  const barSlotUsed = barSlotOwners > 0;
   const tabBar = (
     <nav
       ref={tabBarRef}
       aria-label="주 메뉴"
       aria-hidden={chromeHidden}
       // 불투명 + 위 테두리 — 밝은 테마에서 본문이 비쳐 보였다 (사용자 보고 2026-10-31)
-      className={`fixed inset-x-0 bottom-0 z-30 flex border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
+      className={`fixed inset-x-0 z-30 flex items-stretch border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
         tabBarVisible ? '' : 'hidden'
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
+      style={{ bottom: keyboardInset }}
     >
+      <div className={`flex ${narrow ? 'flex-1' : 'w-[300px] shrink-0 border-r border-hair'} ${narrow && barSlotUsed ? 'hidden' : ''}`}>
       {(
         (layout === 'home'
           ? [
@@ -1564,6 +1579,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </button>
         );
       })}
+      </div>
+      {/* 슬롯 — 뷰어 도구막대 / 대화 입력줄이 포털로 들어온다 (lib/bottomBar). 비어 있으면 자리를 접는다 */}
+      <div ref={setBarSlotEl} className={`flex h-[var(--tab-bar-row)] min-w-0 flex-1 items-center gap-1.5 px-2 ${barSlotUsed ? '' : 'hidden'}`} />
     </nav>
   );
   const startButtons = (
@@ -1587,6 +1605,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   return (
+    <BottomSlotContext.Provider value={barSlot}>
     <div className="relative flex h-dvh bg-slate-950 text-slate-100">
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
@@ -2052,7 +2071,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 if (tabs.some((t) => t.id === id)) detachFiles([id]);
               }}
               onClose={closePage}
-              onViewChange={(v) => setChatBody(v === 'body')}
             />
           </div>
         )}
@@ -2073,7 +2091,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               isPc={!IS_TOUCH}
               twoColumn={!narrow}
               onClose={closePage}
-              onViewChange={(v) => setChatBody(v === 'body')}
             />
           </div>
         )}
@@ -2170,7 +2187,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                     : undefined
                 }
                 askTwoColumn={!narrow}
-                toolbarAtScreenBottom={!tabBarVisible}
+                // 목록 층(접은 폰)이나 페이지(홈·AI·나)가 덮고 있으면 바에는 그쪽 것이 들어가야 한다
+                barSlotEnabled={!PAGE_PANELS.has(panel) && (!narrow || !touchList)}
                 onEditModeChange={IS_TOUCH ? setEditing : undefined}
               />
             )}
@@ -2324,5 +2342,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         </div>
       )}
     </div>
+    </BottomSlotContext.Provider>
   );
 }

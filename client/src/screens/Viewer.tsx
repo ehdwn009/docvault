@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import AskPanel, { type AskSeed } from '../components/AskPanel';
 import BriefingView from '../components/BriefingView';
 import Icon from '../components/Icon';
@@ -9,6 +10,7 @@ import { isDarkViewerTheme, api, ApiError, isTextFileType, type FileContent, typ
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
 import { fileLabel } from '../lib/briefing';
+import { useBottomSlot } from '../lib/bottomBar';
 import { confirmDialog } from '../lib/dialog';
 import { cardTitle } from '../lib/frontmatter';
 import { useSheetDrag } from '../lib/sheetDrag';
@@ -44,12 +46,13 @@ type Props = {
   onOpenSwitcher?: () => void;
   /** 터치: 헤더 왼쪽 ‹ — 목록 층으로 돌아간다 (☰·드로어 대체, IA — 안 B 폰) */
   onBackToList?: () => void;
+  /** 아래 바 슬롯에 도구막대를 넣어도 되는가 — 목록 층·페이지(홈·AI·나) 뒤에 가려져 있으면 false (폰 2단계) */
+  barSlotEnabled?: boolean;
   /** 편집 모드에 들어가고 나올 때 — 터치는 그동안 하단 탭 바를 숨긴다(키보드·마지막 줄과 겹치지 않게) */
   onEditModeChange?: (editing: boolean) => void;
   /** 질문 패널을 오른쪽 열로 그릴지(PC·펼친 폰) — 한 열(접은 폰)은 시트 */
   askTwoColumn?: boolean;
-  /** 터치 도구막대가 화면 바닥에 닿는가(탭 바 없음) — 그때만 안전 여백을 둔다. 탭 바가 있으면 <main> 여백이 이미 비웠다 */
-  toolbarAtScreenBottom?: boolean;
+
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
@@ -118,7 +121,7 @@ const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC, toolbarAtScreenBottom = true }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC, barSlotEnabled = true }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -603,7 +606,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   // 훅이라 early return보다 위에 있어야 한다
   const touch = !IS_PC;
   const headerRef = useChromeTarget(touch ? { dir: 'up' } : null);
-  const toolbarRef = useChromeTarget(touch ? { dir: 'down' } : null);
+  // 폰 2단계(안 ㄴ): 도구막대는 뷰어 안이 아니라 Workspace의 아래 바 슬롯에 포털로 그린다 — 바는 늘 하나.
+  // 분할 보기에서는 활성 칸의 도구만 (슬롯은 하나니까)
+  const barSlot = useBottomSlot(touch && !immersive && mode === 'view' && isActive !== false && barSlotEnabled);
   // HTML은 남의 문서를 iframe에 담는 유일한 경로다 — 우리가 그리는 본문처럼 상단 여백(touch:pt-14)을
   // 안에 넣어 줄 수가 없다. 그래서 크롬이 떠 있는 만큼 iframe 상자 자체를 내려 둔다.
   // 안 그러면 문서가 가진 목차 버튼·sticky 메뉴가 우리 헤더 밑에 깔린다 (IA — 모바일 크롬)
@@ -657,7 +662,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   const isPc = IS_PC;
   const actionButton = (active: boolean) =>
     // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
-    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'min-h-11 w-full px-4 py-2'} ${
+    `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'min-h-10 flex-1 px-2 py-1.5'} ${
       active
         ? 'border-slate-500 bg-slate-800 text-slate-100'
         : 'border-slate-700 text-slate-300 hover:bg-slate-900'
@@ -717,9 +722,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           // 터치: 떠 있는 바 대신 도구막대의 이 버튼이 "고른 문장으로 묻기"가 된다 — 엄지 자리라 iOS 메뉴와 안 겹친다
           <button
             onClick={() => openAsk(true)}
-            className="min-h-11 w-full min-w-0 truncate whitespace-nowrap rounded border border-sky-500 bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+            className="min-h-10 min-w-0 flex-[3] truncate whitespace-nowrap rounded border border-accent-500 bg-accent-600 px-3 py-1.5 text-sm font-medium text-white"
           >
-            💬 「{selection.quote.length > 12 ? `${selection.quote.slice(0, 12)}…` : selection.quote}」 물어보기
+            「{selection.quote.length > 10 ? `${selection.quote.slice(0, 10)}…` : selection.quote}」 물어보기
           </button>
         ) : (
           <button onClick={() => (askOpen ? setAskOpen(false) : openAsk(true))} className={actionButton(askOpen)} title="AI에게 묻기 (Ctrl+Shift+A)">
@@ -868,11 +873,6 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           }
         }}
       >
-        {onBackToList && (
-          <button onClick={onBackToList} aria-label="목록으로" className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-300 pc:hidden">
-            ‹
-          </button>
-        )}
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
@@ -1127,17 +1127,19 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           />
         )}
       </div>
-      {/* 터치 기기의 아래쪽 도구막대 — 엄지가 닿는 자리에 조작을 모은다 (몰입 모드에서는 숨긴다).
-          목차는 w-full로 남는 폭을 채우고 더보기는 오른쪽 끝에 — 목차가 없는 형식에서도 자리가 유지된다 */}
-      {!isPc && !immersive && (
-        // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
-        <div ref={toolbarRef} className="absolute inset-x-0 bottom-0 z-20">
-          {/* 문서를 읽을 때 탭 바는 숨고 이 도구막대만 남는다 — 화면 바닥에 닿으므로 안전 여백을 둔다 */}
-          <div className={`flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 backdrop-blur ${toolbarAtScreenBottom ? 'pb-[calc(env(safe-area-inset-bottom)+8px)]' : ''}`}>
+      {/* 터치 기기의 도구막대 — 아래 바의 슬롯에 (엄지가 닿는 자리). 접은 폰은 첫 칸이 ‹(온 곳으로), 펼친 폰은 탭 넷 옆 (폰 2단계 안 ㄴ) */}
+      {barSlot &&
+        createPortal(
+          <>
+            {onBackToList && (
+              <button onClick={onBackToList} aria-label="목록으로" className="grid h-10 w-9 shrink-0 place-items-center rounded-md text-accent-400">
+                <Icon name="chevronLeft" size={24} />
+              </button>
+            )}
             {actions}
-          </div>
-        </div>
-      )}
+          </>,
+          barSlot,
+        )}
     </div>
   );
 }
