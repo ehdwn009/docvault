@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { kstTime, type AutoSchedule, type AutoSlot, type BriefingStatus } from '../../lib/briefing';
+import { toast } from '../../lib/toast';
 import BriefingSubscriptionSettings from './BriefingSubscriptionSettings';
 
+const SLOT_FULL: Record<AutoSlot, string> = { morning: '아침판', noon: '점심판', evening: '저녁판' };
 const SLOTS: { slot: AutoSlot; label: string }[] = [
   { slot: 'morning', label: '아침' },
   { slot: 'noon', label: '점심' },
@@ -43,11 +45,17 @@ export default function BriefingSettings({ onOpenSources }: Props) {
   async function save(patch: { autoEnabled?: boolean; schedule?: AutoSchedule; readerEnabled?: boolean }) {
     setError(null);
     try {
-      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'readerEnabled' | 'mode'>>('/briefing/settings', {
+      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'readerEnabled' | 'mode' | 'startedNow'>>('/briefing/settings', {
         method: 'PUT',
         body: JSON.stringify(patch),
       });
       setStatus((s) => (s ? { ...s, ...r } : s));
+      // 회차 켜기·시각을 바꿨으면 서버가 어떻게 받았는지 바로 알린다 — 지금 켰는지, 아니면 다음은 언제인지 (v0.51)
+      if (patch.autoEnabled !== undefined || patch.schedule) {
+        if (r.startedNow) toast(`${SLOT_FULL[r.startedNow.slot]} 예약 작업을 지금 켰어요${r.startedNow.deadlineAt ? ` — 마감 ${kstTime(r.startedNow.deadlineAt, false)}` : ''}`, 'success');
+        else if (r.autoEnabled && r.nextAutoAt) toast(`저장했어요 — 다음 ${r.mode === 'subscription' ? '예약 작업' : '자동 생성'} ${kstTime(r.nextAutoAt)} ${SLOT_FULL[r.nextAutoSlot ?? 'morning']}`, 'info');
+        else if (!r.autoEnabled) toast('자동 생성을 껐어요', 'info');
+      }
     } catch (err) {
       // 검증 오류 앞의 칸 이름("schedule: ")은 떼고 보여 준다
       setError(err instanceof ApiError ? err.message.replace(/^[\w.]+: /, '') : '바꾸지 못했어요');

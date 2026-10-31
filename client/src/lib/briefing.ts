@@ -323,6 +323,8 @@ export type BriefingStatus = {
   monthFlagCount?: number;
   /** 회차를 누가 만드나 — api(앱이 직접) · subscription(서버가 켠 claude.ai 예약 작업) (v0.50) */
   mode?: BriefingMode;
+  /** API-134 응답에만 — 이 저장으로 예약 작업을 지금 켰다 (v0.51) */
+  startedNow?: { slot: AutoSlot; deadlineAt: number | null } | null;
   subscription?: SubscriptionStatus | null;
 };
 

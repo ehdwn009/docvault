@@ -9,6 +9,7 @@ import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type Us
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
 import { fileLabel } from '../lib/briefing';
+import { confirmDialog } from '../lib/dialog';
 import { cardTitle } from '../lib/frontmatter';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { toast } from '../lib/toast';
@@ -54,6 +55,8 @@ type Props = {
   onOpenCard?: (title: string) => void;
   /** 헤더 메뉴의 속성 — 속성창(SCR-113)을 연다 */
   onShowProperties?: () => void;
+  /** 브리핑 회차를 휴지통으로 — 회차 문서는 파일 트리에 없어 여기가 유일한 삭제 길. 지우면 그날 그 회차를 다시 만들 수 있다 (v0.51, 사용자 결정 2026-10-31) */
+  onTrash?: () => void;
   /** 문서 속에 점선 밑줄을 그을 내 카드 용어 (활용 ②). 설정이 꺼져 있으면 빈 배열 */
   terms?: { id: number; title: string; aliases: string[]; oneLine: string; kind: string }[];
   /** 터치 전용: 헤더 좌우 스와이프 → 이전/다음 문서 */
@@ -108,7 +111,7 @@ const ASK_BAR_GAP = 40;
 const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, terms }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -646,6 +649,21 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     // 텍스트든 바이너리든 원본 그대로 받는다 (텍스트 본문은 서버가 DB에서 꺼내 준다)
     { label: '다운로드', href: `/api/v1/files/${file.id}/raw`, download: file.name },
     ...(onShowProperties ? [{ label: '속성', onClick: onShowProperties }] : []),
+    // 회차 삭제 — 내 회차(readonly 아님)만. 한 번 묻는다: 지우면 자동·구독 생성이 그 회차를 다시 만든다는 걸 알고 누르게
+    ...(isBriefing && !data.readonly && onTrash
+      ? [
+          {
+            label: '회차 삭제 (휴지통)',
+            onClick: () => {
+              void confirmDialog('이 회차를 휴지통으로 보낼까요?', {
+                message: '지우면 그날 그 회차는 "안 만든 것"이 되어, 시각이 되면 자동(또는 구독) 생성이 다시 만듭니다. 휴지통에서 되살리면 다시 "만든 것"이 됩니다.',
+                confirmLabel: '휴지통으로',
+                danger: true,
+              }).then((ok) => ok && onTrash());
+            },
+          },
+        ]
+      : []),
   ];
   // 편집은 ⋯ 메뉴 맨 아래에만 있어 못 찾았다(사용성 평가 2026-10-01, 4명) — 도구막대에 꺼내 둔다
   const canEdit = !data.readonly && !isBriefing && !isBinary;

@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { and, desc, eq, gt, inArray, isNotNull, lte } from 'drizzle-orm';
 import { BRIEFING, DEFAULT_USER_SETTINGS } from '../../constants.js';
 import { db } from '../../db/index.js';
-import { briefingRuns, users, userSettings } from '../../db/schema.js';
+import { briefingRuns, files, users, userSettings } from '../../db/schema.js';
 import { decryptSecret, encryptSecret, hashEquals, newApiToken, sha256Hex } from '../crypto.js';
 import { parseSchedule, type AutoSchedule, type AutoSlot } from './autoSchedule.js';
 import { isAggregator } from './collect.js';
@@ -441,13 +441,22 @@ function parseDropped(raw: string | null): Record<string, number> {
 
 // ---- 스케줄러 쪽 (schedule.ts가 1분마다 부른다) ----
 
-/** 이 관리자·날짜·회차에 자동(auto) 또는 구독 행이 있나 — 방식을 바꾼 날 같은 회차가 두 번 생기지 않게 둘 다 본다 */
-function hasRunFor(ownerId: number, date: string, slot: Slot): boolean {
-  return !!db
-    .select({ id: briefingRuns.id })
+/**
+ * 하루 한 번 규칙 — 이 관리자·날짜·회차에 자동(auto) 또는 구독 행이 있나. 방식을 바꾼 날 같은 회차가 두 번 생기지 않게 둘 다 본다(API 스케줄러도 이 함수).
+ * 단, ok 실행의 회차 문서가 휴지통에 있으면(사용자가 지웠으면) 없는 것으로 — "지우면 다시 만들 수 있게"(사용자 결정 2026-10-31, 시험용).
+ * missing·error·cancelled는 문서가 없어도 그대로 막는다(실패 뒤 되풀이하지 않는다)
+ */
+export function hasRunFor(ownerId: number, date: string, slot: Slot): boolean {
+  const rows = db
+    .select({ status: briefingRuns.status, fileId: briefingRuns.fileId })
     .from(briefingRuns)
     .where(and(eq(briefingRuns.ownerId, ownerId), eq(briefingRuns.editionDate, date), eq(briefingRuns.slot, slot), inArray(briefingRuns.trigger, ['auto', 'subscription'])))
-    .get();
+    .all();
+  return rows.some((r) => {
+    if (r.status !== 'ok' || !r.fileId) return true;
+    const f = db.select({ deletedAt: files.deletedAt }).from(files).where(eq(files.id, r.fileId)).get();
+    return !!f && f.deletedAt === null;
+  });
 }
 
 function recordMissing(ownerId: number, slot: Slot, editionDate: string, deadlineAt: number, message: string, now: number): void {

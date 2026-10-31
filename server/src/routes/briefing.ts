@@ -22,7 +22,7 @@ import {
   toRunDto,
 } from '../lib/briefing/run.js';
 import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
-import { nextAuto, readSchedule, scheduleSchema, type AutoSchedule } from '../lib/briefing/autoSchedule.js';
+import { nextAuto, readSchedule, scheduleSchema, type AutoSchedule, type AutoSlot } from '../lib/briefing/autoSchedule.js';
 import { briefingOwnerOf, listReaderCandidates, setReader } from '../lib/briefing/readers.js';
 import {
   assertTriggerUrl,
@@ -30,13 +30,14 @@ import {
   issueToken,
   JobError,
   missingToday,
+  nextTrigger,
   readMode,
   recentSubscription,
   revokeToken,
   setMode,
   setTrigger,
   subscriptionSummary,
-  nextTrigger,
+  tickSubscription,
   triggerSet,
   triggerTimesOf,
 } from '../lib/briefing/subscription.js';
@@ -328,7 +329,15 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       .run();
     const auto = autoEnabled(userId);
     const schedule: AutoSchedule = readSchedule(userId);
+    // 저장 즉시 한 번 돌려 본다 — 1분 틱을 기다리지 않고 켤 수 있으면 지금 켜고, 응답에 "지금 켰다"를 실어 화면이 바로 알리게 (사용자 결정 2026-10-31)
+    let startedNow: { slot: AutoSlot; deadlineAt: number | null } | null = null;
+    if (auto && modeNow === 'subscription' && (body.autoEnabled !== undefined || body.schedule || body.mode)) {
+      const before = runningSubscriptionRun(userId)?.id ?? null;
+      await tickSubscription(userId, JSON.stringify(schedule), now);
+      const after = runningSubscriptionRun(userId);
+      if (after && after.id !== before && after.slot !== 'adhoc') startedNow = { slot: after.slot, deadlineAt: after.deadlineAt };
+    }
     const next = auto ? (modeNow === 'subscription' ? nextTrigger(schedule, now, userId) : nextAuto(schedule, now)) : null;
-    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId) });
+    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId), startedNow });
     },
   );

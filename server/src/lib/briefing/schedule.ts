@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, users, userSettings } from '../../db/schema.js';
@@ -6,7 +6,7 @@ import type { AiCaller } from './ai.js';
 import type { Slot } from './edition.js';
 import { isConfigured, monthCostUsd, recordSkipped, runningRun, startRun } from './run.js';
 import { activeSlots, parseSchedule } from './autoSchedule.js';
-import { subscriptionOwners, sweepExpiredSubscriptionRuns, tickSubscription } from './subscription.js';
+import { hasRunFor, subscriptionOwners, sweepExpiredSubscriptionRuns, tickSubscription } from './subscription.js';
 import { kstParts } from './time.js';
 
 // 자동 생성 — 1분마다 한국시간을 보고, 켜 둔 관리자의 그날 회차를 한 번씩 시작한다 (뉴스 브리핑 설계 "실행 관리").
@@ -32,15 +32,8 @@ export function tickScheduler(now = Date.now(), ai?: AiCaller): void {
     .all();
   for (const { id, schedule } of owners) {
     // 창이 겹치면(시각을 가깝게 골랐을 때) 이른 회차부터 — 오늘 이 회차의 자동 실행 기록이 있으면(성공·실패·건너뜀 모두) 다음 회차, 하루 한 번
-    const slot: Slot | undefined = activeSlots(parseSchedule(schedule), now).find(
-      (s) =>
-        !db
-          .select({ id: briefingRuns.id })
-          .from(briefingRuns)
-          // 구독 행도 본다 — 구독으로 받은 아침을 api로 바꾼 직후 또 만들지 않게(설계 "하루 한 번 규칙은 두 trigger를 함께 본다")
-          .where(and(eq(briefingRuns.ownerId, id), eq(briefingRuns.editionDate, date), eq(briefingRuns.slot, s), inArray(briefingRuns.trigger, ['auto', 'subscription'])))
-          .get(),
-    );
+    // 하루 한 번 규칙은 구독과 같은 함수로(두 trigger를 함께, 휴지통에 간 회차는 없는 것으로)
+    const slot: Slot | undefined = activeSlots(parseSchedule(schedule), now).find((s) => !hasRunFor(id, date, s));
     if (!slot) continue;
     // 다른 실행이 도는 중이면 다음 분에 다시 본다 (창 안에서 기다린다)
     if (runningRun()) return;

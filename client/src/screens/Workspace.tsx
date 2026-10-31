@@ -39,7 +39,7 @@ import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
 import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
-import { BRIEFING_FOLDER_NAME, BRIEFING_SOURCES_FILE_NAME } from '../lib/briefing';
+import { BRIEFING_FOLDER_NAME, BRIEFING_READ_EVENT, BRIEFING_SOURCES_FILE_NAME } from '../lib/briefing';
 import AdminPanel from './panels/AdminPanel';
 import BriefingPanel from './panels/BriefingPanel';
 import CardsPanel from './panels/CardsPanel';
@@ -1130,10 +1130,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       if (tabs.some((t) => t.id === id)) detachFiles([id]);
       void guard(async () => {
         await api(`/files/${id}`, { method: 'DELETE' });
+        // 브리핑 패널이 회차 목록을 다시 받게 — 회차를 지웠을 때 보관함에서도 사라져야 한다(패널은 이 이벤트로 목록을 다시 읽는다)
+        window.dispatchEvent(new Event(BRIEFING_READ_EVENT));
         toast('휴지통으로 이동했습니다', 'success', {
           action: {
             label: '실행 취소',
-            onAction: () => void guard(() => api(`/files/${id}/restore`, { method: 'POST' })),
+            onAction: () =>
+              void guard(async () => {
+                await api(`/files/${id}/restore`, { method: 'POST' });
+                window.dispatchEvent(new Event(BRIEFING_READ_EVENT));
+              }),
           },
         });
       });
@@ -1747,6 +1753,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onOpenSource={(tid) => void openSource(tid)}
                 onOpenCard={(title) => void openCardByTitle(title)}
                 onShowProperties={() => setPropsTarget({ kind: 'file', file: f })}
+                onTrash={f.kind === 'briefing' ? () => actions.deleteFile(f.id) : undefined}
                 terms={terms}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
               />
