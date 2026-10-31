@@ -51,6 +51,8 @@ type Props = {
   withCards?: boolean;
   isPc: boolean;
   onClose: () => void;
+  /** page 모드(폰): 목록을 보는지 본문을 보는지 — 부모가 하단 탭 바를 숨길지 정한다 */
+  onViewChange?: (view: 'list' | 'body') => void;
 };
 
 type UsedCard = { id: number; title: string };
@@ -99,7 +101,7 @@ const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판).
 // file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
-export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
+export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose, onViewChange }: Props) {
   const chatMode = file === null;
   const [status, setStatus] = useState<AskStatus | null>(null);
   // 챗봇: 내 자료 참고 스위치 — 질문마다 바꿀 수 있고 끈 상태를 기기가 기억한다 (기본 꺼짐)
@@ -110,6 +112,9 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   const [moreOpen, setMoreOpen] = useState(false);
   // 대화 화면(page)의 폰: 목록을 보여 주는 중인가 — 대화를 고르거나 새로 열면 본문으로 넘어간다
   const [showList, setShowList] = useState(true);
+  useEffect(() => {
+    if (page) onViewChange?.(showList ? 'list' : 'body');
+  }, [page, showList]); // eslint-disable-line react-hooks/exhaustive-deps
   // 오른쪽 패널 폭 — 드래그로 320~560px, 기기가 기억한다
   const [askWidth, setAskWidth] = useState(() => clampWidth(Number(readLocal(ASK_WIDTH_KEY)) || ASK_PANEL_WIDTH_DEFAULT));
   const askWidthRef = useRef(askWidth);
@@ -487,8 +492,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   const menuItem = 'flex min-h-11 w-full items-center rounded-lg px-2.5 text-left text-sm text-slate-200 hover:bg-slate-800';
   // 머리: 제목 한 줄 + [카드로] [새 대화] + ⋯(모델·지난 대화·삭제) + ✕ — 버튼 7개가 두 줄로 꺾이던 것을 둘로 (IA — 안 B SCR-188)
   const header = (
-    <div className={`relative flex items-center gap-1.5 border-b border-slate-800 py-2 pr-3 [&_button]:whitespace-nowrap ${page && !isPc ? 'pl-14' : 'pl-3'}`}>
-      {/* 폰의 대화 화면: 떠 있는 ☰ 자리(pl-14)를 비우고 그 옆에 ‹ 대화 */}
+    <div className={`relative flex items-center gap-1.5 border-b border-slate-800 py-2 pr-3 [&_button]:whitespace-nowrap ${page && !isPc ? 'pl-1' : 'pl-3'}`}>
       {page && !isPc && (
         <button onClick={() => setShowList(true)} className="flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm text-slate-300 hover:bg-slate-800" aria-label="대화 목록으로">
           ‹ 대화
@@ -569,9 +573,9 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     </div>
   );
 
-  // 대화 화면(page)의 왼쪽 목록 머리 — 폰은 떠 있는 ☰ 자리(pl-14)를 비운다
+  // 대화 화면(page)의 왼쪽 목록 머리
   const listHeader = (
-    <div className={`flex items-center gap-2 pr-2 ${isPc ? 'px-4 py-3' : 'py-2 pl-14'}`}>
+    <div className={`flex items-center gap-2 pr-2 ${isPc ? 'px-4 py-3' : 'py-2 pl-4'}`}>
       <h2 className="text-sm font-bold">대화</h2>
       <button onClick={newThread} className="ml-auto min-h-9 rounded-md border border-slate-700 px-2.5 text-xs text-slate-300 hover:bg-slate-800">
         + 새 대화
@@ -986,8 +990,9 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
         </div>
       );
     }
+    // 목록 뒤에는 하단 탭 바(56px)가 있고, 본문에서는 탭 바가 숨는다 — 키보드와 다투지 않게
     return showList ? (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col pb-14">
         {listHeader}
         {historyView}
         {dialogs}

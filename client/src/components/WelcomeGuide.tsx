@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Icon, { type IconName } from './Icon';
 
 type Props = {
-  /** 터치 기기면 "☰ 서랍", PC면 "왼쪽 아이콘 줄"로 안내한다 */
+  /** 터치 기기면 "아래 탭", PC면 "왼쪽 아이콘 줄"로 안내한다 */
   touch: boolean;
   onOpenSettings: () => void;
   onClose: () => void;
@@ -20,7 +20,7 @@ export default function WelcomeGuide({ touch, onOpenSettings, onClose }: Props) 
       title: '내 문서는 여기서 찾아요',
       body: [
         touch
-          ? '왼쪽 위 ☰ 버튼을 누르면 내 파일·공유·검색이 담긴 서랍이 열려요.'
+          ? '아래 [문서] 탭에 내 파일·즐겨찾기·공유가 있고, 오른쪽 위 돋보기가 검색이에요.'
           : '왼쪽 아이콘 줄에서 내 파일·공유·검색을 고를 수 있어요.',
         '파일을 누르면 바로 열리고, [+ 새 문서]로 글을 새로 쓸 수 있어요.',
       ],

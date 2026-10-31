@@ -1,5 +1,6 @@
 import FileName from '../../components/FileName';
 import SwipeRow, { type SwipeConfig } from '../../components/SwipeRow';
+import ListRow from '../../components/ui/ListRow';
 import type { TreeFile } from '../../lib/api';
 
 type Props = {
@@ -25,15 +26,10 @@ export default function FavoritesPanel({ files, selectedId, onSelect, swipe }: P
     <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
       {favorites.map((file) => (
         <SwipeRow key={file.id} {...swipe(file)}>
-          <button
-            onClick={() => onSelect(file)}
-            className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-sm transition ${
-              file.id === selectedId ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900'
-            }`}
-          >
-            <span className="leading-5 text-amber-400">★</span>
+          <ListRow onClick={() => onSelect(file)} selected={file.id === selectedId}>
+            <span className="leading-5 text-warn-400">★</span>
             <FileName name={file.name} wrap expanded={file.id === selectedId} />
-          </button>
+          </ListRow>
         </SwipeRow>
       ))}
     </div>

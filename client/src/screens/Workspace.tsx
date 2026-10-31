@@ -33,7 +33,7 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
-import { CHROME_HEIGHT, useChromeHidden, useChromeTarget } from '../lib/chromeCollapse';
+import { useChromeHidden, useChromeTarget } from '../lib/chromeCollapse';
 import { DEFAULT_USER_SETTINGS } from '../lib/constants';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
@@ -44,6 +44,8 @@ import BriefingPanel from './panels/BriefingPanel';
 import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPage from './settings/SettingsPage';
+import Chip from '../components/ui/Chip';
+import IconButton from '../components/ui/IconButton';
 import type { SettingsTarget } from './settings/catalog';
 import SharedPanel from './panels/SharedPanel';
 import AskPanel from '../components/AskPanel';
@@ -157,11 +159,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     window.addEventListener('dv:cards-changed', load);
     return () => window.removeEventListener('dv:cards-changed', load);
   }, []);
-  // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대)을 접는다 (IA — 크롬 자동 숨김)
-  // 크롬 안착 상태(aria·pointer-events용) — 접히는 동안의 움직임은 drawerBtnRef가 DOM에 직접 쓴다
+  // 터치 전용: 스크롤 방향에 따라 뷰어 크롬(헤더·도구막대·하단 탭 바)을 접는다 (IA — 크롬 자동 숨김)
+  // 크롬 안착 상태(aria·pointer-events용) — 접히는 동안의 움직임은 tabBarRef가 DOM에 직접 쓴다
   const chromeHidden = useChromeHidden();
-  // 헤더와 같은 거리를 같이 움직인다 — 헤더에 얹혀 있는 버튼이라 따로 놀면 어색하다
-  const drawerBtnRef = useChromeTarget(IS_TOUCH ? { dir: 'up', distance: CHROME_HEIGHT } : null);
+  // 하단 탭 바는 문서를 읽을 때 아래로 비킨다 — 거리는 자기 높이 (IA — 안 B 폰, 패턴 G)
+  const tabBarRef = useChromeTarget(IS_TOUCH ? { dir: 'down' } : null);
   const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
   // 드래그 중인 탭 — 있으면 본문 위에 드롭 존 오버레이를 깐다 (IA — 탭 드래그 배치)
   const [dragTab, setDragTab] = useState<TreeFile | null>(null);
@@ -183,7 +185,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   /** 막 만든 문서 — 열자마자 편집 화면으로 들어가게 뷰어에 알린다 */
   const [editRequest, setEditRequest] = useState<number | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false); // 활성 레일 버튼 재클릭 시 패널 접기 (PC 전용)
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // 터치: 목록 층(사이드 패널 내용)이 문서 위에 덮여 있나 — 문서를 고르면 내려가고, 탭을 누르면 다시 올라온다 (☰·드로어 대체)
+  const [touchList, setTouchList] = useState(true);
+  // 터치: 대화 본문을 보는 중 — 키보드와 탭 바가 다투지 않게 탭 바를 숨긴다 (패턴 G)
+  const [chatBody, setChatBody] = useState(false);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set()); // 다중 선택된 파일 id
@@ -292,7 +297,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setActiveIdx(targetIdx);
       }
       ensureTab(file);
-      setDrawerOpen(false);
+      setTouchList(false);
       if (opts?.pushUrl !== false && location.pathname !== `/f/${file.id}`) {
         history.pushState(null, '', `/f/${file.id}`);
       }
@@ -323,7 +328,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         });
         setActiveIdx(panes.length - 1);
       }
-      setDrawerOpen(false);
+      setTouchList(false);
       if (location.pathname !== `/f/${file.id}`) history.pushState(null, '', `/f/${file.id}`);
     },
     [panes, maxPanes, confirmReplace, ensureTab],
@@ -630,6 +635,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setTabs(restore.tabs);
         setPanes(restore.panes);
         setActiveIdx(restore.active);
+        if (IS_TOUCH) setTouchList(false); // 폰: 되살린 문서를 바로 보여 준다 — 목록은 탭으로
         if (saved?.ratio) setSplitRatio(saved.ratio);
         return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
       }
@@ -1063,7 +1069,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           if (!created) return;
           await loadTree();
           setEditRequest(created.id);
-          setDrawerOpen(false);
           void selectFile(created);
         } catch (e) {
           toast(e instanceof ApiError ? e.message : '문서를 만들지 못했습니다', 'error');
@@ -1319,12 +1324,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
-  /** 본문 전체 페이지(설정·대화) 열기 — 본문을 덮으므로 터치 서랍은 닫고, 닫을 때 돌아갈 패널을 기억한다 */
+  /** 본문 전체 페이지(설정·대화) 열기 — 닫을 때 돌아갈 패널을 기억한다 */
   const openPage = (p: Panel) => {
     if (!PAGE_PANELS.has(panel)) panelBeforePage.current = panel;
     setPanel(p);
     setPanelCollapsed(false);
-    setDrawerOpen(false);
   };
   const closePage = () => {
     setPanel(panelBeforePage.current);
@@ -1364,12 +1368,64 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     </button>
   );
 
-  /** 터치 첫 화면의 큰 버튼들 — 서랍(☰)을 몰라도 시작할 수 있게 */
+  /** 터치 첫 화면의 큰 버튼들 — 문서를 다 닫았을 때 어디로든 갈 수 있게 */
   const openPanel = (p: Panel) => {
     setPanel(p);
     setPanelCollapsed(false);
-    setDrawerOpen(true);
+    setTouchList(true);
   };
+  /** 하단 탭 바(SCR-102, v0.53 중간 상태: 문서·대화·브리핑·설정) — 같은 탭을 다시 누르면 문서 탭은 목록↔문서를 오간다 */
+  const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
+  const tabTarget = (p: Panel): Panel => (DOC_PANELS.includes(p) ? 'files' : p);
+  const pressTab = (target: Panel) => {
+    if (PAGE_PANELS.has(target)) {
+      if (panel === target) closePage();
+      else if (target === 'settings') openSettings();
+      else openPage(target);
+      return;
+    }
+    if (target === 'files' && DOC_PANELS.includes(panel)) {
+      // 문서 탭: 문서를 보는 중이면 목록으로, 목록이면(문서가 열려 있을 때) 문서로
+      if (panes.length > 0) setTouchList((v) => !v);
+      else setTouchList(true);
+      return;
+    }
+    setPanel(target);
+    setPanelCollapsed(false);
+    setTouchList(true);
+  };
+  const tabBar = (
+    <nav
+      ref={tabBarRef}
+      aria-label="주 메뉴"
+      aria-hidden={chromeHidden}
+      className={`fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur pc:hidden ${
+        immersive || (panel === 'chat' && chatBody) ? 'hidden' : ''
+      } ${chromeHidden ? 'pointer-events-none' : ''}`}
+    >
+      {(
+        [
+          ['files', '문서', 'files'],
+          ['chat', '대화', 'chat'],
+          ...(canSeeBriefing ? ([['briefing', '브리핑', 'news']] as const) : []),
+          ['settings', '설정', 'settings'],
+        ] as [Panel, string, IconName][]
+      ).map(([target, label, icon]) => {
+        const active = tabTarget(panel) === target;
+        return (
+          <button
+            key={target}
+            onClick={() => pressTab(target)}
+            aria-current={active ? 'page' : undefined}
+            className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'text-accent-400' : 'text-slate-500'}`}
+          >
+            <Icon name={icon} size={22} />
+            {label}
+          </button>
+        );
+      })}
+    </nav>
+  );
   const startButtons = (
     <div className="grid w-full max-w-sm grid-cols-2 gap-2">
       {[
@@ -1391,39 +1447,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   return (
-    <div className="flex h-dvh bg-slate-950 text-slate-100">
-      {/* 터치 기기: 드로어 토글 (입력 방식 기준 — 가로모드에서도 드로어 유지).
-          z-30: 뷰어의 오버레이 헤더(z-20)보다 위 — 같은 z면 DOM 뒤쪽인 헤더가 클릭을 가로챈다 */}
-      <button
-        ref={drawerBtnRef}
-        onClick={() => setDrawerOpen(true)}
-        aria-hidden={chromeHidden}
-        // 크롬이 접히면 이 버튼도 같이 비킨다 — 크롬이 숨으면 문서가 화면 맨 위까지 올라오는데,
-        // 우리 버튼만 남아 있으면 문서 자신의 좌상단 고정 버튼(정독본의 목차 ☰ 등)을 정확히 덮는다
-        aria-label="메뉴"
-        className={`fixed left-3 top-2 z-30 flex h-10 w-10 items-center justify-center rounded-md border border-slate-800 bg-slate-900/90 text-slate-300 pc:hidden ${
-          immersive ? 'hidden' : ''
-        } ${chromeHidden ? 'pointer-events-none' : ''}`}
-      >
-        ☰
-      </button>
-      {drawerOpen && (
-        <div className="fixed inset-0 z-30 bg-black/50 pc:hidden" onClick={() => setDrawerOpen(false)} />
-      )}
-
+    <div className="relative flex h-dvh bg-slate-950 text-slate-100">
+      {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
+          z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
       <div
-        className={`z-40 flex shrink-0 bg-slate-950 touch:fixed touch:inset-y-0 touch:left-0 touch:transition-transform ${
-          drawerOpen ? '' : 'touch:-translate-x-full'
+        className={`z-[25] flex shrink-0 bg-slate-950 touch:absolute touch:inset-0 touch:pb-14 ${
+          touchList && !PAGE_PANELS.has(panel) ? '' : 'touch:hidden'
         } ${immersive ? 'hidden' : ''}`}
       >
-      {/* 아이콘 레일 — 유일한 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃) */}
-      <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:w-16">
+      {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
+      <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:hidden">
         {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01) */}
         <button
-          onClick={() => {
-            setDrawerOpen(false);
-            setPaletteOpen(true);
-          }}
+          onClick={() => setPaletteOpen(true)}
           title="검색 (Ctrl+K)"
           className={`${railClass} text-slate-500 hover:text-slate-200`}
         >
@@ -1460,18 +1496,32 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         </button>
       </div>
 
-      {/* 접힘은 PC 전용 — 터치 드로어에서는 패널이 곧 내비게이션이라 항상 펼친다 */}
+      {/* 접힘은 PC 전용 — 터치의 목록 층은 탭 바가 켜고 끈다 */}
       {/* 설정·대화는 패널이 아니라 본문 전체 페이지다(SCR-140 개정·SCR-188) — 그때는 사이드 패널을 그리지 않는다 */}
       {!PAGE_PANELS.has(panel) && (
       <aside
-        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 ${panelCollapsed ? 'pc:hidden' : ''}`}
+        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 touch:w-full touch:border-r-0 ${panelCollapsed ? 'pc:hidden' : ''}`}
       >
         <div className="flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
           <span className="ml-auto truncate text-xs text-slate-600">
             {user.displayName ?? user.username}
           </span>
+          {/* 터치: 검색은 상단 바 돋보기 (레일이 없으므로) */}
+          <IconButton onClick={() => setPaletteOpen(true)} label="검색" className="-mr-2 pc:hidden">
+            <Icon name="search" size={20} />
+          </IconButton>
         </div>
+        {/* 터치의 문서 탭: 내 파일·즐겨찾기·공유·카드를 칩으로 오간다 — v0.54에서 즐겨찾기·공유는 문서 패널의 섹션이 된다 */}
+        {DOC_PANELS.includes(panel) && (
+          <div className="mb-2 flex gap-1 overflow-x-auto px-3 pc:hidden">
+            {DOC_PANELS.map((p) => (
+              <Chip key={p} active={panel === p} onClick={() => setPanel(p)}>
+                {RAIL_SHORT[p]}
+              </Chip>
+            ))}
+          </div>
+        )}
 
         {panel === 'files' && (
           <>
@@ -1563,25 +1613,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             <div className="mt-2 flex items-start gap-1 px-3">
               {tags.length > 0 && (
                 <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-                  <button
-                    onClick={() => setTagFilter(null)}
-                    className={`rounded-full px-2 py-0.5 text-[11px] transition ${
-                      tagFilter === null ? 'bg-slate-700 text-slate-100' : 'text-slate-500 hover:text-slate-300'
-                    }`}
-                  >
+                  <Chip active={tagFilter === null} onClick={() => setTagFilter(null)}>
                     전체
-                  </button>
+                  </Chip>
                   {tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      onClick={() => setTagFilter((cur) => (cur === tag.id ? null : tag.id))}
-                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition ${
-                        tagFilter === tag.id ? 'bg-slate-700 text-slate-100' : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
+                    <Chip key={tag.id} active={tagFilter === tag.id} onClick={() => setTagFilter((cur) => (cur === tag.id ? null : tag.id))}>
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color }} />
                       {tag.name}
-                    </button>
+                    </Chip>
                   ))}
                 </div>
               )}
@@ -1589,12 +1628,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortBy)}
                 title="정렬"
-                className="ml-auto rounded border border-slate-800 bg-slate-900 px-1 py-0.5 text-[11px] text-slate-400 outline-none"
+                className="ml-auto min-h-8 rounded border border-slate-800 bg-slate-900 px-1 text-[11px] text-slate-400 outline-none touch:min-h-11 touch:text-sm"
               >
                 <option value="name">이름순</option>
                 <option value="updated">최근 수정순</option>
               </select>
-              <button
+              <IconButton
                 onClick={() =>
                   setViewMode((m) => {
                     const next = m === 'list' ? 'grid' : 'list';
@@ -1602,11 +1641,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                     return next;
                   })
                 }
-                title={viewMode === 'list' ? '격자 보기' : '목록 보기'}
-                className="rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-400 hover:text-slate-200"
+                label={viewMode === 'list' ? '격자 보기' : '목록 보기'}
+                className="h-8 w-8 border border-slate-800 bg-slate-900 text-[11px]"
               >
                 {viewMode === 'list' ? '▦' : '▤'}
-              </button>
+              </IconButton>
             </div>
             {checked.size > 0 && (
               <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-sky-900 bg-sky-950/40 px-2 py-1.5 text-xs">
@@ -1615,29 +1654,25 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   <button
                     onClick={() => downloadArchive({ fileIds: [...checked] })}
                     title="고른 파일을 ZIP 하나로 받기"
-                    className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"
+                    className="min-h-7 rounded border border-slate-700 px-2 text-slate-300 hover:bg-slate-800 touch:min-h-11 touch:px-3"
                   >
                     다운로드
                   </button>
                   <button
                     onClick={() => setMovePickerOpen(true)}
-                    className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"
+                    className="min-h-7 rounded border border-slate-700 px-2 text-slate-300 hover:bg-slate-800 touch:min-h-11 touch:px-3"
                   >
                     이동
                   </button>
                   <button
                     onClick={bulkDelete}
-                    className="rounded border border-red-900 px-2 py-0.5 text-red-400 hover:bg-red-950"
+                    className="min-h-7 rounded border border-danger-900 px-2 text-danger-400 hover:bg-danger-950 touch:min-h-11 touch:px-3"
                   >
                     삭제
                   </button>
-                  <button
-                    onClick={() => setChecked(new Set())}
-                    title="선택 해제"
-                    className="rounded px-1.5 py-0.5 text-slate-500 hover:text-slate-200"
-                  >
+                  <IconButton onClick={() => setChecked(new Set())} label="선택 해제" className="h-7 w-7 text-slate-500">
                     ✕
-                  </button>
+                  </IconButton>
                 </span>
               </div>
             )}
@@ -1716,12 +1751,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
       <main className="relative flex min-w-0 flex-1 flex-col">
-        {/* 설정 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정).
-            z-20: 뷰어의 오버레이 헤더와 같은 층이지만 DOM 뒤라 위에 그려진다. 터치의 ☰(z-30)은 그대로 보인다 */}
+        {/* 설정·대화 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정·SCR-188).
+            z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 터치 탭 바(z-30)보다 아래 */}
         {panel === 'chat' && (
           // SCR-187·188: 대화 — 문서 없이 시작하는 챗봇을 본문 전체에. 페이지를 떠나면 언마운트되지만
           // 서버에 자동 저장되므로 다시 열면 목록에서 이어 간다
-          <div className="absolute inset-0 z-20 flex flex-col bg-slate-950">
+          <div className="absolute inset-0 z-[25] flex flex-col bg-slate-950">
             <AskPanel
               file={null}
               page
@@ -1734,11 +1769,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               }}
               isPc={!IS_TOUCH}
               onClose={closePage}
+              onViewChange={(v) => setChatBody(v === 'body')}
             />
           </div>
         )}
         {panel === 'settings' && (
-          <div className="absolute inset-0 z-20 flex flex-col bg-slate-950">
+          <div className="absolute inset-0 z-[25] flex flex-col bg-slate-950">
             <SettingsPage
               user={user}
               settings={settings}
@@ -1816,6 +1852,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onTrash={f.kind === 'briefing' ? () => actions.deleteFile(f.id) : undefined}
                 terms={terms}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
+                onBackToList={IS_TOUCH ? () => setTouchList(true) : undefined}
               />
             )}
           />
@@ -1954,6 +1991,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         <UpdateNotes content={changelogContent} onClose={closeChangelog} />
       )}
 
+      {IS_TOUCH && tabBar}
       {newVersionReady && (
         <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 rounded-lg border border-sky-800 bg-slate-900 px-4 py-2.5 shadow-xl">
           <span className="text-sm text-slate-200">새 버전이 배포되었습니다</span>

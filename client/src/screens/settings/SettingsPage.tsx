@@ -150,25 +150,24 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     if (category === null || q) {
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* pl-14: 떠 있는 ☰ 자리 */}
-          <div className="flex items-center gap-2 py-2 pl-14 pr-2">
+          <div className="flex items-center gap-2 py-2 pl-4 pr-2">
             <h2 className="text-base font-bold">나</h2>
             {roleChip}
             <span className="ml-auto" />
             {closeBtn}
           </div>
           <div className="px-4 pb-2">{searchBox}</div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-8">{q ? resultList : categoryList}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-20">{q ? resultList : categoryList}</div>
         </div>
       );
     }
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-1 py-2 pl-14 pr-2">
+        <div className="flex items-center gap-1 py-2 pl-2 pr-2">
           <button onClick={() => setCategory(null)} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm text-slate-300 hover:bg-slate-800" aria-label="나로 돌아가기">‹ 나</button>
           <h2 className="truncate text-base font-bold">{CATEGORY_BY_ID[category].name}</h2>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">{content(category)}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-20">{content(category)}</div>
       </div>
     );
   }

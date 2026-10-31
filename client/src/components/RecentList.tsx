@@ -1,6 +1,7 @@
 import type { TreeFile } from '../lib/api';
 import FileName from './FileName';
 import SwipeRow, { type SwipeConfig } from './SwipeRow';
+import ListRow from './ui/ListRow';
 
 type Props = {
   files: TreeFile[];
@@ -24,12 +25,9 @@ export default function RecentList({ files, onSelect, swipe }: Props) {
       </h3>
       {recent.map((file) => (
         <SwipeRow key={file.id} {...swipe(file)}>
-          <button
-            onClick={() => onSelect(file)}
-            className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
-          >
+          <ListRow onClick={() => onSelect(file)} muted className="py-0.5 text-[13px]">
             <FileName name={file.name} wrap />
-          </button>
+          </ListRow>
         </SwipeRow>
       ))}
       <div className="mx-2 mt-2 border-b border-slate-800/70" />

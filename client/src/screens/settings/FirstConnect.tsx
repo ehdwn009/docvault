@@ -128,13 +128,13 @@ export default function FirstConnect({ onClose }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-800 py-3 pl-14 pr-4 pc:px-6">
+      <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3 pc:px-6">
         <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100" aria-label="구독 연결로 돌아가기">‹</button>
         <h2 className="text-base font-bold">처음 연결하기</h2>
         <span className="text-xs text-slate-500">{step + 1} / {STEPS.length}</span>
       </div>
       {IS_TOUCH && <p className="px-4 pt-2 text-xs text-slate-500">한 번 하고 끝나는 작업이라 PC에서 하는 걸 권해요</p>}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pc:flex-row pc:p-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-20 pc:flex-row pc:p-6">
         <ol className="flex shrink-0 gap-1 overflow-x-auto pc:w-56 pc:flex-col">
           {STEPS.map((name, i) => (
             <li key={name}>

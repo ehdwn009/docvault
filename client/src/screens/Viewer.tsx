@@ -41,6 +41,8 @@ type Props = {
   onSplitView?: () => void;
   /** 터치 전용: 파일명 탭 → 문서 스위처 시트 (IA — 모바일 재편) */
   onOpenSwitcher?: () => void;
+  /** 터치: 헤더 왼쪽 ‹ — 목록 층으로 돌아간다 (☰·드로어 대체, IA — 안 B 폰) */
+  onBackToList?: () => void;
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
@@ -109,7 +111,7 @@ const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -800,7 +802,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       <div
         // touch-none: 헤더에서 시작한 터치를 브라우저 제스처(스크롤·내비게이션)가 가로채지 않게 —
         // 가로채면 touchend 대신 touchcancel이 와서 스와이프가 끊긴다
-        className="touch-none flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:bg-slate-950/90 touch:pl-14 touch:backdrop-blur"
+        className="touch-none flex items-center gap-3 border-b border-slate-800 px-4 py-2 touch:bg-slate-950/90 touch:pl-2 touch:backdrop-blur"
         // 헤더 좌우 스와이프 = 이전/다음 문서 (본문 스와이프는 스크롤과 싸우므로 헤더 한정)
         onTouchStart={(e) => {
           const t = e.touches[0];
@@ -837,6 +839,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           }
         }}
       >
+        {onBackToList && (
+          <button onClick={onBackToList} aria-label="목록으로" className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-300 pc:hidden">
+            ‹
+          </button>
+        )}
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
@@ -987,7 +994,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             />
           ) : isBriefing && !showAsCode ? (
             // 브리핑은 폭 설정(좁게·보통)을 따르지 않는다 — 보이는 폭이 넓으면 목록|상세 두 칸이 된다 (SCR-191)
-            <div className="p-4 sm:p-6 touch:pt-14 touch:pb-24" style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}>
+            <div className="p-4 sm:p-6 touch:pt-14 touch:pb-32" style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}>
               <BriefingView
                 fileId={file.id}
                 content={data.content}
@@ -1007,7 +1014,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ) : (
             <div
               // 터치의 pt·pb: 오버레이 바가 본문 첫·끝 줄을 가리지 않게 하는 상수 공간 (크롬 자동 숨김)
-              className={`mx-auto p-6 touch:pt-14 touch:pb-24 ${WIDTH[settings.contentWidth]}`}
+              className={`mx-auto p-6 touch:pt-14 touch:pb-32 ${WIDTH[settings.contentWidth]}`}
               // 설정의 글자 크기(px)를 100% 기준으로 두고 파일별 배율을 곱한다 —
               // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
               style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
@@ -1095,7 +1102,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       {!isPc && !immersive && (
         // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
         <div ref={toolbarRef} className="absolute inset-x-0 bottom-0 z-20">
-          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur">
+          {/* 하단 탭 바(56px + 안전 영역) 위에 얹힌다 — 몰입 모드에서는 둘 다 숨는다 */}
+          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 backdrop-blur" style={{ marginBottom: 'calc(56px + env(safe-area-inset-bottom))' }}>
             {actions}
           </div>
         </div>
