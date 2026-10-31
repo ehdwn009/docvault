@@ -106,7 +106,7 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const schedule = readSchedule(user.id);
     const mode = readMode(user.id);
     // 구독 모드의 "다음 자동"은 트리거 시각(회차 시작 − 리드) (v0.50)
-    const next = auto ? (mode === 'subscription' ? nextTrigger(schedule, Date.now()) : nextAuto(schedule, Date.now())) : null;
+    const next = auto ? (mode === 'subscription' ? nextTrigger(schedule, Date.now(), user.id) : nextAuto(schedule, Date.now())) : null;
     // 구독 실행이 돌면 그것이 "지금 실행" — 서버 안 실행과 동시에 있을 수 없다(startRun이 먼저 닫는다)
     const running = runningRun() ?? runningSubscriptionRun(user.id);
     const sub = mode === 'subscription' ? subscriptionSummary(user.id) : null;
@@ -328,7 +328,7 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       .run();
     const auto = autoEnabled(userId);
     const schedule: AutoSchedule = readSchedule(userId);
-    const next = auto ? (modeNow === 'subscription' ? nextTrigger(schedule, now) : nextAuto(schedule, now)) : null;
+    const next = auto ? (modeNow === 'subscription' ? nextTrigger(schedule, now, userId) : nextAuto(schedule, now)) : null;
     return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId) });
     },
   );

@@ -464,14 +464,15 @@ export function sweepExpiredSubscriptionRuns(now = Date.now()): void {
 }
 
 /** 구독 모드에서 "다음 자동"은 트리거 시각(회차 시작 − 리드) — 트리거와 시작 사이에는 다음 회차의 트리거를 가리킨다 */
-export function nextTrigger(schedule: AutoSchedule, now: number): { at: number; slot: AutoSlot } | null {
+export function nextTrigger(schedule: AutoSchedule, now: number, ownerId: number): { at: number; slot: AutoSlot } | null {
   const slots = BRIEFING.AUTO_SLOTS.map((s) => s.slot).filter((slot) => schedule[slot].on);
   if (slots.length === 0) return null;
   for (const dayOffset of [0, 1, 2]) {
     const date = kstParts(now + dayOffset * 24 * 60 * 60 * 1000).date;
     for (const slot of slots) {
       const at = oneSlotStart(schedule, slot, date) - BRIEFING.SUB_LEAD_MS;
-      if (at > now) return { at, slot };
+      // 그날 그 회차가 이미 있으면(시험으로 먼저 만든 경우) 틱도 안 켜므로 "다음"에서도 뺀다 — 첫 실전에서 18:20을 가리켰지만 켜지지 않았다(2026-10-31)
+      if (at > now && !hasRunFor(ownerId, date, slot)) return { at, slot };
     }
   }
   return null;
