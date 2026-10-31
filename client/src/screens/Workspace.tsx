@@ -69,6 +69,8 @@ type Panel = 'home' | 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'bri
 const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['home', 'ai', 'settings', 'chat']);
 /** 문서 탭 아래에 묶이는 목록들 */
 const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
+/** 보이는 영역이 이만큼 넘게 줄면 키보드가 올라온 것으로 본다(px) — 주소 막대 변화(수십 px)와 구분 */
+const KEYBOARD_MIN_PX = 120;
 /** 문서 패널 고정 섹션(즐겨찾기·공유받음)의 열림 상태 — 기기 기억 */
 const FILE_SECTIONS_KEY = 'dv_files_sections';
 type SortBy = 'name' | 'updated';
@@ -177,7 +179,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 크롬 안착 상태(aria·pointer-events용) — 접히는 동안의 움직임은 tabBarRef가 DOM에 직접 쓴다
   const chromeHidden = useChromeHidden();
   // 하단 탭 바는 문서를 읽을 때 아래로 비킨다 — 거리는 자기 높이 (IA — 안 B 폰, 패턴 G)
-  const tabBarRef = useChromeTarget(IS_TOUCH ? { dir: 'down' } : null);
+  const barElRef = useRef<HTMLElement | null>(null);
+  const chromeTabBarRef = useChromeTarget(IS_TOUCH ? { dir: 'down' } : null);
+  const tabBarRef = useCallback(
+    (el: HTMLElement | null) => {
+      barElRef.current = el;
+      chromeTabBarRef(el);
+    },
+    [chromeTabBarRef],
+  );
   // 폰 2단계(안 ㄴ): 아래 바의 슬롯 — 뷰어 도구막대·대화 입력줄이 포털로 들어온다. 쓰는 쪽 수만 센다 (lib/bottomBar)
   const [barSlotEl, setBarSlotEl] = useState<HTMLElement | null>(null);
   const [barSlotOwners, setBarSlotOwners] = useState(0);
@@ -186,9 +196,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     return () => setBarSlotOwners((n) => n - 1);
   }, []);
   const barSlot = useMemo(() => ({ el: barSlotEl, claim: claimBarSlot }), [barSlotEl, claimBarSlot]);
-  // 키보드가 올라오면 보이는 영역만 줄어든다 — 바를 그만큼 올려 입력줄이 키보드 위에 앉게
+  // 키보드가 올라오면 보이는 영역만 줄어든다 — 바를 보이는 영역의 바닥에 맞춰 입력줄이 키보드 위에 앉게.
+  // 질문 시트(AskPanel)와 같은 계산(offsetTop + height - 자기 높이): bottom으로 올리는 계산은 아이폰 웹앱에서 한 뼘 위에 떴다 (사용자 보고 2026-10-31)
   const vv = useVisualViewport(IS_TOUCH);
-  const keyboardInset = IS_TOUCH ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+  const keyboardOpen = IS_TOUCH && window.innerHeight - vv.height - vv.offsetTop > KEYBOARD_MIN_PX;
+  const barTop = keyboardOpen ? vv.offsetTop + vv.height - (barElRef.current?.offsetHeight ?? 0) : null;
   const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
   // 드래그 중인 탭 — 있으면 본문 위에 드롭 존 오버레이를 깐다 (IA — 탭 드래그 배치)
   const [dragTab, setDragTab] = useState<TreeFile | null>(null);
@@ -1538,6 +1550,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 본문 여백·페이지 바닥도 이 플래그 하나를 따른다
   const tabBarVisible = IS_TOUCH && !immersive && !editing;
   const barSlotUsed = barSlotOwners > 0;
+  /** 바의 슬롯을 문서(뷰어)가 쓰는 중 — 페이지(홈·AI·나)가 아닐 때 슬롯이 차 있으면 뷰어다 */
+  const docOwnsBar = barSlotUsed && !PAGE_PANELS.has(panel);
   const tabBar = (
     <nav
       ref={tabBarRef}
@@ -1547,7 +1561,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       className={`fixed inset-x-0 z-30 flex items-stretch border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
         tabBarVisible ? '' : 'hidden'
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
-      style={{ bottom: keyboardInset }}
+      style={barTop !== null ? { top: barTop, bottom: 'auto' } : { bottom: 0 }}
     >
       <div className={`flex ${narrow ? 'flex-1' : 'w-[300px] shrink-0 border-r border-hair'} ${narrow && barSlotUsed ? 'hidden' : ''}`}>
       {(
@@ -2014,7 +2028,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
       {/* 터치: 하단 탭 바 자리를 비운다 — 뷰어 도구막대·분할 칸이 탭 바 밑에 깔리지 않게. 탭 바가 숨는 몰입·편집·대화 본문에서는 비우지 않는다 */}
-      <main className={`relative flex min-w-0 flex-1 flex-col ${tabBarVisible ? 'pb-[var(--tab-bar-h)]' : ''}`} style={{ '--page-bottom': tabBarVisible ? 'var(--tab-bar-h)' : '0px' } as React.CSSProperties}>
+      {/* 문서가 바의 슬롯을 쓸 때(읽는 중)는 여백 없이 바가 본문 위에 얹힌다 — 바가 스크롤로 숨으면 빈 띠만 남았다 (사용자 보고 2026-10-31). 본문의 touch:pb-24가 마지막 줄을 지킨다 */}
+      <main className={`relative flex min-w-0 flex-1 flex-col ${tabBarVisible && !docOwnsBar ? 'pb-[var(--tab-bar-h)]' : ''}`} style={{ '--page-bottom': tabBarVisible ? 'var(--tab-bar-h)' : '0px' } as React.CSSProperties}>
         {/* 설정·대화 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정·SCR-188).
             z-[45]: 뷰어 크롬(z-20)·질문 패널 오버레이(z-30)·브리핑 기사 시트(z-40)보다 위, 확인창·팔레트·토스트(z-50)보다 아래.
             터치는 탭 바 자리(bottom)를 비워 탭 바가 보인다 */}
@@ -2189,6 +2204,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 askTwoColumn={!narrow}
                 // 목록 층(접은 폰)이나 페이지(홈·AI·나)가 덮고 있으면 바에는 그쪽 것이 들어가야 한다
                 barSlotEnabled={!PAGE_PANELS.has(panel) && (!narrow || !touchList)}
+                onToggleSidebar={IS_TOUCH && !narrow ? () => setPanelCollapsed((v) => !v) : undefined}
+                sidebarCollapsed={panelCollapsed}
                 onEditModeChange={IS_TOUCH ? setEditing : undefined}
               />
             )}

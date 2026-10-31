@@ -46,6 +46,9 @@ type Props = {
   onOpenSwitcher?: () => void;
   /** 터치: 헤더 왼쪽 ‹ — 목록 층으로 돌아간다 (☰·드로어 대체, IA — 안 B 폰) */
   onBackToList?: () => void;
+  /** 펼친 폰: 머리 왼쪽의 목록 열 접기·펼치기 (아이패드 앱의 사이드바 단추). 탭 두 번 누르기는 쓰지 않는다 (사용자 보고 2026-10-31) */
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
   /** 아래 바 슬롯에 도구막대를 넣어도 되는가 — 목록 층·페이지(홈·AI·나) 뒤에 가려져 있으면 false (폰 2단계) */
   barSlotEnabled?: boolean;
   /** 편집 모드에 들어가고 나올 때 — 터치는 그동안 하단 탭 바를 숨긴다(키보드·마지막 줄과 겹치지 않게) */
@@ -121,7 +124,7 @@ const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC, barSlotEnabled = true }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC, barSlotEnabled = true, onToggleSidebar, sidebarCollapsed = false }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -873,6 +876,11 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           }
         }}
       >
+        {onToggleSidebar && (
+          <button onClick={onToggleSidebar} aria-label={sidebarCollapsed ? '목록 펼치기' : '목록 접기'} aria-pressed={!sidebarCollapsed} className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-accent-400">
+            <Icon name="sidebar" size={20} />
+          </button>
+        )}
         <button
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
