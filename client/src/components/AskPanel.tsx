@@ -15,7 +15,8 @@ import CardSaveDialog from './CardSaveDialog';
 import ThreadCardsDialog from './ThreadCardsDialog';
 import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
-import { ASK_CONTEXT_MAX_CARDS, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
+import { ASK_CONTEXT_MAX_CARDS, ASK_PANEL_OVERLAY_BELOW, ASK_PANEL_WIDTH_DEFAULT, ASK_PANEL_WIDTH_MAX, ASK_PANEL_WIDTH_MIN, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
+import { useMinWidth } from '../lib/device';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
@@ -33,8 +34,8 @@ export type AskSeed = { quote: string; context: string; itemId?: string; transie
 type Props = {
   /** 읽던 문서. null이면 문서 없이 시작하는 대화 — 챗봇(SCR-187): 인용 대신 "내 자료 참고" 스위치가 있다 */
   file: TreeFile | null;
-  /** true면 레일 패널 안에 그냥 세로로 그린다 (오른쪽 패널·바텀 시트가 아니라) */
-  inline?: boolean;
+  /** true면 본문 전체를 쓰는 대화 화면(SCR-188) — PC는 왼쪽 목록 + 오른쪽 본문, 폰은 목록 → 본문 푸시. file은 null */
+  page?: boolean;
   /** 열릴 때의 문맥. null이면 문맥 없는 대화(설계 흐름 G) */
   seed: AskSeed | null;
   /** 대화 중 문서에서 다시 드래그한 문장 — 다음 질문에 인용으로 붙는다. 붙이고 나면 부모가 비운다 */
@@ -60,6 +61,9 @@ const MY_STUFF_KEY = 'dv_chat_mystuff';
 const MODEL_KEY = 'dv_ask_model';
 /** 챗봇 빈 화면에 보여 주는 최근 대화 수 */
 const RECENT_THREADS = 5;
+/** 오른쪽 질문 패널 폭의 기억 — 기기별 취향이라 localStorage */
+const ASK_WIDTH_KEY = 'dv_ask_width';
+const clampWidth = (w: number) => Math.min(ASK_PANEL_WIDTH_MAX, Math.max(ASK_PANEL_WIDTH_MIN, w));
 function readLocal(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -95,14 +99,36 @@ const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판).
 // file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
-export default function AskPanel({ file, inline = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
+export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose }: Props) {
   const chatMode = file === null;
   const [status, setStatus] = useState<AskStatus | null>(null);
   // 챗봇: 내 자료 참고 스위치 — 질문마다 바꿀 수 있고 끈 상태를 기기가 기억한다 (기본 꺼짐)
   const [myStuff, setMyStuff] = useState(() => readLocal(MY_STUFF_KEY) === '1');
   // 새 대화에 쓸 모델(칩). 대화가 생기면 thread.model이 진실이고, 바꾸면 서버에도 저장한다 (API-107)
   const [pendingModel, setPendingModel] = useState<string | null>(() => readLocal(MODEL_KEY));
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  // 머리의 ⋯ 메뉴 — 모델 고르기·지난 대화·삭제 (머리 버튼 7개 → 2개 + ⋯, IA — 안 B SCR-188)
+  const [moreOpen, setMoreOpen] = useState(false);
+  // 대화 화면(page)의 폰: 목록을 보여 주는 중인가 — 대화를 고르거나 새로 열면 본문으로 넘어간다
+  const [showList, setShowList] = useState(true);
+  // 오른쪽 패널 폭 — 드래그로 320~560px, 기기가 기억한다
+  const [askWidth, setAskWidth] = useState(() => clampWidth(Number(readLocal(ASK_WIDTH_KEY)) || ASK_PANEL_WIDTH_DEFAULT));
+  const askWidthRef = useRef(askWidth);
+  askWidthRef.current = askWidth;
+  // 좁은 창(1024px 미만)에서는 본문을 밀지 않고 위에 덮인다
+  const wide = useMinWidth(ASK_PANEL_OVERLAY_BELOW);
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = askWidthRef.current;
+    const move = (ev: PointerEvent) => setAskWidth(clampWidth(startW + (startX - ev.clientX)));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      writeLocal(ASK_WIDTH_KEY, String(askWidthRef.current));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   // 지난 대화의 제목 편집 — 그 자리가 입력창이 되고, 오른쪽 끝의 ✦가 AI 제목을 채운다 (VS Code의 커밋 메시지 생성 자리와 같은 발상)
   const [renaming, setRenaming] = useState<{ id: number; draft: string } | null>(null);
   const [titleBusy, setTitleBusy] = useState(false);
@@ -174,13 +200,13 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
     if (!chatMode) return;
     void api<{ threads: AskThread[] }>('/ask/threads').then((r) => setHistory(r.threads)).catch(() => {});
   }, [chatMode]);
-  // 모델 메뉴는 바깥을 누르면 닫힌다
+  // ⋯ 메뉴는 바깥을 누르면 닫힌다
   useEffect(() => {
-    if (!modelMenuOpen) return;
-    const close = () => setModelMenuOpen(false);
+    if (!moreOpen) return;
+    const close = () => setMoreOpen(false);
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
-  }, [modelMenuOpen]);
+  }, [moreOpen]);
 
   // 문맥(seed)이 새로 오면 아직 대화가 없는 한 그것을 쓴다 — 안 보내고 닫았다가 다른 문장을 고른 경우 (설계 흐름 A 되풀이).
   // 입력창은 채우지 않는다: 채워 두면 다른 걸 묻고 싶을 때 지우는 일이 생긴다. 대신 빠른 질문 버튼을 둔다
@@ -317,7 +343,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
 
   /** 모델 칩 — 대화가 있으면 서버에 저장(다음 답부터), 없으면 새 대화에 쓸 값으로. 고른 것은 기기가 기억한다 */
   async function chooseModel(id: string) {
-    setModelMenuOpen(false);
+    setMoreOpen(false);
     setPendingModel(id);
     writeLocal(MODEL_KEY, id);
     if (!thread) return;
@@ -390,6 +416,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
       onConversingChange?.(true);
       seedUsedRef.current = true; // 옛 대화를 이었으니 지금 seed는 쓰지 않는다
       setShowHistory(false);
+      setShowList(false);
       setError(null);
       setFailedQuestion(null);
     } catch (e) {
@@ -419,6 +446,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
     setError(null);
     setFailedQuestion(null);
     setShowHistory(false);
+    setShowList(false);
     seedUsedRef.current = true; // 새 대화는 문맥 없이 — 문맥이 필요하면 문서에서 다시 드래그
     onConversingChange?.(false);
     inputRef.current?.focus();
@@ -456,80 +484,109 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
       </div>
     ) : null;
 
-  const body = (
-    <>
-      <div className="relative flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-slate-800 px-3 py-2 [&_button]:whitespace-nowrap">
-        {/* 레일 패널 안에서는 패널 머리가 이미 "대화"라고 적혀 있다 — 한 번 더 적으면 좁은 폭에서 자리만 먹는다 */}
-        {!inline && <h3 className="whitespace-nowrap text-sm font-medium text-slate-200">질문</h3>}
+  const menuItem = 'flex min-h-11 w-full items-center rounded-lg px-2.5 text-left text-sm text-slate-200 hover:bg-slate-800';
+  // 머리: 제목 한 줄 + [카드로] [새 대화] + ⋯(모델·지난 대화·삭제) + ✕ — 버튼 7개가 두 줄로 꺾이던 것을 둘로 (IA — 안 B SCR-188)
+  const header = (
+    <div className={`relative flex items-center gap-1.5 border-b border-slate-800 py-2 pr-3 [&_button]:whitespace-nowrap ${page && !isPc ? 'pl-14' : 'pl-3'}`}>
+      {/* 폰의 대화 화면: 떠 있는 ☰ 자리(pl-14)를 비우고 그 옆에 ‹ 대화 */}
+      {page && !isPc && (
+        <button onClick={() => setShowList(true)} className="flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm text-slate-300 hover:bg-slate-800" aria-label="대화 목록으로">
+          ‹ 대화
+        </button>
+      )}
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-medium text-slate-200">{page ? (thread?.title ?? '새 대화') : '질문'}</h3>
         {status && status.configured && (
-          <span className={`whitespace-nowrap text-xs ${limitReached ? 'text-amber-400' : 'text-slate-600'}`}>
+          <p className={`truncate text-[11px] ${limitReached ? 'text-warn-400' : 'text-slate-600'}`}>
             오늘 {status.used}{status.limit !== null ? `/${status.limit}` : '번'}
-          </span>
+            {currentModel ? ` · ${currentModel.name.split(' ')[0]}` : ''}
+            {page && thread?.fileName ? ` · ${thread.fileName}` : ''}
+          </p>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          {status?.configured && currentModel && !showHistory && (
-            // 모델 칩 — 셋 중 하나. 고른 모델은 대화에 저장되고 다음 답부터. 답마다 아래에 어느 모델인지 남는다
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => setModelMenuOpen((v) => !v)}
-              title={`답변 모델: ${currentModel.label} (${currentModel.name}) — ${currentModel.note}`}
-              className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800"
-            >
-              <b className="font-semibold text-slate-100">{currentModel.name.split(' ')[0]}</b> ▾
+      </div>
+      {thread && !showHistory && hasAnswer && (
+        <button
+          onClick={() => setOutlineOpen(true)}
+          title="이 대화 전체를 카드로 — 개념별로 나누거나 한 장으로"
+          className="inline-flex min-h-9 items-center gap-1 rounded-md border border-slate-600 px-2.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+        >
+          <Icon name="cards" size={13} />카드로
+        </button>
+      )}
+      <button onClick={newThread} className="min-h-9 rounded-md border border-slate-700 px-2.5 text-xs text-slate-300 hover:bg-slate-800">
+        새 대화
+      </button>
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => setMoreOpen((v) => !v)}
+        title="더 보기 — 답변 모델·지난 대화·삭제"
+        aria-label="더 보기"
+        aria-expanded={moreOpen}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+      >
+        <Icon name="more" size={16} />
+      </button>
+      {!page && (
+        <button onClick={onClose} title="닫기 (대화는 남아 있어요)" aria-label="닫기" className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300">
+          <Icon name="close" size={16} />
+        </button>
+      )}
+      {moreOpen && status && (
+        <div onPointerDown={(e) => e.stopPropagation()} className="absolute right-3 top-full z-20 mt-1 w-64 rounded-xl border border-slate-700 bg-slate-950 p-1.5 text-sm shadow-xl shadow-black/40">
+          {status.configured && (
+            <>
+              {/* 답변 모델 — 셋 중 하나. 고른 모델은 대화에 저장되고 다음 답부터. 답마다 아래에 어느 모델인지 남는다 */}
+              <p className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">답변 모델</p>
+              {status.models.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => void chooseModel(m.id)}
+                  className={`flex w-full flex-col rounded-lg px-2.5 py-2 text-left hover:bg-slate-800 ${m.id === currentModelId ? 'bg-accent-950/60' : ''}`}
+                >
+                  <span className="flex items-center gap-1.5 font-semibold text-slate-100">
+                    {m.label}
+                    <span className="ml-auto text-[10px] font-medium text-slate-500">{m.name}</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400">{m.note}</span>
+                </button>
+              ))}
+              <p className="px-2.5 pb-1.5 pt-1 text-[10px] text-slate-500">다음 답부터 적용 · 답마다 어느 모델인지 표시</p>
+              <div className="my-1 border-t border-slate-800" />
+            </>
+          )}
+          {!page && (
+            <button onClick={() => { setMoreOpen(false); void openHistory(); }} className={menuItem}>
+              지난 대화
             </button>
           )}
-          {thread && !showHistory && hasAnswer && (
-            <button
-              onClick={() => setOutlineOpen(true)}
-              title="이 대화 전체를 카드로 — 개념별로 나누거나 한 장으로"
-              className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-0.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-            >
-              <Icon name="cards" size={13} />카드로
-            </button>
-          )}
-          <button onClick={() => void openHistory()} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
-            지난 대화
-          </button>
-          {thread && !showHistory && (
-            <button onClick={() => void deleteThread(thread.id)} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-red-300">
-              삭제
-            </button>
-          )}
-          <button onClick={newThread} className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200">
-            새 대화
-          </button>
-          {!inline && (
-            <button onClick={onClose} title="닫기 (대화는 남아 있어요)" className="ml-1 px-1 text-slate-500 hover:text-slate-300">
-              <Icon name="close" size={16} />
+          {thread && (
+            <button onClick={() => { setMoreOpen(false); void deleteThread(thread.id); }} className={`${menuItem} text-danger-300`}>
+              이 대화 삭제
             </button>
           )}
         </div>
-        {modelMenuOpen && status && (
-          <div onPointerDown={(e) => e.stopPropagation()} className="absolute right-3 top-full z-20 mt-1 w-60 rounded-xl border border-slate-700 bg-slate-950 p-1.5 text-sm shadow-xl shadow-black/40">
-            {status.models.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => void chooseModel(m.id)}
-                className={`flex w-full flex-col rounded-lg px-2.5 py-2 text-left hover:bg-slate-800 ${m.id === currentModelId ? 'bg-sky-950/60' : ''}`}
-              >
-                <span className="flex items-center gap-1.5 font-semibold text-slate-100">
-                  {m.label}
-                  <span className="ml-auto text-[10px] font-medium text-slate-500">{m.name}</span>
-                </span>
-                <span className="text-[11px] text-slate-400">{m.note}</span>
-              </button>
-            ))}
-            <p className="border-t border-slate-800 px-2.5 pb-0.5 pt-1.5 text-[10px] text-slate-500">다음 답부터 적용 · 답마다 어느 모델인지 표시</p>
-          </div>
-        )}
-      </div>
+      )}
+    </div>
+  );
 
-      {showHistory ? (
+  // 대화 화면(page)의 왼쪽 목록 머리 — 폰은 떠 있는 ☰ 자리(pl-14)를 비운다
+  const listHeader = (
+    <div className={`flex items-center gap-2 pr-2 ${isPc ? 'px-4 py-3' : 'py-2 pl-14'}`}>
+      <h2 className="text-sm font-bold">대화</h2>
+      <button onClick={newThread} className="ml-auto min-h-9 rounded-md border border-slate-700 px-2.5 text-xs text-slate-300 hover:bg-slate-800">
+        + 새 대화
+      </button>
+    </div>
+  );
+
+  const historyView = (
         <div className="min-h-0 flex-1 overflow-auto p-2">
+          {!page && (
           <div className="mb-1 flex items-center justify-between px-1 text-xs text-slate-500">
             <span>최근 30일</span>
             <button onClick={() => setShowHistory(false)} className="hover:text-slate-300">← 돌아가기</button>
           </div>
+          )}
           {history.length === 0 ? (
             <p className="px-2 py-4 text-xs text-slate-600">지난 대화가 없습니다</p>
           ) : (
@@ -565,7 +622,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
                   left={[{ label: '제목', onAction: () => setRenaming({ id: t.id, draft: t.title }) }]}
                   right={[{ label: '삭제', danger: true, onAction: () => void deleteThread(t.id) }]}
                 >
-                  <div className="flex items-center rounded-md hover:bg-slate-900" onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) }); }}>
+                  <div className={`flex items-center rounded-md hover:bg-slate-900 ${page && thread?.id === t.id ? 'bg-slate-800' : ''}`} onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) }); }}>
                     <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
                       <div className="truncate text-sm text-slate-200">{t.title}</div>
                       <div className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
@@ -586,8 +643,11 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
             )
           )}
         </div>
-      ) : (
-        <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto overscroll-contain p-3 text-sm">
+  );
+
+  const conversation = (
+        <div ref={listRef} className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain p-3 text-sm">
+        <div className={`flex flex-col gap-3 ${page ? 'mx-auto w-full max-w-3xl' : ''}`}>
           {contextChip}
           {notConfigured && (
             // 일반 사용자에게 "LLM", "ANTHROPIC_API_KEY"는 뜻 모를 말이었다(사용성 평가 2026-10-01) — 관리자에게만 설정 방법을
@@ -612,7 +672,7 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
                     : '시트를 내리고 문장을 길게 눌러 고른 뒤 [질문]을 누르면 그 문장이 붙어요. 그냥 물어봐도 됩니다.'}
             </p>
           )}
-          {chatMode && messages.length === 0 && !notConfigured && history.length > 0 && (
+          {chatMode && !page && messages.length === 0 && !notConfigured && history.length > 0 && (
             // 최근 대화가 먼저 — 문서에서 시작한 대화도 같은 대화라 섞어 보여 주고 표시만 다르다
             <div className="rounded-lg border border-slate-800">
               <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold tracking-wide text-slate-500">최근 대화</div>
@@ -633,11 +693,11 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
           )}
           {messages.map((m) =>
             m.role === 'user' ? (
-              <div key={m.id} className="ml-6 self-end whitespace-pre-wrap rounded-2xl rounded-br-sm bg-sky-700 px-3 py-2 text-slate-50">
+              <div key={m.id} className={`ml-6 self-end whitespace-pre-wrap rounded-2xl rounded-br-sm bg-accent-700 px-3 py-2 text-slate-50 ${page ? 'max-w-[640px]' : ''}`}>
                 {m.content}
               </div>
             ) : (
-              <div key={m.id} className="relative mr-2 rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900 px-3 py-2 pr-9 text-slate-200">
+              <div key={m.id} className={`relative mr-2 rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900 px-3 py-2 pr-9 text-slate-200 ${page ? 'max-w-[640px]' : ''}`}>
                 {thread && typeof m.id === 'number' && m.id > 0 && (
                   // 답 골라 담기 — 평소엔 흐리게, 하나라도 고르면 전부 또렷하게 (파일 트리의 선택 모드와 같은 규칙)
                   <button
@@ -743,9 +803,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
             </div>
           )}
         </div>
-      )}
+        </div>
+  );
 
+  const composer = (
       <div className="border-t border-slate-800 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pc:pb-2">
+        <div className={page ? 'mx-auto w-full max-w-3xl' : ''}>
         {picking && thread && (
           <div className="mb-1.5 flex items-center gap-2 rounded-md border border-teal-900 bg-teal-950/40 px-2.5 py-1.5 text-xs">
             <span className="text-slate-200"><b className="text-teal-300">{picked.size}</b>개 답 골라짐</span>
@@ -857,7 +920,12 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
               ? '문서 전체가 아니라 드래그한 문장의 앞뒤 문단만 AI에 보냅니다'
               : '문서 전체가 아니라 고른 문장의 앞뒤 문단만 AI에 보냅니다'}
         </p>
+        </div>
       </div>
+  );
+
+  const dialogs = (
+    <>
       {rowMenu && <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} onClose={() => setRowMenu(null)} />}
       {save && thread && (
         <CardSaveDialog
@@ -891,13 +959,54 @@ export default function AskPanel({ file, inline = false, seed, pendingQuote, pen
     </>
   );
 
-  if (inline) {
-    // 레일 패널 안 — 폭·위치는 부모(Workspace의 aside)가 정한다 (SCR-187)
-    return <div className="flex min-h-0 flex-1 flex-col">{body}</div>;
+  const body = (
+    <>
+      {header}
+      {showHistory ? historyView : conversation}
+      {composer}
+      {dialogs}
+    </>
+  );
+
+  if (page) {
+    // SCR-188 대화 화면 — PC: 왼쪽 목록(288px) + 오른쪽 본문(말풍선 최대 640px). 폰: 목록 → 본문 푸시 (IA — 안 B)
+    if (isPc) {
+      return (
+        <div className="flex min-h-0 flex-1">
+          <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800">
+            {listHeader}
+            {historyView}
+          </aside>
+          <div className="flex min-w-0 flex-1 flex-col">
+            {header}
+            {conversation}
+            {composer}
+          </div>
+          {dialogs}
+        </div>
+      );
+    }
+    return showList ? (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {listHeader}
+        {historyView}
+        {dialogs}
+      </div>
+    ) : (
+      <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+    );
   }
   if (isPc) {
-    // 버전 기록 패널과 같은 자리·같은 폭 (IA — SCR-180)
-    return <aside className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-950">{body}</aside>;
+    // 오른쪽 질문 패널(SCR-180 개정) — 폭은 왼쪽 모서리를 끌어 320~560px, 좁은 창에서는 본문 위에 덮인다
+    return (
+      <aside
+        className={`relative flex shrink-0 flex-col border-l border-slate-800 bg-slate-950 ${wide ? '' : 'absolute inset-y-0 right-0 z-30 max-w-full shadow-2xl shadow-black/50'}`}
+        style={{ width: askWidth }}
+      >
+        <div onPointerDown={startResize} title="끌어서 폭 조절" className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent-500/40" />
+        {body}
+      </aside>
+    );
   }
   return (
     <>

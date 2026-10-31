@@ -55,6 +55,8 @@ import { formatDateTime } from '../lib/date';
 import { IS_TOUCH } from '../lib/device';
 
 type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings';
+/** 사이드 패널이 아니라 본문 전체를 쓰는 것들 (IA — 안 B) */
+const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['settings', 'chat']);
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
@@ -167,9 +169,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
   const [panel, setPanel] = useState<Panel>('files');
-  // 설정 페이지(SCR-140 개정)는 본문 전체를 쓴다 — 어느 카테고리·항목으로 들어왔는지, 닫으면 어느 패널로 돌아갈지
+  // 설정(SCR-140 개정)과 대화(SCR-188)는 패널이 아니라 본문 전체를 쓰는 "페이지"다 — 닫으면 그 전 패널로 돌아간다
   const [settingsTarget, setSettingsTarget] = useState<SettingsTarget | null>(null);
-  const panelBeforeSettings = useRef<Panel>('files');
+  const panelBeforePage = useRef<Panel>('files');
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagFilter, setTagFilter] = useState<number | null>(null);
@@ -1317,24 +1319,30 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
-  /** 설정 페이지 열기 — 본문을 덮으므로 터치 서랍은 닫고, 닫을 때 돌아갈 패널을 기억한다 */
-  const openSettings = (target: SettingsTarget | null = null) => {
-    if (panel !== 'settings') panelBeforeSettings.current = panel;
-    setSettingsTarget(target ? { ...target } : target);
-    setPanel('settings');
+  /** 본문 전체 페이지(설정·대화) 열기 — 본문을 덮으므로 터치 서랍은 닫고, 닫을 때 돌아갈 패널을 기억한다 */
+  const openPage = (p: Panel) => {
+    if (!PAGE_PANELS.has(panel)) panelBeforePage.current = panel;
+    setPanel(p);
     setPanelCollapsed(false);
     setDrawerOpen(false);
   };
-  const closeSettings = () => {
-    setPanel(panelBeforeSettings.current);
+  const closePage = () => {
+    setPanel(panelBeforePage.current);
     setSettingsTarget(null);
   };
+  const openSettings = (target: SettingsTarget | null = null) => {
+    setSettingsTarget(target ? { ...target } : target);
+    openPage('settings');
+  };
+  const closeSettings = closePage;
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
-        if (target === 'settings') {
-          if (panel === 'settings') closeSettings();
-          else openSettings();
+        if (PAGE_PANELS.has(target)) {
+          // 페이지는 접는 게 아니라 닫는다 — 다시 누르면 그 전 패널로
+          if (panel === target) closePage();
+          else if (target === 'settings') openSettings();
+          else openPage(target);
           return;
         }
         // VS Code 방식: 활성 패널의 버튼을 다시 누르면 패널을 접는다
@@ -1453,11 +1461,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       </div>
 
       {/* 접힘은 PC 전용 — 터치 드로어에서는 패널이 곧 내비게이션이라 항상 펼친다 */}
-      {/* 설정은 패널이 아니라 본문 전체 페이지다(SCR-140 개정) — 그때는 사이드 패널을 그리지 않는다 */}
-      {panel !== 'settings' && (
+      {/* 설정·대화는 패널이 아니라 본문 전체 페이지다(SCR-140 개정·SCR-188) — 그때는 사이드 패널을 그리지 않는다 */}
+      {!PAGE_PANELS.has(panel) && (
       <aside
-        // 대화 패널만 PC에서 넓다(문서 질문 패널과 같은 384px) — 답이 길어 288px에서는 읽기 답답하다 (SCR-187)
-        className={`flex shrink-0 flex-col border-r border-slate-800 ${panel === 'chat' ? 'w-72 pc:w-96' : 'w-72'} ${panelCollapsed ? 'pc:hidden' : ''}`}
+        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 ${panelCollapsed ? 'pc:hidden' : ''}`}
       >
         <div className="flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
@@ -1695,11 +1702,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         )}
 
-        {panel === 'chat' && (
-          // SCR-187: 대화 — 문서 없이 시작하는 챗봇. 패널을 떠나도 언마운트하지 않아야 대화가 살지만,
-          // 서버에 자동 저장되므로 다시 열면 "최근 대화"에서 이어 간다 (첫 판은 단순하게)
-          <AskPanel file={null} inline seed={null} pendingQuote={null} onConsumePendingQuote={() => {}} onOpenFile={(f) => void selectFile(f)} isPc={!IS_TOUCH} onClose={() => setPanelCollapsed(true)} />
-        )}
         {panel === 'briefing' && canSeeBriefing && (
           <BriefingPanel
             readOnly={user.role !== 'admin'}
@@ -1716,6 +1718,25 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       <main className="relative flex min-w-0 flex-1 flex-col">
         {/* 설정 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정).
             z-20: 뷰어의 오버레이 헤더와 같은 층이지만 DOM 뒤라 위에 그려진다. 터치의 ☰(z-30)은 그대로 보인다 */}
+        {panel === 'chat' && (
+          // SCR-187·188: 대화 — 문서 없이 시작하는 챗봇을 본문 전체에. 페이지를 떠나면 언마운트되지만
+          // 서버에 자동 저장되므로 다시 열면 목록에서 이어 간다
+          <div className="absolute inset-0 z-20 flex flex-col bg-slate-950">
+            <AskPanel
+              file={null}
+              page
+              seed={null}
+              pendingQuote={null}
+              onConsumePendingQuote={() => {}}
+              onOpenFile={(f) => {
+                closePage();
+                void selectFile(f);
+              }}
+              isPc={!IS_TOUCH}
+              onClose={closePage}
+            />
+          </div>
+        )}
         {panel === 'settings' && (
           <div className="absolute inset-0 z-20 flex flex-col bg-slate-950">
             <SettingsPage

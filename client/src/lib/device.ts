@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 // 기기 판정 한 곳 — CSS의 pc:/touch: 변형(index.css)과 같은 질문을 JS에서도 한다.
 // 화면 너비가 아니라 "입력 방식"으로 가른다: 폰을 눕혀 넓어져도 터치 기기면 터치 UI를 유지.
 // 기기 특성이라 실행 중 안 바뀌므로 한 번만 잰다 (IA — 모바일 재편).
@@ -11,3 +13,15 @@ export const IS_TOUCH = !window.matchMedia(PC_QUERY).matches;
 export const IS_PC = !IS_TOUCH;
 
 export const PC_MEDIA_QUERY = PC_QUERY;
+
+/** 창 너비가 px 이상인가 — 레이아웃 판정(기기 판정과 달리 실행 중 바뀐다) */
+export function useMinWidth(px: number): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(`(min-width: ${px}px)`).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${px}px)`);
+    const onChange = () => setMatches(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [px]);
+  return matches;
+}

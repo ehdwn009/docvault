@@ -47,3 +47,10 @@ export const REVIEW_MAX_INTERVAL_DAYS = 60;
 
 /** 질문 때 함께 보내는 카드 수 상한 — 서버 CARD.ASK_CONTEXT_MAX_CARDS와 같아야 한다 */
 export const ASK_CONTEXT_MAX_CARDS = 3;
+
+/** 오른쪽 질문 패널(SCR-180)의 폭 — 드래그로 조절하고 기기가 기억한다 (IA — 안 B) */
+export const ASK_PANEL_WIDTH_MIN = 320;
+export const ASK_PANEL_WIDTH_MAX = 560;
+export const ASK_PANEL_WIDTH_DEFAULT = 384;
+/** 이보다 좁은 창에서는 질문 패널이 본문을 밀지 않고 위에 덮인다 */
+export const ASK_PANEL_OVERLAY_BELOW = 1024;
