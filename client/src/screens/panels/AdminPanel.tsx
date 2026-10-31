@@ -31,7 +31,7 @@ type AdminTreeUser = {
   }[];
 };
 
-type Tab = 'stats' | 'users' | 'tree' | 'ai' | 'perf';
+export type AdminTab = 'stats' | 'users' | 'tree' | 'ai' | 'perf';
 
 type UsageRow = {
   id: number; username: string; displayName: string | null;
@@ -45,11 +45,11 @@ type AskUsage = {
   pricing: { models: { id: string; name: string; inputPerMtok: number; outputPerMtok: number }[]; searchPer1000: number; krwPerUsd: number };
 };
 
-type Props = { meId: number; onSelectFile: (file: TreeFile) => void };
+type Props = { tab: AdminTab; meId: number; onSelectFile: (file: TreeFile) => void };
 
-// SCR-300: 관리자 — 대시보드(301)·사용자 관리(302)·전체 파일(303)·AI 사용량(305)·성능(306)
-export default function AdminPanel({ meId, onSelectFile }: Props) {
-  const [tab, setTab] = useState<Tab>('users');
+// SCR-300: 관리자 — 통계(301)·사용자(302)·전체 파일(303)·AI 사용량(305)·성능(306).
+// 어느 화면을 보일지는 설정 페이지("나" › 앱 운영)의 카테고리가 정한다 — 가로 스크롤 탭은 없어졌다 (IA — 안 B)
+export default function AdminPanel({ tab, meId, onSelectFile }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [treeUsers, setTreeUsers] = useState<AdminTreeUser[]>([]);
@@ -77,31 +77,10 @@ export default function AdminPanel({ meId, onSelectFile }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex gap-1 overflow-x-auto px-3 pb-2">
-        {(
-          [
-            ['stats', '통계'],
-            ['users', '사용자'],
-            ['tree', '전체 파일'],
-            ['ai', 'AI 사용량'],
-            ['perf', '성능'],
-          ] as [Tab, string][]
-        ).map(([t, label]) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`shrink-0 whitespace-nowrap rounded px-2 py-1 text-xs transition ${
-              tab === t ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {error && <p className="px-3 pb-2 text-xs text-red-400">{error}</p>}
+    <div className="py-3">
+      {error && <p className="pb-2 text-xs text-danger-400">{error}</p>}
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 pb-4">
+      <div className="max-w-2xl">
         {tab === 'stats' && stats && (
           <dl className="space-y-2 text-sm">
             {(

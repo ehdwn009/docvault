@@ -40,11 +40,11 @@ import { runGuarded } from '../lib/guard';
 import { downloadArchive, downloadFile } from '../lib/download';
 import { toast } from '../lib/toast';
 import { BRIEFING_FOLDER_NAME, BRIEFING_READ_EVENT, BRIEFING_SOURCES_FILE_NAME } from '../lib/briefing';
-import AdminPanel from './panels/AdminPanel';
 import BriefingPanel from './panels/BriefingPanel';
 import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
-import SettingsPanel from './panels/SettingsPanel';
+import SettingsPage from './settings/SettingsPage';
+import type { SettingsTarget } from './settings/catalog';
 import SharedPanel from './panels/SharedPanel';
 import AskPanel from '../components/AskPanel';
 import Icon, { type IconName } from '../components/Icon';
@@ -54,7 +54,7 @@ import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
 import { IS_TOUCH } from '../lib/device';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings' | 'admin';
+type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings';
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
@@ -65,7 +65,6 @@ const PANEL_TITLE: Record<Panel, string> = {
   chat: '대화',
   briefing: '뉴스 브리핑',
   settings: '설정',
-  admin: '관리자',
 };
 
 /** 공유 트리 항목을 뷰어가 받는 TreeFile 형태로 맞춘다 (내 트리에 없는 파일) */
@@ -168,6 +167,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
   const [panel, setPanel] = useState<Panel>('files');
+  // 설정 페이지(SCR-140 개정)는 본문 전체를 쓴다 — 어느 카테고리·항목으로 들어왔는지, 닫으면 어느 패널로 돌아갈지
+  const [settingsTarget, setSettingsTarget] = useState<SettingsTarget | null>(null);
+  const panelBeforeSettings = useRef<Panel>('files');
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagFilter, setTagFilter] = useState<number | null>(null);
@@ -1308,16 +1310,33 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
-  const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings', admin: 'admin' };
+  const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings' };
   // 터치 서랍에서는 아이콘 밑에 이름을 붙인다 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
-  const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정', admin: '관리자' };
+  const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition touch:h-auto touch:min-h-11 touch:w-14 touch:flex-col touch:gap-0.5 touch:py-1.5';
   const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
+  /** 설정 페이지 열기 — 본문을 덮으므로 터치 서랍은 닫고, 닫을 때 돌아갈 패널을 기억한다 */
+  const openSettings = (target: SettingsTarget | null = null) => {
+    if (panel !== 'settings') panelBeforeSettings.current = panel;
+    setSettingsTarget(target ? { ...target } : target);
+    setPanel('settings');
+    setPanelCollapsed(false);
+    setDrawerOpen(false);
+  };
+  const closeSettings = () => {
+    setPanel(panelBeforeSettings.current);
+    setSettingsTarget(null);
+  };
   const railButton = (target: Panel, label: string) => (
     <button
       onClick={() => {
+        if (target === 'settings') {
+          if (panel === 'settings') closeSettings();
+          else openSettings();
+          return;
+        }
         // VS Code 방식: 활성 패널의 버튼을 다시 누르면 패널을 접는다
         if (panel === target) setPanelCollapsed((v) => !v);
         else {
@@ -1412,7 +1431,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {canSeeBriefing && railButton('briefing', '뉴스 브리핑')}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
         {railButton('settings', '설정')}
-        {user.role === 'admin' && railButton('admin', '관리자')}
+        {/* 관리자 화면들은 설정 페이지의 "앱 운영" 카테고리 — 이 버튼은 그 첫 칸(사용자)으로 가는 바로 가기 */}
+        {user.role === 'admin' && (
+          <button
+            onClick={() => openSettings({ category: 'users' })}
+            title="관리자"
+            className={`${railClass} ${panel === 'settings' && settingsTarget && ['users', 'stats', 'tree', 'ai', 'perf'].includes(settingsTarget.category) ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
+          >
+            <Icon name="admin" />
+            {railLabel('관리자')}
+          </button>
+        )}
         <button
           onClick={handleLogout}
           title={`로그아웃 (${user.displayName ?? user.username})`}
@@ -1424,6 +1453,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       </div>
 
       {/* 접힘은 PC 전용 — 터치 드로어에서는 패널이 곧 내비게이션이라 항상 펼친다 */}
+      {/* 설정은 패널이 아니라 본문 전체 페이지다(SCR-140 개정) — 그때는 사이드 패널을 그리지 않는다 */}
+      {panel !== 'settings' && (
       <aside
         // 대화 패널만 PC에서 넓다(문서 질문 패널과 같은 384px) — 답이 길어 288px에서는 읽기 답답하다 (SCR-187)
         className={`flex shrink-0 flex-col border-r border-slate-800 ${panel === 'chat' ? 'w-72 pc:w-96' : 'w-72'} ${panelCollapsed ? 'pc:hidden' : ''}`}
@@ -1673,29 +1704,40 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <BriefingPanel
             readOnly={user.role !== 'admin'}
             onOpenFile={openFileById}
-            onOpenSettings={() => setPanel('settings')}
+            onOpenSettings={() => openSettings({ category: 'briefing' })}
             onOpenSources={openBriefingSources}
           />
         )}
-        {panel === 'settings' && (
-          <SettingsPanel
-            settings={settings}
-            onChange={changeSettings}
-            onShowChangelog={showChangelog}
-            onShowShortcuts={() => setShortcutsOpen(true)}
-            isAdmin={user.role === 'admin'}
-            onOpenBriefingSources={openBriefingSources}
-          />
-        )}
-
-        {panel === 'admin' && user.role === 'admin' && (
-          <AdminPanel meId={user.id} onSelectFile={(f) => void selectFile(f)} />
-        )}
       </aside>
+      )}
       </div>
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        {/* 설정 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정).
+            z-20: 뷰어의 오버레이 헤더와 같은 층이지만 DOM 뒤라 위에 그려진다. 터치의 ☰(z-30)은 그대로 보인다 */}
+        {panel === 'settings' && (
+          <div className="absolute inset-0 z-20 flex flex-col bg-slate-950">
+            <SettingsPage
+              user={user}
+              settings={settings}
+              onChange={changeSettings}
+              target={settingsTarget}
+              onShowChangelog={showChangelog}
+              onShowShortcuts={() => setShortcutsOpen(true)}
+              onOpenBriefingSources={() => {
+                closeSettings();
+                openBriefingSources();
+              }}
+              onSelectFile={(f) => {
+                closeSettings();
+                void selectFile(f);
+              }}
+              onLogout={() => void handleLogout()}
+              onClose={closeSettings}
+            />
+          </div>
+        )}
         {/* 터치에서는 탭 바 대신 문서 스위처 시트를 쓴다 (IA — 모바일 재편) */}
         {!IS_TOUCH && tabs.length > 0 && !immersive && (
           <TabBar
@@ -1882,9 +1924,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           onClose={closeWelcome}
           onOpenSettings={() => {
             closeWelcome();
-            openPanel('settings');
-            // 비밀번호 칸은 설정 패널 아래쪽이라 열기만 하면 안 보인다 — 패널이 그려진 뒤 그 칸으로 내린다
-            window.setTimeout(() => document.getElementById('settings-password')?.scrollIntoView({ block: 'start' }), 100);
+            // 설정 페이지의 계정 › 비밀번호 줄을 펼친 채로 연다
+            openSettings({ category: 'account', item: 'password' });
           }}
         />
       )}
