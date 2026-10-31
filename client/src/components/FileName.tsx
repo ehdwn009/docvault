@@ -43,7 +43,8 @@ export default function FileName({ name, expanded = false, wrap = false, hideExt
 
   if (wrap) {
     return (
-      <span title={name} className={`min-w-0 wrap-anywhere ${expanded ? '' : 'line-clamp-2'} ${className}`}>
+      // [word-break:break-word]: overflow-wrap: anywhere를 모르는 옛 iOS Safari용 예비 규칙 — 없으면 긴 이름이 칸을 밀어 홈이 가로로 넘쳤다 (아이폰 웹앱 보고 2026-10-31)
+      <span title={name} className={`min-w-0 wrap-anywhere [word-break:break-word] ${expanded ? '' : 'line-clamp-2'} ${className}`}>
         {withBreaks(shown)}
       </span>
     );
