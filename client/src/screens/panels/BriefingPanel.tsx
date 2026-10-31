@@ -239,45 +239,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
   const nextAutoToday = !!admin && admin.autoEnabled && admin.nextAutoAt !== null && kstToday(admin.nextAutoAt) === today && !running;
   const nextTimerAt = admin?.nextAutoSlot ? admin.schedule.timers.find((t) => t.id === admin.nextAutoSlot)?.at : undefined;
 
-  return (
-    <div className={home ? 'relative' : 'relative min-h-0 flex-1 overflow-y-auto pb-8'}>
-      {/* 설정 단추 — 자동 생성 설정 · 수집 목록 · 실행 기록 */}
-      {admin && !home && (
-        <div className="flex justify-end px-2">
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-label="브리핑 설정"
-            aria-expanded={menuOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
-          >
-            <Icon name="sliders" size={18} />
-          </button>
-        </div>
-      )}
-      {/* 열람 계정 — 누가 만든 브리핑인지, 그리고 읽기만 된다는 것 */}
-      {readOnly && !home && (
-        <p className="px-4 pt-4 text-xs text-slate-500">
-          <b className="text-slate-300">{page?.ownerName ?? '관리자'}</b>님이 만든 뉴스 브리핑을 함께 봅니다. 읽음 표시와 틀린 곳 알리기는 내 것으로 따로 남아요
-        </p>
-      )}
-      {menuOpen && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div role="menu" className="absolute right-3 top-10 z-20 w-48 overflow-hidden rounded-md border border-slate-700 bg-slate-900 py-1 text-sm shadow-lg">
-            {[
-              { label: '자동 생성 설정', on: () => (setMenuOpen(false), onOpenSettings()) },
-              { label: '수집 목록 열기', on: () => (setMenuOpen(false), onOpenSources()) },
-              { label: '실행 기록 보기', on: () => void showRuns() },
-            ].map((m) => (
-              <button key={m.label} role="menuitem" onClick={m.on} className="block w-full px-3 py-2.5 text-left text-slate-300 hover:bg-slate-800">
-                {m.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className={`space-y-6 ${home ? '' : 'px-4'} ${readOnly && !home ? 'pt-4' : ''}`}>
+  const todayBlockEl = (
+    <>
         <section>
           <div className="mb-2 flex items-baseline gap-1.5">
             <h3 className="text-sm font-bold text-slate-200">오늘</h3>
@@ -322,6 +285,10 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             })}
           </div>
         </section>
+    </>
+  );
+  const adminBlockEl = (
+    <>
         {admin && (
         <section className="space-y-2">
           {!admin.configured && (
@@ -430,6 +397,52 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             )}
           </section>
         )}
+    </>
+  );
+
+  return (
+    <div className={home ? 'relative' : 'relative min-h-0 flex-1 overflow-y-auto pb-8'}>
+      {/* 설정 단추 — 자동 생성 설정 · 수집 목록 · 실행 기록 */}
+      {admin && !home && (
+        <div className="flex justify-end px-2">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="브리핑 설정"
+            aria-expanded={menuOpen}
+            className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
+          >
+            <Icon name="sliders" size={18} />
+          </button>
+        </div>
+      )}
+      {/* 열람 계정 — 누가 만든 브리핑인지, 그리고 읽기만 된다는 것 */}
+      {readOnly && !home && (
+        <p className="px-4 pt-4 text-xs text-slate-500">
+          <b className="text-slate-300">{page?.ownerName ?? '관리자'}</b>님이 만든 뉴스 브리핑을 함께 봅니다. 읽음 표시와 틀린 곳 알리기는 내 것으로 따로 남아요
+        </p>
+      )}
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+          <div role="menu" className="absolute right-3 top-10 z-20 w-48 overflow-hidden rounded-md border border-slate-700 bg-slate-900 py-1 text-sm shadow-lg">
+            {[
+              { label: '자동 생성 설정', on: () => (setMenuOpen(false), onOpenSettings()) },
+              { label: '수집 목록 열기', on: () => (setMenuOpen(false), onOpenSources()) },
+              { label: '실행 기록 보기', on: () => void showRuns() },
+            ].map((m) => (
+              <button key={m.label} role="menuitem" onClick={m.on} className="block w-full px-3 py-2.5 text-left text-slate-300 hover:bg-slate-800">
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className={`space-y-6 ${home ? '' : 'px-4'} ${readOnly && !home ? 'pt-4' : ''}`}>
+        {/* 홈에서는 오늘 회차가 먼저(읽을 것이 먼저), 패널에서는 경고·진행·만들기가 먼저 */}
+        {home && todayBlockEl}
+        {adminBlockEl}
+        {!home && todayBlockEl}
 
         {home && readOnly && pastDays.length > 0 && (
           <button onClick={() => setPastOpen((v) => !v)} className="text-xs text-slate-500 hover:text-slate-300">{pastOpen ? '지난 브리핑 접기' : '지난 브리핑 ›'}</button>

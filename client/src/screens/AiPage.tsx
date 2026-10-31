@@ -19,11 +19,17 @@ type Props = {
   listSignal?: number;
   /** 두 열(PC·펼친 폰) */
   twoColumn?: boolean;
+  /** 탭이 바뀌면 부모가 기억한다 — 문서를 열었다 ‹로 돌아올 때 같은 탭으로 */
+  onTabChange?: (tab: Tab) => void;
 };
 
 // SCR-189: AI 화면 — 왼쪽 목록 칸 위에 「대화 ｜ 배움 카드」 탭, 오른쪽 본문(대화 SCR-188). 카드를 고르면 뷰어로 연다 (IA — 안 B)
-export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onClose, onViewChange, initialTab = 'chat', listSignal = 0, twoColumn = IS_PC }: Props) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onClose, onViewChange, initialTab = 'chat', listSignal = 0, twoColumn = IS_PC, onTabChange }: Props) {
+  const [tab, setTabState] = useState<Tab>(initialTab);
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    onTabChange?.(t);
+  };
   useEffect(() => {
     if (listSignal > 0) setTab('chat');
   }, [listSignal]);

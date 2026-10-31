@@ -15,7 +15,7 @@ import CardSaveDialog from './CardSaveDialog';
 import ThreadCardsDialog from './ThreadCardsDialog';
 import { useAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
-import { ASK_CONTEXT_MAX_CARDS, ASK_PANEL_OVERLAY_BELOW, ASK_PANEL_WIDTH_DEFAULT, ASK_PANEL_WIDTH_MAX, ASK_PANEL_WIDTH_MIN, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
+import { ASK_CONTEXT_MAX_CARDS, ASK_PANEL_OVERLAY_BELOW, ASK_PANEL_OVERLAY_GUTTER, ASK_PANEL_WIDTH_DEFAULT, ASK_PANEL_WIDTH_MAX, ASK_PANEL_WIDTH_MIN, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
 import { IS_TOUCH, useMinWidth } from '../lib/device';
 import { pushLayer } from '../lib/layers';
 import { useSheetDrag } from '../lib/sheetDrag';
@@ -130,7 +130,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   useEffect(() => {
     if (page) onViewChange?.(showList ? 'list' : 'body');
   }, [page, showList]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 탭을 다시 누르면 목록으로
+  // 탭 재탭 = 그 탭의 뿌리 — 닫기가 아니라 목록으로 (폰 감사 2026-10-31)
   useEffect(() => {
     if (listSignal > 0) setShowList(true);
   }, [listSignal]);
@@ -145,7 +145,13 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
       dismiss();
     }
   }, [page, twoColumn, showList]);
-  useEffect(() => () => bodyLayerRef.current?.(), []);
+  useEffect(
+    () => () => {
+      bodyLayerRef.current?.();
+      bodyLayerRef.current = null;
+    },
+    [],
+  );
   // 홈에서 고른 대화로 바로 — 바뀔 때마다(다른 대화를 고르면) 다시 연다
   useEffect(() => {
     if (page && initialThreadId !== null) void loadThread(initialThreadId);
@@ -1057,7 +1063,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
       <aside
         className={`flex shrink-0 flex-col border-l border-slate-800 bg-slate-950 ${wide ? 'relative' : 'absolute inset-y-0 right-0 z-30 max-w-full shadow-2xl shadow-black/50'}`}
         // 좁은 창에서 덮일 때는 본문이 한 뼘은 보이게 — 펼친 폰(669px)에서 패널이 본문 칸을 통째로 덮었다
-        style={{ width: wide ? askWidth : `min(${askWidth}px, calc(100% - 48px))` }}
+        style={{ width: wide ? askWidth : `min(${askWidth}px, calc(100% - ${ASK_PANEL_OVERLAY_GUTTER}px))` }}
       >
         <div onPointerDown={startResize} title="끌어서 폭 조절" className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent-500/40" />
         {body}

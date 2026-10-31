@@ -48,6 +48,8 @@ type Props = {
   onEditModeChange?: (editing: boolean) => void;
   /** 질문 패널을 오른쪽 열로 그릴지(PC·펼친 폰) — 한 열(접은 폰)은 시트 */
   askTwoColumn?: boolean;
+  /** 터치 도구막대가 화면 바닥에 닿는가(탭 바 없음) — 그때만 안전 여백을 둔다. 탭 바가 있으면 <main> 여백이 이미 비웠다 */
+  toolbarAtScreenBottom?: boolean;
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
@@ -116,7 +118,7 @@ const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC, toolbarAtScreenBottom = true }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -222,7 +224,13 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       dismiss();
     }
   }, [askOpen, askTwoColumn]);
-  useEffect(() => () => askLayerRef.current?.(), []);
+  useEffect(
+    () => () => {
+      askLayerRef.current?.();
+      askLayerRef.current = null;
+    },
+    [],
+  );
   const [askStarted, setAskStarted] = useState(false);
   // 질문을 한 번이라도 보냈나 — 안 보냈으면 새 선택이 문맥을 갈아타고, 보냈으면 인용으로 붙는다 (v0.23.2)
   const [askConversing, setAskConversing] = useState(false);
@@ -1125,7 +1133,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
         // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
         <div ref={toolbarRef} className="absolute inset-x-0 bottom-0 z-20">
           {/* 문서를 읽을 때 탭 바는 숨고 이 도구막대만 남는다 — 화면 바닥에 닿으므로 안전 여백을 둔다 */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur">
+          <div className={`flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 backdrop-blur ${toolbarAtScreenBottom ? 'pb-[calc(env(safe-area-inset-bottom)+8px)]' : ''}`}>
             {actions}
           </div>
         </div>

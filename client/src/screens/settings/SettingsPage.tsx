@@ -76,10 +76,15 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
       d();
     }
   }, [narrow, firstConnectOpen]);
-  useEffect(() => () => {
-    fcLayer.current?.();
-    detailLayer.current?.();
-  }, []);
+  useEffect(
+    () => () => {
+      fcLayer.current?.();
+      fcLayer.current = null;
+      detailLayer.current?.();
+      detailLayer.current = null;
+    },
+    [],
+  );
   /** 바로 가기로 들어온 항목 — 잠깐 테두리를 밝혀 눈이 가게 */
   const [flash, setFlash] = useState<string | null>(null);
   /** 바로 가기로 계정 › 비밀번호에 들어왔다 — 펼친 채로 연다. 다른 카테고리로 옮기면 풀린다 */

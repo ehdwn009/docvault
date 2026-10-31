@@ -39,5 +39,3 @@ window.addEventListener('popstate', (e) => {
   }
 });
 
-/** 열린 층이 있나 — 주소 기반 뒤로 가기 처리(Workspace)가 층 닫기와 겹치지 않게 */
-export const hasLayers = () => stack.length > 0;

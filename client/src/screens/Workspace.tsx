@@ -186,6 +186,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const narrow = IS_TOUCH && wc === 'narrow';
   const selectedRef = useRef<TreeFile | null>(null);
   selectedRef.current = selected;
+  /** 마지막으로 처리한 주소 — 주소가 그대로인 popstate(층 닫기)를 거르기 위해 */
+  const lastPathRef = useRef(location.pathname);
   // 레이아웃(홈 중심 / 이전) — 설정의 스위치가 바꾸면 이벤트로 따라간다
   const [layout, setLayoutState] = useState<AppLayout>(getLayout);
   useEffect(() => {
@@ -198,6 +200,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       const l = getLayout();
       setLayoutState(l);
       setPanel((p) => normalize(p, l));
+      docOriginRef.current = normalize(docOriginRef.current, l);
       panelBeforePage.current = normalize(panelBeforePage.current, l);
       returnPanel.current = normalize(returnPanel.current, l);
     };
@@ -380,6 +383,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       setPanel((p) => (PAGE_PANELS.has(p) ? panelBeforePage.current : p));
       if (opts?.pushUrl !== false && location.pathname !== `/f/${file.id}`) {
         history.pushState({ dvDoc: file.id }, '', `/f/${file.id}`);
+        lastPathRef.current = location.pathname;
       }
     },
     [panes, activeIdx, confirmReplace, ensureTab],
@@ -717,6 +721,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setPanes(restore.panes);
         setActiveIdx(restore.active);
         if (IS_TOUCH) setTouchList(false); // 폰: 되살린 문서를 바로 보여 준다 — 목록은 탭으로
+        docOriginRef.current = getLayout() === 'home' ? 'home' : 'files'; // 되살린 문서의 ‹는 홈으로
         setPanel((p) => (p === 'home' ? 'files' : p)); // 문서가 열리면 홈은 본문에서 비켜난다 — 그새 연 설정·AI는 그대로 (IA — 안 B 홈)
         if (saved?.ratio) setSplitRatio(saved.ratio);
         return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
@@ -789,9 +794,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 뒤로가기/앞으로가기 — URL은 활성 문서 하나만 가리킨다 (탭·분할 구성은 기기에 따로 기억한다)
   useEffect(() => {
     const handler = () => {
+      // 주소(pathname)가 그대로인 뒤로·앞으로는 "층"(질문 시트·대화 본문·설정 상세·브리핑 기사)의 것 — lib/layers.ts·BriefingView가 닫는다. 여기서 화면을 바꾸면 층 하나 닫으려다 페이지가 갈린다 (검수 2026-10-31)
+      if (location.pathname === lastPathRef.current) return;
+      lastPathRef.current = location.pathname;
       const id = fileIdFromPath(location.pathname);
-      // 같은 문서를 가리키는 기록(질문 시트·대화 본문·설정 상세 같은 "층")은 lib/layers.ts가 닫는다 — 여기선 문서를 건드리지 않는다
-      if (id !== null && id === selectedRef.current?.id) return;
+      if (id !== null && id === selectedRef.current?.id) {
+        // 앞으로 가기로 보던 문서에 돌아왔다 — 폰은 목록 층을 내린다
+        if (IS_TOUCH) {
+          setTouchList(false);
+          setPanel((p) => (PAGE_PANELS.has(p) ? panelBeforePage.current : p));
+        }
+        return;
+      }
       if (id === null) {
         if (IS_TOUCH) {
           // 폰: 뒤로 가기는 "맨 위 층 하나 닫기" — 문서를 전부 닫는 게 아니라 온 곳(홈·목록)으로 (폰 감사 2026-10-31)
@@ -1503,7 +1517,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 탭 바는 "가는 곳"을 고를 때만 — 문서를 읽거나 대화 본문에 있을 때는 그 화면의 도구막대만 둔다(바 두 겹 금지, 사용자 결정 2026-10-31).
   // 본문 여백·페이지 바닥도 이 플래그 하나를 따른다 — 어긋나면 숨은 탭 바 자리로 밑의 도구막대가 비친다
   const readingDoc = narrow && !touchList && panes.length > 0 && !PAGE_PANELS.has(panel);
-  const tabBarVisible = IS_TOUCH && !immersive && !editing && !readingDoc && !((panel === 'chat' || panel === 'ai') && chatBody);
+  const tabBarVisible = IS_TOUCH && !immersive && !editing && !readingDoc && !(narrow && (panel === 'chat' || panel === 'ai') && chatBody);
   const tabBar = (
     <nav
       ref={tabBarRef}
@@ -1569,7 +1583,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
       <div
-        className={`z-[25] flex shrink-0 bg-slate-950 narrow:absolute narrow:inset-0 narrow:pb-[var(--page-bottom)] ${
+        className={`z-[25] flex shrink-0 bg-slate-950 narrow:absolute narrow:inset-0 touch:pb-[var(--tab-bar-h)] ${
           !PAGE_PANELS.has(panel) && (touchList || !narrow) ? '' : 'touch:hidden'
         } ${immersive ? 'hidden' : ''}`}
       >
@@ -1977,6 +1991,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             <AiPage
               initialThreadId={aiThreadId}
               initialTab={aiTab}
+              onTabChange={setAiTab}
               listSignal={aiListSignal}
               twoColumn={!narrow}
               onOpenFile={(f) => {
@@ -2100,10 +2115,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                         setTouchList(true);
                         setPanel(docOriginRef.current);
                         if (location.pathname !== '/') history.replaceState(null, '', '/');
+                        lastPathRef.current = location.pathname;
                       }
                     : undefined
                 }
                 askTwoColumn={!narrow}
+                toolbarAtScreenBottom={!tabBarVisible}
                 onEditModeChange={IS_TOUCH ? setEditing : undefined}
               />
             )}

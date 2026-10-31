@@ -54,6 +54,8 @@ export const ASK_PANEL_WIDTH_MAX = 560;
 export const ASK_PANEL_WIDTH_DEFAULT = 384;
 /** 이보다 좁은 창에서는 질문 패널이 본문을 밀지 않고 위에 덮인다 */
 export const ASK_PANEL_OVERLAY_BELOW = 1024;
+/** 덮일 때 본문이 최소한 이만큼은 보이게 남기는 폭(px) — 펼친 폰에서 패널이 본문 칸을 통째로 덮었다 */
+export const ASK_PANEL_OVERLAY_GUTTER = 48;
 
 /** 창 등급(폰 재설계 2026-10-31) — 기기 이름이 아니라 페이지가 받은 폭으로 가른다.
     narrow < 600 ≤ wide < 840 ≤ xwide. 높이 가드: 일반 폰 가로(932×430)는 narrow로 남긴다. 접는 폰의 과도기 크기는 디바운스로 삼킨다 */
