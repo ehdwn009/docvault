@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type UserSettings } from '../../lib/api';
-import { APP_THEMES, applyAppTheme, getAppTheme, type AppThemeId } from '../../lib/appTheme';
+import { ACCENTS, SCHEMES, applyAppTheme, getAppTheme, type AppTheme } from '../../lib/appTheme';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/constants';
 import { downloadArchive } from '../../lib/download';
 import BriefingSettings from './BriefingSettings';
@@ -25,8 +25,13 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
   const [newPassword, setNewPassword] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [withManifest, setWithManifest] = useState(true);
-  // 앱 테마는 기기별 취향이라 서버 설정이 아니라 localStorage (IA — 앱 테마 프리셋)
-  const [appTheme, setAppTheme] = useState<AppThemeId>(getAppTheme);
+  // 앱 테마는 기기별 취향이라 서버 설정이 아니라 localStorage (IA — UI 재설계 안 B, 외관 = 명암 + 강조색)
+  const [appTheme, setAppTheme] = useState<AppTheme>(getAppTheme);
+  function pickTheme(patch: Partial<AppTheme>) {
+    const next = { ...appTheme, ...patch };
+    applyAppTheme(next);
+    setAppTheme(next);
+  }
 
   async function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -53,29 +58,37 @@ export default function SettingsPanel({ settings, onChange, onShowChangelog, onS
       <section>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">앱 테마</h3>
         <p className="mt-1 text-xs text-slate-500">앱 전체(메뉴·패널·탭)의 색. 이 기기에만 적용됩니다.</p>
-        <div className="mt-2 grid grid-cols-3 gap-1.5">
-          {APP_THEMES.map((t) => (
+        <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="명암">
+          {SCHEMES.map((s) => (
             <button
-              key={t.id}
-              onClick={() => {
-                applyAppTheme(t.id);
-                setAppTheme(t.id);
-              }}
-              className={`rounded-md border p-1.5 text-center transition ${
-                appTheme === t.id
-                  ? 'border-sky-500 bg-slate-800'
-                  : 'border-slate-700 hover:border-slate-500'
+              key={s.id}
+              role="radio"
+              aria-checked={appTheme.scheme === s.id}
+              title={s.hint || undefined}
+              onClick={() => pickTheme({ scheme: s.id })}
+              className={`min-h-11 rounded-md border px-2 text-sm transition ${
+                appTheme.scheme === s.id ? 'border-sky-500 bg-slate-800 text-slate-100' : 'border-slate-700 text-slate-300 hover:border-slate-500'
               }`}
             >
-              {/* 색 견본: 배경 위에 표면·강조색 — 고르기 전에 분위기가 보이게 */}
-              <span
-                className="flex h-7 items-center justify-center gap-1 rounded"
-                style={{ background: t.swatch[0] }}
-              >
-                <span className="h-3 w-3 rounded-sm" style={{ background: t.swatch[1] }} />
-                <span className="h-3 w-3 rounded-full" style={{ background: t.swatch[2] }} />
-              </span>
-              <span className="mt-1 block truncate text-[10px] text-slate-400">{t.name}</span>
+              {s.name}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-2" role="radiogroup" aria-label="강조색">
+          <span className="text-xs text-slate-500">강조색</span>
+          {ACCENTS.map((a) => (
+            <button
+              key={a.id}
+              role="radio"
+              aria-checked={appTheme.accent === a.id}
+              aria-label={a.name}
+              title={a.name}
+              onClick={() => pickTheme({ accent: a.id })}
+              className={`grid h-11 w-11 place-items-center rounded-full transition ${
+                appTheme.accent === a.id ? 'ring-2 ring-slate-100' : 'hover:ring-2 hover:ring-slate-600'
+              }`}
+            >
+              <span className="h-6 w-6 rounded-full" style={{ background: a.swatch }} />
             </button>
           ))}
         </div>

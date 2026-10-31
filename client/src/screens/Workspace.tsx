@@ -52,6 +52,7 @@ import PropertiesDialog, { type PropertiesTarget } from '../components/Propertie
 import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
+import { IS_TOUCH } from '../lib/device';
 
 type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings' | 'admin';
 type SortBy = 'name' | 'updated';
@@ -111,10 +112,6 @@ function fileIdFromPath(pathname: string): number | null {
   const m = pathname.match(/^\/f\/(\d+)$/);
   return m ? Number(m[1]) : null;
 }
-
-// CSS의 touch 변형과 같은 판정 — 터치 기기는 탭 바 대신 문서 스위처, 크롬 자동 숨김을 쓴다
-// (기기 특성이라 실행 중 안 바뀌므로 한 번만 잰다) (IA — 모바일 재편)
-const IS_TOUCH = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-100: 워크스페이스 — 아이콘 레일 + 패널 + 본문(뷰어/편집기)
 /** 열린 탭·분할 칸 기억 (기기별, 사용자별) — 열린 문서 id만 둔다. 본문은 열 때 다시 받는다 */

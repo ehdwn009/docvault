@@ -17,6 +17,7 @@ import { finishBoot, timed } from '../lib/bootTiming';
 import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '../renderers';
 import Editor from './Editor';
 import { formatDate, formatDateTime } from '../lib/date';
+import { IS_PC } from '../lib/device';
 
 type Props = {
   file: TreeFile;
@@ -106,9 +107,6 @@ function blockContext(node: Node, root: HTMLElement): string {
 /** 선택 바(물어보기)의 크기·간격 — 선택과 겹치지 않게 띄우는 거리 */
 const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
-
-/** CSS의 pc 변형과 같은 판정 — 터치 기기에서만 다른 동작이 필요할 때 사용 */
-const isPcDevice = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
 export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms }: Props) {
@@ -390,7 +388,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   // 터치: 문장을 고르면 크롬을 펼친다 — 도구막대의 [물어보기]가 그 자리에 있어야 하니까 (떠 있는 바는 iOS 메뉴와 겹쳐 안 쓴다)
   useEffect(() => {
-    if (selection && !isPcDevice()) showChrome();
+    if (selection && !IS_PC) showChrome();
   }, [selection]);
 
   // Ctrl+Shift+A = 질문 (선택이 있으면 그 문장이 붙음) — 활성 칸에서만 (IA — SCR-180)
@@ -512,7 +510,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       // 터치의 크롬은 이 델타만큼 손가락을 따라 접힌다 — 판정·그리기는 lib/chromeCollapse가 든다
       const delta = y - lastScrollYRef.current;
       lastScrollYRef.current = y;
-      if (!isPcDevice() && !selectionRef.current) reportChromeScroll(y, delta);
+      if (!IS_PC && !selectionRef.current) reportChromeScroll(y, delta);
       if (denom !== null) {
         // 짧은 문서는 줄이 의미 없다 — 화면 반 이상 스크롤될 때만 표시
         const next = denom > 300 ? Math.min(100, Math.round((y / denom) * 100)) : null;
@@ -572,7 +570,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   // 크롬 접힘에 태울 요소들 — 진행도는 lib/chromeCollapse가 들고 transform을 DOM에 직접 쓴다 (터치 전용).
   // 훅이라 early return보다 위에 있어야 한다
-  const touch = !isPcDevice();
+  const touch = !IS_PC;
   const headerRef = useChromeTarget(touch ? { dir: 'up' } : null);
   const toolbarRef = useChromeTarget(touch ? { dir: 'down' } : null);
   // HTML은 남의 문서를 iframe에 담는 유일한 경로다 — 우리가 그리는 본문처럼 상단 여백(touch:pt-14)을
@@ -625,7 +623,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     fontScale ?? (data.fileType === 'html' ? settings.htmlFontScale : FONT_SCALE_DEFAULT);
   // 터치 기기에서는 조작을 화면 아래(엄지가 닿는 자리)로 내린다 — CSS의 pc/touch 변형과 같은 판정이고,
   // 기기 특성이라 실행 중에 바뀌지 않으므로 한 번만 재도 된다
-  const isPc = isPcDevice();
+  const isPc = IS_PC;
   const actionButton = (active: boolean) =>
     // whitespace-nowrap이 없으면 폭이 좁을 때 "목 차"처럼 글자가 세로로 접힌다
     `whitespace-nowrap rounded border text-sm ${isPc ? 'px-3 py-1' : 'min-h-11 w-full px-4 py-2'} ${
@@ -893,7 +891,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                     key={i}
                     onClick={() => {
                       h.jump();
-                      if (!isPcDevice()) setShowToc(false); // 터치에선 선택 즉시 드로어를 닫아 본문을 보여준다
+                      if (!IS_PC) setShowToc(false); // 터치에선 선택 즉시 드로어를 닫아 본문을 보여준다
                     }}
                     className="block w-full truncate px-3 py-1 text-left text-[13px] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200 touch:py-2.5 touch:text-sm"
                     style={{ paddingLeft: `${12 + (h.level - 1) * 12}px` }}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { isDarkViewerTheme, type ViewerTheme } from '../lib/api';
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, HTML_SCROLLER_LIMIT } from '../lib/constants';
 import type { RendererSelection, RendererTocItem } from './index';
+import { PC_MEDIA_QUERY } from '../lib/device';
 
 // HTML은 iframe sandbox로 격리 렌더링한다 (아키텍처 — 보안 경계).
 // allow-same-origin은 절대 추가하지 않는다 — 없어야 iframe이 별도 오리진이 되어
@@ -260,7 +261,7 @@ else if(d.type==='docvault:scale')setTimeout(function(){undo();if(on)run()},0)})
 // 상자가 한도를 넘을 때만, 줄바꿈이 가능한 코드형 상자만 바꾼다. 표는 줄바꿈하면 칸이 무너져 스크롤로 남긴다
 function memoryGuardShim(): string {
   return `<script>(function(){
-if(matchMedia('(hover: hover) and (pointer: fine)').matches)return; // PC는 메모리가 넉넉하다 — 문서를 만든 그대로 둔다
+if(matchMedia('${PC_MEDIA_QUERY}').matches)return; // PC는 메모리가 넉넉하다 — 문서를 만든 그대로 둔다
 var LIMIT=${HTML_SCROLLER_LIMIT};
 var run=function(){
 if(!document.body)return;

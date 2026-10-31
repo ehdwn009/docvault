@@ -9,6 +9,7 @@ import { api, ApiError, cardToTreeFile, type CardSummary, type ReviewList, type 
 import { promptDialog } from '../../lib/dialog';
 import { runGuarded } from '../../lib/guard';
 import { toast } from '../../lib/toast';
+import { IS_PC } from '../../lib/device';
 
 type Props = {
   selectedId: number | null;
@@ -235,7 +236,7 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
         <ReviewDialog
           due={review.due}
           tomorrow={review.tomorrow}
-          isPc={window.matchMedia('(hover: hover) and (pointer: fine)').matches}
+          isPc={IS_PC}
           onClose={() => setReviewOpen(false)}
           onGraded={loadReview}
           onOpenCard={(f) => {
@@ -247,7 +248,7 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
       {exportOpen && (
         <ExportCardsDialog
           cards={cards}
-          isPc={window.matchMedia('(hover: hover) and (pointer: fine)').matches}
+          isPc={IS_PC}
           onClose={() => setExportOpen(false)}
           onOpenFile={(f) => {
             setExportOpen(false);

@@ -4,6 +4,7 @@ import { getAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { MarkdownRenderer } from '../renderers';
+import { IS_TOUCH } from '../lib/device';
 
 type Props = {
   file: FileContent;
@@ -30,7 +31,7 @@ export default function Editor({ file, fileName, onSaved, onCancel, onDirtyChang
   // 목록 단축키(스페이스 = 선택, Delete = 삭제)로 처리됐다 (사용성 평가 2026-10-01).
   // 터치 기기는 건드리지 않는다 — 키보드가 저절로 올라와 화면 절반을 가린다
   useEffect(() => {
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    if (IS_TOUCH) return;
     const area = areaRef.current;
     if (!area) return;
     area.focus({ preventScroll: true });

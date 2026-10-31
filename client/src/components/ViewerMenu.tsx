@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SCALE_STEP } from '../lib/constants';
+import { IS_TOUCH } from '../lib/device';
 
 /** 메뉴 한 줄 — 링크(다운로드)와 동작 둘 다 담는다 */
 export type ViewerAction = {
@@ -38,8 +39,6 @@ type Props = {
 const clamp = (v: number) => Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, v));
 
 // 터치 기기에서는 팝오버 대신 바텀 시트로 — 메뉴가 엄지 앞에 오게 (IA — 모바일 재편).
-// 기기 특성이라 실행 중 안 바뀌므로 한 번만 잰다 (CSS pc:/touch: 변형과 같은 판정)
-const IS_TOUCH = !window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // SCR-150의 더보기 메뉴 — 헤더에 버튼이 늘어나는 걸 막으려고 뷰어의 조작을 한곳에 모았다.
 // 여는 버튼까지 이 컴포넌트가 들고 있는 이유: 버튼이 "바깥"으로 판정되면 바깥 클릭이 닫고

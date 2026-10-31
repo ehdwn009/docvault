@@ -11,74 +11,117 @@
   font-size: inherit;
 }
 
-/* ── 앱 테마 (IA — 앱 테마 프리셋) ─────────────────────────────────────────
+/* ── 앱 테마 (IA — UI 재설계 안 B, 외관 = 명암 + 강조색) ────────────────────────
    Tailwind 4의 색 유틸리티는 CSS 변수(var(--color-slate-950) 등)를 참조한다.
-   그래서 [data-app-theme=…] 아래에서 slate(표면·글자)·sky(강조) 램프만 재정의하면
+   그래서 [data-scheme=…]·[data-accent=…] 아래에서 램프만 재정의하면
    컴포넌트 클래스를 한 줄도 안 고치고 앱 전체가 그 색으로 바뀐다.
-   라이트 테마는 램프를 "뒤집는다" — 코드의 의미 체계(bg-slate-950=앱 배경,
-   text-slate-100=본문 글자)가 어두움 기준으로 짜여 있어, 950을 밝게 100을 어둡게
-   주면 의미가 그대로 유지된다. 뷰어 본문·코드 뷰어는 고정 색이라 영향받지 않는다.
+   - data-scheme='light'  : slate(표면·글자)와 의미색(amber·red·emerald·teal) 램프를 뒤집는다.
+     코드의 의미 체계(bg-slate-950=앱 배경, text-slate-100=본문 글자)가 어두움 기준으로
+     짜여 있어, 950을 밝게 100을 어둡게 주면 의미가 그대로 유지된다.
+     의미색은 500·600(단색 버튼)은 그대로 두고 나머지만 뒤집는다 — 버튼 위 흰 글자가 안 죽게.
+   - data-accent=…        : sky(강조) 램프를 고른 색으로 바꾼다. 밝음에서는 그 색을 뒤집은 램프.
+   - 속성이 없으면 어두움·하늘(기본값). '시스템'은 JS(lib/appTheme.ts)가 기기 설정으로 풀어 적는다.
+   뷰어 본문·코드 뷰어는 고정 색이라 영향받지 않는다.
    주의: gray 램프는 건드리지 않는다 — prose(typography)가 gray를 쓴다. */
 
 :root {
   color-scheme: dark; /* 스크롤바·네이티브 컨트롤도 앱과 같은 명암으로 */
 }
 
-/* 그래파이트 — 무채색 다크 (zinc 램프) */
-[data-app-theme='graphite'] {
-  --color-slate-50: #fafafa; --color-slate-100: #f4f4f5; --color-slate-200: #e4e4e7;
-  --color-slate-300: #d4d4d8; --color-slate-400: #a1a1aa; --color-slate-500: #71717a;
-  --color-slate-600: #52525b; --color-slate-700: #3f3f46; --color-slate-800: #27272a;
-  --color-slate-900: #18181b; --color-slate-950: #0b0b0d;
+/* dark: 변형도 기기 설정이 아니라 앱 테마를 따르게 */
+@custom-variant dark (&:where(:root:not([data-scheme='light']), :root:not([data-scheme='light']) *));
+
+/* 의미 토큰 — 새 코드는 램프 이름(sky·amber…)이 아니라 뜻으로 쓴다: bg-accent-600, text-warn-400, border-danger-700, text-good-400, bg-card-600.
+   inline이라 쓰는 자리에서 var()를 다시 읽으므로 위 램프 재정의가 그대로 먹는다. */
+@theme inline {
+  --color-accent-50: var(--color-sky-50); --color-accent-100: var(--color-sky-100); --color-accent-200: var(--color-sky-200);
+  --color-accent-300: var(--color-sky-300); --color-accent-400: var(--color-sky-400); --color-accent-500: var(--color-sky-500);
+  --color-accent-600: var(--color-sky-600); --color-accent-700: var(--color-sky-700); --color-accent-800: var(--color-sky-800);
+  --color-accent-900: var(--color-sky-900); --color-accent-950: var(--color-sky-950);
+  --color-warn-50: var(--color-amber-50); --color-warn-100: var(--color-amber-100); --color-warn-200: var(--color-amber-200);
+  --color-warn-300: var(--color-amber-300); --color-warn-400: var(--color-amber-400); --color-warn-500: var(--color-amber-500);
+  --color-warn-600: var(--color-amber-600); --color-warn-700: var(--color-amber-700); --color-warn-800: var(--color-amber-800);
+  --color-warn-900: var(--color-amber-900); --color-warn-950: var(--color-amber-950);
+  --color-danger-50: var(--color-red-50); --color-danger-100: var(--color-red-100); --color-danger-200: var(--color-red-200);
+  --color-danger-300: var(--color-red-300); --color-danger-400: var(--color-red-400); --color-danger-500: var(--color-red-500);
+  --color-danger-600: var(--color-red-600); --color-danger-700: var(--color-red-700); --color-danger-800: var(--color-red-800);
+  --color-danger-900: var(--color-red-900); --color-danger-950: var(--color-red-950);
+  --color-good-50: var(--color-emerald-50); --color-good-100: var(--color-emerald-100); --color-good-200: var(--color-emerald-200);
+  --color-good-300: var(--color-emerald-300); --color-good-400: var(--color-emerald-400); --color-good-500: var(--color-emerald-500);
+  --color-good-600: var(--color-emerald-600); --color-good-700: var(--color-emerald-700); --color-good-800: var(--color-emerald-800);
+  --color-good-900: var(--color-emerald-900); --color-good-950: var(--color-emerald-950);
+  /* 배움 카드·물어보기 계열 (teal) */
+  --color-card-50: var(--color-teal-50); --color-card-100: var(--color-teal-100); --color-card-200: var(--color-teal-200);
+  --color-card-300: var(--color-teal-300); --color-card-400: var(--color-teal-400); --color-card-500: var(--color-teal-500);
+  --color-card-600: var(--color-teal-600); --color-card-700: var(--color-teal-700); --color-card-800: var(--color-teal-800);
+  --color-card-900: var(--color-teal-900); --color-card-950: var(--color-teal-950);
 }
 
-/* 딥 그린 — 짙은 숲색 표면 + 에메랄드 강조 */
-[data-app-theme='forest'] {
-  --color-slate-50: #f2faf6; --color-slate-100: #e4f5ec; --color-slate-200: #cbe8da;
-  --color-slate-300: #a7d3bf; --color-slate-400: #79b598; --color-slate-500: #569478;
-  --color-slate-600: #40725d; --color-slate-700: #2c5343; --color-slate-800: #1c3a2e;
-  --color-slate-900: #10281e; --color-slate-950: #081711;
+/* ── 명암: 밝음 ── */
+[data-scheme='light'] {
+  color-scheme: light;
+  /* slate 반전 (옛 '페이퍼' 램프) */
+  --color-slate-50: #020617; --color-slate-100: #0f172a; --color-slate-200: #1f2937;
+  --color-slate-300: #334155; --color-slate-400: #475569; --color-slate-500: #64748b;
+  --color-slate-600: #8b98a8; --color-slate-700: #c0c9d4; --color-slate-800: #d8dee6;
+  --color-slate-900: #e9edf1; --color-slate-950: #f4f6f8;
+  /* 하늘 강조(기본) — 의미색과 같은 규칙으로 뒤집는다. 다른 강조색은 아래 [data-accent] 블록이 덮어쓴다 */
+  --color-sky-50: #082f49; --color-sky-100: #0c4a6e; --color-sky-200: #075985;
+  --color-sky-300: #0369a1; --color-sky-400: #0284c7; --color-sky-500: #0ea5e9;
+  --color-sky-600: #0284c7; --color-sky-700: #7dd3fc; --color-sky-800: #bae6fd;
+  --color-sky-900: #e0f2fe; --color-sky-950: #f0f9ff;
+  /* 의미색 — 글자(200~400)는 짙게, 바탕(800~950)은 옅게, 단색 버튼(500·600)은 그대로 */
+  --color-amber-50: #451a03; --color-amber-100: #78350f; --color-amber-200: #92400e;
+  --color-amber-300: #b45309; --color-amber-400: #d97706;
+  --color-amber-700: #fcd34d; --color-amber-800: #fde68a; --color-amber-900: #fef3c7; --color-amber-950: #fffbeb;
+  --color-red-50: #450a0a; --color-red-100: #7f1d1d; --color-red-200: #991b1b;
+  --color-red-300: #b91c1c; --color-red-400: #dc2626;
+  --color-red-700: #fca5a5; --color-red-800: #fecaca; --color-red-900: #fee2e2; --color-red-950: #fef2f2;
+  --color-emerald-50: #022c22; --color-emerald-100: #064e3b; --color-emerald-200: #065f46;
+  --color-emerald-300: #047857; --color-emerald-400: #059669;
+  --color-emerald-700: #6ee7b7; --color-emerald-800: #a7f3d0; --color-emerald-900: #d1fae5; --color-emerald-950: #ecfdf5;
+  --color-teal-50: #042f2e; --color-teal-100: #134e4a; --color-teal-200: #115e59;
+  --color-teal-300: #0f766e; --color-teal-400: #0d9488;
+  --color-teal-700: #5eead4; --color-teal-800: #99f6e4; --color-teal-900: #ccfbf1; --color-teal-950: #f0fdfa;
+}
+
+/* ── 강조색: 어두움 ── */
+[data-accent='emerald'] {
   --color-sky-50: #ecfdf5; --color-sky-100: #d1fae5; --color-sky-200: #a7f3d0;
   --color-sky-300: #6ee7b7; --color-sky-400: #34d399; --color-sky-500: #10b981;
   --color-sky-600: #059669; --color-sky-700: #047857; --color-sky-800: #065f46;
   --color-sky-900: #064e3b; --color-sky-950: #022c22;
 }
-
-/* 오베르진 — 가지색 표면 + 보라 강조 */
-[data-app-theme='aubergine'] {
-  --color-slate-50: #f8f1fb; --color-slate-100: #efe2f4; --color-slate-200: #ddc9e6;
-  --color-slate-300: #c5a8d3; --color-slate-400: #a37fb5; --color-slate-500: #825b95;
-  --color-slate-600: #654078; --color-slate-700: #4a2c5a; --color-slate-800: #352040;
-  --color-slate-900: #241329; --color-slate-950: #150a19;
+[data-accent='violet'] {
   --color-sky-50: #f5f3ff; --color-sky-100: #ede9fe; --color-sky-200: #ddd6fe;
   --color-sky-300: #c4b5fd; --color-sky-400: #a78bfa; --color-sky-500: #8b5cf6;
   --color-sky-600: #7c3aed; --color-sky-700: #6d28d9; --color-sky-800: #5b21b6;
   --color-sky-900: #4c1d95; --color-sky-950: #2e1065;
 }
-
-/* 페이퍼 — 라이트 (슬레이트 램프 반전) */
-[data-app-theme='paper'] {
-  color-scheme: light;
-  --color-slate-50: #020617; --color-slate-100: #0f172a; --color-slate-200: #1f2937;
-  --color-slate-300: #334155; --color-slate-400: #475569; --color-slate-500: #64748b;
-  --color-slate-600: #8b98a8; --color-slate-700: #c0c9d4; --color-slate-800: #d8dee6;
-  --color-slate-900: #e9edf1; --color-slate-950: #f4f6f8;
-  --color-sky-50: #082f49; --color-sky-100: #0c4a6e; --color-sky-200: #075985;
-  --color-sky-300: #0369a1; --color-sky-400: #0284c7; --color-sky-500: #0ea5e9;
-  --color-sky-600: #38bdf8; --color-sky-700: #7cc8f4; --color-sky-800: #a9d4f5;
-  --color-sky-900: #d3e9fb; --color-sky-950: #e8f4fd;
+[data-accent='amber'] {
+  --color-sky-50: #fffbeb; --color-sky-100: #fef3c7; --color-sky-200: #fde68a;
+  --color-sky-300: #fcd34d; --color-sky-400: #fbbf24; --color-sky-500: #f59e0b;
+  --color-sky-600: #d97706; --color-sky-700: #b45309; --color-sky-800: #92400e;
+  --color-sky-900: #78350f; --color-sky-950: #451a03;
 }
 
-/* 아이보리 — 라이트 웜 (미색 표면 + 앰버 강조) */
-[data-app-theme='ivory'] {
-  color-scheme: light;
-  --color-slate-50: #0f0d0a; --color-slate-100: #1b1915; --color-slate-200: #2d2a22;
-  --color-slate-300: #423d32; --color-slate-400: #5a5344; --color-slate-500: #7a715c;
-  --color-slate-600: #a09478; --color-slate-700: #cec0a0; --color-slate-800: #e3d8bf;
-  --color-slate-900: #f2ead8; --color-slate-950: #faf6ec;
-  --color-sky-50: #271003; --color-sky-100: #451a03; --color-sky-200: #78350f;
-  --color-sky-300: #92400e; --color-sky-400: #b45309; --color-sky-500: #d97706;
-  --color-sky-600: #f59e0b; --color-sky-700: #fcd34d; --color-sky-800: #fde68a;
+/* ── 강조색: 밝음 (의미색과 같은 규칙으로 뒤집은 램프) ── */
+[data-scheme='light'][data-accent='emerald'] {
+  --color-sky-50: #022c22; --color-sky-100: #064e3b; --color-sky-200: #065f46;
+  --color-sky-300: #047857; --color-sky-400: #059669; --color-sky-500: #10b981;
+  --color-sky-600: #059669; --color-sky-700: #6ee7b7; --color-sky-800: #a7f3d0;
+  --color-sky-900: #d1fae5; --color-sky-950: #ecfdf5;
+}
+[data-scheme='light'][data-accent='violet'] {
+  --color-sky-50: #2e1065; --color-sky-100: #4c1d95; --color-sky-200: #5b21b6;
+  --color-sky-300: #6d28d9; --color-sky-400: #7c3aed; --color-sky-500: #8b5cf6;
+  --color-sky-600: #7c3aed; --color-sky-700: #c4b5fd; --color-sky-800: #ddd6fe;
+  --color-sky-900: #ede9fe; --color-sky-950: #f5f3ff;
+}
+[data-scheme='light'][data-accent='amber'] {
+  --color-sky-50: #451a03; --color-sky-100: #78350f; --color-sky-200: #92400e;
+  --color-sky-300: #b45309; --color-sky-400: #d97706; --color-sky-500: #f59e0b;
+  --color-sky-600: #d97706; --color-sky-700: #fcd34d; --color-sky-800: #fde68a;
   --color-sky-900: #fef3c7; --color-sky-950: #fffbeb;
 }
 
