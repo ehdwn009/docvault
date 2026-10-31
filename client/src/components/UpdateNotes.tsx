@@ -1,11 +1,12 @@
 import { Suspense } from 'react';
-import { getAppProseTheme } from '../lib/appTheme';
+import { useAppProseTheme } from '../lib/appTheme';
 import { MarkdownRenderer } from '../renderers';
 
 type Props = { content: string; onClose: () => void };
 
 // 패치노트 모달 — 새 버전 첫 로그인 시 자동 표시 + 설정 → 정보에서 수동 열람 (SCR-144)
 export default function UpdateNotes({ content, onClose }: Props) {
+  const proseTheme = useAppProseTheme();
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -21,7 +22,7 @@ export default function UpdateNotes({ content, onClose }: Props) {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
           <Suspense fallback={<p className="text-sm text-slate-500">불러오는 중…</p>}>
-            <MarkdownRenderer content={content} theme={getAppProseTheme()} />
+            <MarkdownRenderer content={content} theme={proseTheme} />
           </Suspense>
         </div>
         <div className="border-t border-slate-800 px-5 py-3">

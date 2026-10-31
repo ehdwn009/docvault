@@ -25,7 +25,7 @@ export default function RecentList({ files, onSelect, swipe }: Props) {
       </h3>
       {recent.map((file) => (
         <SwipeRow key={file.id} {...swipe(file)}>
-          <ListRow onClick={() => onSelect(file)} muted className="py-0.5 text-[13px]">
+          <ListRow onClick={() => onSelect(file)} muted dense>
             <FileName name={file.name} wrap />
           </ListRow>
         </SwipeRow>

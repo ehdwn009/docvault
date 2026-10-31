@@ -59,8 +59,8 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
         .filter((f) => f.parentId === parentId)
         .map((folder) => (
           <div key={`d${folder.id}`}>
-            <div style={{ paddingLeft: `${depth * 14}px` }}>
-              <ListRow onClick={() => toggleExpand(folder.id)} muted>
+            <div>
+              <ListRow onClick={() => toggleExpand(folder.id)} muted style={{ paddingLeft: `${8 + depth * 14}px` }}>
                 <span className="text-[10px] leading-5">{expanded.has(folder.id) ? '▾' : '▸'}</span>
                 <span className="leading-5">📁</span>
                 <FileName name={folder.name} wrap />
@@ -73,8 +73,8 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
       {files
         .filter((f) => f.folderId === parentId)
         .map((file) => (
-          <div key={file.id} style={{ paddingLeft: `${depth * 14}px` }}>
-            <ListRow onClick={() => onSelect(file)} selected={file.id === selectedId}>
+          <div key={file.id}>
+            <ListRow onClick={() => onSelect(file)} selected={file.id === selectedId} style={{ paddingLeft: `${8 + depth * 14}px` }}>
               <FileName name={file.name} wrap expanded={file.id === selectedId} />
               <span className="ml-auto shrink-0 self-center text-[10px] text-slate-600">{file.ownerName}</span>
             </ListRow>

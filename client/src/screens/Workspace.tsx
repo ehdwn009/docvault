@@ -33,7 +33,7 @@ import {
   type User,
   type UserSettings,
 } from '../lib/api';
-import { useChromeHidden, useChromeTarget } from '../lib/chromeCollapse';
+import { showChrome, useChromeHidden, useChromeTarget } from '../lib/chromeCollapse';
 import { DEFAULT_USER_SETTINGS } from '../lib/constants';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
@@ -46,7 +46,7 @@ import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPage from './settings/SettingsPage';
 import Chip from '../components/ui/Chip';
 import IconButton from '../components/ui/IconButton';
-import type { SettingsTarget } from './settings/catalog';
+import { isAdminCategory, type SettingsTarget } from './settings/catalog';
 import SharedPanel from './panels/SharedPanel';
 import AskPanel from '../components/AskPanel';
 import Icon, { type IconName } from '../components/Icon';
@@ -189,6 +189,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [touchList, setTouchList] = useState(true);
   // 터치: 대화 본문을 보는 중 — 키보드와 탭 바가 다투지 않게 탭 바를 숨긴다 (패턴 G)
   const [chatBody, setChatBody] = useState(false);
+  // 터치: 편집기가 열려 있는 동안 탭 바를 숨긴다 — 키보드와 마지막 줄을 가리지 않게 (검수 2026-10-31)
+  const [editing, setEditing] = useState(false);
+  // 접힌 크롬(탭 바 포함)은 뷰어 스크롤로만 돌아온다 — 문서를 떠나거나 목록·페이지를 열면 되살려 둔다 (검수 2026-10-31)
+  useEffect(() => {
+    if (IS_TOUCH && (panes.length === 0 || touchList || PAGE_PANELS.has(panel))) showChrome();
+  }, [panes.length, touchList, panel]);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set()); // 다중 선택된 파일 id
@@ -298,6 +304,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       }
       ensureTab(file);
       setTouchList(false);
+      // 설정·대화 페이지가 덮고 있으면 내린다 — 검색·드롭·뒤로가기로 연 문서가 페이지 밑에서 열리지 않게 (검수 2026-10-31)
+      setPanel((p) => (PAGE_PANELS.has(p) ? panelBeforePage.current : p));
       if (opts?.pushUrl !== false && location.pathname !== `/f/${file.id}`) {
         history.pushState(null, '', `/f/${file.id}`);
       }
@@ -329,6 +337,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setActiveIdx(panes.length - 1);
       }
       setTouchList(false);
+      setPanel((p) => (PAGE_PANELS.has(p) ? panelBeforePage.current : p));
       if (location.pathname !== `/f/${file.id}`) history.pushState(null, '', `/f/${file.id}`);
     },
     [panes, maxPanes, confirmReplace, ensureTab],
@@ -1318,10 +1327,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
   const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings' };
-  // 터치 서랍에서는 아이콘 밑에 이름을 붙인다 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
+  // 터치의 문서 탭 칩 이름 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
   const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
-  const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition touch:h-auto touch:min-h-11 touch:w-14 touch:flex-col touch:gap-0.5 touch:py-1.5';
-  const railLabel = (text: string) => <span className="text-[10px] leading-none pc:hidden">{text}</span>;
+  const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition';
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
   /** 본문 전체 페이지(설정·대화) 열기 — 닫을 때 돌아갈 패널을 기억한다 */
@@ -1364,7 +1372,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       }`}
     >
       <Icon name={RAIL_ICONS[target]} />
-      {railLabel(RAIL_SHORT[target])}
     </button>
   );
 
@@ -1400,7 +1407,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       aria-label="주 메뉴"
       aria-hidden={chromeHidden}
       className={`fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur pc:hidden ${
-        immersive || (panel === 'chat' && chatBody) ? 'hidden' : ''
+        immersive || editing || (panel === 'chat' && chatBody) ? 'hidden' : ''
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
     >
       {(
@@ -1417,7 +1424,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             key={target}
             onClick={() => pressTab(target)}
             aria-current={active ? 'page' : undefined}
-            className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'text-accent-400' : 'text-slate-500'}`}
+            className={`flex h-[var(--tab-bar-h)] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'text-accent-400' : 'text-slate-500'}`}
           >
             <Icon name={icon} size={22} />
             {label}
@@ -1451,7 +1458,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
       <div
-        className={`z-[25] flex shrink-0 bg-slate-950 touch:absolute touch:inset-0 touch:pb-14 ${
+        className={`z-[25] flex shrink-0 bg-slate-950 touch:absolute touch:inset-0 touch:pb-[var(--tab-bar-h)] ${
           touchList && !PAGE_PANELS.has(panel) ? '' : 'touch:hidden'
         } ${immersive ? 'hidden' : ''}`}
       >
@@ -1464,7 +1471,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           className={`${railClass} text-slate-500 hover:text-slate-200`}
         >
           <Icon name="search" />
-          {railLabel('검색')}
         </button>
         {railButton('files', '내 파일')}
         {railButton('favorites', '즐겨찾기')}
@@ -1480,10 +1486,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <button
             onClick={() => openSettings({ category: 'users' })}
             title="관리자"
-            className={`${railClass} ${panel === 'settings' && settingsTarget && ['users', 'stats', 'tree', 'ai', 'perf'].includes(settingsTarget.category) ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
+            className={`${railClass} ${panel === 'settings' && settingsTarget && isAdminCategory(settingsTarget.category) ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
           >
             <Icon name="admin" />
-            {railLabel('관리자')}
           </button>
         )}
         <button
@@ -1492,7 +1497,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           className={`${railClass} text-slate-600 hover:text-slate-300`}
         >
           <Icon name="logout" />
-          {railLabel('나가기')}
         </button>
       </div>
 
@@ -1750,13 +1754,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       </div>
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
-      <main className="relative flex min-w-0 flex-1 flex-col">
+      {/* 터치: 하단 탭 바 자리를 비운다 — 뷰어 도구막대·분할 칸이 탭 바 밑에 깔리지 않게. 탭 바가 숨는 몰입·편집·대화 본문에서는 비우지 않는다 */}
+      <main className={`relative flex min-w-0 flex-1 flex-col ${IS_TOUCH && !immersive && !editing && !(panel === 'chat' && chatBody) ? 'pb-[var(--tab-bar-h)]' : ''}`}>
         {/* 설정·대화 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정·SCR-188).
-            z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 터치 탭 바(z-30)보다 아래 */}
+            z-[45]: 뷰어 크롬(z-20)·질문 패널 오버레이(z-30)·브리핑 기사 시트(z-40)보다 위, 확인창·팔레트·토스트(z-50)보다 아래.
+            터치는 탭 바 자리(bottom)를 비워 탭 바가 보인다 */}
         {panel === 'chat' && (
           // SCR-187·188: 대화 — 문서 없이 시작하는 챗봇을 본문 전체에. 페이지를 떠나면 언마운트되지만
           // 서버에 자동 저장되므로 다시 열면 목록에서 이어 간다
-          <div className="absolute inset-0 z-[25] flex flex-col bg-slate-950">
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
             <AskPanel
               file={null}
               page
@@ -1774,7 +1780,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </div>
         )}
         {panel === 'settings' && (
-          <div className="absolute inset-0 z-[25] flex flex-col bg-slate-950">
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
             <SettingsPage
               user={user}
               settings={settings}
@@ -1853,6 +1859,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 terms={terms}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
                 onBackToList={IS_TOUCH ? () => setTouchList(true) : undefined}
+                onEditModeChange={IS_TOUCH ? setEditing : undefined}
               />
             )}
           />
@@ -1960,6 +1967,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             setPropsTarget(null);
             setPanel('files');
             setPanelCollapsed(false);
+            setTouchList(true);
             setSelectedFolder(folderId);
           }}
         />
@@ -1993,7 +2001,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {IS_TOUCH && tabBar}
       {newVersionReady && (
-        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 rounded-lg border border-sky-800 bg-slate-900 px-4 py-2.5 shadow-xl">
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 rounded-lg border border-sky-800 bg-slate-900 px-4 py-2.5 shadow-xl touch:bottom-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom)+16px)]">
           <span className="text-sm text-slate-200">새 버전이 배포되었습니다</span>
           <button
             onClick={() => location.reload()}

@@ -13,7 +13,7 @@ import {
 } from '../lib/api';
 import CardSaveDialog from './CardSaveDialog';
 import ThreadCardsDialog from './ThreadCardsDialog';
-import { getAppProseTheme } from '../lib/appTheme';
+import { useAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { ASK_CONTEXT_MAX_CARDS, ASK_PANEL_OVERLAY_BELOW, ASK_PANEL_WIDTH_DEFAULT, ASK_PANEL_WIDTH_MAX, ASK_PANEL_WIDTH_MIN, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
 import { useMinWidth } from '../lib/device';
@@ -103,6 +103,7 @@ const SHEET_EXPANDED_TOP_INSET = 44;
 // file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
 export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose, onViewChange }: Props) {
   const chatMode = file === null;
+  const proseTheme = useAppProseTheme();
   const [status, setStatus] = useState<AskStatus | null>(null);
   // 챗봇: 내 자료 참고 스위치 — 질문마다 바꿀 수 있고 끈 상태를 기기가 기억한다 (기본 꺼짐)
   const [myStuff, setMyStuff] = useState(() => readLocal(MY_STUFF_KEY) === '1');
@@ -530,7 +531,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
       >
         <Icon name="more" size={16} />
       </button>
-      {!page && (
+      {(!page || isPc) && (
         <button onClick={onClose} title="닫기 (대화는 남아 있어요)" aria-label="닫기" className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300">
           <Icon name="close" size={16} />
         </button>
@@ -727,7 +728,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
                 ) : MdRenderer ? (
                   <Suspense fallback={<span className="whitespace-pre-wrap">{m.content}</span>}>
                     <div className="ask-md">
-                      <MdRenderer content={m.content} theme={getAppProseTheme()} />
+                      <MdRenderer content={m.content} theme={proseTheme} />
                     </div>
                   </Suspense>
                 ) : (
@@ -992,7 +993,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     }
     // 목록 뒤에는 하단 탭 바(56px)가 있고, 본문에서는 탭 바가 숨는다 — 키보드와 다투지 않게
     return showList ? (
-      <div className="flex min-h-0 flex-1 flex-col pb-14">
+      <div className="flex min-h-0 flex-1 flex-col pb-[var(--tab-bar-h)]">
         {listHeader}
         {historyView}
         {dialogs}
@@ -1005,7 +1006,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     // 오른쪽 질문 패널(SCR-180 개정) — 폭은 왼쪽 모서리를 끌어 320~560px, 좁은 창에서는 본문 위에 덮인다
     return (
       <aside
-        className={`relative flex shrink-0 flex-col border-l border-slate-800 bg-slate-950 ${wide ? '' : 'absolute inset-y-0 right-0 z-30 max-w-full shadow-2xl shadow-black/50'}`}
+        className={`flex shrink-0 flex-col border-l border-slate-800 bg-slate-950 ${wide ? 'relative' : 'absolute inset-y-0 right-0 z-30 max-w-full shadow-2xl shadow-black/50'}`}
         style={{ width: askWidth }}
       >
         <div onPointerDown={startResize} title="끌어서 폭 조절" className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent-500/40" />

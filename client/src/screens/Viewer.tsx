@@ -5,7 +5,7 @@ import Icon from '../components/Icon';
 import CardView from '../components/CardView';
 import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
-import { api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
+import { isDarkViewerTheme, api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
 import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
 import { fileLabel } from '../lib/briefing';
@@ -43,6 +43,8 @@ type Props = {
   onOpenSwitcher?: () => void;
   /** 터치: 헤더 왼쪽 ‹ — 목록 층으로 돌아간다 (☰·드로어 대체, IA — 안 B 폰) */
   onBackToList?: () => void;
+  /** 편집 모드에 들어가고 나올 때 — 터치는 그동안 하단 탭 바를 숨긴다(키보드·마지막 줄과 겹치지 않게) */
+  onEditModeChange?: (editing: boolean) => void;
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
@@ -111,10 +113,14 @@ const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  useEffect(() => {
+    onEditModeChange?.(mode === 'edit');
+    return () => onEditModeChange?.(false);
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showVersions, setShowVersions] = useState(false);
   const [showToc, setShowToc] = useState(false);
   const [headings, setHeadings] = useState<Heading[]>([]);
@@ -994,7 +1000,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             />
           ) : isBriefing && !showAsCode ? (
             // 브리핑은 폭 설정(좁게·보통)을 따르지 않는다 — 보이는 폭이 넓으면 목록|상세 두 칸이 된다 (SCR-191)
-            <div className="p-4 sm:p-6 touch:pt-14 touch:pb-32" style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}>
+            <div className="theme-free p-4 sm:p-6 touch:pt-14 touch:pb-24" style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}>
               <BriefingView
                 fileId={file.id}
                 content={data.content}
@@ -1014,14 +1020,14 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           ) : (
             <div
               // 터치의 pt·pb: 오버레이 바가 본문 첫·끝 줄을 가리지 않게 하는 상수 공간 (크롬 자동 숨김)
-              className={`mx-auto p-6 touch:pt-14 touch:pb-32 ${WIDTH[settings.contentWidth]}`}
+              className={`theme-free mx-auto p-6 touch:pt-14 touch:pb-24 ${WIDTH[settings.contentWidth]}`}
               // 설정의 글자 크기(px)를 100% 기준으로 두고 파일별 배율을 곱한다 —
               // 안쪽 요소들이 em/rem으로 짜여 있어 제목·본문의 위계가 그대로 따라 커진다
               style={{ fontSize: (settings.fontSize * effectiveScale) / 100 }}
             >
               {foundTerms.length > 0 && file.kind !== 'card' && (
                 // 이 문서에 내 카드가 몇 장 걸리는지 — 밑줄이 왜 그어져 있는지 설명하는 한 줄
-                <p className="mb-4 rounded-md border border-teal-700/40 bg-teal-600/10 px-3 py-1.5 text-xs text-teal-700 dark:text-teal-300">
+                <p className={`mb-4 rounded-md border border-teal-700/40 bg-teal-600/10 px-3 py-1.5 text-xs ${isDarkViewerTheme(settings.viewerTheme) ? 'text-teal-300' : 'text-teal-700'}`}>
                   📚 이 문서에 내 카드 {foundTerms.length}장 · {foundTerms.join(', ')}
                 </p>
               )}
@@ -1102,8 +1108,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       {!isPc && !immersive && (
         // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
         <div ref={toolbarRef} className="absolute inset-x-0 bottom-0 z-20">
-          {/* 하단 탭 바(56px + 안전 영역) 위에 얹힌다 — 몰입 모드에서는 둘 다 숨는다 */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 backdrop-blur" style={{ marginBottom: 'calc(56px + env(safe-area-inset-bottom))' }}>
+          {/* 하단 탭 바 자리는 Workspace의 <main> 여백이 비워 둔다 — 분할 보기의 위 칸에서 도구막대가 떠 있지 않게 */}
+          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 backdrop-blur">
             {actions}
           </div>
         </div>

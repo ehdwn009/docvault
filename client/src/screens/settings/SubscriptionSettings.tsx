@@ -66,9 +66,16 @@ export default function SubscriptionSettings({ onOpenFirstConnect }: Props) {
         <PingControl sub={sub} />
       </SettingRow>
 
-      <SettingRow id={id('times')} title="예약 시각" desc={`예약 작업은 회차 ${Math.round(info.leadMs / 60_000)}분 전에 켜지고, 마감은 회차 ${Math.round(info.deadlineAfterMs / 60_000)}분 뒤예요`}>
-        <Value>{info.triggerTimes.map((t) => `${t.label} ${t.at} → ${t.triggerAt} 켜기`).join(' · ') || '켜 둔 타이머가 없어요'}</Value>
-      </SettingRow>
+      <SettingRow
+        id={id('times')}
+        title="예약 시각"
+        desc={
+          <>
+            예약 작업은 회차 {Math.round(info.leadMs / 60_000)}분 전에 켜지고, 마감은 회차 {Math.round(info.deadlineAfterMs / 60_000)}분 뒤예요
+            <span className="mt-0.5 block text-slate-400">{info.triggerTimes.map((t) => `${t.label} ${t.at} → ${t.triggerAt} 켜기`).join(' · ') || '켜 둔 타이머가 없어요'}</span>
+          </>
+        }
+      />
 
       <SettingRow
         id={id('recent')}

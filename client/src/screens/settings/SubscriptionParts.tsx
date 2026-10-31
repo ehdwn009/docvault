@@ -11,11 +11,11 @@ export const TRIGGER_URL_HINT = 'https://api.anthropic.com/v1/claude_code/routin
 export function FreshTokenBox({ sub }: { sub: Subscription }) {
   if (!sub.freshToken) return null;
   return (
-    <div className="max-w-xl rounded-md border border-warn-700/50 bg-warn-900/20 p-3 text-sm text-warn-500">
+    <div className="max-w-xl rounded-md border border-warn-700/50 bg-warn-900/20 p-3 text-sm text-warn-400">
       <p className="text-xs">이 창을 닫으면 다시 볼 수 없어요 — claude.ai 환경의 네트워크 시크릿(Bearer)의 헤더 값에 넣어 두세요</p>
       <code className="mt-1.5 block break-all rounded bg-slate-950 px-2 py-1.5 text-xs text-slate-200">{sub.freshToken}</code>
       <div className="mt-2 flex gap-2">
-        <button onClick={() => sub.copy(sub.freshToken!, '연결 열쇠를')} className="min-h-11 rounded-md border border-warn-600/60 px-3 text-sm font-semibold text-warn-500 hover:bg-warn-800/40">
+        <button onClick={() => sub.copy(sub.freshToken!, '연결 열쇠를')} className="min-h-11 rounded-md border border-warn-600/60 px-3 text-sm font-semibold text-warn-400 hover:bg-warn-800/40">
           복사
         </button>
         <button onClick={sub.closeFreshToken} className={btnClass}>닫기</button>

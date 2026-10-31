@@ -115,8 +115,8 @@ export default function FirstConnect({ onClose }: Props) {
             ) : (
               <button
                 onClick={() => void sub.changeMode('subscription', mode)}
-                disabled={!sub.ready || info.lastPingResult !== 'ok'}
-                className="min-h-11 rounded-md border border-warn-600/60 px-3 text-sm font-semibold text-warn-500 hover:bg-warn-800/40 disabled:opacity-40"
+                disabled={!sub.ready}
+                className="min-h-11 rounded-md border border-warn-600/60 px-3 text-sm font-semibold text-warn-400 hover:bg-warn-800/40 disabled:opacity-40"
               >
                 구독으로 바꾸기
               </button>

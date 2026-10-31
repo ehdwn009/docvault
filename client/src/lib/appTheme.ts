@@ -3,6 +3,8 @@
 // 여기는 목록·저장·적용만 담당한다.
 // 보기 모드(dv_viewmode)처럼 "기기별 취향"이라 서버 설정이 아니라 localStorage에 둔다.
 
+import { useEffect, useState } from 'react';
+
 export type Scheme = 'system' | 'light' | 'dark';
 export type Accent = 'sky' | 'emerald' | 'violet' | 'amber';
 export type AppTheme = { scheme: Scheme; accent: Accent };
@@ -39,7 +41,12 @@ const isScheme = (v: unknown): v is Scheme => SCHEMES.some((s) => s.id === v);
 const isAccent = (v: unknown): v is Accent => ACCENTS.some((a) => a.id === v);
 
 export function getAppTheme(): AppTheme {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    /* 사생활 모드 등 — 기본값으로 */
+  }
   if (!saved) return DEFAULT_APP_THEME;
   const legacy = LEGACY[saved];
   if (legacy) return legacy;
@@ -85,7 +92,11 @@ function paint() {
 
 export function applyAppTheme(theme: AppTheme) {
   current = theme;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(theme));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(theme));
+  } catch {
+    /* 저장이 막혀도 이번 세션에는 적용한다 */
+  }
   if (!listening) {
     // '시스템'일 때 기기 명암이 바뀌면(해 지면 다크 등) 바로 따라간다
     darkMq().addEventListener('change', () => {
@@ -99,5 +110,16 @@ export function applyAppTheme(theme: AppTheme) {
 /** 앱 껍데기 위에 마크다운(prose)을 그릴 때 쓸 명암 — 문서 뷰어 테마가 아니라 앱 테마를 따른다.
  *  밝은 테마에서 다크용(prose-invert)으로 그리면 밝은 배경에 밝은 글자가 되어 안 읽힌다. */
 export function getAppProseTheme(): 'light' | 'dark' {
-  return resolveScheme(getAppTheme().scheme);
+  return resolveScheme(current.scheme);
+}
+
+/** 렌더 중에 읽는 prose 명암 — 테마가 바뀌면(설정·시스템 명암) 다시 그린다 */
+export function useAppProseTheme(): 'light' | 'dark' {
+  const [theme, setTheme] = useState(getAppProseTheme);
+  useEffect(() => {
+    const on = () => setTheme(getAppProseTheme());
+    window.addEventListener(APP_THEME_EVENT, on);
+    return () => window.removeEventListener(APP_THEME_EVENT, on);
+  }, []);
+  return theme;
 }

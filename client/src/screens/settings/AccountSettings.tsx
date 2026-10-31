@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError, type User } from '../../lib/api';
 import { rowId } from './catalog';
 import SettingRow, { btnClass, inputClass, Value } from './SettingRow';
@@ -13,6 +13,9 @@ type Props = {
 // SCR-142: 계정 — 로그인한 계정·비밀번호 바꾸기(펼침)·나가기
 export default function AccountSettings({ user, openPassword = false, onLogout }: Props) {
   const [pwOpen, setPwOpen] = useState(openPassword);
+  useEffect(() => {
+    if (openPassword) setPwOpen(true);
+  }, [openPassword]);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);

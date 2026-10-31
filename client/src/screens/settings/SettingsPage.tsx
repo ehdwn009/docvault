@@ -27,6 +27,11 @@ type Props = {
   onClose: () => void;
 };
 
+/** 바로 가기로 들어온 항목으로 내리기 전 기다리는 시간 — 카테고리 본문이 데이터를 받아 그려질 여유 */
+const SCROLL_DELAY_MS = 150;
+/** 그 항목의 테두리를 밝혀 두는 시간 */
+const FLASH_MS = 1600;
+
 // SCR-140 (개정): "나" — 본문 전체를 쓰는 설정 페이지. 왼쪽 카테고리(내 취향 / 앱 운영 / 정보), 오른쪽 항목들.
 // 머리에 설정 검색(SCR-405). 폰은 목록 → 상세 2단 푸시 (IA — 안 B "나")
 export default function SettingsPage({ user, settings, onChange, target, onShowChangelog, onShowShortcuts, onOpenBriefingSources, onSelectFile, onLogout, onClose }: Props) {
@@ -37,12 +42,15 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
   const [firstConnectOpen, setFirstConnectOpen] = useState(false);
   /** 바로 가기로 들어온 항목 — 잠깐 테두리를 밝혀 눈이 가게 */
   const [flash, setFlash] = useState<string | null>(null);
+  /** 바로 가기로 계정 › 비밀번호에 들어왔다 — 펼친 채로 연다. 다른 카테고리로 옮기면 풀린다 */
+  const [pwTarget, setPwTarget] = useState(false);
 
   useEffect(() => {
     if (!target) return;
     setCategory(target.category);
     setFirstConnectOpen(false);
     setQuery('');
+    setPwTarget(target.category === 'account' && target.item === 'password');
     if (target.item) goToItem(target.category, target.item);
   }, [target]);
 
@@ -54,8 +62,8 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     window.setTimeout(() => {
       document.getElementById(domId)?.scrollIntoView({ block: 'center' });
       setFlash(domId);
-      window.setTimeout(() => setFlash((f) => (f === domId ? null : f)), 1600);
-    }, 150);
+      window.setTimeout(() => setFlash((f) => (f === domId ? null : f)), FLASH_MS);
+    }, SCROLL_DELAY_MS);
   }
 
   useEffect(() => {
@@ -94,6 +102,7 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
               onClick={() => {
                 setCategory(c.id);
                 setFirstConnectOpen(false);
+                setPwTarget(false);
               }}
               aria-current={category === c.id ? 'page' : undefined}
               className={`flex min-h-11 w-full items-center rounded-md px-3 text-left text-sm transition ${
@@ -128,7 +137,7 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     switch (cat) {
       case 'display': return <DisplaySettings settings={settings} onChange={onChange} onShowShortcuts={onShowShortcuts} />;
       case 'cards': return <CardsSettings settings={settings} onChange={onChange} />;
-      case 'account': return <AccountSettings user={user} openPassword={target?.category === 'account' && target.item === 'password'} onLogout={onLogout} />;
+      case 'account': return <AccountSettings user={user} openPassword={pwTarget} onLogout={onLogout} />;
       case 'briefing': return <BriefingSettings onOpenSources={onOpenBriefingSources} onOpenSubscription={() => setCategory('subscription')} />;
       case 'subscription': return <SubscriptionSettings onOpenFirstConnect={() => setFirstConnectOpen(true)} />;
       case 'readers': return <ReadersSettings onOpenUsers={() => setCategory('users')} />;

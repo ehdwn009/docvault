@@ -77,7 +77,7 @@ export default function CodeRenderer({ content, fileName, highlightLines }: Rend
   }, [hl?.start, hl?.end, content]);
 
   return (
-    <div className="overflow-hidden rounded-lg bg-[#0d1117]">
+    <div className="theme-free overflow-hidden rounded-lg bg-[#0d1117]">
       <div className="flex font-mono text-[0.875em] leading-relaxed">
         <div aria-hidden className="shrink-0 select-none py-4 pl-3 pr-3 text-right text-slate-600">
           {lines.map((_, i) => (

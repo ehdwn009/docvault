@@ -226,7 +226,7 @@ export default function BriefingSettings({ onOpenSources, onOpenSubscription }: 
                 </span>
               )
             ) : mode === 'subscription' ? (
-              '정한 시각 90분 전에 서버가 claude.ai 예약 작업을 켜고, 완성본을 받아 저장해요 — 내 Claude 구독으로, 추가 비용 없음. 앱이 직접 만들기로 바꾸면 지금 도는 예약 작업은 취소로 기록되고 더 켜지지 않아요'
+              '정한 시각 90분 전에 서버가 claude.ai 예약 작업을 켜고, 완성본을 받아 저장해요 — 내 Claude 구독으로, 추가 비용 없음. 앱이 직접 만들기로 바꾸면 지금 도는 예약 작업은 취소로 기록되고 더 켜지지 않아요 — claude.ai의 예약 작업도 꺼 두세요. 열쇠·트리거는 남아 있어 다시 구독으로 바꾸면 바로 이어서 써요'
             ) : (
               '서버가 Anthropic API로 만들어요 — 회차마다 비용이 들고 월 한도가 있어요. 타이머는 두 방식이 함께 써요'
             )}
@@ -238,7 +238,7 @@ export default function BriefingSettings({ onOpenSources, onOpenSubscription }: 
           <option value="subscription">구독으로 받기 (Claude 예약 작업)</option>
         </select>
         {want === 'subscription' && mode !== 'subscription' && sub.ready && (
-          <button onClick={() => void pickMode('subscription')} className="min-h-11 rounded-md border border-warn-600/60 px-3 text-sm font-semibold text-warn-500 hover:bg-warn-800/40">
+          <button onClick={() => void pickMode('subscription')} className="min-h-11 rounded-md border border-warn-600/60 px-3 text-sm font-semibold text-warn-400 hover:bg-warn-800/40">
             구독으로 바꾸기
           </button>
         )}

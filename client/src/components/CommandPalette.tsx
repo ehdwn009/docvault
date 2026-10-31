@@ -97,7 +97,7 @@ export default function CommandPalette({ files, onPick, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[15vh]"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">

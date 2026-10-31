@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { api, ApiError, cardToTreeFile, type CardBatchResult, type CardOutline, type CardOutlineItem, type CardSummary, type TreeFile } from '../lib/api';
-import { getAppProseTheme } from '../lib/appTheme';
+import { useAppProseTheme } from '../lib/appTheme';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
 
@@ -232,7 +232,7 @@ export default function ThreadCardsDialog({ threadId, isPc, onClose, onWholeAsOn
   if (merge) ctaParts.push(`${merge}장 이어쓰기`);
   const cta = ctaParts.length ? ctaParts.join(' + ') : withTopic ? '주제 카드만 만들기' : '고른 개념이 없어요';
   const canSave = !busy && pending === 0 && (picked.length > 0 || withTopic);
-  const proseTheme = getAppProseTheme();
+  const proseTheme = useAppProseTheme();
   const renderMd = (md: string) =>
     MdRenderer ? (
       <Suspense fallback={<pre className="whitespace-pre-wrap text-xs">{md}</pre>}>

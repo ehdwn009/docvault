@@ -1,6 +1,6 @@
 import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { api, ApiError, type FileContent } from '../lib/api';
-import { getAppProseTheme } from '../lib/appTheme';
+import { useAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { MarkdownRenderer } from '../renderers';
@@ -18,6 +18,7 @@ type Props = {
 
 // SCR-160: 편집기 — 분할 화면(에디터 + 실시간 미리보기, md만). Ctrl+S 저장
 export default function Editor({ file, fileName, onSaved, onCancel, onDirtyChange }: Props) {
+  const proseTheme = useAppProseTheme();
   const [draft, setDraft] = useState(file.content);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +177,7 @@ export default function Editor({ file, fileName, onSaved, onCancel, onDirtyChang
         >
           {file.fileType === 'md' ? (
             <Suspense fallback={<p className="text-sm text-slate-500">미리보기 준비 중…</p>}>
-              <MarkdownRenderer content={draft} theme={getAppProseTheme()} />
+              <MarkdownRenderer content={draft} theme={proseTheme} />
             </Suspense>
           ) : (
             <p className="text-sm text-slate-500">md 파일만 실시간 미리보기를 지원합니다</p>

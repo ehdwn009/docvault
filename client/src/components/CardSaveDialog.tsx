@@ -10,7 +10,7 @@ import {
   type CardSummary,
   type TreeFile,
 } from '../lib/api';
-import { getAppProseTheme } from '../lib/appTheme';
+import { useAppProseTheme } from '../lib/appTheme';
 import { CARD_KINDS } from '../lib/frontmatter';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
@@ -263,7 +263,7 @@ export default function CardSaveDialog({ threadId, messageId, messageIds, isPc, 
 
   // merge
   const { card, merged, current } = step;
-  const proseTheme = getAppProseTheme();
+  const proseTheme = useAppProseTheme();
   const renderMd = (md: string) =>
     MdRenderer ? (
       <Suspense fallback={<pre className="whitespace-pre-wrap text-xs">{md}</pre>}>

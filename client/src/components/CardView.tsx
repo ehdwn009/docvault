@@ -32,7 +32,7 @@ export default function CardView({ title, content, theme, renderBody, onAsk, onO
   const tone = dark ? 'text-[#f1f5f9]' : 'text-[#0f172a]';
   const teal = dark ? 'text-teal-300' : 'text-teal-700';
   return (
-    <div className={`flex flex-col gap-4 ${tone}`}>
+    <div className={`theme-free flex flex-col gap-4 ${tone}`}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="m-0 text-3xl font-bold leading-tight">{title}</h1>

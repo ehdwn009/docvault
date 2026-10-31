@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { api, ApiError, cardToTreeFile, type ReviewCard, type TreeFile } from '../lib/api';
-import { getAppProseTheme } from '../lib/appTheme';
+import { useAppProseTheme } from '../lib/appTheme';
 import { REVIEW_AGAIN_DAYS, REVIEW_FIRST_OK_DAYS, REVIEW_MAX_INTERVAL_DAYS } from '../lib/constants';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
@@ -56,7 +56,7 @@ export default function ReviewDialog({ due: dueProp, tomorrow, isPc, onClose, on
     }
   }
 
-  const proseTheme = getAppProseTheme();
+  const proseTheme = useAppProseTheme();
   const btn = 'rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40';
 
   return (
