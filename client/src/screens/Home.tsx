@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Icon from '../components/Icon';
+import { cleanTitle } from '../components/AskPanel';
 import ReviewDialog from '../components/ReviewDialog';
 import FileName from '../components/FileName';
 import { api, type AskThread, type ReviewList, type TreeFile, type User, type UserSettings } from '../lib/api';
@@ -20,6 +21,8 @@ type Props = {
   onOpenFile: (file: TreeFile) => void;
   onOpenFileById: (id: number) => void;
   onOpenThread: (id: number | null) => void;
+  /** AI 화면의 배움 카드 탭으로 */
+  onOpenCards: () => void;
   onOpenPanel: (p: 'files' | 'shared') => void;
   onSearch: () => void;
   onNewDoc: () => void;
@@ -28,7 +31,7 @@ type Props = {
 };
 
 // SCR-101: 홈 — 로그인 직후·`/`의 첫 화면. 매일 들어오는 것(브리핑·복습)과 이어 갈 것(문서·대화)이 한 화면에 (IA — 안 B 홈)
-export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenPanel, onSearch, onNewDoc, onOpenBriefingSettings, onOpenBriefingSources }: Props) {
+export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, onNewDoc, onOpenBriefingSettings, onOpenBriefingSources }: Props) {
   const isAdmin = user.role === 'admin';
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 브리핑이 있다 (v0.49)
   const briefingOwner = isAdmin ? null : (settings.briefingOwnerId ?? null);
@@ -89,7 +92,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
       </div>
       {/* overflow-x-hidden·min-w-0: 긴 파일 이름이나 한 줄 글이 칸을 밀어 폰에서 가로 스크롤이 생기지 않게 (사용자 보고 2026-10-31) */}
       <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 pb-10 pc:px-6">
-        <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] wide:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="min-w-0 space-y-8">
             {hasBriefing && (
               <section>
@@ -119,13 +122,13 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
             </section>
           </div>
           <div className="min-w-0 space-y-8">
-            {review && (review.due.length > 0 || review.tomorrow > 0) && (
-              // SCR-186 복습 띠 그대로 — 0이면 숨김
+            {review && review.total > 0 && (
+              // SCR-186 복습 띠 — 0장이어도 카드 입구로 남긴다 (폰 감사 2026-10-31)
               <section className="flex items-center gap-2 rounded-xl border border-card-900 bg-card-950/40 px-3 py-2.5 text-sm">
                 {review.due.length > 0 ? (
                   <span className="text-slate-200">오늘 복습 <b className="text-card-300">{review.due.length}장</b>{review.tomorrow > 0 ? ` · 내일 ${review.tomorrow}장` : ''}</span>
                 ) : (
-                  <span className="text-slate-400">오늘 복습할 카드 없음 · 내일 {review.tomorrow}장</span>
+                  <button onClick={onOpenCards} className="text-left text-slate-400 hover:text-slate-200">오늘 복습 없음 · 카드 {review.total}장 ›</button>
                 )}
                 {review.due.length > 0 && (
                   <button onClick={() => setReviewOpen(true)} className="ml-auto min-h-9 rounded-md bg-card-600 px-3 font-medium text-white hover:bg-card-500 touch:min-h-11">
@@ -144,7 +147,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
                 <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
                   {threads.slice(0, RECENT_THREADS).map((t) => (
                     <button key={t.id} onClick={() => onOpenThread(t.id)} className="block w-full px-3 py-2 text-left transition hover:bg-slate-900">
-                      <span className="block truncate text-sm text-slate-200">{t.title}</span>
+                      <span className="block truncate text-sm text-slate-200">{cleanTitle(t.title)}</span>
                       <span className="flex min-w-0 items-center gap-1 text-[11px] text-slate-500">
                         <span className="shrink-0">{formatDate(t.updatedAt)} ·</span>
                         <Icon name={t.fileId !== null || t.fileName ? 'doc' : 'chat'} size={11} className="shrink-0" />

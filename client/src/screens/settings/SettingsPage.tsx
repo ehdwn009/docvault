@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '../../components/Icon';
 import type { TreeFile, User, UserSettings } from '../../lib/api';
 import { IS_TOUCH } from '../../lib/device';
+import { pushLayer } from '../../lib/layers';
 import AdminPanel from '../panels/AdminPanel';
 import AboutSettings from './AboutSettings';
 import AccountSettings from './AccountSettings';
@@ -25,6 +26,10 @@ type Props = {
   onSelectFile: (file: TreeFile) => void;
   onLogout: () => void;
   onClose: () => void;
+  /** 한 열(접은 폰): 목록 → 상세 푸시. 두 열(PC·펼친 폰): 카테고리 + 본문 나란히 */
+  narrow?: boolean;
+  /** 값이 바뀌면 목록(뿌리)으로 — 탭 재탭 */
+  rootSignal?: number;
 };
 
 /** 바로 가기로 들어온 항목으로 내리기 전 기다리는 시간 — 카테고리 본문이 데이터를 받아 그려질 여유 */
@@ -34,12 +39,47 @@ const FLASH_MS = 1600;
 
 // SCR-140 (개정): "나" — 본문 전체를 쓰는 설정 페이지. 왼쪽 카테고리(내 취향 / 앱 운영 / 정보), 오른쪽 항목들.
 // 머리에 설정 검색(SCR-405). 폰은 목록 → 상세 2단 푸시 (IA — 안 B "나")
-export default function SettingsPage({ user, settings, onChange, target, onShowChangelog, onShowShortcuts, onOpenBriefingSources, onSelectFile, onLogout, onClose }: Props) {
+export default function SettingsPage({ user, settings, onChange, target, onShowChangelog, onShowShortcuts, onOpenBriefingSources, onSelectFile, onLogout, onClose, narrow = IS_TOUCH, rootSignal = 0 }: Props) {
   const isAdmin = user.role === 'admin';
   // 폰은 처음에 목록만(null), PC는 첫 카테고리를 바로 연다
-  const [category, setCategory] = useState<SettingsCategoryId | null>(() => target?.category ?? (IS_TOUCH ? null : 'display'));
+  const [category, setCategory] = useState<SettingsCategoryId | null>(() => target?.category ?? (narrow ? null : 'display'));
   const [query, setQuery] = useState('');
   const [firstConnectOpen, setFirstConnectOpen] = useState(false);
+  // 두 열이 되면(펼침) 카테고리 없음은 첫 카테고리로; 탭 재탭이면 목록으로
+  useEffect(() => {
+    if (!narrow && category === null) setCategory('display');
+  }, [narrow]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (rootSignal > 0 && narrow) {
+      setCategory(null);
+      setFirstConnectOpen(false);
+    }
+  }, [rootSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 한 열의 상세·처음 연결하기는 열린 층 — 뒤로 가기가 목록으로 (폰 감사 2026-10-31)
+  const detailLayer = useRef<(() => void) | null>(null);
+  const fcLayer = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!narrow) return;
+    if (category !== null && !detailLayer.current) detailLayer.current = pushLayer(() => setCategory(null));
+    else if (category === null && detailLayer.current) {
+      const d = detailLayer.current;
+      detailLayer.current = null;
+      d();
+    }
+  }, [narrow, category]);
+  useEffect(() => {
+    if (!narrow) return;
+    if (firstConnectOpen && !fcLayer.current) fcLayer.current = pushLayer(() => setFirstConnectOpen(false));
+    else if (!firstConnectOpen && fcLayer.current) {
+      const d = fcLayer.current;
+      fcLayer.current = null;
+      d();
+    }
+  }, [narrow, firstConnectOpen]);
+  useEffect(() => () => {
+    fcLayer.current?.();
+    detailLayer.current?.();
+  }, []);
   /** 바로 가기로 들어온 항목 — 잠깐 테두리를 밝혀 눈이 가게 */
   const [flash, setFlash] = useState<string | null>(null);
   /** 바로 가기로 계정 › 비밀번호에 들어왔다 — 펼친 채로 연다. 다른 카테고리로 옮기면 풀린다 */
@@ -106,11 +146,11 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
               }}
               aria-current={category === c.id ? 'page' : undefined}
               className={`flex min-h-11 w-full items-center rounded-md px-3 text-left text-sm transition ${
-                category === c.id && !IS_TOUCH ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900 hover:text-slate-100'
+                category === c.id && !narrow ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-900 hover:text-slate-100'
               }`}
             >
               {c.name}
-              {IS_TOUCH && <span className="ml-auto text-slate-600"><Icon name="chevron" size={16} /></span>}
+              {narrow && <span className="ml-auto text-slate-600"><Icon name="chevron" size={16} /></span>}
             </button>
           ))}
         </div>
@@ -153,8 +193,8 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     </button>
   );
 
-  // ── 폰: 목록 → 상세 2단 푸시 ──
-  if (IS_TOUCH) {
+  // ── 한 열(접은 폰): 목록 → 상세 2단 푸시 ──
+  if (narrow) {
     if (category !== null && firstConnectOpen) return <FirstConnect onClose={() => setFirstConnectOpen(false)} />;
     if (category === null || q) {
       return (
@@ -162,8 +202,6 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
           <div className="flex items-center gap-2 py-2 pl-4 pr-2">
             <h2 className="text-base font-bold">나</h2>
             {roleChip}
-            <span className="ml-auto" />
-            {closeBtn}
           </div>
           <div className="px-4 pb-2">{searchBox}</div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-20">{q ? resultList : categoryList}</div>

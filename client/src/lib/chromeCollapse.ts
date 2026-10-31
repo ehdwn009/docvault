@@ -71,8 +71,27 @@ function snap() {
   settle(hide);
 }
 
+/** 읽을 때 바 숨기기 — 기기별 취향(localStorage). 강제하면 반발이 온다(Obsidian 1.11 교훈)라 끌 수 있게 둔다 */
+const AUTOHIDE_KEY = 'dv_chrome_autohide';
+export function getChromeAutohide(): boolean {
+  try {
+    return localStorage.getItem(AUTOHIDE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+export function setChromeAutohide(on: boolean) {
+  try {
+    localStorage.setItem(AUTOHIDE_KEY, on ? '1' : '0');
+  } catch {
+    /* 기억 못 해도 이번 세션엔 적용 */
+  }
+  if (!on) showChrome();
+}
+
 /** 뷰어가 스크롤 위치를 보고할 때마다 부른다 — 민 만큼 그대로 접히고, 멈추면 붙인다 */
 export function reportChromeScroll(y: number, delta: number) {
+  if (!getChromeAutohide()) return;
   clearSnap();
   if (y < NEAR_TOP) {
     paint(0, true);

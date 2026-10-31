@@ -278,69 +278,6 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
       )}
 
       <div className={`space-y-6 ${home ? '' : 'px-4'} ${readOnly && !home ? 'pt-4' : ''}`}>
-        {admin && (
-        <section className="space-y-2">
-          {!admin.configured && (
-            <p className="rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
-              {admin.mode === 'subscription'
-                ? 'AI 키가 없어 [지금 만들기]는 쓸 수 없어요. 구독으로 받는 회차는 그대로 와요.'
-                : 'AI 키가 연결되지 않아 브리핑을 만들 수 없어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣고 다시 시작하면 켜집니다.'}
-            </p>
-          )}
-          {/* 마감까지 안 온 회차 — 앱 안 띠(푸시가 아니다). [지금 만들기]는 API 방식으로 그 회차 이름으로 (IA SCR-190, v0.50) */}
-          {!running && admin.subscription?.missing && (
-            <div className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
-              <span className="flex-1">
-                {admin.subscription.missing.status === 'error'
-                  ? `${runName(admin.subscription.missing)}의 예약 작업을 켜지 못했어요${admin.subscription.missing.message ? ` — ${admin.subscription.missing.message}` : ''}`
-                  : `${runName(admin.subscription.missing)}이 도착하지 않았어요${admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}`}
-              </span>
-              <button
-                onClick={() => void start(false, admin.subscription?.missing?.slot === 'adhoc' ? undefined : admin.subscription?.missing?.slot)}
-                disabled={!admin.configured || starting}
-                className="min-h-9 shrink-0 rounded-md border border-amber-600/60 px-2.5 font-semibold text-amber-500 transition hover:bg-amber-800/40 disabled:opacity-40"
-              >
-                지금 만들기
-              </button>
-            </div>
-          )}
-          {running && running.stage === 'remote' ? (
-            <RemoteProgressCard run={running} canReplace={admin.configured && !starting} onReplace={() => void replaceRemote(running)} />
-          ) : running ? (
-            <ProgressCard run={running} onStopped={() => void load()} />
-          ) : (
-            <>
-              <button
-                onClick={() => void start()}
-                disabled={!admin.configured || starting}
-                className="h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {starting ? '시작하는 중…' : '지금 브리핑 만들기'}
-              </button>
-              <p className="text-center text-xs text-slate-500">{kstTime(admin.nextSinceAt, kstToday(admin.nextSinceAt) !== today)} 이후 새 기사로 · 약 1~2분</p>
-            </>
-          )}
-          {/* 알림 띠가 같은 실행을 보이고 있으면 "최근" 줄은 겹치니 뺀다 */}
-          {!running && last && last.status !== 'ok' && admin.subscription?.missing?.runId !== last.id && (
-            <ClampLine className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</ClampLine>
-          )}
-          {!running && last && last.failedSources.length > 0 && (
-            <div className="text-xs">
-              <button onClick={() => setFailedOpenFor((v) => (v === last.id ? null : last.id))} className="text-amber-400 underline">
-                지난 실행에서 출처 {last.failedSources.length}곳을 받지 못했어요
-              </button>
-              {failedOpenFor === last.id && (
-                <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto rounded border border-slate-800 p-2 text-[11px] text-slate-500">
-                  {last.failedSources.map((f) => (
-                    <li key={f}>{f}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </section>
-        )}
-
         <section>
           <div className="mb-2 flex items-baseline gap-1.5">
             <h3 className="text-sm font-bold text-slate-200">오늘</h3>
@@ -385,6 +322,81 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             })}
           </div>
         </section>
+        {admin && (
+        <section className="space-y-2">
+          {!admin.configured && (
+            <p className="rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
+              {admin.mode === 'subscription'
+                ? 'AI 키가 없어 [지금 만들기]는 쓸 수 없어요. 구독으로 받는 회차는 그대로 와요.'
+                : 'AI 키가 연결되지 않아 브리핑을 만들 수 없어요. 서버의 .env에 ANTHROPIC_API_KEY를 넣고 다시 시작하면 켜집니다.'}
+            </p>
+          )}
+          {/* 마감까지 안 온 회차 — 앱 안 띠(푸시가 아니다). [지금 만들기]는 API 방식으로 그 회차 이름으로 (IA SCR-190, v0.50) */}
+          {!running && admin.subscription?.missing && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
+              <span className="flex-1">
+                {admin.subscription.missing.status === 'error'
+                  ? `${runName(admin.subscription.missing)}의 예약 작업을 켜지 못했어요${admin.subscription.missing.message ? ` — ${admin.subscription.missing.message}` : ''}`
+                  : `${runName(admin.subscription.missing)}이 도착하지 않았어요${admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}`}
+              </span>
+              <button
+                onClick={() => void start(false, admin.subscription?.missing?.slot === 'adhoc' ? undefined : admin.subscription?.missing?.slot)}
+                disabled={!admin.configured || starting}
+                className="min-h-9 shrink-0 rounded-md border border-amber-600/60 px-2.5 font-semibold text-amber-500 transition hover:bg-amber-800/40 disabled:opacity-40"
+              >
+                지금 만들기
+              </button>
+            </div>
+          )}
+          {running && running.stage === 'remote' ? (
+            <RemoteProgressCard run={running} canReplace={admin.configured && !starting} onReplace={() => void replaceRemote(running)} />
+          ) : running ? (
+            <ProgressCard run={running} onStopped={() => void load()} />
+          ) : (
+            <>
+              {/* 홈에서 오늘 회차가 이미 있으면 큰 단추 대신 한 줄 — 읽을 것이 먼저다 (폰 감사 2026-10-31) */}
+              {home && todays.length > 0 ? (
+                <p className="text-xs text-slate-500">
+                  <button onClick={() => void start()} disabled={!admin.configured || starting} className="underline underline-offset-2 hover:text-slate-300 disabled:opacity-40">
+                    {starting ? '시작하는 중…' : '지금 만들기'}
+                  </button>
+                  {' '}· {kstTime(admin.nextSinceAt, kstToday(admin.nextSinceAt) !== today)} 이후 새 기사로 · 약 1~2분
+                </p>
+              ) : (
+                <>
+                  <button
+                    onClick={() => void start()}
+                    disabled={!admin.configured || starting}
+                    className="h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {starting ? '시작하는 중…' : '지금 브리핑 만들기'}
+                  </button>
+                  <p className="text-center text-xs text-slate-500">{kstTime(admin.nextSinceAt, kstToday(admin.nextSinceAt) !== today)} 이후 새 기사로 · 약 1~2분</p>
+                </>
+              )}
+            </>
+          )}
+          {/* 알림 띠가 같은 실행을 보이고 있으면 "최근" 줄은 겹치니 뺀다 */}
+          {!running && last && last.status !== 'ok' && admin.subscription?.missing?.runId !== last.id && (
+            <ClampLine className={`text-xs ${STATUS_COLOR[last.status]}`}>최근: {runLine(last)}</ClampLine>
+          )}
+          {!running && last && last.failedSources.length > 0 && (
+            <div className="text-xs">
+              <button onClick={() => setFailedOpenFor((v) => (v === last.id ? null : last.id))} className="text-amber-400 underline">
+                지난 실행에서 출처 {last.failedSources.length}곳을 받지 못했어요
+              </button>
+              {failedOpenFor === last.id && (
+                <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto rounded border border-slate-800 p-2 text-[11px] text-slate-500">
+                  {last.failedSources.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
+        )}
+
 
         {pastDays.length > 0 && pastOpen && (
           <section>

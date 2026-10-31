@@ -16,7 +16,8 @@ import ThreadCardsDialog from './ThreadCardsDialog';
 import { useAppProseTheme } from '../lib/appTheme';
 import { confirmDialog } from '../lib/dialog';
 import { ASK_CONTEXT_MAX_CARDS, ASK_PANEL_OVERLAY_BELOW, ASK_PANEL_WIDTH_DEFAULT, ASK_PANEL_WIDTH_MAX, ASK_PANEL_WIDTH_MIN, ASK_QUESTION_MAX_CHARS } from '../lib/constants';
-import { useMinWidth } from '../lib/device';
+import { IS_TOUCH, useMinWidth } from '../lib/device';
+import { pushLayer } from '../lib/layers';
 import { useSheetDrag } from '../lib/sheetDrag';
 import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
@@ -57,6 +58,10 @@ type Props = {
   listTop?: ReactNode;
   /** page 모드: 열자마자 이 대화를 연다 — 홈의 "최근 대화"에서 들어올 때 */
   initialThreadId?: number | null;
+  /** page 모드(폰): 값이 바뀌면 목록으로 돌아간다 — 탭 재탭 = 그 탭의 뿌리 */
+  listSignal?: number;
+  /** 구조: 목록 288 + 본문 두 열(page) / 오른쪽 열(문서 질문)로 그릴지. 기본은 isPc — 펼친 폰은 터치여도 두 열 */
+  twoColumn?: boolean;
 };
 
 type UsedCard = { id: number; title: string };
@@ -65,6 +70,11 @@ type UsedCard = { id: number; title: string };
 const MY_STUFF_KEY = 'dv_chat_mystuff';
 /** 새 대화에 쓸 모델 — 마지막에 고른 것을 기억한다. 없으면 서버 기본(균형) */
 const MODEL_KEY = 'dv_ask_model';
+/** 대화 제목에 섞인 마크다운 기호(##·**·`)를 떼고 보인다 — 첫 질문이 그대로 제목이 되어 목록이 지저분했다 (폰 감사 2026-10-31) */
+export function cleanTitle(t: string): string {
+  return t.replace(/[#*`_>]+/g, ' ').replace(/\s+/g, ' ').trim() || t;
+}
+
 /** 챗봇 빈 화면에 보여 주는 최근 대화 수 */
 const RECENT_THREADS = 5;
 /** 오른쪽 질문 패널 폭의 기억 — 기기별 취향이라 localStorage */
@@ -105,7 +115,7 @@ const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판).
 // file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
-export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose, onViewChange, listTop, initialThreadId = null }: Props) {
+export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose, onViewChange, listTop, initialThreadId = null, listSignal = 0, twoColumn = isPc }: Props) {
   const chatMode = file === null;
   const proseTheme = useAppProseTheme();
   const [status, setStatus] = useState<AskStatus | null>(null);
@@ -120,6 +130,22 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   useEffect(() => {
     if (page) onViewChange?.(showList ? 'list' : 'body');
   }, [page, showList]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 탭을 다시 누르면 목록으로
+  useEffect(() => {
+    if (listSignal > 0) setShowList(true);
+  }, [listSignal]);
+  // 폰 한 열에서 본문은 "열린 층" — 뒤로 가기가 목록으로 돌아가게 기록에 쌓는다
+  const bodyLayerRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!page || twoColumn) return;
+    if (!showList && !bodyLayerRef.current) bodyLayerRef.current = pushLayer(() => setShowList(true));
+    else if (showList && bodyLayerRef.current) {
+      const dismiss = bodyLayerRef.current;
+      bodyLayerRef.current = null;
+      dismiss();
+    }
+  }, [page, twoColumn, showList]);
+  useEffect(() => () => bodyLayerRef.current?.(), []);
   // 홈에서 고른 대화로 바로 — 바뀔 때마다(다른 대화를 고르면) 다시 연다
   useEffect(() => {
     if (page && initialThreadId !== null) void loadThread(initialThreadId);
@@ -501,14 +527,14 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   const menuItem = 'flex min-h-11 w-full items-center rounded-lg px-2.5 text-left text-sm text-slate-200 hover:bg-slate-800';
   // 머리: 제목 한 줄 + [카드로] [새 대화] + ⋯(모델·지난 대화·삭제) + ✕ — 버튼 7개가 두 줄로 꺾이던 것을 둘로 (IA — 안 B SCR-188)
   const header = (
-    <div className={`relative flex items-center gap-1.5 border-b border-slate-800 py-2 pr-3 [&_button]:whitespace-nowrap ${page && !isPc ? 'pl-1' : 'pl-3'}`}>
-      {page && !isPc && (
+    <div className={`relative flex items-center gap-1.5 border-b border-slate-800 py-2 pr-3 [&_button]:whitespace-nowrap ${page && !twoColumn ? 'pl-1' : 'pl-3'}`}>
+      {page && !twoColumn && (
         <button onClick={() => setShowList(true)} className="flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm text-slate-300 hover:bg-slate-800" aria-label="대화 목록으로">
           ‹ 대화
         </button>
       )}
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-sm font-medium text-slate-200">{page ? (thread?.title ?? '새 대화') : '질문'}</h3>
+        <h3 className="truncate text-sm font-medium text-slate-200">{page ? (thread ? cleanTitle(thread.title) : '새 대화') : '질문'}</h3>
         {status && status.configured && (
           <p className={`truncate text-[11px] ${limitReached ? 'text-warn-400' : 'text-slate-600'}`}>
             오늘 {status.used}{status.limit !== null ? `/${status.limit}` : '번'}
@@ -539,7 +565,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
       >
         <Icon name="more" size={16} />
       </button>
-      {(!page || isPc) && (
+      {(!page || twoColumn) && (
         <button onClick={onClose} title="닫기 (대화는 남아 있어요)" aria-label="닫기" className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300">
           <Icon name="close" size={16} />
         </button>
@@ -586,7 +612,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   const listHeader = (
     <>
     {listTop}
-    <div className={`flex items-center gap-2 pr-2 ${isPc ? 'px-4 py-3' : 'py-2 pl-4'}`}>
+    <div className={`flex items-center gap-2 pr-2 ${twoColumn ? 'px-4 py-3' : 'py-2 pl-4'}`}>
       <h2 className="text-sm font-bold">대화</h2>
       <button onClick={newThread} className="ml-auto min-h-9 rounded-md border border-slate-700 px-2.5 text-xs text-slate-300 hover:bg-slate-800">
         + 새 대화
@@ -640,7 +666,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
                 >
                   <div className={`flex items-center rounded-md hover:bg-slate-900 ${page && thread?.id === t.id ? 'bg-slate-800' : ''}`} onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, items: rowMenuItems(t) }); }}>
                     <button onClick={() => void loadThread(t.id)} className="min-w-0 flex-1 px-2 py-2 text-left">
-                      <div className="truncate text-sm text-slate-200">{t.title}</div>
+                      <div className="truncate text-sm text-slate-200">{cleanTitle(t.title)}</div>
                       <div className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
                         <span className="shrink-0">{formatDate(t.updatedAt)} · {t.messageCount ?? 0}개 ·</span>
                         {threadKind(t)}
@@ -837,8 +863,9 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
             </button>
           </div>
         )}
-        {chatMode && (
-          // "내 자료 참고" 스위치 — 켜면 이름이 걸린 내 카드 + 질문 낱말로 찾은 내 문서 단락을 함께 보낸다. 질문마다 바꿀 수 있다
+        {chatMode && !IS_TOUCH && (
+          // "내 자료 참고" 스위치 — 켜면 이름이 걸린 내 카드 + 질문 낱말로 찾은 내 문서 단락을 함께 보낸다. 질문마다 바꿀 수 있다.
+          // 폰은 이 줄과 각주가 입력줄을 키우는 주범이라 입력줄 안 📎 칩 하나로 (폰 감사 2026-10-31)
           <button
             onClick={toggleMyStuff}
             className="mb-1.5 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-xs text-slate-300 hover:bg-slate-900"
@@ -885,6 +912,17 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
           </div>
         )}
         <div className="flex items-end gap-2">
+          {chatMode && IS_TOUCH && (
+            <button
+              onClick={toggleMyStuff}
+              aria-pressed={myStuff}
+              aria-label={myStuff ? '내 자료 참고 켬 — 관련 카드·문서 단락을 함께 보냄' : '내 자료 참고 끔 — 질문과 대화만 보냄'}
+              title={myStuff ? '내 자료 참고 켬' : '내 자료 참고 끔'}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg border text-base ${myStuff ? 'border-accent-500 bg-accent-950/60' : 'border-slate-700 text-slate-500'}`}
+            >
+              📎
+            </button>
+          )}
           <textarea
             ref={inputRef}
             value={input}
@@ -927,7 +965,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
             </button>
           )}
         </div>
-        <p className="mt-1 text-[11px] text-slate-600">
+        <p className="mt-1 text-[11px] text-slate-600 touch:hidden">
           {chatMode
             ? myStuff
               ? '내 카드 최대 3장과 내 문서에서 찾은 단락 최대 3개를 함께 보냅니다. 문서 전체는 가지 않습니다'
@@ -985,8 +1023,8 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   );
 
   if (page) {
-    // SCR-188 대화 화면 — PC: 왼쪽 목록(288px) + 오른쪽 본문(말풍선 최대 640px). 폰: 목록 → 본문 푸시 (IA — 안 B)
-    if (isPc) {
+    // SCR-188 대화 화면 — 두 열: 왼쪽 목록(288px) + 오른쪽 본문(말풍선 최대 640px). 한 열(접은 폰): 목록 → 본문 푸시 (IA — 안 B)
+    if (twoColumn) {
       return (
         <div className="flex min-h-0 flex-1">
           <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800">
@@ -1004,7 +1042,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     }
     // 목록 뒤에는 하단 탭 바(56px)가 있고, 본문에서는 탭 바가 숨는다 — 키보드와 다투지 않게
     return showList ? (
-      <div className="flex min-h-0 flex-1 flex-col pb-[var(--tab-bar-h)]">
+      <div className="flex min-h-0 flex-1 flex-col">
         {listHeader}
         {historyView}
         {dialogs}
@@ -1013,12 +1051,13 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
     );
   }
-  if (isPc) {
+  if (twoColumn) {
     // 오른쪽 질문 패널(SCR-180 개정) — 폭은 왼쪽 모서리를 끌어 320~560px, 좁은 창에서는 본문 위에 덮인다
     return (
       <aside
         className={`flex shrink-0 flex-col border-l border-slate-800 bg-slate-950 ${wide ? 'relative' : 'absolute inset-y-0 right-0 z-30 max-w-full shadow-2xl shadow-black/50'}`}
-        style={{ width: askWidth }}
+        // 좁은 창에서 덮일 때는 본문이 한 뼘은 보이게 — 펼친 폰(669px)에서 패널이 본문 칸을 통째로 덮었다
+        style={{ width: wide ? askWidth : `min(${askWidth}px, calc(100% - 48px))` }}
       >
         <div onPointerDown={startResize} title="끌어서 폭 조절" className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent-500/40" />
         {body}

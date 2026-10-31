@@ -3,6 +3,8 @@ import type { UserSettings } from '../../lib/api';
 import { ACCENTS, SCHEMES, applyAppTheme, getAppTheme, type AppTheme } from '../../lib/appTheme';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/constants';
 import { getLayout, setLayout } from '../../lib/layout';
+import { getChromeAutohide, setChromeAutohide } from '../../lib/chromeCollapse';
+import { IS_TOUCH } from '../../lib/device';
 import { rowId } from './catalog';
 import SettingRow, { btnClass, selectClass, Switch } from './SettingRow';
 
@@ -25,6 +27,7 @@ export default function DisplaySettings({ settings, onChange, onShowShortcuts }:
   const id = (item: string) => rowId('display', item);
   // "이전 레이아웃" — v0.54 한 버전만 두는 스위치 (IA — 안 B 결정 1)
   const [classic, setClassic] = useState(() => getLayout() === 'classic');
+  const [autohide, setAutohide] = useState(getChromeAutohide);
 
   return (
     <>
@@ -77,6 +80,18 @@ export default function DisplaySettings({ settings, onChange, onShowShortcuts }:
           <option value="wide">넓게</option>
         </select>
       </SettingRow>
+      {IS_TOUCH && (
+        <SettingRow id={id('autohide')} title="읽을 때 바 숨기기" desc="문서를 아래로 넘기면 머리와 아래 바가 숨고, 위로 조금 올리면 돌아옵니다. 끄면 늘 보입니다">
+          <Switch
+            checked={autohide}
+            onChange={(v) => {
+              setAutohide(v);
+              setChromeAutohide(v);
+            }}
+            label="읽을 때 바 숨기기"
+          />
+        </SettingRow>
+      )}
       <SettingRow id={id('layout')} title="이전 레이아웃" desc="v0.53의 모습으로 — 홈 없이 내 파일·즐겨찾기·공유·카드·대화·브리핑이 레일(폰은 문서·대화·브리핑·설정 탭)에 따로 있습니다. 설정 페이지·질문 패널은 그대로예요. 이 스위치는 한 버전만 있다가 사라집니다">
         <Switch
           checked={classic}

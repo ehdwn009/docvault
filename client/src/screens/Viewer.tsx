@@ -18,6 +18,7 @@ import { CodeRenderer, PdfRenderer, renderers, type RendererSelection } from '..
 import Editor from './Editor';
 import { formatDate, formatDateTime } from '../lib/date';
 import { IS_PC } from '../lib/device';
+import { pushLayer } from '../lib/layers';
 
 type Props = {
   file: TreeFile;
@@ -45,6 +46,8 @@ type Props = {
   onBackToList?: () => void;
   /** 편집 모드에 들어가고 나올 때 — 터치는 그동안 하단 탭 바를 숨긴다(키보드·마지막 줄과 겹치지 않게) */
   onEditModeChange?: (editing: boolean) => void;
+  /** 질문 패널을 오른쪽 열로 그릴지(PC·펼친 폰) — 한 열(접은 폰)은 시트 */
+  askTwoColumn?: boolean;
   /** 다른 파일 열기 — 카드를 저장하면 그 카드를 연다 (SCR-182) */
   onOpenFile?: (file: TreeFile) => void;
   /** 브리핑 회차 화면에서 다른 회차로 — 이 칸·탭 자리에서 바꿔 연다 */
@@ -113,7 +116,7 @@ const ASK_BAR_WIDTH = 120;
 const ASK_BAR_GAP = 40;
 
 // SCR-150: 뷰어 — 렌더러 표시 + 즐겨찾기 + 읽던 위치 저장·복원 + 목차(SCR-151) + 버전(SCR-152)
-export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange }: Props) {
+export default function Viewer({ file, settings, immersive, onToggleImmersive, onContentSaved, onStateChanged, onToggleFavorite, onDirtyChange, onClosePane, isActive, onOpenLink, jumpLines, onSplitView, onOpenSwitcher, onSwipeTab, onOpenFile, onSwapBriefing, startEditing, onEditStarted, jumpQuote, onOpenSource, onOpenCard, onShowProperties, onTrash, terms, onBackToList, onEditModeChange, askTwoColumn = IS_PC }: Props) {
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -208,6 +211,18 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
   }, []);
   // SCR-180 질문 패널. 한 번 시작되면 닫아도 마운트를 유지한다 — 닫았다 열어도 대화가 이어지게 (IA — SCR-180)
   const [askOpen, setAskOpen] = useState(false);
+  // 시트로 뜨는 질문 패널은 열린 층 — 뒤로 가기가 시트를 닫게 (폰 감사 2026-10-31)
+  const askLayerRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (askTwoColumn) return;
+    if (askOpen && !askLayerRef.current) askLayerRef.current = pushLayer(() => setAskOpen(false));
+    else if (!askOpen && askLayerRef.current) {
+      const dismiss = askLayerRef.current;
+      askLayerRef.current = null;
+      dismiss();
+    }
+  }, [askOpen, askTwoColumn]);
+  useEffect(() => () => askLayerRef.current?.(), []);
   const [askStarted, setAskStarted] = useState(false);
   // 질문을 한 번이라도 보냈나 — 안 보냈으면 새 선택이 문맥을 갈아타고, 보냈으면 인용으로 붙는다 (v0.23.2)
   const [askConversing, setAskConversing] = useState(false);
@@ -1083,6 +1098,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
               onOpenFile={onOpenFile}
               withCards={settings.askWithCards === 1}
               isPc={isPc}
+              twoColumn={askTwoColumn}
               onClose={() => setAskOpen(false)}
             />
           </div>
@@ -1108,8 +1124,8 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
       {!isPc && !immersive && (
         // 헤더와 같은 원리: 오버레이 + transform 슬라이드 (레이아웃 불변 → 스크롤 안 끊김)
         <div ref={toolbarRef} className="absolute inset-x-0 bottom-0 z-20">
-          {/* 하단 탭 바 자리는 Workspace의 <main> 여백이 비워 둔다 — 분할 보기의 위 칸에서 도구막대가 떠 있지 않게 */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 backdrop-blur">
+          {/* 문서를 읽을 때 탭 바는 숨고 이 도구막대만 남는다 — 화면 바닥에 닿으므로 안전 여백을 둔다 */}
+          <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur">
             {actions}
           </div>
         </div>

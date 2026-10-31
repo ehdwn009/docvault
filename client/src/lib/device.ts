@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { WINDOW_CLASS_DEBOUNCE_MS, WINDOW_WIDE_MIN_H, WINDOW_WIDE_MIN_W, WINDOW_XWIDE_MIN_W } from './constants';
 
 // 기기 판정 한 곳 — CSS의 pc:/touch: 변형(index.css)과 같은 질문을 JS에서도 한다.
 // 화면 너비가 아니라 "입력 방식"으로 가른다: 폰을 눕혀 넓어져도 터치 기기면 터치 UI를 유지.
@@ -24,4 +25,35 @@ export function useMinWidth(px: number): boolean {
     return () => mq.removeEventListener('change', onChange);
   }, [px]);
   return matches;
+}
+
+/** 창 등급 — 폭 기준(기기 무관). CSS의 narrow:/wide: 변형(index.css)과 같은 식. 접고 펼 때 resize로 바뀌므로 훅이다 */
+export type WindowClass = 'narrow' | 'wide' | 'xwide';
+export const WIDE_QUERY = `(min-width: ${WINDOW_WIDE_MIN_W}px) and (min-height: ${WINDOW_WIDE_MIN_H}px)`;
+export const XWIDE_QUERY = `(min-width: ${WINDOW_XWIDE_MIN_W}px) and (min-height: ${WINDOW_WIDE_MIN_H}px)`;
+function readWindowClass(): WindowClass {
+  if (window.matchMedia(XWIDE_QUERY).matches) return 'xwide';
+  if (window.matchMedia(WIDE_QUERY).matches) return 'wide';
+  return 'narrow';
+}
+export function useWindowClass(): WindowClass {
+  const [wc, setWc] = useState<WindowClass>(readWindowClass);
+  useEffect(() => {
+    let timer = 0;
+    // 접는 기기는 펴는 동안 중간 크기를 잠깐 거친다 — 그 값으로 레이아웃을 바꾸지 않게 잠시 기다린다
+    const onChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setWc(readWindowClass()), WINDOW_CLASS_DEBOUNCE_MS);
+    };
+    const a = window.matchMedia(WIDE_QUERY);
+    const b = window.matchMedia(XWIDE_QUERY);
+    a.addEventListener('change', onChange);
+    b.addEventListener('change', onChange);
+    return () => {
+      a.removeEventListener('change', onChange);
+      b.removeEventListener('change', onChange);
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return wc;
 }

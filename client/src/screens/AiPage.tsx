@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AskPanel from '../components/AskPanel';
 import type { TreeFile } from '../lib/api';
 import { IS_PC } from '../lib/device';
@@ -13,11 +13,20 @@ type Props = {
   onCardDeleted: (id: number) => void;
   onClose: () => void;
   onViewChange: (view: 'list' | 'body') => void;
+  /** 홈의 복습 띠에서 들어오면 배움 카드 탭 */
+  initialTab?: Tab;
+  /** 탭 재탭 — 대화 목록(뿌리)으로 */
+  listSignal?: number;
+  /** 두 열(PC·펼친 폰) */
+  twoColumn?: boolean;
 };
 
 // SCR-189: AI 화면 — 왼쪽 목록 칸 위에 「대화 ｜ 배움 카드」 탭, 오른쪽 본문(대화 SCR-188). 카드를 고르면 뷰어로 연다 (IA — 안 B)
-export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onClose, onViewChange }: Props) {
-  const [tab, setTab] = useState<Tab>('chat');
+export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onClose, onViewChange, initialTab = 'chat', listSignal = 0, twoColumn = IS_PC }: Props) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  useEffect(() => {
+    if (listSignal > 0) setTab('chat');
+  }, [listSignal]);
   const tabs = (
     <div className="flex gap-1 px-3 pt-2" role="tablist">
       {(
@@ -53,6 +62,8 @@ export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onC
           onConsumePendingQuote={() => {}}
           onOpenFile={onOpenFile}
           isPc={IS_PC}
+          twoColumn={twoColumn}
+          listSignal={listSignal}
           onClose={onClose}
           onViewChange={onViewChange}
         />
@@ -60,12 +71,12 @@ export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onC
       {tab === 'cards' && (
         // 카드 서랍(SCR-181)은 그대로 — 본문은 카드를 고르면 뷰어가 맡는다
         <div className="flex min-h-0 flex-1">
-          <aside className={`flex min-h-0 flex-col ${IS_PC ? 'w-72 shrink-0 border-r border-slate-800' : 'w-full'}`}>
+          <aside className={`flex min-h-0 flex-col ${twoColumn ? 'w-72 shrink-0 border-r border-slate-800' : 'w-full'}`}>
             {tabs}
             <div className="h-2" />
             <CardsPanel selectedId={null} onSelect={onOpenFile} onDeleted={onCardDeleted} />
           </aside>
-          {IS_PC && <div className="flex min-w-0 flex-1 items-center justify-center text-sm text-slate-600">카드를 고르면 문서로 열려요</div>}
+          {twoColumn && <div className="flex min-w-0 flex-1 items-center justify-center text-sm text-slate-600">카드를 고르면 문서로 열려요</div>}
         </div>
       )}
     </>

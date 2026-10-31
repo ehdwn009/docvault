@@ -58,7 +58,7 @@ import PropertiesDialog, { type PropertiesTarget } from '../components/Propertie
 import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
-import { IS_TOUCH } from '../lib/device';
+import { IS_TOUCH, useWindowClass } from '../lib/device';
 
 // home·ai·files·settings = 안 B(v0.54) 레일 네 개. favorites·shared·cards·chat·briefing은 "이전 레이아웃"(classic)에서만 레일에 보인다 (IA — 안 B 결정 1)
 type Panel = 'home' | 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'ai' | 'settings';
@@ -181,6 +181,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 분할 방향·상한은 화면 폭 기준: 넓으면 좌우 최대 4칸, 좁으면 상하 최대 2칸 (IA — 반응형 기준 768px)
   const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
+  // 창 등급(폭 기준) — 접은 폰은 한 열(목록이 문서를 덮음), 펼친 폰은 PC처럼 두 열. 기기 판정(IS_TOUCH)과 별개 축 (IA — 폰 재설계 2026-10-31)
+  const wc = useWindowClass();
+  const narrow = IS_TOUCH && wc === 'narrow';
+  const selectedRef = useRef<TreeFile | null>(null);
+  selectedRef.current = selected;
   // 레이아웃(홈 중심 / 이전) — 설정의 스위치가 바꾸면 이벤트로 따라간다
   const [layout, setLayoutState] = useState<AppLayout>(getLayout);
   useEffect(() => {
@@ -203,6 +208,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [panel, setPanel] = useState<Panel>(() => (getLayout() === 'home' ? 'home' : 'files'));
   // 홈 "최근 대화"에서 고른 대화 — AI 화면이 열자마자 연다
   const [aiThreadId, setAiThreadId] = useState<number | null>(null);
+  const [aiTab, setAiTab] = useState<'chat' | 'cards'>('chat');
+  // 탭 재탭 = 그 탭의 뿌리(목록)로 — 값이 바뀌면 AI·나 페이지가 목록으로 돌아간다
+  const [aiListSignal, setAiListSignal] = useState(0);
+  const [settingsRootSignal, setSettingsRootSignal] = useState(0);
+  // 문서를 연 곳 — 폰의 ‹·뒤로 가기는 문서 트리가 아니라 "온 곳"(홈·문서·AI)으로 돌아간다
+  const panelRef = useRef<Panel>('files');
+  panelRef.current = panel;
+  const docOriginRef = useRef<Panel>('files');
   // 문서 패널의 고정 섹션 열림 상태
   const [fileSections, setFileSections] = useState<{ favorites: boolean; shared: boolean }>(() => {
     try {
@@ -243,6 +256,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [panelCollapsed, setPanelCollapsed] = useState(false); // 활성 레일 버튼 재클릭 시 패널 접기 (PC 전용)
   // 터치: 목록 층(사이드 패널 내용)이 문서 위에 덮여 있나 — 문서를 고르면 내려가고, 탭을 누르면 다시 올라온다 (☰·드로어 대체)
   const [touchList, setTouchList] = useState(true);
+  const touchListRef = useRef(true);
+  touchListRef.current = touchList;
   // 터치: 대화 본문을 보는 중 — 키보드와 탭 바가 다투지 않게 탭 바를 숨긴다 (패턴 G)
   const [chatBody, setChatBody] = useState(false);
   // 터치: 편집기가 열려 있는 동안 탭 바를 숨긴다 — 키보드와 마지막 줄을 가리지 않게 (검수 2026-10-31)
@@ -359,11 +374,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setActiveIdx(targetIdx);
       }
       ensureTab(file);
+      if (panelRef.current !== 'files' || touchListRef.current) docOriginRef.current = panelRef.current;
       setTouchList(false);
       // 설정·대화 페이지가 덮고 있으면 내린다 — 검색·드롭·뒤로가기로 연 문서가 페이지 밑에서 열리지 않게 (검수 2026-10-31)
       setPanel((p) => (PAGE_PANELS.has(p) ? panelBeforePage.current : p));
       if (opts?.pushUrl !== false && location.pathname !== `/f/${file.id}`) {
-        history.pushState(null, '', `/f/${file.id}`);
+        history.pushState({ dvDoc: file.id }, '', `/f/${file.id}`);
       }
     },
     [panes, activeIdx, confirmReplace, ensureTab],
@@ -774,7 +790,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   useEffect(() => {
     const handler = () => {
       const id = fileIdFromPath(location.pathname);
+      // 같은 문서를 가리키는 기록(질문 시트·대화 본문·설정 상세 같은 "층")은 lib/layers.ts가 닫는다 — 여기선 문서를 건드리지 않는다
+      if (id !== null && id === selectedRef.current?.id) return;
       if (id === null) {
+        if (IS_TOUCH) {
+          // 폰: 뒤로 가기는 "맨 위 층 하나 닫기" — 문서를 전부 닫는 게 아니라 온 곳(홈·목록)으로 (폰 감사 2026-10-31)
+          setTouchList(true);
+          setPanel(docOriginRef.current);
+          return;
+        }
         setPanes([]);
         if (getLayout() === 'home') setPanel('home'); // `/`의 첫 화면은 홈 (IA — 안 B 홈)
       } else void resolveFile(id).then((f) => f && void selectFile(f, { pushUrl: false }));
@@ -1413,7 +1437,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         if (PAGE_PANELS.has(target)) {
           // 홈은 "장소"라 토글이 아니다; AI를 레일에서 열면 홈에서 고른 대화는 잊는다
           if (target === 'home' && panel === 'home') return;
-          if (target === 'ai') setAiThreadId(null);
+          if (target === 'ai' && panel !== 'ai') {
+            setAiThreadId(null);
+            setAiTab('chat');
+          }
           // 페이지는 접는 게 아니라 닫는다 — 다시 누르면 그 전 패널로
           if (panel === target) closePage();
           else if (target === 'settings') openSettings();
@@ -1448,16 +1475,24 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const tabTarget = (p: Panel): Panel => (DOC_PANELS.includes(p) ? 'files' : p);
   const pressTab = (target: Panel) => {
     if (PAGE_PANELS.has(target)) {
-      if (target === 'home' && panel === 'home') return;
-      if (target === 'ai') setAiThreadId(null);
-      if (panel === target) closePage();
-      else if (target === 'settings') openSettings();
+      // 같은 탭을 다시 누르면 그 탭의 뿌리(목록)로 — 닫는 게 아니다 (폰 감사 2026-10-31)
+      if (panel === target) {
+        if (target === 'ai') setAiListSignal((n) => n + 1);
+        if (target === 'settings') setSettingsRootSignal((n) => n + 1);
+        return;
+      }
+      if (target === 'ai') {
+        setAiThreadId(null);
+        setAiTab('chat');
+      }
+      if (target === 'settings') openSettings();
       else openPage(target);
       return;
     }
     if (target === 'files' && DOC_PANELS.includes(panel)) {
-      // 문서 탭: 문서를 보는 중이면 목록으로, 목록이면(문서가 열려 있을 때) 문서로
-      if (panes.length > 0) setTouchList((v) => !v);
+      // 문서 탭 재탭: 한 열은 목록↔문서, 두 열은 목록 열 접기/펼치기 (같은 뜻 — "목록을 보여 줘/치워 줘")
+      if (!narrow) setPanelCollapsed((v) => !v);
+      else if (panes.length > 0) setTouchList((v) => !v);
       else setTouchList(true);
       return;
     }
@@ -1465,6 +1500,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     setPanelCollapsed(false);
     setTouchList(true);
   };
+  // 탭 바는 "가는 곳"을 고를 때만 — 문서를 읽거나 대화 본문에 있을 때는 그 화면의 도구막대만 둔다(바 두 겹 금지, 사용자 결정 2026-10-31).
+  // 본문 여백·페이지 바닥도 이 플래그 하나를 따른다 — 어긋나면 숨은 탭 바 자리로 밑의 도구막대가 비친다
+  const readingDoc = narrow && !touchList && panes.length > 0 && !PAGE_PANELS.has(panel);
+  const tabBarVisible = IS_TOUCH && !immersive && !editing && !readingDoc && !((panel === 'chat' || panel === 'ai') && chatBody);
   const tabBar = (
     <nav
       ref={tabBarRef}
@@ -1472,7 +1511,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       aria-hidden={chromeHidden}
       // 불투명 + 위 테두리 + 탭 사이 세로선 — 밝은 테마에서 본문이 비쳐 보이고 탭끼리 구분이 안 됐다 (사용자 보고 2026-10-31)
       className={`fixed inset-x-0 bottom-0 z-30 flex divide-x divide-slate-800 border-t border-slate-800 bg-slate-950 pb-[env(safe-area-inset-bottom)] pc:hidden ${
-        immersive || editing || ((panel === 'chat' || panel === 'ai') && chatBody) ? 'hidden' : ''
+        tabBarVisible ? '' : 'hidden'
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
     >
       {(
@@ -1530,8 +1569,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
       <div
-        className={`z-[25] flex shrink-0 bg-slate-950 touch:absolute touch:inset-0 touch:pb-[var(--tab-bar-h)] ${
-          touchList && !PAGE_PANELS.has(panel) ? '' : 'touch:hidden'
+        className={`z-[25] flex shrink-0 bg-slate-950 narrow:absolute narrow:inset-0 narrow:pb-[var(--page-bottom)] ${
+          !PAGE_PANELS.has(panel) && (touchList || !narrow) ? '' : 'touch:hidden'
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
@@ -1592,7 +1631,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {/* 설정·대화는 패널이 아니라 본문 전체 페이지다(SCR-140 개정·SCR-188) — 그때는 사이드 패널을 그리지 않는다 */}
       {!PAGE_PANELS.has(panel) && (
       <aside
-        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 touch:w-full touch:border-r-0 ${panelCollapsed ? 'pc:hidden' : ''}`}
+        className={`flex w-72 shrink-0 flex-col border-r border-slate-800 narrow:w-full narrow:border-r-0 wide:w-[300px] ${panelCollapsed ? 'pc:hidden wide:hidden' : ''}`}
       >
         <div className="relative flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{layout === 'home' && panel === 'files' ? '문서' : PANEL_TITLE[panel]}</h1>
@@ -1895,12 +1934,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
       {/* 터치: 하단 탭 바 자리를 비운다 — 뷰어 도구막대·분할 칸이 탭 바 밑에 깔리지 않게. 탭 바가 숨는 몰입·편집·대화 본문에서는 비우지 않는다 */}
-      <main className={`relative flex min-w-0 flex-1 flex-col ${IS_TOUCH && !immersive && !editing && !((panel === 'chat' || panel === 'ai') && chatBody) ? 'pb-[var(--tab-bar-h)]' : ''}`}>
+      <main className={`relative flex min-w-0 flex-1 flex-col ${tabBarVisible ? 'pb-[var(--tab-bar-h)]' : ''}`} style={{ '--page-bottom': tabBarVisible ? 'var(--tab-bar-h)' : '0px' } as React.CSSProperties}>
         {/* 설정·대화 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정·SCR-188).
             z-[45]: 뷰어 크롬(z-20)·질문 패널 오버레이(z-30)·브리핑 기사 시트(z-40)보다 위, 확인창·팔레트·토스트(z-50)보다 아래.
             터치는 탭 바 자리(bottom)를 비워 탭 바가 보인다 */}
         {panel === 'home' && (
-          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
             <Home
               user={user}
               settings={settings}
@@ -1909,6 +1948,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               onOpenFileById={openFileById}
               onOpenThread={(id) => {
                 setAiThreadId(id);
+                setAiTab('chat');
+                openPage('ai');
+              }}
+              onOpenCards={() => {
+                setAiThreadId(null);
+                setAiTab('cards');
                 openPage('ai');
               }}
               onOpenPanel={(p) => {
@@ -1928,9 +1973,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </div>
         )}
         {panel === 'ai' && (
-          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
             <AiPage
               initialThreadId={aiThreadId}
+              initialTab={aiTab}
+              listSignal={aiListSignal}
+              twoColumn={!narrow}
               onOpenFile={(f) => {
                 closePage();
                 void selectFile(f);
@@ -1946,7 +1994,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         {panel === 'chat' && (
           // SCR-187·188: 대화 — 문서 없이 시작하는 챗봇을 본문 전체에. 페이지를 떠나면 언마운트되지만
           // 서버에 자동 저장되므로 다시 열면 목록에서 이어 간다
-          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
             <AskPanel
               file={null}
               page
@@ -1958,13 +2006,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 void selectFile(f);
               }}
               isPc={!IS_TOUCH}
+              twoColumn={!narrow}
               onClose={closePage}
               onViewChange={(v) => setChatBody(v === 'body')}
             />
           </div>
         )}
         {panel === 'settings' && (
-          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
             <SettingsPage
               user={user}
               settings={settings}
@@ -1982,6 +2031,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               }}
               onLogout={() => void handleLogout()}
               onClose={closeSettings}
+              narrow={narrow}
+              rootSignal={settingsRootSignal}
             />
           </div>
         )}
@@ -2042,7 +2093,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 onTrash={f.kind === 'briefing' ? () => actions.deleteFile(f.id) : undefined}
                 terms={terms}
                 onSwipeTab={IS_TOUCH ? switchTab : undefined}
-                onBackToList={IS_TOUCH ? () => setTouchList(true) : undefined}
+                onBackToList={
+                  narrow
+                    ? () => {
+                        // 온 곳으로 — 주소도 목록 상태(`/`)로 맞춰 뒤로 가기가 같은 자리를 또 거치지 않게
+                        setTouchList(true);
+                        setPanel(docOriginRef.current);
+                        if (location.pathname !== '/') history.replaceState(null, '', '/');
+                      }
+                    : undefined
+                }
+                askTwoColumn={!narrow}
                 onEditModeChange={IS_TOUCH ? setEditing : undefined}
               />
             )}

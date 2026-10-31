@@ -5,6 +5,23 @@
    폰을 가로로 눕혀 너비가 768px를 넘어도 터치 기기면 드로어 UI를 유지하기 위함. */
 @custom-variant pc (@media (hover: hover) and (pointer: fine));
 @custom-variant touch (@media not ((hover: hover) and (pointer: fine)));
+/* 창 등급(폰 재설계 2026-10-31) — 터치 기기 안에서 폭으로 다시 가른다. 값은 lib/constants.ts WINDOW_*와 같아야 한다.
+   narrow: 접은 폰·플립·일반 폰(세로·가로) / wide: 펼친 폰 세로·작은 태블릿 / xwide: 펼친 폰 가로·큰 태블릿.
+   구조(목록 덮기·두 열)만 이 변형으로 가르고, 44px·hover 같은 affordance는 touch:/pc:에 남긴다 */
+@custom-variant narrow {
+  @media not ((hover: hover) and (pointer: fine)) {
+    @media not ((min-width: 600px) and (min-height: 480px)) {
+      @slot;
+    }
+  }
+}
+@custom-variant wide {
+  @media not ((hover: hover) and (pointer: fine)) {
+    @media ((min-width: 600px) and (min-height: 480px)) {
+      @slot;
+    }
+  }
+}
 
 /* 뷰어 글자 크기 설정이 먹도록 prose의 rem 고정 크기를 부모 상속으로 바꾼다 (자식은 em 기반이라 함께 스케일됨) */
 .prose {

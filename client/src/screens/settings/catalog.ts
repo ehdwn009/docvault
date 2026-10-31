@@ -57,6 +57,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { category: 'display', item: 'fontSize', title: '글자 크기', desc: '마크다운 문서의 글자 크기' },
   { category: 'display', item: 'htmlFontScale', title: 'HTML 글자 크기', desc: 'HTML 문서의 기본 배율' },
   { category: 'display', item: 'contentWidth', title: '본문 너비', desc: '좁게 · 보통 · 넓게' },
+  { category: 'display', item: 'autohide', title: '읽을 때 바 숨기기', desc: '폰에서 문서를 넘길 때 머리와 아래 바를 숨길지' },
   { category: 'display', item: 'layout', title: '이전 레이아웃', desc: 'v0.53 모습(홈 없음, 레일 아이콘 여럿)으로 되돌리기' },
   { category: 'display', item: 'shortcuts', title: '단축키 · 제스처', desc: '숨어 있는 단축키와 제스처 전체 목록' },
   { category: 'cards', item: 'termHighlight', title: '문서 속 내 카드 용어에 점선 밑줄', desc: '누르면 한 줄 정의가 뜨고 카드로 갈 수 있습니다' },
