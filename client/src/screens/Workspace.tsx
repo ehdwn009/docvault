@@ -71,6 +71,11 @@ const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['home', 'ai', 'settings'
 const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
 /** 보이는 영역이 이만큼 넘게 줄면 키보드가 올라온 것으로 본다(px) — 주소 막대 변화(수십 px)와 구분 */
 const KEYBOARD_MIN_PX = 120;
+/** 글자를 받는 요소에 커서가 있는가 — 키보드가 떠 있을 조건 */
+function isEditableFocused(): boolean {
+  const a = document.activeElement;
+  return a instanceof HTMLElement && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT' || a.isContentEditable);
+}
 /** 문서 패널 고정 섹션(즐겨찾기·공유받음)의 열림 상태 — 기기 기억 */
 const FILE_SECTIONS_KEY = 'dv_files_sections';
 type SortBy = 'name' | 'updated';
@@ -199,8 +204,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 키보드가 올라오면 보이는 영역만 줄어든다 — 바를 보이는 영역의 바닥에 맞춰 입력줄이 키보드 위에 앉게.
   // 질문 시트(AskPanel)와 같은 계산(offsetTop + height - 자기 높이): bottom으로 올리는 계산은 아이폰 웹앱에서 한 뼘 위에 떴다 (사용자 보고 2026-10-31)
   const vv = useVisualViewport(IS_TOUCH);
-  const keyboardOpen = IS_TOUCH && window.innerHeight - vv.height - vv.offsetTop > KEYBOARD_MIN_PX;
+  // 입력칸에 커서가 있을 때만 키보드로 본다 — 접는 폰을 접는 순간 창 높이와 보이는 영역이 잠깐 어긋나 키보드로 오판했고,
+  // 바가 화면 밖(펼친 높이 기준)에 놓여 사라졌다 (사용자 보고 2026-10-31)
+  const keyboardOpen = IS_TOUCH && window.innerHeight - vv.height - vv.offsetTop > KEYBOARD_MIN_PX && isEditableFocused();
   const barTop = keyboardOpen ? vv.offsetTop + vv.height - (barElRef.current?.offsetHeight ?? 0) : null;
+  // 아이폰 웹앱은 키보드를 닫거나 접고 펼친 뒤 페이지가 밀린 채 남는다(위에 빈 띠) — 앱은 늘 화면 한 장이라 0으로 되돌린다
+
   const [switcherOpen, setSwitcherOpen] = useState(false); // 문서 스위처 시트
   // 드래그 중인 탭 — 있으면 본문 위에 드롭 존 오버레이를 깐다 (IA — 탭 드래그 배치)
   const [dragTab, setDragTab] = useState<TreeFile | null>(null);
@@ -209,6 +218,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
   // 창 등급(폭 기준) — 접은 폰은 한 열(목록이 문서를 덮음), 펼친 폰은 PC처럼 두 열. 기기 판정(IS_TOUCH)과 별개 축 (IA — 폰 재설계 2026-10-31)
   const wc = useWindowClass();
+  // 아이폰 웹앱은 키보드를 닫거나 접고 펼친 뒤 페이지가 밀린 채 남는다(위에 빈 띠) — 앱은 늘 화면 한 장이라 0으로 되돌린다
+  useEffect(() => {
+    if (!IS_TOUCH || keyboardOpen) return;
+    window.scrollTo(0, 0);
+  }, [keyboardOpen, wc]);
   const narrow = IS_TOUCH && wc === 'narrow';
   const selectedRef = useRef<TreeFile | null>(null);
   selectedRef.current = selected;
