@@ -158,7 +158,11 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const sub = subscriptionSummary(userId);
     const schedule = readSchedule(userId);
     const { doc } = loadSourcesDoc(userId);
-    const origin = new URL(c.req.url).origin;
+    // 프록시(Caddy) 뒤라 c.req.url은 http://app:3000 — 바깥 주소는 X-Forwarded-* 로 복원한다. 복사 줄이 http면 스킬이 "https가 아니다"로 멈춘다(첫 실전 2026-10-31)
+    const url = new URL(c.req.url);
+    const proto = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() || url.protocol.replace(':', '');
+    const host = c.req.header('x-forwarded-host')?.split(',')[0]?.trim() || c.req.header('host') || url.host;
+    const origin = `${proto}://${host}`;
     return c.json({
       ...sub,
       leadMs: BRIEFING.SUB_LEAD_MS,
