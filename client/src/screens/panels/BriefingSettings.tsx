@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { BRIEFING_TIMER_LABEL_MAX, BRIEFING_TIMERS_MAX, kstTime, timerLabel, type AutoSchedule, type BriefingStatus, type Timer } from '../../lib/briefing';
 import { toast } from '../../lib/toast';
@@ -35,9 +35,14 @@ export default function BriefingSettings({ onOpenSources }: Props) {
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [readers, setReaders] = useState<ReaderCandidate[] | null>(null);
+  /** 서버가 확인해 준 마지막 타이머 목록 — 잘못 친 시각을 되돌리고, 바뀐 게 없으면 저장하지 않으려고 */
+  const savedTimers = useRef<Timer[]>([]);
 
   useEffect(() => {
-    void api<BriefingStatus>('/briefing/status').then(setStatus, () => setError('상태를 불러오지 못했어요'));
+    void api<BriefingStatus>('/briefing/status').then((s) => {
+      savedTimers.current = s.schedule.timers;
+      setStatus(s);
+    }, () => setError('상태를 불러오지 못했어요'));
     void api<{ users: ReaderCandidate[] }>('/briefing/readers').then((r) => setReaders(r.users), () => {});
   }, []);
 
@@ -60,6 +65,7 @@ export default function BriefingSettings({ onOpenSources }: Props) {
         method: 'PUT',
         body: JSON.stringify(patch),
       });
+      savedTimers.current = r.schedule.timers;
       setStatus((s) => (s ? { ...s, ...r } : s));
       // 회차 켜기·시각을 바꿨으면 서버가 어떻게 받았는지 바로 알린다 — 지금 켰는지, 아니면 다음은 언제인지 (v0.51)
       if (patch.autoEnabled !== undefined || patch.schedule) {
@@ -70,7 +76,10 @@ export default function BriefingSettings({ onOpenSources }: Props) {
     } catch (err) {
       // 검증 오류 앞의 칸 이름("schedule: ")은 떼고 보여 준다
       setError(err instanceof ApiError ? err.message.replace(/^[\w.]+: /, '') : '바꾸지 못했어요');
-      void api<BriefingStatus>('/briefing/status').then(setStatus, () => {});
+      void api<BriefingStatus>('/briefing/status').then((s) => {
+        savedTimers.current = s.schedule.timers;
+        setStatus(s);
+      }, () => {});
     }
   }
   /** 타이머 목록 한 줄 바꾸기·추가·지우기 — 화면에 먼저 반영하고 저장. 서버가 정렬·검사한 목록으로 다시 맞춘다 */
@@ -80,7 +89,14 @@ export default function BriefingSettings({ onOpenSources }: Props) {
     setStatus({ ...status, schedule });
     void save({ schedule });
   };
-  const patchTimer = (id: string, patch: Partial<Timer>) => status && saveTimers(status.schedule.timers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  const savedOf = (id: string) => savedTimers.current.find((t) => t.id === id);
+  /** 저장 — 서버가 확인한 값과 같으면 보내지 않는다(저장마다 토스트·틱·설정 변경 시각이 움직인다) */
+  const patchTimer = (id: string, patch: Partial<Timer>) => {
+    if (!status) return;
+    const saved = savedOf(id);
+    if (saved && (Object.keys(patch) as (keyof Timer)[]).every((k) => saved[k] === patch[k])) return;
+    saveTimers(status.schedule.timers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  };
   /** 시각·이름은 칸을 떠날 때 저장 — 글자를 치는 도중의 값마다 간격 검사에 걸리지 않게. 그 전까지는 화면 값만 바꾼다 */
   const editTimer = (id: string, patch: Partial<Timer>) => status && setStatus({ ...status, schedule: { timers: status.schedule.timers.map((t) => (t.id === id ? { ...t, ...patch } : t)) } });
   const addTimer = () => {
@@ -133,7 +149,7 @@ export default function BriefingSettings({ onOpenSources }: Props) {
                   placeholder={`${t.at}판`}
                   disabled={!status.autoEnabled}
                   onChange={(e) => editTimer(t.id, { label: e.target.value })}
-                  onBlur={() => patchTimer(t.id, { label: t.label.trim() })}
+                  onBlur={() => (t.id ? patchTimer(t.id, { label: t.label.trim() }) : undefined)}
                   aria-label="회차 이름"
                   className="min-h-9 w-20 min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
                 />
@@ -142,12 +158,17 @@ export default function BriefingSettings({ onOpenSources }: Props) {
                   inputMode="numeric"
                   value={t.at}
                   placeholder="HH:MM"
-                  disabled={!status.autoEnabled || !t.on}
+                  // 꺼진 타이머도 시각은 고칠 수 있어야 한다 — 켜려다 간격에 걸리면 시각부터 옮겨야 하므로(검토 2026-10-31)
+                  disabled={!status.autoEnabled}
                   onChange={(e) => editTimer(t.id, { at: e.target.value })}
                   onBlur={(e) => {
                     const at = e.target.value.trim();
                     if (AT_RE.test(at)) patchTimer(t.id, { at });
-                    else setError('시각은 24시간제 HH:MM으로 적어 주세요 (예: 13:00)');
+                    else {
+                      // 잘못 친 글자를 두면 다음 저장(체크 등)까지 거절된다 — 서버가 아는 값으로 되돌린다
+                      setError('시각은 24시간제 HH:MM으로 적어 주세요 (예: 13:00)');
+                      editTimer(t.id, { at: savedOf(t.id)?.at ?? t.at });
+                    }
                   }}
                   aria-label="시작 시각 (24시간제)"
                   className="min-h-9 w-16 rounded border border-slate-700 bg-slate-900 px-2 text-center font-mono text-slate-200 disabled:opacity-50"

@@ -163,7 +163,7 @@ export const userSettings = sqliteTable('user_settings', {
   briefingAuto: integer('briefing_auto').notNull().default(0),
   /** 앱 안 원문 보기 스위치(기본 0) — 서버에서 추출 품질을 잰 뒤 관리자가 켠다 (v0.45, 개선 합의안 7장) */
   briefingReader: integer('briefing_reader').notNull().default(0),
-  /** 자동 생성 회차별 켜기·시작 시각 JSON {"morning":{"on":true,"at":"06:30"},…}. null이면 기본(06:30·11:30·17:30 모두 켬) (v0.43) */
+  /** 자동 생성 타이머 목록 JSON {timers:[…]} — null이면 타이머 하나(아침 06:30). 옛 {morning,noon,evening} 모양은 읽을 때 변환 (autoSchedule.ts, v0.52) */
   briefingSchedule: text('briefing_schedule'),
   /** 이 사용자가 함께 보는 브리핑의 주인(관리자). null=안 봄. 관리자가 설정 → 뉴스 브리핑에서 계정을 고른다 (v0.49).
       is_shared(전체 공개)와 달리 사람을 고르는 공유라 파일이 아니라 사람에 붙인다 — 앞으로 생길 회차까지 한 번에 열린다 */

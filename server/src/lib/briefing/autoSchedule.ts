@@ -35,7 +35,12 @@ const atSchema = z
 const timerSchema = z.object({
   /** 빈 문자열이면 서버가 만든다(화면이 [+ 추가]로 보낸 새 줄) */
   id: z.string().max(20).regex(/^[a-z0-9_-]*$/, 'id는 영문 소문자·숫자만'),
-  label: z.string().trim().max(BRIEFING.TIMER_LABEL_MAX_CHARS, `이름은 ${BRIEFING.TIMER_LABEL_MAX_CHARS}자까지`),
+  // 이름은 회차 파일 이름에 들어간다 — 경로 글자는 nameField(validate.ts)와 같은 규칙으로 막는다
+  label: z
+    .string()
+    .trim()
+    .max(BRIEFING.TIMER_LABEL_MAX_CHARS, `이름은 ${BRIEFING.TIMER_LABEL_MAX_CHARS}자까지`)
+    .refine((n) => !/[/\\]/.test(n) && n !== '.' && n !== '..', '이름에 / 나 \\ 는 쓸 수 없어요'),
   at: atSchema,
   on: z.boolean(),
 });
@@ -51,7 +56,11 @@ export const scheduleSchema = z
     return true;
   }, `켜진 타이머는 서로 ${BRIEFING.TIMER_MIN_GAP_MS / 3_600_000}시간 이상 떨어져야 해요`);
 
-/** 옛 모양 {"morning":{on,at},"noon":…,"evening":…} → 타이머 3개 (이름 아침·점심·저녁 그대로) */
+/**
+ * 옛 모양 {"morning":{on,at},"noon":…,"evening":…} → 타이머 3개 (이름 아침·점심·저녁 그대로).
+ * 새 규칙(2시간 간격)으로 검사하지 않는다 — 옛 설정은 순서만 지켰으므로 걸리면 설정이 통째로 기본값으로 사라진다(검토 2026-10-31).
+ * 간격이 모자라면 뒤쪽 타이머를 꺼 두고, 사람이 설정에서 시각을 고치게 한다
+ */
 function fromLegacy(raw: unknown): AutoSchedule | null {
   if (!raw || typeof raw !== 'object' || 'timers' in raw) return null;
   const obj = raw as Record<string, { on?: unknown; at?: unknown }>;
@@ -59,10 +68,17 @@ function fromLegacy(raw: unknown): AutoSchedule | null {
   for (const def of BRIEFING.LEGACY_TIMERS) {
     const v = obj[def.id];
     if (!v || typeof v !== 'object') return null;
-    timers.push({ id: def.id, label: def.label, at: typeof v.at === 'string' ? v.at : def.at, on: v.on === true });
+    const at = typeof v.at === 'string' && atSchema.safeParse(v.at).success ? v.at : def.at;
+    timers.push({ id: def.id, label: def.label, at, on: v.on === true });
   }
-  const r = scheduleSchema.safeParse({ timers });
-  return r.success ? r.data : null;
+  timers.sort((a, b) => toMinutes(a.at) - toMinutes(b.at));
+  let lastOn: Timer | null = null;
+  for (const t of timers) {
+    if (!t.on) continue;
+    if (lastOn && (toMinutes(t.at) - toMinutes(lastOn.at)) * 60_000 < BRIEFING.TIMER_MIN_GAP_MS) t.on = false;
+    else lastOn = t;
+  }
+  return { timers };
 }
 
 /** 저장된 글자를 읽는다 — 비었거나 망가졌으면 기본값(타이머 하나). 옛 모양이면 타이머 3개로 */

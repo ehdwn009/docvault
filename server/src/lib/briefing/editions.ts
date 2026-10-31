@@ -57,7 +57,7 @@ function withLead(row: EditionRow): EditionRow & { lead: string[] } {
     db.update(briefingRuns).set({ leadIds: JSON.stringify(lead) }).where(eq(briefingRuns.id, row.runId)).run();
     return { ...row, lead };
   }
-  return { ...row, lead, slot: ed.edition?.slot ?? row.slot, itemCount: ed.stats?.items ?? row.itemCount };
+  return { ...row, lead, slot: ed.edition?.slot ?? row.slot, label: ed.edition?.label ?? row.label, itemCount: ed.stats?.items ?? row.itemCount };
 }
 
 function toSummary(raw: EditionRow) {
