@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { BRIEFING_PING_POLL_MS, BRIEFING_PING_WAIT_MS, kstTime, PING_LABEL, type AutoSchedule, type AutoSlot, type BriefingMode, type SubscriptionInfo } from '../../lib/briefing';
+import { BRIEFING_PING_POLL_MS, BRIEFING_PING_WAIT_MS, kstTime, PING_LABEL, type AutoSchedule, type BriefingMode, type SubscriptionInfo } from '../../lib/briefing';
 import { confirmDialog } from '../../lib/dialog';
 import { toast } from '../../lib/toast';
 
-const SLOT_LABEL: Record<AutoSlot, string> = { morning: '아침', noon: '점심', evening: '저녁' };
 /** 트리거 주소의 모양 — 서버 SUB_TRIGGER_HOST·SUB_TRIGGER_PATH와 같은 규칙. 화면은 미리 알려 주기만 하고 검사는 서버가 한다 */
 const TRIGGER_URL_HINT = 'https://api.anthropic.com/v1/claude_code/routines/<id>/fire';
 
@@ -408,10 +407,7 @@ export default function BriefingSubscriptionSettings({ mode, schedule, remoteRun
           <div className="text-slate-500">
             <p>
               예약 작업은 회차 {Math.round(info.leadMs / 60_000)}분 전에 켜지고, 마감은 회차 {Math.round(info.deadlineAfterMs / 60_000)}분 뒤예요 —{' '}
-              {(Object.keys(SLOT_LABEL) as AutoSlot[])
-                .filter((s) => schedule[s].on && info.triggerTimes[s])
-                .map((s) => `${SLOT_LABEL[s]} ${schedule[s].at} → ${info.triggerTimes[s]} 켜기`)
-                .join(' · ') || '켜 둔 회차가 없어요'}
+              {info.triggerTimes.map((t) => `${t.label} ${t.at} → ${t.triggerAt} 켜기`).join(' · ') || '켜 둔 타이머가 없어요'}
             </p>
             {recent && recent.ok + recent.missing + recent.error > 0 && (
               <p className="mt-1">

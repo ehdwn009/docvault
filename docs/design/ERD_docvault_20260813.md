@@ -113,7 +113,7 @@ erDiagram
         integer term_highlight "0|1 문서 속 카드 용어 밑줄 (기본 1, 2026-09-20)"
         integer ask_with_cards "0|1 질문 때 관련 카드 함께 보내기 (기본 1, 2026-09-20)"
         integer briefing_auto "0|1 뉴스 브리핑 자동 생성 (기본 0, 관리자만 의미, 2026-10-01)"
-        text briefing_schedule "nullable, 자동 생성 회차별 켜기·시각 JSON (v0.43)"
+        text briefing_schedule "nullable, 자동 생성 타이머 목록 JSON {timers:[{id,label,at,on}]} — 최대 5개, 켜진 것끼리 2시간 이상 (v0.52; 옛 {morning,noon,evening} 모양은 읽을 때 변환)"
         integer briefing_reader "0|1 브리핑 앱 안 원문 보기 (기본 0, 관리자만 의미, v0.45)"
         integer briefing_owner_id FK "nullable, 함께 보는 브리핑의 주인(관리자) — 관리자가 고른 일반 계정에만 값, SET NULL (v0.49)"
         text briefing_mode "api|subscription 회차 생성 방식 (기본 api, 관리자만 의미, v0.50)"
@@ -189,7 +189,8 @@ erDiagram
         integer id PK
         integer owner_id FK "만든 관리자"
         text trigger "manual|auto|subscription — subscription은 claude.ai 예약 작업이 만든 회차 (v0.50)"
-        text slot "morning|noon|evening|adhoc"
+        text slot "타이머 id(옛 morning|noon|evening 포함) 또는 adhoc (v0.52)"
+        text label "nullable, 만들 때의 회차 이름(아침·13:00·…) — 타이머를 지우거나 이름을 바꿔도 지난 회차 이름이 흔들리지 않게 (v0.52)"
         text edition_date "YYYY-MM-DD (한국시간) — 자동 회차 중복 방지 기준"
         text status "running|ok|error|skipped|cancelled|missing — missing은 구독 실행이 마감까지 안 옴 (v0.50)"
         text stage "collect|classify|select|read|fill|summarize|lens|save|remote — 진행 표시용 (read는 v0.43, fill·lens는 v0.45, remote는 구독 — 예약 작업이 일하는 중, v0.50)"
@@ -275,7 +276,7 @@ erDiagram
   - BRIEFING_RUNS.opus_input_tokens·opus_output_tokens(v0.46)는 핵심 요약에 쓰는 Opus 5.5의 토큰이다 — 단가가 Sonnet의 2배라 따로 센다. stage_usage(v0.46)는 단계별 분해(분류·선별·합치기·웹 보강·요약·핵심 요약·글머리표)의 JSON 사본이다 — 회차 JSON `stats.byStage`에도 같은 값이 있지만 회차를 지워도 비용 근거가 남아야 하고, 2주 실측이 "어느 단계가 돈을 먹나"를 실행 기록만 읽어 셀 수 있어야 해서 둘 다 둔다.
   - BRIEFING_RUNS.web_searches(v0.45)는 웹 검색 보강(설계 ③-3)에 쓴 검색 수다. 토큰이 아니라 검색 횟수로 과금(1,000회당 $10)되는 비용이라 토큰 칸과 따로 두고, cost_usd에는 합쳐 넣는다. stage의 `fill`(웹 검색 보강)·`lens`(요약 보기 다시 쓰기)도 v0.45.
   - 비용은 cost_usd에 끝날 때 한 번 계산해 둔다(토큰 칸도 함께). 질문 사용량처럼 조회 때 단가를 곱하지 않는 이유: 월 한도 판정이 매분 이 합계를 읽고, 단가가 나중에 바뀌어도 "그때 얼마로 봤나"가 남아야 한다.
-  - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다 — 구독 모드(v0.50)의 트리거도 이 스위치가 켜져 있어야 돈다(스위치는 "자동으로 만들까", briefing_mode는 "누가 만들까"). USER_SETTINGS.briefing_schedule은 그 사용자의 회차별 켜기·시작 시각 JSON(`{"morning":{"on":true,"at":"06:30"},…}`, v0.43)이고, null이면 기본(06:30·11:30·17:30 모두 켬) — 스케줄러가 사용자마다 이 값으로 지금 돌 회차를 고른다.
+  - USER_SETTINGS.briefing_auto는 자동 생성 스위치(기본 0). 관리자에게만 의미가 있고, 스케줄러는 role=admin이면서 이 값이 1인 사용자만 본다 — 구독 모드(v0.50)의 트리거도 이 스위치가 켜져 있어야 돈다(스위치는 "자동으로 만들까", briefing_mode는 "누가 만들까"). USER_SETTINGS.briefing_schedule은 그 사용자의 자동 생성 **타이머 목록** JSON(`{"timers":[{"id":"morning","label":"아침","at":"06:30","on":true},…]}`, v0.52 — 최대 5개, 켜진 타이머끼리 2시간 이상, 시각순; 옛 `{"morning":{…},…}` 모양은 읽을 때 타이머 3개로 변환)이고, BRIEFING_RUNS.slot은 타이머 id(또는 `adhoc`)·BRIEFING_RUNS.label은 만들 때의 회차 이름이다. null이면 기본(06:30·11:30·17:30 모두 켬) — 스케줄러가 사용자마다 이 값으로 지금 돌 회차를 고른다.
   - USER_SETTINGS.briefing_reader(v0.45)는 앱 안 원문 보기 스위치(기본 0). 관리자에게만 의미가 있고, 회차 화면의 [앱에서 보기]와 API-138은 이 값이 1인 사용자에게만 열린다. 기본이 꺼짐인 이유: 켜기 전에 `briefing:readcheck`로 추출 품질(70%)·범위(50%)를 재는 것이 설계라서다. 원문은 저장하지 않으므로 이 표 밖에 원문 칸은 없다.
   - USER_SETTINGS.briefing_owner_id(v0.49)는 **열람 계정** 칸이다 — 이 사용자가 함께 보는 브리핑의 주인(관리자) id, null이면 안 본다. 관리자가 설정 → 뉴스 브리핑에서 일반 계정을 골라 넣는다(API-140). 권한은 `canReadFile`이 "kind=briefing이고 FILES.owner_id가 내 briefing_owner_id면 읽기"로 본다 — 쓰기는 열리지 않는다. 사람에 붙인 이유는 위 공유 항목에: 회차는 매일 생기므로 파일마다 공유를 켜는 구조로는 "자동"이 되지 않는다. 주인 관리자가 지워지면 SET NULL로 저절로 닫힌다. 스케줄러·비용·실행 기록은 이 칸과 무관하다(만드는 사람은 그대로 관리자 한 명).
   - 인덱스 `briefing_runs_owner_started_idx (owner_id, started_at)` — 패널의 최근 실행·실행 기록·이번 달 비용 합계가 전부 "이 사람의 최근 실행부터" 읽는다.

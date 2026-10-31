@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { kstTime, type AutoSchedule, type AutoSlot, type BriefingStatus } from '../../lib/briefing';
+import { BRIEFING_TIMER_LABEL_MAX, BRIEFING_TIMERS_MAX, kstTime, timerLabel, type AutoSchedule, type BriefingStatus, type Timer } from '../../lib/briefing';
 import { toast } from '../../lib/toast';
 import BriefingSubscriptionSettings from './BriefingSubscriptionSettings';
 
-const SLOT_FULL: Record<AutoSlot, string> = { morning: '아침판', noon: '점심판', evening: '저녁판' };
-const SLOTS: { slot: AutoSlot; label: string }[] = [
-  { slot: 'morning', label: '아침' },
-  { slot: 'noon', label: '점심' },
-  { slot: 'evening', label: '저녁' },
-];
+/** 24시간제 HH:MM — 브라우저 time 입력칸은 OS 설정에 따라 오전/오후로 보여 글자 칸을 쓴다 (v0.52, 사용자 요청) */
+const AT_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** 구독 모드에서 켜지는 시각 — 회차 시각 − 90분 (서버 BRIEFING.SUB_LEAD_MS와 같은 값) */
+const SUB_LEAD_MIN = 90;
+function triggerTimeOf(at: string): string {
+  const m = (((Number(at.slice(0, 2)) * 60 + Number(at.slice(3, 5)) - SUB_LEAD_MIN) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/** 새 타이머의 시각 — 마지막 타이머 + 4시간(기사가 쌓이는 리듬), 21:59를 넘으면 06:30 */
+function suggestAt(timers: Timer[]): string {
+  const last = timers.at(-1);
+  if (!last) return '06:30';
+  const m = Number(last.at.slice(0, 2)) * 60 + Number(last.at.slice(3, 5)) + 240;
+  if (m > 21 * 60 + 59) return '06:30';
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
 
 type Props = {
   /** 수집 목록 문서를 연다 — 고치는 곳은 설정이 아니라 그 문서다 */
@@ -45,15 +56,15 @@ export default function BriefingSettings({ onOpenSources }: Props) {
   async function save(patch: { autoEnabled?: boolean; schedule?: AutoSchedule; readerEnabled?: boolean }) {
     setError(null);
     try {
-      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'readerEnabled' | 'mode' | 'startedNow'>>('/briefing/settings', {
+      const r = await api<Pick<BriefingStatus, 'autoEnabled' | 'schedule' | 'nextAutoAt' | 'nextAutoSlot' | 'nextAutoLabel' | 'readerEnabled' | 'mode' | 'startedNow'>>('/briefing/settings', {
         method: 'PUT',
         body: JSON.stringify(patch),
       });
       setStatus((s) => (s ? { ...s, ...r } : s));
       // 회차 켜기·시각을 바꿨으면 서버가 어떻게 받았는지 바로 알린다 — 지금 켰는지, 아니면 다음은 언제인지 (v0.51)
       if (patch.autoEnabled !== undefined || patch.schedule) {
-        if (r.startedNow) toast(`${SLOT_FULL[r.startedNow.slot]} 예약 작업을 지금 켰어요${r.startedNow.deadlineAt ? ` — 마감 ${kstTime(r.startedNow.deadlineAt, false)}` : ''}`, 'success');
-        else if (r.autoEnabled && r.nextAutoAt) toast(`저장했어요 — 다음 ${r.mode === 'subscription' ? '예약 작업' : '자동 생성'} ${kstTime(r.nextAutoAt)} ${SLOT_FULL[r.nextAutoSlot ?? 'morning']}`, 'info');
+        if (r.startedNow) toast(`${r.startedNow.label}판 예약 작업을 지금 켰어요${r.startedNow.deadlineAt ? ` — 마감 ${kstTime(r.startedNow.deadlineAt, false)}` : ''}`, 'success');
+        else if (r.autoEnabled && r.nextAutoAt) toast(`저장했어요 — 다음 ${r.mode === 'subscription' ? '예약 작업' : '자동 생성'} ${kstTime(r.nextAutoAt)} ${r.nextAutoLabel ?? ''}판`, 'info');
         else if (!r.autoEnabled) toast('자동 생성을 껐어요', 'info');
       }
     } catch (err) {
@@ -62,12 +73,22 @@ export default function BriefingSettings({ onOpenSources }: Props) {
       void api<BriefingStatus>('/briefing/status').then(setStatus, () => {});
     }
   }
-  const setSlot = (slot: AutoSlot, patch: Partial<AutoSchedule[AutoSlot]>) => {
+  /** 타이머 목록 한 줄 바꾸기·추가·지우기 — 화면에 먼저 반영하고 저장. 서버가 정렬·검사한 목록으로 다시 맞춘다 */
+  const saveTimers = (timers: Timer[]) => {
     if (!status) return;
-    const schedule = { ...status.schedule, [slot]: { ...status.schedule[slot], ...patch } };
+    const schedule: AutoSchedule = { timers };
     setStatus({ ...status, schedule });
     void save({ schedule });
   };
+  const patchTimer = (id: string, patch: Partial<Timer>) => status && saveTimers(status.schedule.timers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  /** 시각·이름은 칸을 떠날 때 저장 — 글자를 치는 도중의 값마다 간격 검사에 걸리지 않게. 그 전까지는 화면 값만 바꾼다 */
+  const editTimer = (id: string, patch: Partial<Timer>) => status && setStatus({ ...status, schedule: { timers: status.schedule.timers.map((t) => (t.id === id ? { ...t, ...patch } : t)) } });
+  const addTimer = () => {
+    if (!status || status.schedule.timers.length >= BRIEFING_TIMERS_MAX) return;
+    // id는 서버가 만든다(빈 문자열) — 화면 key로는 임시 값을 쓴다
+    saveTimers([...status.schedule.timers, { id: '', label: '', at: suggestAt(status.schedule.timers), on: true }]);
+  };
+  const removeTimer = (id: string) => status && status.schedule.timers.length > 1 && saveTimers(status.schedule.timers.filter((t) => t.id !== id));
 
   return (
     <section>
@@ -93,33 +114,75 @@ export default function BriefingSettings({ onOpenSources }: Props) {
               </span>
             </span>
           </label>
-          {/* 회차마다 켜기·시각 — 사람마다 하루 리듬이 달라 고정 시각(06:30·11:30·17:30)이 안 맞았다 (v0.43, 사용자 요청) */}
+          {/* 타이머 목록 — 고정 세 회차(v0.43)를 대체. 처음엔 하나, [+ 추가]로 최대 5개, 켜진 것끼리 2시간 이상(서버가 거절) (v0.52, 사용자 결정 2026-10-31) */}
           <div className={`mt-2 flex flex-col gap-1.5 pl-6 ${status.autoEnabled ? '' : 'opacity-50'}`}>
-            {SLOTS.map(({ slot, label }) => (
-              <div key={slot} className="flex items-center gap-2 text-xs text-slate-400">
-                <label className="flex min-h-9 flex-1 items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={status.schedule[slot].on}
-                    disabled={!status.autoEnabled}
-                    onChange={(e) => setSlot(slot, { on: e.target.checked })}
-                    className="accent-slate-400"
-                  />
-                  {label}
-                </label>
+            {status.schedule.timers.map((t, i) => (
+              <div key={t.id || `new-${i}`} className="flex items-center gap-1.5 text-xs text-slate-400">
                 <input
-                  type="time"
-                  value={status.schedule[slot].at}
-                  max="21:59"
-                  disabled={!status.autoEnabled || !status.schedule[slot].on}
-                  // 다 고른 뒤(포커스를 떠날 때) 저장한다 — 시·분을 고르는 도중의 값마다 순서 검사에 걸리지 않게
-                  onChange={(e) => setStatus({ ...status, schedule: { ...status.schedule, [slot]: { ...status.schedule[slot], at: e.target.value } } })}
-                  onBlur={(e) => e.target.value && setSlot(slot, { at: e.target.value })}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200 disabled:opacity-50"
+                  type="checkbox"
+                  checked={t.on}
+                  disabled={!status.autoEnabled}
+                  onChange={(e) => patchTimer(t.id, { on: e.target.checked })}
+                  aria-label="이 타이머 켜기"
+                  className="accent-slate-400"
                 />
+                <input
+                  type="text"
+                  value={t.label}
+                  maxLength={BRIEFING_TIMER_LABEL_MAX}
+                  placeholder={`${t.at}판`}
+                  disabled={!status.autoEnabled}
+                  onChange={(e) => editTimer(t.id, { label: e.target.value })}
+                  onBlur={() => patchTimer(t.id, { label: t.label.trim() })}
+                  aria-label="회차 이름"
+                  className="min-h-9 w-20 min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
+                />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={t.at}
+                  placeholder="HH:MM"
+                  disabled={!status.autoEnabled || !t.on}
+                  onChange={(e) => editTimer(t.id, { at: e.target.value })}
+                  onBlur={(e) => {
+                    const at = e.target.value.trim();
+                    if (AT_RE.test(at)) patchTimer(t.id, { at });
+                    else setError('시각은 24시간제 HH:MM으로 적어 주세요 (예: 13:00)');
+                  }}
+                  aria-label="시작 시각 (24시간제)"
+                  className="min-h-9 w-16 rounded border border-slate-700 bg-slate-900 px-2 text-center font-mono text-slate-200 disabled:opacity-50"
+                />
+                <button
+                  onClick={() => removeTimer(t.id)}
+                  disabled={!status.autoEnabled || status.schedule.timers.length <= 1}
+                  title={status.schedule.timers.length <= 1 ? '타이머는 하나는 있어야 해요' : '이 타이머 지우기'}
+                  aria-label="이 타이머 지우기"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-slate-500 hover:text-red-300 disabled:opacity-40"
+                >
+                  ×
+                </button>
               </div>
             ))}
-            <p className="text-[11px] text-slate-600">아침 → 점심 → 저녁 순서로, 21:59까지 고를 수 있어요</p>
+            <div className="flex flex-col items-start gap-1">
+              <button
+                onClick={addTimer}
+                disabled={!status.autoEnabled || status.schedule.timers.length >= BRIEFING_TIMERS_MAX}
+                className="min-h-9 whitespace-nowrap rounded-md border border-slate-700 px-3 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+              >
+                + 타이머 추가
+              </button>
+              <span className="text-[11px] text-slate-600">
+                {status.schedule.timers.length}/{BRIEFING_TIMERS_MAX} · 이름을 비우면 시각이 회차 이름 · 켜진 타이머끼리 2시간 이상 · 21:59까지
+              </span>
+            </div>
+            {status.mode === 'subscription' && (
+              <p className="text-[11px] text-slate-600">
+                {status.schedule.timers
+                  .filter((t) => t.on)
+                  .map((t) => `${timerLabel(t)}판 ${t.at} → ${triggerTimeOf(t.at)} 켜짐`)
+                  .join(' · ') || '켜 둔 타이머가 없어요'}
+              </p>
+            )}
           </div>
           <p className="mt-2 text-xs text-slate-500">
             이번 달 ≈ ${status.monthCostUsd.toFixed(2)} / 한도 ${status.monthBudgetUsd} — 한도에 닿으면 자동 생성이 멈춥니다{status.mode === 'subscription' ? ' (구독 회차는 $0으로, 비용에 쌓이지 않아요)' : ''}

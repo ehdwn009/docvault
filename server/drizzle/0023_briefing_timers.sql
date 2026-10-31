@@ -1,0 +1,1 @@
+ALTER TABLE `briefing_runs` ADD `label` text;

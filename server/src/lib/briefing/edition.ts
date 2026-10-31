@@ -17,7 +17,8 @@ import { kstParts } from './time.js';
 // 회차 JSON — 회차 하나 = 문서 하나의 본문 (뉴스 브리핑 설계 "회차 JSON (version 1)").
 // 저장하는 것은 새로 쓴 제목·요약·의미, 언론사 이름, 원문 링크뿐이다. RSS 발췌는 여기 들어오지 않는다
 
-export type Slot = 'morning' | 'noon' | 'evening' | 'adhoc';
+/** 타이머 id 또는 'adhoc' — v0.52부터 자유 글자(옛 morning·noon·evening 포함) */
+export type Slot = string;
 
 /** v0.43의 고정 4칸 — 옛 회차에만 남아 있다. 화면은 blocks → detail → summary 순으로 찾아 그린다 */
 export type Detail = { background: string; numbers: string; next: string };
@@ -131,11 +132,9 @@ export type Edition = {
   }[];
 };
 
-const SLOT_LABEL: Record<Exclude<Slot, 'adhoc'>, string> = { morning: '아침', noon: '점심', evening: '저녁' };
-
-/** 회차 이름표 — 정기판은 "저녁", 수시판은 만든 시각 "14시 23분" */
-export function slotLabel(slot: Slot, createdAt: number): string {
-  if (slot !== 'adhoc') return SLOT_LABEL[slot];
+/** 회차 이름표 — 정기판은 만들 때 적어 둔 이름(label; 옛 행은 아침·점심·저녁 표), 수시판은 만든 시각 "14시 23분" */
+export function slotLabel(slot: Slot, createdAt: number, label?: string | null): string {
+  if (slot !== 'adhoc') return label?.trim() || BRIEFING.LEGACY_TIMERS.find((t) => t.id === slot)?.label || slot;
   const { hour, minute } = kstParts(createdAt);
   return `${hour}시 ${String(minute).padStart(2, '0')}분`;
 }
@@ -151,7 +150,7 @@ export type ItemDraft = { subId: string; prevStoryId: string | null; item: Omit<
 /** 기사마다 Written을 보고 세는 검증 카운터 — 기존 파이프라인은 buildItem에서, 구독 경로는 완성본 stats에서 온다 (설계 "완성본") */
 export type VerifyCounters = { numberDrops: number; demoted: number; overruns: number; impactDrops: number; explainDrops: number; titleMismatch: number };
 
-export type EditionMeta = { slot: Slot; since: number; until: number; createdAt: number };
+export type EditionMeta = { slot: Slot; label?: string | null; since: number; until: number; createdAt: number };
 
 export function assembleEdition(args: {
   picked: Picked[];
@@ -161,6 +160,7 @@ export function assembleEdition(args: {
   /** 재료가 없어 참고로 내린 핵심·주요 — 열쇠는 picked 위치 */
   demoted: Map<number, Demoted>;
   slot: Slot;
+  label?: string | null;
   since: number;
   until: number;
   createdAt: number;
@@ -233,7 +233,7 @@ export function assembleEdition(args: {
     });
   });
 
-  return layoutEdition(drafts, { slot: args.slot, since: args.since, until: args.until, createdAt: args.createdAt }, args.stats, counters, {
+  return layoutEdition(drafts, { slot: args.slot, label: args.label ?? null, since: args.since, until: args.until, createdAt: args.createdAt }, args.stats, counters, {
     usd: costOf(args.usage),
     haiku: { input: args.usage.haikuInput, output: args.usage.haikuOutput },
     sonnet: { input: args.usage.sonnetInput, output: args.usage.sonnetOutput },
@@ -314,7 +314,7 @@ export function layoutEdition(
   return {
     version: BRIEFING.EDITION_VERSION,
     lead,
-    edition: { date, slot: meta.slot, label: slotLabel(meta.slot, meta.createdAt), since: meta.since, until: meta.until, createdAt: meta.createdAt, ...(generator ? { generator } : {}) },
+    edition: { date, slot: meta.slot, label: slotLabel(meta.slot, meta.createdAt, meta.label), since: meta.since, until: meta.until, createdAt: meta.createdAt, ...(generator ? { generator } : {}) },
     stats: {
       ...stats,
       items: total,

@@ -6,9 +6,9 @@ import { BRIEFING, DEFAULT_USER_SETTINGS } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, files, users, userSettings } from '../../db/schema.js';
 import { decryptSecret, encryptSecret, hashEquals, newApiToken, sha256Hex } from '../crypto.js';
-import { parseSchedule, type AutoSchedule, type AutoSlot } from './autoSchedule.js';
+import { parseSchedule, startOf, timerLabel, type AutoSchedule, type AutoSlot } from './autoSchedule.js';
 import { isAggregator } from './collect.js';
-import { layoutEdition, readPrevious, saveEdition, type Edition, type ItemDraft, type Slot } from './edition.js';
+import { layoutEdition, readPrevious, saveEdition, slotLabel, type Edition, type ItemDraft, type Slot } from './edition.js';
 import { isPrivateAddress } from './fetch.js';
 import { buildInstruction, type Instruction, type PrevStoryRef } from './jobInstruction.js';
 import { checkItems, ResultSchema, tooManyDropped, type JobResult, type ResultItem } from './jobResult.js';
@@ -17,7 +17,7 @@ import { closeSubscriptionRun, nextSinceAt, runningSubscriptionRun } from './run
 import { loadSourcesDoc } from './sources.js';
 import { SourcesError } from './sourcesDoc.js';
 import { SUBS } from './taxonomy.js';
-import { kstParts, kstToMs } from './time.js';
+import { kstParts } from './time.js';
 
 // 구독 생성 방식 — 회차를 서버가 트리거한 claude.ai 예약 작업(사용자의 Claude 구독)이 만든다 (뉴스 브리핑 설계 "구독 생성 방식", v0.50).
 // 서버가 하는 일: 켜기(트리거)·지시서 내주기·진행 보고 받기·완성본 검사·조립·저장·마감 닫기. 이 경로에서 서버는 AI를 한 번도 부르지 않는다.
@@ -195,16 +195,11 @@ export function jobByJobId(jobId: string): RunRow | null {
   return db.select().from(briefingRuns).where(eq(briefingRuns.jobId, jobId)).get() ?? null;
 }
 
-function oneSlotStart(schedule: AutoSchedule, slot: AutoSlot, date: string): number {
-  const at = schedule[slot].at;
-  return kstToMs(date, Number(at.slice(0, 2)), Number(at.slice(3, 5)));
-}
-
 /**
  * 구독 실행 하나를 만들고 예약 작업을 켠다 — 실행 기록(running/remote, jobId, 마감)을 먼저 적고 트리거를 쏜다.
  * 호출이 실패하면 그 자리에서 error. until은 지금(트리거 시각) — 세션이 수집한 범위와 기록이 어긋나면 다음 회차의 since가 틀린다
  */
-export async function createJob(args: { ownerId: number; slot: Slot; editionDate: string; deadlineAt: number; now?: number }): Promise<RunRow> {
+export async function createJob(args: { ownerId: number; slot: Slot; label: string | null; editionDate: string; deadlineAt: number; now?: number }): Promise<RunRow> {
   const now = args.now ?? Date.now();
   const run = db
     .insert(briefingRuns)
@@ -212,6 +207,7 @@ export async function createJob(args: { ownerId: number; slot: Slot; editionDate
       ownerId: args.ownerId,
       trigger: 'subscription',
       slot: args.slot,
+      label: args.label,
       editionDate: args.editionDate,
       status: 'running',
       stage: 'remote',
@@ -249,7 +245,7 @@ export function instructionFor(run: RunRow, now = Date.now()): Instruction {
     db.update(briefingRuns).set({ remoteStartedAt: now }).where(and(eq(briefingRuns.id, run.id), eq(briefingRuns.status, 'running'))).run();
     addLog(openRemoteLive(run.id), '예약 작업이 지시서를 받아 갔어요', now);
   }
-  return buildInstruction({ jobId: run.jobId, slot: run.slot, since: run.sinceAt, until: run.untilAt, deadline: run.deadlineAt ?? run.untilAt + BRIEFING.SUB_LEAD_MS + BRIEFING.SUB_DEADLINE_AFTER_MS, doc, excludeUrls: prev.urls, prevStories, config: MODEL_CONFIG });
+  return buildInstruction({ jobId: run.jobId, slot: run.slot, label: run.label, since: run.sinceAt, until: run.untilAt, deadline: run.deadlineAt ?? run.untilAt + BRIEFING.SUB_LEAD_MS + BRIEFING.SUB_DEADLINE_AFTER_MS, doc, excludeUrls: prev.urls, prevStories, config: MODEL_CONFIG });
 }
 
 /** 수집 목록 문서를 읽어 틀린 점을 돌려준다(없으면 null) — 트리거 전 검사용 */
@@ -386,7 +382,7 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
   const s = result.stats;
   const edition: Edition = layoutEdition(
     kept.map((it) => toDraft(it, knownStoryIds)),
-    { slot: run.slot, since: run.sinceAt, until: run.untilAt, createdAt: now },
+    { slot: run.slot, label: run.label, since: run.sinceAt, until: run.untilAt, createdAt: now },
     { sources: s.sources, sourcesFailed: s.sourcesFailed, candidates: s.candidates, attached: s.attached, bodiesRead: s.bodiesRead, fromFeed: s.fromFeed, extractRejected: s.extractRejected, webFilled: s.webFilled, lensDrops: s.lensDrops, wouldMerge: s.wouldMerge },
     { numberDrops: s.numberDrops, demoted: s.demoted, overruns: s.overruns, impactDrops: s.impactDrops, explainDrops: s.explainDrops, titleMismatch: s.titleMismatch },
     { usd: 0, haiku: { input: 0, output: 0 }, sonnet: { input: 0, output: 0 }, opus: { input: 0, output: 0 }, webSearches: 0 },
@@ -459,9 +455,9 @@ export function hasRunFor(ownerId: number, date: string, slot: Slot): boolean {
   });
 }
 
-function recordMissing(ownerId: number, slot: Slot, editionDate: string, deadlineAt: number, message: string, now: number): void {
+function recordMissing(ownerId: number, slot: Slot, label: string | null, editionDate: string, deadlineAt: number, message: string, now: number): void {
   db.insert(briefingRuns)
-    .values({ ownerId, trigger: 'subscription', slot, editionDate, status: 'missing', stage: 'remote', deadlineAt, message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
+    .values({ ownerId, trigger: 'subscription', slot, label, editionDate, status: 'missing', stage: 'remote', deadlineAt, message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
     .run();
 }
 
@@ -473,15 +469,15 @@ export function sweepExpiredSubscriptionRuns(now = Date.now()): void {
 }
 
 /** 구독 모드에서 "다음 자동"은 트리거 시각(회차 시작 − 리드) — 트리거와 시작 사이에는 다음 회차의 트리거를 가리킨다 */
-export function nextTrigger(schedule: AutoSchedule, now: number, ownerId: number): { at: number; slot: AutoSlot } | null {
-  const slots = BRIEFING.AUTO_SLOTS.map((s) => s.slot).filter((slot) => schedule[slot].on);
-  if (slots.length === 0) return null;
+export function nextTrigger(schedule: AutoSchedule, now: number, ownerId: number): { at: number; slot: AutoSlot; label: string } | null {
+  const on = schedule.timers.filter((t) => t.on);
+  if (on.length === 0) return null;
   for (const dayOffset of [0, 1, 2]) {
     const date = kstParts(now + dayOffset * 24 * 60 * 60 * 1000).date;
-    for (const slot of slots) {
-      const at = oneSlotStart(schedule, slot, date) - BRIEFING.SUB_LEAD_MS;
+    for (const t of on) {
+      const at = startOf(date, t.at) - BRIEFING.SUB_LEAD_MS;
       // 그날 그 회차가 이미 있으면(시험으로 먼저 만든 경우) 틱도 안 켜므로 "다음"에서도 뺀다 — 첫 실전에서 18:20을 가리켰지만 켜지지 않았다(2026-10-31)
-      if (at > now && !hasRunFor(ownerId, date, slot)) return { at, slot };
+      if (at > now && !hasRunFor(ownerId, date, t.id)) return { at, slot: t.id, label: timerLabel(t) };
     }
   }
   return null;
@@ -500,40 +496,39 @@ export async function tickSubscription(ownerId: number, scheduleText: string | n
   // 오늘과 "지금 + 리드"의 날짜 — 00:30 회차는 전날 23:00에 켜야 하므로 날짜를 넘겨 본다
   const dates = [...new Set([kstParts(now).date, kstParts(now + BRIEFING.SUB_LEAD_MS).date])];
   for (const date of dates) {
-    for (const def of BRIEFING.AUTO_SLOTS) {
-      const slot = def.slot;
-      if (!schedule[slot].on) continue;
-      const start = oneSlotStart(schedule, slot, date);
+    for (const t of schedule.timers) {
+      if (!t.on) continue;
+      const slot = t.id;
+      const label = timerLabel(t);
+      const start = startOf(date, t.at);
       const triggerAt = start - BRIEFING.SUB_LEAD_MS;
       const deadlineAt = start + BRIEFING.SUB_DEADLINE_AFTER_MS;
       if (now < triggerAt || hasRunFor(ownerId, date, slot)) continue;
       const enabledBeforeTrigger = settingsChangedAt <= triggerAt;
       if (now >= deadlineAt) {
-        if (enabledBeforeTrigger) recordMissing(ownerId, slot, date, deadlineAt, '예약 작업을 켜지 못한 채 마감이 지났어요(서버가 꺼져 있었을 수 있어요)', now);
+        if (enabledBeforeTrigger) recordMissing(ownerId, slot, label, date, deadlineAt, '예약 작업을 켜지 못한 채 마감이 지났어요(서버가 꺼져 있었을 수 있어요)', now);
         continue;
       }
       if (now > deadlineAt - BRIEFING.SUB_MIN_LEAD_MS) {
-        if (enabledBeforeTrigger) recordMissing(ownerId, slot, date, deadlineAt, `마감까지 ${BRIEFING.SUB_MIN_LEAD_MS / 60_000}분이 안 남아 예약 작업을 켜지 않았어요`, now);
+        if (enabledBeforeTrigger) recordMissing(ownerId, slot, label, date, deadlineAt, `마감까지 ${BRIEFING.SUB_MIN_LEAD_MS / 60_000}분이 안 남아 예약 작업을 켜지 않았어요`, now);
         continue;
       }
       if (runningSubscriptionRun(ownerId)) return;
-      await createJob({ ownerId, slot, editionDate: date, deadlineAt, now });
+      await createJob({ ownerId, slot, label, editionDate: date, deadlineAt, now });
       return;
     }
   }
 }
 
 /** 구독 모드에서 "다음 자동"은 트리거 시각 — 회차 시작 − 리드 */
-export function triggerTimesOf(schedule: AutoSchedule): Partial<Record<AutoSlot, string>> {
-  const out: Partial<Record<AutoSlot, string>> = {};
-  for (const def of BRIEFING.AUTO_SLOTS) {
-    if (!schedule[def.slot].on) continue;
-    const at = schedule[def.slot].at;
-    const minutes = Number(at.slice(0, 2)) * 60 + Number(at.slice(3, 5)) - BRIEFING.SUB_LEAD_MS / 60_000;
-    const m = ((minutes % 1440) + 1440) % 1440;
-    out[def.slot] = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-  }
-  return out;
+export function triggerTimesOf(schedule: AutoSchedule): { id: string; label: string; at: string; triggerAt: string }[] {
+  return schedule.timers
+    .filter((t) => t.on)
+    .map((t) => {
+      const minutes = Number(t.at.slice(0, 2)) * 60 + Number(t.at.slice(3, 5)) - BRIEFING.SUB_LEAD_MS / 60_000;
+      const m = ((minutes % 1440) + 1440) % 1440;
+      return { id: t.id, label: timerLabel(t), at: t.at, triggerAt: `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}` };
+    });
 }
 
 // ---- 연결 확인 (ping) — 회차가 아니라 실행 기록에 두지 않고 메모리에만, 결과만 설정에 남긴다 ----
@@ -628,7 +623,7 @@ export function subscriptionSummary(userId: number, now = Date.now()): Subscript
 }
 
 /** 오늘 받지 못한 구독 회차 — 마감까지 안 온 것(missing)과 예약 작업을 켜지 못한 것(error), 아직 대체되지 않은 것만. 패널의 알림 띠(설계 결함 표 "트리거 호출 실패 → 알림 띠") */
-export function missingToday(userId: number, now = Date.now()): { runId: number; slot: Slot; deadlineAt: number | null; status: 'missing' | 'error'; message: string | null } | null {
+export function missingToday(userId: number, now = Date.now()): { runId: number; slot: Slot; label: string; deadlineAt: number | null; status: 'missing' | 'error'; message: string | null } | null {
   const date = kstParts(now).date;
   const rows = db
     .select()
@@ -636,7 +631,7 @@ export function missingToday(userId: number, now = Date.now()): { runId: number;
     .where(and(eq(briefingRuns.ownerId, userId), eq(briefingRuns.editionDate, date), eq(briefingRuns.trigger, 'subscription'), inArray(briefingRuns.status, ['missing', 'error'])))
     .orderBy(desc(briefingRuns.startedAt))
     .all();
-  for (const r of rows) if (!laterRunBlocks(r)) return { runId: r.id, slot: r.slot, deadlineAt: r.deadlineAt, status: r.status === 'error' ? 'error' : 'missing', message: r.message };
+  for (const r of rows) if (!laterRunBlocks(r)) return { runId: r.id, slot: r.slot, label: slotLabel(r.slot, r.startedAt, r.label), deadlineAt: r.deadlineAt, status: r.status === 'error' ? 'error' : 'missing', message: r.message };
   return null;
 }
 

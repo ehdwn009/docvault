@@ -70,7 +70,7 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 const InstructionSchema = z.object({
   kind: z.literal('edition'),
   jobId: z.string(),
-  slot: z.enum(['morning', 'noon', 'evening', 'adhoc']),
+  slot: z.string().max(20),
   editionDate: z.string(),
   since: z.number(),
   until: z.number(),

@@ -120,7 +120,7 @@
 | API-131 | GET | /briefing/status | 뉴스 브리핑 상태 — 키 설정 여부·자동 생성 여부와 다음 시각·지금 실행·최근 결과·이번 달 비용/한도·생성 방식(`mode`)·구독 상태(`subscription`, v0.50) | 관리자 |
 | API-132 | POST | /briefing/runs | 브리핑 만들기 시작 (직전 회차 이후 기사로 수시판). 곧바로 202 + 실행, 만드는 일은 뒤에서 | 관리자 |
 | API-133 | GET | /briefing/runs | 실행 기록 (최근순, 상태·건수·비용·걸린 시간·실패 이유·실패 출처) | 관리자 |
-| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기·회차별 켜기·시각·앱 안 원문 보기·생성 방식·트리거 `{ autoEnabled?, schedule?, readerEnabled?, mode?, trigger? }` | 관리자 |
+| API-134 | PUT | /briefing/settings | 자동 생성 켜기/끄기·타이머 목록(v0.52)·앱 안 원문 보기·생성 방식·트리거 `{ autoEnabled?, schedule?, readerEnabled?, mode?, trigger? }` | 관리자 |
 | API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43). 열람 계정은 함께 보는 관리자의 회차 + `ownerName` (v0.49) | 관리자, 열람 계정 |
 | API-137 | POST | /briefing/runs/{id}/cancel | 도는 실행 중지 — 진행 카드의 [중지] (2026-10-02) | 관리자 |
 | API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자, 열람 계정 |
@@ -609,7 +609,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 {
   "configured": true,
   "autoEnabled": true,
-  "schedule": { "morning": { "on": true, "at": "06:30" }, "noon": { "on": false, "at": "11:30" }, "evening": { "on": true, "at": "19:00" } },
+  "schedule": { "timers": [ { "id": "morning", "label": "아침", "at": "06:30", "on": true }, { "id": "t8k2m1", "label": "", "at": "13:00", "on": true } ] }, "nextAutoLabel": "아침",
   "nextAutoAt": 1790845200000,
   "nextAutoSlot": "evening",
   "running": null,
@@ -645,11 +645,12 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 **200** `{ "runs": [ 실행 객체 ] }` — 최근 시작순, limit 최대 100. 자동 실행이 한도로 건너뛴 기록(`skipped`)도 여기 보인다.
 
 ### API-134 — PUT /briefing/settings
-**Body** `{ "autoEnabled"?: boolean, "schedule"?: { "morning"|"noon"|"evening": { "on": boolean, "at": "HH:MM" } }, "readerEnabled"?: boolean, "mode"?: "api"|"subscription", "trigger"?: { "url": string, "token": string } | null }` — 보낸 것만 바꾼다 → **200** `{ "autoEnabled", "schedule", "nextAutoAt", "nextAutoSlot", "readerEnabled", "mode", "triggerSet" }`.
+**Body** `{ "autoEnabled"?: boolean, "schedule"?: { "timers": [ { "id": string, "label": string, "at": "HH:MM", "on": boolean } ] }, "readerEnabled"?: boolean, "mode"?: "api"|"subscription", "trigger"?: { "url": string, "token": string } | null }` — 보낸 것만 바꾼다 → **200** `{ "autoEnabled", "schedule", "nextAutoAt", "nextAutoSlot", "readerEnabled", "mode", "triggerSet" }`.
 - `mode`(v0.50): 생성 방식. `subscription`으로 바꾸려면 연결 열쇠(API-141)와 트리거가 있어야 한다 — 없으면 409 BRIEFING_TRIGGER_NOT_SET. 바꾸는 순간 `running`인 구독 실행은 `cancelled`("방식 변경")로 닫히고, 그 뒤 스케줄러는 그 방식만 돈다. 자동 생성 스위치(`autoEnabled`)는 두 방식이 공유한다 — 구독 트리거도 스위치가 켜져 있어야 돈다. `autoEnabled: true`가 키 없음으로 503이 나는 규칙은 **`api` 모드에서만** — 구독 모드는 키 없이 켤 수 있다(v0.50).
 - `trigger`(v0.50): claude.ai 예약 작업의 트리거 주소·토큰(`url` ≤2,048자, `token` 1~512자). USER_SETTINGS.briefing_trigger_enc에 암호화해 둔다(ERD 관계 설명). 응답과 API-131·143에는 **`triggerSet`·`triggerBroken`만** 실리고 값은 어떤 경로로도 다시 내려오지 않는다. `null`이면 지우고 **생성 방식도 `api`로 돌린다**(트리거 없는 구독은 돌 수 없다). 주소는 `https://api.anthropic.com/v1/claude_code/routines/<id>/fire` 모양만(호스트·경로 고정, 포트·`아이디:비밀번호@` 불가) — 아니거나 사설 IP로 풀리면 400 VALIDATION_ERROR(`trigger.url: <이유>`). 임의의 https를 받으면 서버가 트리거 토큰을 아무 데나 보내는 SSRF 통로가 된다(보안 검토 2026-10-30).
 - **검사를 전부 먼저, 저장은 그 뒤** — 순서는 `trigger.url`(400) → `mode: subscription`인데 열쇠·트리거가 없음(409) → `autoEnabled: true`인데 api 모드에 키 없음(503). 거절 응답을 받았는데 방식·트리거만 바뀌어 있으면 화면과 서버가 어긋나기 때문. 같은 요청에 `trigger`와 `mode: "subscription"`을 함께 보내면 그 트리거를 인정한다(이미 저장된 것이 없어도 409가 아니다). `trigger: null`과 함께 온 `autoEnabled: true`는 api 모드로 보고 키 검사를 한다. USER_SETTINGS.briefing_auto·briefing_schedule·briefing_reader에 저장한다. `readerEnabled`(v0.45)는 앱 안 원문 보기 — 기본 꺼짐이고, 켜기 전에 서버에서 `briefing:readcheck`로 추출 품질을 재는 것이 설계다. `schedule`은 세 회차를 다 보내야 하고, 시각은 아침 < 점심 < 저녁 순서이며 21:59까지 — 어기면 400 VALIDATION_ERROR(v0.43). 같은 값이 API-071 응답에 `briefingAuto`로 보이지만 API-072로는 바꿀 수 없다(관리자 전용 설정이라 이 API 하나로만). 켤 때 키가 없으면 503 ASK_NOT_CONFIGURED — 켜 둔 채로 매번 조용히 실패하지 않게(자동 백업 API-018과 같은 이유).
 
+- (v0.52) `schedule.timers`는 **타이머 목록** — `id`(옛 `morning`·`noon`·`evening` 또는 새로 만들면 `t`+난수 6자; 빈 문자열이면 서버가 만든다), `label`(최대 8자, 빈 값이면 회차 이름은 시각), `at`(24시간제 `HH:MM`, 21:59까지), `on`. 최대 5개(`TIMERS_MAX`), 켜진 타이머끼리 2시간 이상(`TIMER_MIN_GAP_MS`) — 어기면 400 `VALIDATION_ERROR`(`schedule: 켜진 타이머는 서로 2시간 이상 떨어져야 해요`). 서버가 시각순으로 정렬해 저장·응답한다. 옛 모양(`{ morning, noon, evening }`)을 보내면 400.
 - (v0.51) `autoEnabled`·`schedule`·`mode`가 오고 구독 모드·자동 켬이면 서버는 **저장 직후 틱을 한 번 돌린다** — 켤 수 있으면 지금 켜고 응답에 `startedNow: { slot, deadlineAt } | null`을 싣는다(화면 토스트 「아침판 예약 작업을 지금 켰어요 — 마감 07:00」, 아니면 「저장했어요 — 다음 예약 작업 …」). 하루 한 번 규칙(`hasRunFor`)은 `ok` 실행의 회차 문서가 휴지통에 있으면 없는 것으로 본다 — 시험 회차를 지우면 같은 날 같은 회차를 다시 만들 수 있다(사용자 결정 2026-10-31).
 
 ### API-135 — GET /briefing/editions?before=YYYY-MM-DD&days=7 (v0.43)
@@ -690,7 +691,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-143 — GET /briefing/subscription
 **200** `{ "mode", "tokenPrefix": string | null, "tokenCreatedAt", "tokenLastUsedAt", "triggerSet": boolean, "triggerBroken": boolean, "lastPingAt": number | null, "lastPingResult": "fired" | "ok" | "trigger_failed" | "token_invalid" | "no_request" | null, "leadMs": 5400000, "deadlineAfterMs": 1800000, "triggerTimes": { "morning": "05:00", "noon": "10:00", "evening": "16:00" }, "recent": { "ok": 6, "missing": 1, "error": 0, "avgMinutes": 48, "hint": "later" | "earlier" | null }, "allowedDomains": ["yna.co.kr", "…"], "allowlist": ["mydocvault.example", "yna.co.kr", "*.yna.co.kr", "…"], "checklist": { "docvaultUrl": "https://…", "envNames": ["DOCVAULT_URL"], "secret": { "host": "mydocvault.example", "pathPrefix": "/api/v1/briefing/jobs/", "header": "Authorization", "prefix": "Bearer" }, "taskPrompt": "…" } }`
-- `triggerTimes`는 켜진 회차의 시작 시각 − 리드 — 설정 화면의 「예약 작업은 회차 90분 전에 켜지고, 마감은 회차 30분 뒤예요 — 아침 06:30 → 05:00 켜기 · …」 안내(`leadMs`·`deadlineAfterMs`와 함께). 꺼진 회차는 없다.
+- `triggerTimes`(v0.52)는 켜진 타이머마다 `[{ id, label, at, triggerAt: "05:00" }]` — 시작 시각 − 리드 — 설정 화면의 「예약 작업은 회차 90분 전에 켜지고, 마감은 회차 30분 뒤예요 — 아침 06:30 → 05:00 켜기 · …」 안내(`leadMs`·`deadlineAfterMs`와 함께). 꺼진 회차는 없다.
 - `recent`는 최근 7회(`SUB_RECENT_RUNS`) 구독 실행 요약. `avgMinutes`는 지시서를 받아 간 때(`remote_started_at`)부터 완성본까지 — 세션 기동 대기는 빼고 일한 시간만(패널 실행 기록의 "52분"과 같은 기준). `hint`는 평균 소요가 리드의 절반 아래면 `later`(화면 「넉넉히 끝나요. 회차 시각을 30분 늦추면 …」), 마감 10분 안쪽이거나 `missing`이 2회 이상이면 `earlier`(화면 「마감에 자주 몰려요. 수집 목록의 출처나 켜 둔 분야를 줄여 보세요」 — 리드가 상수라 시각을 앞당기라고는 하지 않는다)(`SUB_HINT_*`).
 - `lastPingResult`는 `fired`가 트리거 성공 직후("켰어요 — 세션을 기다리는 중"), `ok`가 세션이 지시서를 받아 감, `trigger_failed`는 트리거 호출 거절(화면 「예약 작업을 켜지 못했어요 — 트리거 주소·토큰을 확인하세요」), `token_invalid`는 ping 뒤 `dvt_`로 시작하는 틀린 열쇠로 요청이 옴(빈 요청·스캐너는 세지 않는다), `no_request`는 `fired`인 채 5분(`SUB_PING_NO_REQUEST_MS`)이 지남(저장값은 `fired` 그대로, 읽을 때 바꾼다). `triggerSet`은 복호화에 실패하면(`JWT_SECRET` 변경) false이고 그때 `triggerBroken`이 true — 화면은 「트리거를 읽을 수 없어요(서버 비밀키가 바뀜) — 다시 넣어 주세요」. `checklist.taskPrompt`는 예약 작업에 저장할 지시문 한 줄("routine-fire-payload 블록에 적힌 BRIEFING_JOB_ID로 briefing-subscription 스킬을 실전 모드로 실행해. DOCVAULT_URL과 DOCVAULT_TOKEN은 환경에 있어.") — 트리거 본문의 `text`가 그 블록에 담겨 "신뢰하지 않는 데이터"로 들어가므로 지시문이 그것을 읽으라고 적혀 있어야 한다.
 - `allowedDomains`는 **검사용 목록**(수집 목록 전체 언론사 + 통신사 + `news.google.com`) — 지시서의 것과 같다. `checklist`는 설정 체크리스트의 복사 버튼 재료. 열쇠·트리거 값은 실리지 않는다.

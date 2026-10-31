@@ -11,11 +11,10 @@ import {
   REMOTE_STAGE_LABEL,
   REMOTE_STAGE_ORDER,
   shortDate,
-  SLOT_SHORT,
   slotName,
+  slotShort,
   STAGE_LABEL,
   STAGE_ORDER,
-  type AutoSlot,
   type BriefingRun,
   type BriefingStatus,
   type EditionSummary,
@@ -36,22 +35,25 @@ type Props = {
 /** API-135 — ownerName은 남의 회차를 보는 열람 계정에게만 온다 */
 type EditionPage = { editions: EditionSummary[]; nextBefore: string | null; ownerName?: string | null };
 
-const SLOT_FULL: Record<BriefingRun['slot'], string> = { morning: '아침판', noon: '점심판', evening: '저녁판', adhoc: '수시판' };
+/** 실행 한 줄의 회차 이름 — "아침판"·"13:00판"·"수시판" (v0.52: 고정 표 대신 기록의 label) */
+function runName(r: { slot: string; label?: string | null }): string {
+  return r.slot === 'adhoc' ? '수시판' : `${slotShort(r.slot, r.label)}판`;
+}
 
 /** 구독 성공 한 줄 — 비용 대신 걸린 시간과 검사에서 뺀 수 (IA SCR-190 "구독 생성 · $0 · 52분 · 검사에서 3건 뺌") */
 function subscriptionOkLine(r: BriefingRun): string {
   const minutes = r.finishedAt ? Math.round((r.finishedAt - (r.remoteStartedAt ?? r.startedAt)) / 60_000) : null;
   const dropped = Object.values(r.droppedItems ?? {}).reduce((a, b) => a + b, 0);
-  return [`${SLOT_FULL[r.slot]} ${r.itemCount ?? 0}건`, '구독 생성 · $0', minutes !== null ? `${minutes}분` : null, dropped > 0 ? `검사에서 ${dropped}건 뺌` : null].filter(Boolean).join(' · ');
+  return [`${runName(r)} ${r.itemCount ?? 0}건`, '구독 생성 · $0', minutes !== null ? `${minutes}분` : null, dropped > 0 ? `검사에서 ${dropped}건 뺌` : null].filter(Boolean).join(' · ');
 }
 
 function runLine(r: BriefingRun): string {
   const when = kstTime(r.finishedAt ?? r.startedAt);
-  if (r.status === 'ok') return r.trigger === 'subscription' ? `${subscriptionOkLine(r)} · ${when}` : `${SLOT_FULL[r.slot]} ${r.itemCount ?? 0}건 · ≈ $${r.costUsd.toFixed(2)} · ${when}`;
+  if (r.status === 'ok') return r.trigger === 'subscription' ? `${subscriptionOkLine(r)} · ${when}` : `${runName(r)} ${r.itemCount ?? 0}건 · ≈ $${r.costUsd.toFixed(2)} · ${when}`;
   if (r.status === 'skipped') return `${r.message ?? '건너뜀'} · ${when}`;
   if (r.status === 'cancelled') return `${r.message ?? '멈춤'} · ${when}`;
   if (r.status === 'error') return `실패: ${r.message ?? '알 수 없는 오류'} · ${when}`;
-  if (r.status === 'missing') return `${SLOT_FULL[r.slot]} 도착 안 함${r.message ? ` — ${r.message}` : ''} · ${when}`;
+  if (r.status === 'missing') return `${runName(r)} 도착 안 함${r.message ? ` — ${r.message}` : ''} · ${when}`;
   return r.trigger === 'subscription' ? `예약 작업이 만드는 중 · ${when}` : `만드는 중 · ${when}`;
 }
 
@@ -119,7 +121,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
       if (last.status === 'ok' && last.fileId) {
         const fileId = last.fileId;
         void loadEditions();
-        toast(`${SLOT_FULL[last.slot]} ${last.itemCount ?? 0}건을 만들었어요`, 'success', { action: { label: '열기', onAction: () => openRef.current(fileId) } });
+        toast(`${runName(last)} ${last.itemCount ?? 0}건을 만들었어요`, 'success', { action: { label: '열기', onAction: () => openRef.current(fileId) } });
       } else if (last.status === 'error') {
         toast(`브리핑을 만들지 못했어요 — ${last.message ?? ''}`, 'error');
       } else if (last.status === 'cancelled') {
@@ -127,7 +129,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
       } else if (last.status === 'skipped') {
         toast(last.message ?? '새 기사가 없어요', 'info');
       } else if (last.status === 'missing') {
-        toast(`${SLOT_FULL[last.slot]}이 마감까지 도착하지 않았어요 — [지금 만들기]로 만들 수 있어요`, 'error');
+        toast(`${runName(last)}이 마감까지 도착하지 않았어요 — [지금 만들기]로 만들 수 있어요`, 'error');
       }
       setRuns(null); // 실행 기록을 펼쳐 둔 상태였으면 다시 받게
     }
@@ -168,7 +170,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
   }, [runningId, remote, load]);
 
   /** slot은 알림 띠의 [지금 만들기] — 안 온 회차 이름을 물려받는다(수시판 대신). 늘 API 방식으로 만든다 (v0.50) */
-  async function start(force = false, slot?: AutoSlot) {
+  async function start(force = false, slot?: string) {
     setStarting(true);
     try {
       const r = await api<{ run: BriefingRun }>('/briefing/runs', { method: 'POST', body: JSON.stringify({ ...(force ? { force: true } : {}), ...(slot ? { slot } : {}) }) });
@@ -194,7 +196,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
   /** 도는 예약 작업을 기다리지 않고 직접 만들기 — 서버가 그 구독 실행을 "직접 만들기로 대체"로 닫고 API 실행을 시작한다 (API-132, IA SCR-190) */
   async function replaceRemote(run: BriefingRun) {
     const ok = await confirmDialog('예약 작업을 기다리지 않고 직접 만들까요?', {
-      message: `지금 도는 예약 작업은 취소로 기록되고 늦게 온 완성본은 받지 않아요. ${SLOT_FULL[run.slot]}을 앱이 API로 만들어요(이 회차만 비용). claude.ai의 세션은 스스로 멈추지 않으니 거기서도 꺼 두세요.`,
+      message: `지금 도는 예약 작업은 취소로 기록되고 늦게 온 완성본은 받지 않아요. ${runName(run)}을 앱이 API로 만들어요(이 회차만 비용). claude.ai의 세션은 스스로 멈추지 않으니 거기서도 꺼 두세요.`,
       confirmLabel: '직접 만들기',
       danger: true,
     });
@@ -232,6 +234,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
   }
   const last = admin?.last ?? null;
   const nextAutoToday = !!admin && admin.autoEnabled && admin.nextAutoAt !== null && kstToday(admin.nextAutoAt) === today && !running;
+  const nextTimerAt = admin?.nextAutoSlot ? admin.schedule.timers.find((t) => t.id === admin.nextAutoSlot)?.at : undefined;
 
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto pb-8">
@@ -286,8 +289,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             <div className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
               <span className="flex-1">
                 {admin.subscription.missing.status === 'error'
-                  ? `${SLOT_FULL[admin.subscription.missing.slot]}의 예약 작업을 켜지 못했어요${admin.subscription.missing.message ? ` — ${admin.subscription.missing.message}` : ''}`
-                  : `${SLOT_FULL[admin.subscription.missing.slot]}이 도착하지 않았어요${admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}`}
+                  ? `${runName(admin.subscription.missing)}의 예약 작업을 켜지 못했어요${admin.subscription.missing.message ? ` — ${admin.subscription.missing.message}` : ''}`
+                  : `${runName(admin.subscription.missing)}이 도착하지 않았어요${admin.subscription.missing.deadlineAt ? ` (마감 ${kstTime(admin.subscription.missing.deadlineAt, false)})` : ''}`}
               </span>
               <button
                 onClick={() => void start(false, admin.subscription?.missing?.slot === 'adhoc' ? undefined : admin.subscription?.missing?.slot)}
@@ -343,12 +346,12 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           <div className="space-y-1.5">
             {admin && nextAutoToday && admin.nextAutoAt !== null && (
               <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2">
-                <SlotChip label={SLOT_SHORT[admin.nextAutoSlot ?? 'adhoc']} />
+                <SlotChip label={slotShort(admin.nextAutoSlot ?? 'adhoc', admin.nextAutoLabel)} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[15px] font-semibold text-slate-400">{SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']} ({admin.mode === 'subscription' ? '구독' : '자동'})</span>
+                  <span className="text-[15px] font-semibold text-slate-400">{runName({ slot: admin.nextAutoSlot ?? 'adhoc', label: admin.nextAutoLabel })} ({admin.mode === 'subscription' ? '구독' : '자동'})</span>
                   <span className="text-xs text-slate-500">
                     {admin.mode === 'subscription'
-                      ? `${kstTime(admin.nextAutoAt, false)}에 예약 작업 시작${admin.nextAutoSlot ? ` · ${admin.schedule[admin.nextAutoSlot].at} 회차` : ''}`
+                      ? `${kstTime(admin.nextAutoAt, false)}에 예약 작업 시작${nextTimerAt ? ` · ${nextTimerAt} 회차` : ''}`
                       : `${kstTime(admin.nextAutoAt, false)}에 만들기 시작`}
                   </span>
                 </span>
@@ -366,7 +369,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
                     i === 0 ? 'border-sky-800' : 'border-slate-800'
                   }`}
                 >
-                  <SlotChip label={SLOT_SHORT[e.slot]} accent={i === 0} />
+                  <SlotChip label={slotShort(e.slot, e.label)} accent={i === 0} />
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-[15px] font-semibold text-slate-200">{slotName(e.slot, e.label)}</span>
                     <span className="text-xs text-slate-500">
@@ -398,7 +401,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
                           e.state === 'done' ? 'bg-slate-900 text-slate-500 hover:text-slate-300' : 'bg-sky-950/60 font-semibold text-sky-300 hover:bg-sky-900/60'
                         }`}
                       >
-                        {e.slot === 'adhoc' ? kstTime(e.createdAt, false) : SLOT_SHORT[e.slot]}
+                        {e.slot === 'adhoc' ? kstTime(e.createdAt, false) : slotShort(e.slot, e.label)}
                       </button>
                     ))}
                   </div>
@@ -444,7 +447,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             {admin.autoEnabled && admin.nextAutoAt !== null ? (
               <>
                 {admin.mode === 'subscription' ? '구독으로 받기 · 다음 예약 작업 ' : '자동 생성 켜짐 · 다음 '}
-                <b className="text-slate-300">{kstTime(admin.nextAutoAt, kstToday(admin.nextAutoAt) !== today)} {SLOT_FULL[admin.nextAutoSlot ?? 'adhoc']}</b>
+                <b className="text-slate-300">{kstTime(admin.nextAutoAt, kstToday(admin.nextAutoAt) !== today)} {runName({ slot: admin.nextAutoSlot ?? 'adhoc', label: admin.nextAutoLabel })}</b>
               </>
             ) : admin.autoEnabled ? (
               '자동 생성 켜짐 · 켜 둔 회차가 없어요'
@@ -465,7 +468,6 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
   );
 }
 
-/** 자동 회차 시작 시각 → 칸. 06·11·17시 — 서버 BRIEFING.AUTO_SLOTS와 같은 순서 */
 /** 두 줄까지만 — 누르면 펼친다. 옛 실패 기록에는 영어 오류 원문이 통째로 남아 화면을 덮었다(v0.42.1 전 기록, 2026-10-02) */
 function ClampLine({ className, children }: { className: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -478,7 +480,7 @@ function ClampLine({ className, children }: { className: string; children: React
 
 function SlotChip({ label, accent = false }: { label: string; accent?: boolean }) {
   return (
-    <span className={`w-10 shrink-0 rounded-lg py-1 text-center text-xs font-bold ${accent ? 'bg-sky-950/60 text-sky-300' : 'bg-slate-900 text-slate-500'}`}>
+    <span className={`min-w-10 shrink-0 rounded-lg px-1.5 py-1 text-center text-xs font-bold ${accent ? 'bg-sky-950/60 text-sky-300' : 'bg-slate-900 text-slate-500'}`}>
       {label}
     </span>
   );

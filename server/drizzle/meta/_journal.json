@@ -162,6 +162,13 @@
       "when": 1793357872385,
       "tag": "0022_briefing_subscription",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1793439520203,
+      "tag": "0023_briefing_timers",
+      "breakpoints": true
     }
   ]
 }

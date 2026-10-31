@@ -22,7 +22,7 @@ import {
   toRunDto,
 } from '../lib/briefing/run.js';
 import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
-import { nextAuto, readSchedule, scheduleSchema, type AutoSchedule, type AutoSlot } from '../lib/briefing/autoSchedule.js';
+import { labelOf, nextAuto, readSchedule, scheduleSchema, timerOf, type AutoSchedule, type AutoSlot } from '../lib/briefing/autoSchedule.js';
 import { briefingOwnerOf, listReaderCandidates, setReader } from '../lib/briefing/readers.js';
 import {
   assertTriggerUrl,
@@ -125,6 +125,7 @@ export const briefingRoutes = new Hono<BriefingEnv>()
       schedule,
       nextAutoAt: next?.at ?? null,
       nextAutoSlot: next?.slot ?? null,
+      nextAutoLabel: next?.label ?? null,
       running: running ? toRunDto(running) : null,
       last: last ? toRunDto(last) : null,
       monthCostUsd: monthCostUsd(user.id),
@@ -248,11 +249,15 @@ export const briefingRoutes = new Hono<BriefingEnv>()
 
   // API-132: 만들기 시작 — 202로 곧바로 답하고 만드는 일은 뒤에서. 구독 모드에서는 [지금 만들기] — 항상 앱이 직접(API) 만들고,
   // 도는 구독 실행은 startRun이 "직접 만들기로 대체"로 닫는다. slot은 알림 띠가 보내는 회차(수시판 대신 그 회차 이름으로) (v0.50)
-  .post('/runs', jsonBody(z.object({ force: z.boolean().optional(), slot: z.enum(['morning', 'noon', 'evening']).optional() })), (c) => {
+  .post('/runs', jsonBody(z.object({ force: z.boolean().optional(), slot: z.string().max(20).optional() })), (c) => {
     if (!isConfigured()) return fail(c, 503, 'ASK_NOT_CONFIGURED', 'API 키가 연결되지 않았어요');
     const { force, slot } = c.req.valid('json');
+    const userId = c.get('user').id;
+    // slot은 타이머 id — 목록에 없으면(지운 타이머) 수시판으로 (v0.52)
+    const schedule = readSchedule(userId);
+    const timer = slot && slot !== 'adhoc' ? timerOf(schedule, slot) : undefined;
     try {
-      const run = startRun({ ownerId: c.get('user').id, trigger: 'manual', slot: slot ?? 'adhoc', force });
+      const run = startRun({ ownerId: userId, trigger: 'manual', slot: timer ? timer.id : 'adhoc', label: timer ? labelOf(schedule, timer.id) : null, force });
       return c.json({ run: toRunDto(run) }, 202);
     } catch (e) {
       if (e instanceof BriefingBusyError) return c.json({ code: 'BRIEFING_RUNNING', message: e.message, run: toRunDto(e.run) }, 409);
@@ -330,14 +335,14 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const auto = autoEnabled(userId);
     const schedule: AutoSchedule = readSchedule(userId);
     // 저장 즉시 한 번 돌려 본다 — 1분 틱을 기다리지 않고 켤 수 있으면 지금 켜고, 응답에 "지금 켰다"를 실어 화면이 바로 알리게 (사용자 결정 2026-10-31)
-    let startedNow: { slot: AutoSlot; deadlineAt: number | null } | null = null;
+    let startedNow: { slot: AutoSlot; label: string; deadlineAt: number | null } | null = null;
     if (auto && modeNow === 'subscription' && (body.autoEnabled !== undefined || body.schedule || body.mode)) {
       const before = runningSubscriptionRun(userId)?.id ?? null;
       await tickSubscription(userId, JSON.stringify(schedule), now);
       const after = runningSubscriptionRun(userId);
-      if (after && after.id !== before && after.slot !== 'adhoc') startedNow = { slot: after.slot, deadlineAt: after.deadlineAt };
+      if (after && after.id !== before && after.slot !== 'adhoc') startedNow = { slot: after.slot, label: after.label ?? labelOf(schedule, after.slot), deadlineAt: after.deadlineAt };
     }
     const next = auto ? (modeNow === 'subscription' ? nextTrigger(schedule, now, userId) : nextAuto(schedule, now)) : null;
-    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId), startedNow });
+    return c.json({ autoEnabled: auto, schedule, nextAutoAt: next?.at ?? null, nextAutoSlot: next?.slot ?? null, nextAutoLabel: next?.label ?? null, readerEnabled: readerEnabled(userId), mode: modeNow, triggerSet: triggerSet(userId), startedNow });
     },
   );

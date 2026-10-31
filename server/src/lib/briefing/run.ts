@@ -4,7 +4,7 @@ import { BRIEFING } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, files } from '../../db/schema.js';
 import { callClaude, callWebSearch, costOf, type AiCaller, type Usage, type WebCaller } from './ai.js';
-import { saveEdition, type Slot } from './edition.js';
+import { saveEdition, slotLabel, type Slot } from './edition.js';
 import { abortLive, addLog, closeLive, liveView, openLive, track } from './live.js';
 import { BriefingFailure, generateEdition, type Stage } from './pipeline.js';
 import { kstMonthStart, kstParts } from './time.js';
@@ -128,7 +128,7 @@ export function recoverStaleRuns(): void {
  * 실행 하나를 시작하고 곧바로 돌려준다 — 만드는 일은 뒤에서. 범위는 직전 ok 실행의 until부터 지금까지(최대 24시간).
  * 자동 실행(스케줄러)과 버튼(API-132)이 같은 입구를 쓴다
  */
-export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; slot: Slot; force?: boolean; ai?: AiCaller; web?: WebCaller | null; now?: number }): RunRow {
+export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; slot: Slot; label?: string | null; force?: boolean; ai?: AiCaller; web?: WebCaller | null; now?: number }): RunRow {
   const now = args.now ?? Date.now();
   // 잠금은 DB의 running 행 하나 — better-sqlite3는 동기라 이 검사와 아래 insert 사이에 다른 요청이 끼어들 수 없다
   const busy = runningRun();
@@ -147,6 +147,7 @@ export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; sl
       ownerId: args.ownerId,
       trigger: args.trigger,
       slot: args.slot,
+      label: args.slot === 'adhoc' ? null : (args.label ?? null),
       editionDate: kstParts(now).date,
       status: 'running',
       stage: 'collect',
@@ -161,9 +162,9 @@ export function startRun(args: { ownerId: number; trigger: 'manual' | 'auto'; sl
 }
 
 /** 자동 실행이 건너뛴 사실도 기록으로 남긴다 — "왜 오늘 아침판이 없지?"에 답할 수 있게 */
-export function recordSkipped(ownerId: number, slot: Slot, message: string, now = Date.now()): void {
+export function recordSkipped(ownerId: number, slot: Slot, label: string | null, message: string, now = Date.now()): void {
   db.insert(briefingRuns)
-    .values({ ownerId, trigger: 'auto', slot, editionDate: kstParts(now).date, status: 'skipped', message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
+    .values({ ownerId, trigger: 'auto', slot, label, editionDate: kstParts(now).date, status: 'skipped', message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
     .run();
 }
 
@@ -183,6 +184,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller, web
     const result = await generateEdition({
       ownerId: run.ownerId,
       slot: run.slot,
+      label: run.label,
       since: run.sinceAt,
       until: run.untilAt,
       prevFileId,
@@ -263,6 +265,8 @@ export function toRunDto(r: RunRow) {
     id: r.id,
     trigger: r.trigger,
     slot: r.slot,
+    // 회차 이름 — 옛 행(label null)은 slot으로 이름표를 만든다
+    label: slotLabel(r.slot, r.startedAt, r.label),
     editionDate: r.editionDate,
     status: r.status,
     stage: r.stage,

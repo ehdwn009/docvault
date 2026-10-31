@@ -43,6 +43,8 @@ export class BriefingFailure extends Error {
 export async function generateEdition(args: {
   ownerId: number;
   slot: Slot;
+  /** 회차 이름(타이머 이름, 수시판은 null) — 회차 JSON의 label (v0.52) */
+  label?: string | null;
   since: number;
   until: number;
   prevFileId: number | null;
@@ -150,6 +152,7 @@ export async function generateEdition(args: {
       lenses: lens.lenses,
       demoted,
       slot: args.slot,
+      label: args.label ?? null,
       since: args.since,
       until: args.until,
       createdAt: Date.now(),

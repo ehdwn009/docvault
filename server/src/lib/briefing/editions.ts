@@ -13,6 +13,7 @@ type EditionRow = {
   fileId: number;
   createdAt: number;
   slot: Slot;
+  label?: string | null;
   itemCount: number;
   runId: number | null;
   leadIds: string | null;
@@ -25,6 +26,7 @@ function loadRows(ownerId: number, userId: number): EditionRow[] {
       fileId: files.id,
       createdAt: files.createdAt,
       slot: briefingRuns.slot,
+      label: briefingRuns.label,
       itemCount: briefingRuns.itemCount,
       runId: briefingRuns.id,
       leadIds: briefingRuns.leadIds,
@@ -68,7 +70,7 @@ function toSummary(raw: EditionRow) {
     fileId: row.fileId,
     editionDate: kstParts(row.createdAt).date,
     slot: row.slot,
-    label: slotLabel(row.slot, row.createdAt),
+    label: slotLabel(row.slot, row.createdAt, row.label),
     createdAt: row.createdAt,
     itemCount: row.itemCount,
     leadCount: lead.length,
@@ -111,7 +113,7 @@ export function editionNav(ownerId: number, userId: number, fileId: number) {
     sameDay: rows
       .filter((r) => kstParts(r.createdAt).date === date)
       .reverse()
-      .map((r) => ({ fileId: r.fileId, slot: r.slot, label: slotLabel(r.slot, r.createdAt) })),
+      .map((r) => ({ fileId: r.fileId, slot: r.slot, label: slotLabel(r.slot, r.createdAt, r.label) })),
   };
 }
 

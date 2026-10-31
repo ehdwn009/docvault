@@ -15,7 +15,7 @@ import {
   longDate,
   outletsOf,
   parseEdition,
-  SLOT_SHORT,
+  slotShort,
   slotName,
   type Block,
   type Edition,
@@ -930,7 +930,7 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
                 aria-current={d.fileId === fileId ? 'true' : undefined}
                 className={`h-9 min-w-[3.5rem] rounded-lg px-2.5 text-[0.8em] font-semibold transition ${d.fileId === fileId ? p.chipOn : p.chip}`}
               >
-                {d.slot === 'adhoc' ? slotName(d.slot, d.label).replace(' 수시판', '') : SLOT_SHORT[d.slot]}
+                {d.slot === 'adhoc' ? slotName(d.slot, d.label).replace(' 수시판', '') : slotShort(d.slot, d.label)}
               </button>
             ))}
           </div>

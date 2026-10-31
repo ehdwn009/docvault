@@ -14,6 +14,8 @@ export type Instruction = {
   kind: 'edition';
   jobId: string;
   slot: Slot;
+  /** 회차 이름(타이머 이름 또는 시각) — 세션이 보고 글에 쓴다. 저장은 서버가 한다 (v0.52) */
+  label: string | null;
   editionDate: string;
   since: number;
   until: number;
@@ -28,11 +30,12 @@ export type Instruction = {
   limits: { titleMaxChars: number; blocksMax: number; relatedMax: number; resultMaxBytes: number; resendMax: number; itemsMax: number };
 };
 
-export function buildInstruction(args: { jobId: string; slot: Slot; since: number; until: number; deadline: number; doc: SourcesDoc; excludeUrls: Iterable<string>; prevStories: PrevStoryRef[]; config: string }): Instruction {
+export function buildInstruction(args: { jobId: string; slot: Slot; label?: string | null; since: number; until: number; deadline: number; doc: SourcesDoc; excludeUrls: Iterable<string>; prevStories: PrevStoryRef[]; config: string }): Instruction {
   return {
     kind: 'edition',
     jobId: args.jobId,
     slot: args.slot,
+    label: args.label ?? null,
     editionDate: kstParts(args.until).date,
     since: args.since,
     until: args.until,

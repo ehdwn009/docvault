@@ -253,7 +253,10 @@ export const briefingRuns = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     /** subscription = 서버가 트리거한 claude.ai 예약 작업이 만든 회차 (v0.50) */
     trigger: text('trigger', { enum: ['manual', 'auto', 'subscription'] }).notNull(),
-    slot: text('slot', { enum: ['morning', 'noon', 'evening', 'adhoc'] }).notNull(),
+    /** 타이머 id(옛 morning·noon·evening 포함) 또는 adhoc(버튼 수시판) — v0.52부터 자유 글자 */
+    slot: text('slot').notNull(),
+    /** 만들 때의 회차 이름(아침·13:00·…) — 타이머를 지우거나 이름을 바꿔도 지난 회차 이름이 흔들리지 않게. 옛 행은 null → slot으로 이름표 (v0.52) */
+    label: text('label'),
     /** 한국시간 날짜 YYYY-MM-DD — 자동 회차가 하루에 한 번만 돌게 하는 기준 */
     editionDate: text('edition_date').notNull(),
     /** cancelled = 사람이 [중지]로 멈춤 (2026-10-02). 실패(error)와 나눠 화면이 빨갛게 보이지 않게 */

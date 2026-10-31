@@ -92,7 +92,8 @@ export const FLAG_LABEL: Record<FlagReason, string> = { number: '숫자가 틀�
 
 export type Edition = {
   version: number;
-  edition: { date: string; slot: 'morning' | 'noon' | 'evening' | 'adhoc'; label: string; since: number; until: number; createdAt: number };
+  /** slot은 타이머 id 또는 'adhoc'(v0.52부터 자유 글자), label은 회차 이름 */
+  edition: { date: string; slot: string; label: string; since: number; until: number; createdAt: number };
   stats: { sources: number; sourcesFailed: number; candidates: number; items: number; basis?: { body: number; lede: number; title: number; web: number }; webFilled?: number; demoted?: number };
   cost: { usd: number };
   /** 영향 칸을 그리나 (v0.46). 없으면(옛 회차) 그리지 않는다 */
@@ -145,15 +146,20 @@ function dateParts(date: string): { m: number; d: number; wd: string } {
   return { m, d, wd: WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] ?? '' };
 }
 
-/** 회차 이름 — 정기판 "저녁판", 수시판 "14:53 수시판" (서버 label은 "저녁" · "14시 53분") */
+/** 회차 이름 — 정기판 "저녁판"·"13:00판"(label은 타이머 이름 또는 시각), 수시판 "14:53 수시판" (서버 label은 "14시 53분") */
 export function slotName(slot: Slot, label: string): string {
   if (slot !== 'adhoc') return `${label}판`;
   const m = /(\d+)시 (\d+)분/.exec(label);
   return m ? `${m[1]!.padStart(2, '0')}:${m[2]} 수시판` : `${label} 수시판`;
 }
 
-/** 칩에 들어가는 짧은 이름 — 아침·점심·저녁·수시 */
-export const SLOT_SHORT: Record<Slot, string> = { morning: '아침', noon: '점심', evening: '저녁', adhoc: '수시' };
+/** 칩에 들어가는 짧은 이름 — 타이머 이름(또는 시각)·수시. v0.52부터 회차는 타이머라 고정 표가 아니라 label을 그대로 쓴다 */
+export function slotShort(slot: Slot, label: string | null | undefined): string {
+  if (slot === 'adhoc') return '수시';
+  return label?.trim() || LEGACY_SLOT_LABEL[slot] || slot;
+}
+/** 옛 고정 회차 id의 이름 — label이 없는 옛 기록용 */
+const LEGACY_SLOT_LABEL: Record<string, string> = { morning: '아침', noon: '점심', evening: '저녁' };
 
 /** "9/30 (화)" */
 export function shortDate(date: string): string {
@@ -178,7 +184,8 @@ export function briefingNameFromFile(name: string): string | null {
   const m = /(\d{4}-\d{2}-\d{2}) (.+?)(?: \(\d+\))?\.json$/.exec(name);
   if (!m) return null;
   const label = m[2]!;
-  const slot = (Object.entries(SLOT_SHORT).find(([, v]) => v === label)?.[0] as Slot | undefined) ?? 'adhoc';
+  // 수시판 이름표는 "14시 53분" 꼴 — 그 밖(아침·13:00·사용자 이름)은 정기판
+  const slot = /\d+시 \d+분/.test(label) ? 'adhoc' : (Object.entries(LEGACY_SLOT_LABEL).find(([, v]) => v === label)?.[0] ?? 'timer');
   return editionDisplayName(m[1]!, slot, label);
 }
 
@@ -230,6 +237,8 @@ export type BriefingRun = {
   /** subscription = 서버가 켠 claude.ai 예약 작업이 만든 회차 (v0.50) */
   trigger: 'manual' | 'auto' | 'subscription';
   slot: Edition['edition']['slot'];
+  /** 회차 이름(타이머 이름·시각·옛 아침/점심/저녁) — 수시판은 만든 시각 (v0.52) */
+  label: string;
   editionDate: string;
   /** missing = 구독 실행이 마감까지 안 옴 (v0.50) */
   status: 'running' | 'ok' | 'error' | 'skipped' | 'cancelled' | 'missing';
@@ -274,7 +283,7 @@ export type SubscriptionStatus = {
   triggerBroken: boolean;
   lastPingAt: number | null;
   /** 오늘 받지 못한 구독 회차 — 마감까지 안 옴(missing) 또는 예약 작업을 켜지 못함(error), 아직 대체되지 않은 것만. 패널의 알림 띠 */
-  missing: { runId: number; slot: Slot; deadlineAt: number | null; status: 'missing' | 'error'; message: string | null } | null;
+  missing: { runId: number; slot: Slot; label: string; deadlineAt: number | null; status: 'missing' | 'error'; message: string | null } | null;
 };
 export type PingResult = 'fired' | 'ok' | 'trigger_failed' | 'token_invalid' | 'no_request';
 /** API-143 — 설정 화면의 구독 상태 */
@@ -289,8 +298,8 @@ export type SubscriptionInfo = {
   lastPingResult: PingResult | null;
   leadMs: number;
   deadlineAfterMs: number;
-  /** 켜 둔 회차마다 예약 작업을 켜는 시각 "05:00" */
-  triggerTimes: Partial<Record<AutoSlot, string>>;
+  /** 켜 둔 타이머마다 예약 작업을 켜는 시각 (v0.52) */
+  triggerTimes: { id: string; label: string; at: string; triggerAt: string }[];
   recent: { ok: number; missing: number; error: number; avgMinutes: number | null; hint: 'later' | 'earlier' | null };
   allowedDomains: string[];
   /** 네트워크 허용 목록에 그대로 붙여 넣을 줄들 — docvault 호스트 + 도메인마다 맨몸·`*.` 둘 (v0.50.5) */
@@ -298,9 +307,19 @@ export type SubscriptionInfo = {
   checklist: { docvaultUrl: string; envNames: string[]; secret: { host: string; pathPrefix: string; header: string; prefix: string }; taskPrompt: string };
 };
 
-export type AutoSlot = 'morning' | 'noon' | 'evening';
-/** 자동 생성 회차별 켜기·시작 시각("06:30", 한국시간) — v0.43 */
-export type AutoSchedule = Record<AutoSlot, { on: boolean; at: string }>;
+/** 타이머 id — 옛 morning·noon·evening 또는 t+난수 (v0.52) */
+export type AutoSlot = string;
+/** 자동 생성 타이머 하나 — 이름은 비우면 시각이 회차 이름. 서버 autoSchedule.ts의 Timer와 같아야 한다 (v0.52) */
+export type Timer = { id: string; label: string; at: string; on: boolean };
+/** 자동 생성 타이머 목록 — 시각순, 최대 BRIEFING_TIMERS_MAX, 켜진 것끼리 2시간 이상 (v0.52) */
+export type AutoSchedule = { timers: Timer[] };
+/** 서버 BRIEFING.TIMERS_MAX·TIMER_LABEL_MAX_CHARS와 같아야 한다 */
+export const BRIEFING_TIMERS_MAX = 5;
+export const BRIEFING_TIMER_LABEL_MAX = 8;
+/** 타이머의 회차 이름 — 서버 timerLabel과 같은 규칙 */
+export function timerLabel(t: Pick<Timer, 'label' | 'at'>): string {
+  return t.label.trim() || t.at;
+}
 
 export type BriefingStatus = {
   configured: boolean;
@@ -309,6 +328,8 @@ export type BriefingStatus = {
   nextAutoAt: number | null;
   /** 다음 자동 회차 — 시각으로 짐작하지 않는다(사람마다 시각이 다르다) */
   nextAutoSlot: AutoSlot | null;
+  /** 다음 회차 이름(타이머 이름 또는 시각) (v0.52) */
+  nextAutoLabel?: string | null;
   running: BriefingRun | null;
   last: BriefingRun | null;
   monthCostUsd: number;
@@ -324,7 +345,7 @@ export type BriefingStatus = {
   /** 회차를 누가 만드나 — api(앱이 직접) · subscription(서버가 켠 claude.ai 예약 작업) (v0.50) */
   mode?: BriefingMode;
   /** API-134 응답에만 — 이 저장으로 예약 작업을 지금 켰다 (v0.51) */
-  startedNow?: { slot: AutoSlot; deadlineAt: number | null } | null;
+  startedNow?: { slot: AutoSlot; label: string; deadlineAt: number | null } | null;
   subscription?: SubscriptionStatus | null;
 };
 

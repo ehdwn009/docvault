@@ -94,7 +94,7 @@ export const DEFAULT_USER_SETTINGS = {
   termHighlight: 1,
   askWithCards: 1,
   briefingAuto: 0,
-  /** 회차별 켜기·시각 JSON — null이면 AUTO_SLOTS 기본값 (lib/briefing/autoSchedule.ts) */
+  /** 자동 생성 타이머 목록 JSON — null이면 DEFAULT_TIMER 하나 (lib/briefing/autoSchedule.ts, v0.52) */
   briefingSchedule: null as string | null,
   /** 앱 안 원문 보기 스위치(기본 꺼짐) — 서버에서 추출 품질을 잰 뒤(briefing:readcheck) 관리자가 켠다 (개선 합의안 7장) */
   briefingReader: 0,
@@ -224,12 +224,20 @@ export const BRIEFING = {
     'claude-sonnet-5-5': { inputPerMtok: 2, outputPerMtok: 10 },
     'claude-opus-5-5': { inputPerMtok: 4, outputPerMtok: 20 },
   },
-  /** 자동 생성 기본 시작 시각 (한국시간 시·분) — 발행 목표(07·12·18시) 30분 전. 사람마다 바꿀 수 있다(v0.43, autoSchedule.ts) */
-  AUTO_SLOTS: [
-    { slot: 'morning', label: '아침', hour: 6, minute: 30 },
-    { slot: 'noon', label: '점심', hour: 11, minute: 30 },
-    { slot: 'evening', label: '저녁', hour: 17, minute: 30 },
+  /** 자동 생성 타이머(v0.52) — 초기화 상태의 타이머 하나, 개수 상한, 켜진 타이머끼리 최소 간격, 이름 길이, 새 타이머 id 접두어.
+      옛 고정 세 회차(아침·점심·저녁, v0.43)는 LEGACY_TIMERS로 읽을 때 타이머로 옮긴다 (autoSchedule.ts) */
+  DEFAULT_TIMER: { id: 'morning', label: '아침', at: '06:30', on: true },
+  LEGACY_TIMERS: [
+    { id: 'morning', label: '아침', at: '06:30' },
+    { id: 'noon', label: '점심', at: '11:30' },
+    { id: 'evening', label: '저녁', at: '17:30' },
   ],
+  TIMERS_MAX: 5,
+  /** 회차 하나가 30분~1시간 걸리고 구독은 한 번에 하나만 돈다 — 2시간보다 가까우면 저장을 거절 */
+  TIMER_MIN_GAP_MS: 2 * 60 * 60 * 1000,
+  TIMER_LABEL_MAX_CHARS: 8,
+  TIMER_ID_PREFIX: 't',
+  TIMER_ID_RANDOM_CHARS: 6,
   /** 서버가 꺼져 있다 켜졌을 때 그 회차를 늦게라도 시작해 주는 시간 */
   AUTO_CATCHUP_MS: 2 * 60 * 60 * 1000,
   /** 사람이 고를 수 있는 가장 늦은 시작 시각(하루의 분) — 늦게라도 시작하는 2시간이 자정을 넘지 않게 21:59까지 */
