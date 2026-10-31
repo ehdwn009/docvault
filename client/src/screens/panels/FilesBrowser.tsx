@@ -55,6 +55,8 @@ type Props = {
   onSearch: () => void;
   /** 홈의 「함께 보는 파일」처럼 밖에서 바로 공유받음·즐겨찾기로 — n이 바뀔 때마다 */
   jump?: { to: 'shared' | 'favorites'; n: number } | null;
+  /** 값이 바뀌면 뿌리(내 파일 맨 위)로 — 탭 재탭 */
+  rootSignal?: number;
 };
 
 const ICON_SIZE = 21;
@@ -62,7 +64,7 @@ const ICON_SIZE = 21;
 // SCR-110 (폰 A안, 2026-10-31): 문서 탭 — 큰 제목 + [+]·[⋯], 검색 칸, 묶음 카드(즐겨찾기·공유받음 / 폴더·문서 / 휴지통).
 // 폴더는 펼치지 않고 다음 화면으로 들어간다(아이폰 파일 앱처럼, ‹·뒤로 가기로 나온다). 행에는 단추가 없다 —
 // 누르기=열기, 길게 누르기=메뉴, 옆으로 밀기=빠른 동작. 정렬·보기·태그·선택은 머리의 ⋯ 안에 (사용자 결정 2026-10-31)
-export default function FilesBrowser({ folders, files, allFiles, tags, isAdmin, selectedId, onSelect, onSelectShared, actions, onToggleFavorite, checked, onCheckChange, onBulkDownload, onBulkMove, onBulkDelete, swipe, sortBy, onSortChange, viewMode, onViewModeChange, tagFilter, onTagFilterChange, selectedFolderId, onSelectFolder, onOpenTrash, onSearch, jump = null }: Props) {
+export default function FilesBrowser({ folders, files, allFiles, tags, isAdmin, selectedId, onSelect, onSelectShared, actions, onToggleFavorite, checked, onCheckChange, onBulkDownload, onBulkMove, onBulkDelete, swipe, sortBy, onSortChange, viewMode, onViewModeChange, tagFilter, onTagFilterChange, selectedFolderId, onSelectFolder, onOpenTrash, onSearch, jump = null, rootSignal = 0 }: Props) {
   const [stack, setStack] = useState<View[]>([{ kind: 'root' }]);
   const cur = stack[stack.length - 1]!;
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -103,6 +105,9 @@ export default function FilesBrowser({ folders, files, allFiles, tags, isAdmin, 
     toRoot();
     push({ kind: 'folder', id: selectedFolderId });
   }, [selectedFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (rootSignal > 0) toRoot();
+  }, [rootSignal]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!jump) return;
     toRoot();

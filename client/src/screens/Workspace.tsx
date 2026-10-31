@@ -243,6 +243,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [plusOpen, setPlusOpen] = useState(false);
   /** 폰 문서 탭(FilesBrowser)을 밖에서 공유받음·즐겨찾기로 보내는 신호 — 홈의 「함께 보는 파일」 */
   const [filesJump, setFilesJump] = useState<{ to: 'shared' | 'favorites'; n: number } | null>(null);
+  /** 문서 탭 재탭 — 폰 문서 탭을 뿌리(내 파일 맨 위)로 */
+  const [filesRootSignal, setFilesRootSignal] = useState(0);
   useEffect(() => setPlusOpen(false), [panel]);
   // 설정(SCR-140 개정)과 대화(SCR-188)는 패널이 아니라 본문 전체를 쓰는 "페이지"다 — 닫으면 그 전 패널로 돌아간다
   const [settingsTarget, setSettingsTarget] = useState<SettingsTarget | null>(null);
@@ -1507,10 +1509,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       return;
     }
     if (target === 'files' && DOC_PANELS.includes(panel)) {
-      // 문서 탭 재탭: 한 열은 목록↔문서, 두 열은 목록 열 접기/펼치기 (같은 뜻 — "목록을 보여 줘/치워 줘")
-      if (!narrow) setPanelCollapsed((v) => !v);
-      else if (panes.length > 0) setTouchList((v) => !v);
-      else setTouchList(true);
+      // 문서 탭 재탭 = 그 탭의 뿌리(목록 맨 위). 목록↔문서를 오가게 했더니 "메뉴를 두 번 누르면 뭔가 된다"가 어색했다 (사용자 보고 2026-10-31)
+      setPanelCollapsed(false);
+      setTouchList(true);
+      setFilesRootSignal((n) => n + 1);
       return;
     }
     setPanel(target);
@@ -1734,6 +1736,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             onOpenTrash={() => setTrashOpen(true)}
             onSearch={() => setPaletteOpen(true)}
             jump={filesJump}
+            rootSignal={filesRootSignal}
           />
         )}
         {panel === 'files' && !phoneFiles && (
