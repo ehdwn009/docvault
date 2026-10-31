@@ -1496,7 +1496,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             key={target}
             onClick={() => pressTab(target)}
             aria-current={active ? 'page' : undefined}
-            className={`flex h-[var(--tab-bar-h)] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'bg-slate-900 font-semibold text-accent-400' : 'text-slate-500'}`}
+            className={`flex h-[var(--tab-bar-row)] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'bg-slate-900 font-semibold text-accent-400' : 'text-slate-500'}`}
           >
             <Icon name={icon} size={22} />
             {label}
@@ -2185,7 +2185,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {IS_TOUCH && tabBar}
       {newVersionReady && (
-        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 rounded-lg border border-sky-800 bg-slate-900 px-4 py-2.5 shadow-xl touch:bottom-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom)+16px)]">
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 rounded-lg border border-sky-800 bg-slate-900 px-4 py-2.5 shadow-xl touch:bottom-[calc(var(--tab-bar-h)+16px)]">
           <span className="text-sm text-slate-200">새 버전이 배포되었습니다</span>
           <button
             onClick={() => location.reload()}
