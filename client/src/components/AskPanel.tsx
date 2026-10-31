@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   api,
   ApiError,
@@ -53,6 +53,10 @@ type Props = {
   onClose: () => void;
   /** page 모드(폰): 목록을 보는지 본문을 보는지 — 부모가 하단 탭 바를 숨길지 정한다 */
   onViewChange?: (view: 'list' | 'body') => void;
+  /** page 모드: 왼쪽 목록 맨 위에 얹는 것 — AI 화면(SCR-189)의 「대화 ｜ 배움 카드」 탭 */
+  listTop?: ReactNode;
+  /** page 모드: 열자마자 이 대화를 연다 — 홈의 "최근 대화"에서 들어올 때 */
+  initialThreadId?: number | null;
 };
 
 type UsedCard = { id: number; title: string };
@@ -101,7 +105,7 @@ const SHEET_EXPANDED_TOP_INSET = 44;
 
 // SCR-180: 질문 패널 — 드래그한 문장을 문맥으로 LLM에 묻고 꼬리질문을 잇는다 (배움 카드 1판).
 // file이 null이면 SCR-187 대화(챗봇): 같은 부품이 레일 패널 안에서 문서 없이 돈다
-export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose, onViewChange }: Props) {
+export default function AskPanel({ file, page = false, seed, pendingQuote, pendingTransient = false, onConsumePendingQuote, onConversingChange, onOpenFile, withCards = false, isPc, onClose, onViewChange, listTop, initialThreadId = null }: Props) {
   const chatMode = file === null;
   const proseTheme = useAppProseTheme();
   const [status, setStatus] = useState<AskStatus | null>(null);
@@ -116,6 +120,10 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   useEffect(() => {
     if (page) onViewChange?.(showList ? 'list' : 'body');
   }, [page, showList]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 홈에서 고른 대화로 바로 — 바뀔 때마다(다른 대화를 고르면) 다시 연다
+  useEffect(() => {
+    if (page && initialThreadId !== null) void loadThread(initialThreadId);
+  }, [page, initialThreadId]); // eslint-disable-line react-hooks/exhaustive-deps
   // 오른쪽 패널 폭 — 드래그로 320~560px, 기기가 기억한다
   const [askWidth, setAskWidth] = useState(() => clampWidth(Number(readLocal(ASK_WIDTH_KEY)) || ASK_PANEL_WIDTH_DEFAULT));
   const askWidthRef = useRef(askWidth);
@@ -576,12 +584,15 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
 
   // 대화 화면(page)의 왼쪽 목록 머리
   const listHeader = (
+    <>
+    {listTop}
     <div className={`flex items-center gap-2 pr-2 ${isPc ? 'px-4 py-3' : 'py-2 pl-4'}`}>
       <h2 className="text-sm font-bold">대화</h2>
       <button onClick={newThread} className="ml-auto min-h-9 rounded-md border border-slate-700 px-2.5 text-xs text-slate-300 hover:bg-slate-800">
         + 새 대화
       </button>
     </div>
+    </>
   );
 
   const historyView = (

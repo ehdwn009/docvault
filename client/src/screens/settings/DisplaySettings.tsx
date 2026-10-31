@@ -2,8 +2,9 @@ import { useState } from 'react';
 import type { UserSettings } from '../../lib/api';
 import { ACCENTS, SCHEMES, applyAppTheme, getAppTheme, type AppTheme } from '../../lib/appTheme';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN, FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/constants';
+import { getLayout, setLayout } from '../../lib/layout';
 import { rowId } from './catalog';
-import SettingRow, { btnClass, selectClass } from './SettingRow';
+import SettingRow, { btnClass, selectClass, Switch } from './SettingRow';
 
 type Props = {
   settings: UserSettings;
@@ -22,6 +23,8 @@ export default function DisplaySettings({ settings, onChange, onShowShortcuts }:
     setAppTheme(next);
   }
   const id = (item: string) => rowId('display', item);
+  // "이전 레이아웃" — v0.54 한 버전만 두는 스위치 (IA — 안 B 결정 1)
+  const [classic, setClassic] = useState(() => getLayout() === 'classic');
 
   return (
     <>
@@ -73,6 +76,16 @@ export default function DisplaySettings({ settings, onChange, onShowShortcuts }:
           <option value="normal">보통</option>
           <option value="wide">넓게</option>
         </select>
+      </SettingRow>
+      <SettingRow id={id('layout')} title="이전 레이아웃" desc="v0.53의 모습으로 — 홈 없이 내 파일·즐겨찾기·공유·카드·대화·브리핑이 레일(폰은 문서·대화·브리핑·설정 탭)에 따로 있습니다. 설정 페이지·질문 패널은 그대로예요. 이 스위치는 한 버전만 있다가 사라집니다">
+        <Switch
+          checked={classic}
+          onChange={(v) => {
+            setClassic(v);
+            setLayout(v ? 'classic' : 'home');
+          }}
+          label="이전 레이아웃"
+        />
       </SettingRow>
       <SettingRow
         id={id('shortcuts')}

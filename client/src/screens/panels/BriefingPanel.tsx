@@ -30,6 +30,8 @@ type Props = {
   onOpenSettings: () => void;
   /** 수집 목록 문서를 연다 */
   onOpenSources: () => void;
+  /** 홈(SCR-101)의 "오늘의 브리핑" 섹션으로 그린다 — ⚙ 메뉴 없이, 지난 브리핑은 「지난 브리핑 ›」로 펼친다 (IA — 안 B) */
+  home?: boolean;
 };
 
 /** API-135 — ownerName은 남의 회차를 보는 열람 계정에게만 온다 */
@@ -82,7 +84,8 @@ function stateText(e: EditionSummary): { text: string; cls: string } {
 // SCR-190: 뉴스 브리핑 패널 (v0.43 개편) — 회차의 보관함. 만들기·진행 → 오늘 회차 → 지난 브리핑(날짜별) → 자동·비용.
 // 실행 중에만 2초마다 상태를 다시 읽는다. 패널을 닫았다 열어도 같은 상태가 보인다(서버 실행 기록이 원천).
 // 열람 계정(readOnly)은 상태(API-131)를 읽지 않는다 — 관리자 전용이라 403이고, 보여 줄 것도 회차 목록뿐이다 (v0.49)
-export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources }: Props) {
+export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources, home = false }: Props) {
+  const [pastOpen, setPastOpen] = useState(!home);
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [page, setPage] = useState<EditionPage | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -237,9 +240,9 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
   const nextTimerAt = admin?.nextAutoSlot ? admin.schedule.timers.find((t) => t.id === admin.nextAutoSlot)?.at : undefined;
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-y-auto pb-8">
+    <div className={home ? 'relative' : 'relative min-h-0 flex-1 overflow-y-auto pb-8'}>
       {/* 설정 단추 — 자동 생성 설정 · 수집 목록 · 실행 기록 */}
-      {admin && (
+      {admin && !home && (
         <div className="flex justify-end px-2">
           <button
             onClick={() => setMenuOpen((v) => !v)}
@@ -252,7 +255,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
         </div>
       )}
       {/* 열람 계정 — 누가 만든 브리핑인지, 그리고 읽기만 된다는 것 */}
-      {readOnly && (
+      {readOnly && !home && (
         <p className="px-4 pt-4 text-xs text-slate-500">
           <b className="text-slate-300">{page?.ownerName ?? '관리자'}</b>님이 만든 뉴스 브리핑을 함께 봅니다. 읽음 표시와 틀린 곳 알리기는 내 것으로 따로 남아요
         </p>
@@ -274,7 +277,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
         </>
       )}
 
-      <div className={`space-y-6 px-4 ${readOnly ? 'pt-4' : ''}`}>
+      <div className={`space-y-6 ${home ? '' : 'px-4'} ${readOnly && !home ? 'pt-4' : ''}`}>
         {admin && (
         <section className="space-y-2">
           {!admin.configured && (
@@ -383,7 +386,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           </div>
         </section>
 
-        {pastDays.length > 0 && (
+        {pastDays.length > 0 && pastOpen && (
           <section>
             <h3 className="mb-2 text-sm font-bold text-slate-200">지난 브리핑</h3>
             <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
@@ -416,6 +419,9 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           </section>
         )}
 
+        {home && readOnly && pastDays.length > 0 && !pastOpen && (
+          <button onClick={() => setPastOpen(true)} className="text-xs text-slate-500 hover:text-slate-300">지난 브리핑 ›</button>
+        )}
         {runs && (
           <section>
             <div className="mb-2 flex items-center">
@@ -441,7 +447,30 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           </section>
         )}
 
-        {admin && (
+        {admin && home ? (
+          // 홈의 바닥 한 줄 — 같은 사실 세 곳(상태·다음 시각·비용)을 여기 한 줄과 설정 한 줄로 줄인다 (IA — 안 B 홈)
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <button onClick={onOpenSettings} className="hover:text-slate-300">
+              {admin.autoEnabled && admin.nextAutoAt !== null
+                ? `${admin.mode === 'subscription' ? '다음 예약 작업' : '다음 자동 생성'} ${kstTime(admin.nextAutoAt, kstToday(admin.nextAutoAt) !== today)} ${runName({ slot: admin.nextAutoSlot ?? 'adhoc', label: admin.nextAutoLabel })}`
+                : admin.autoEnabled ? '자동 생성 켜짐 · 켜 둔 회차가 없어요' : '자동 생성 꺼짐 · 설정에서 켜기'}
+            </button>
+            <span>·</span>
+            <span className={admin.monthCostUsd >= admin.monthBudgetUsd * (admin.budgetWarnRatio ?? 0.8) ? 'text-warn-400' : ''}>이번 달 ≈ ${admin.monthCostUsd.toFixed(2)} / ${admin.monthBudgetUsd}</span>
+            {pastDays.length > 0 && !pastOpen && (
+              <>
+                <span>·</span>
+                <button onClick={() => setPastOpen(true)} className="hover:text-slate-300">지난 브리핑 ›</button>
+              </>
+            )}
+            {!runs && (
+              <>
+                <span>·</span>
+                <button onClick={() => void showRuns()} className="hover:text-slate-300">실행 기록</button>
+              </>
+            )}
+          </p>
+        ) : admin && (
         <section className="space-y-1 border-t border-slate-800 pt-4 text-xs text-slate-500">
           <button onClick={onOpenSettings} className="block text-left hover:text-slate-300">
             {admin.autoEnabled && admin.nextAutoAt !== null ? (

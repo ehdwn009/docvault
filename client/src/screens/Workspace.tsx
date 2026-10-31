@@ -44,6 +44,10 @@ import BriefingPanel from './panels/BriefingPanel';
 import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
 import SettingsPage from './settings/SettingsPage';
+import Home from './Home';
+import AiPage from './AiPage';
+import { getLayout, LAYOUT_EVENT, type AppLayout } from '../lib/layout';
+import ListRow from '../components/ui/ListRow';
 import Chip from '../components/ui/Chip';
 import IconButton from '../components/ui/IconButton';
 import { isAdminCategory, type SettingsTarget } from './settings/catalog';
@@ -56,12 +60,19 @@ import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
 import { IS_TOUCH } from '../lib/device';
 
-type Panel = 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'settings';
+// home·ai·files·settings = 안 B(v0.54) 레일 네 개. favorites·shared·cards·chat·briefing은 "이전 레이아웃"(classic)에서만 레일에 보인다 (IA — 안 B 결정 1)
+type Panel = 'home' | 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'ai' | 'settings';
 /** 사이드 패널이 아니라 본문 전체를 쓰는 것들 (IA — 안 B) */
-const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['settings', 'chat']);
+const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['home', 'ai', 'settings', 'chat']);
+/** 문서 탭 아래에 묶이는 목록들 */
+const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
+/** 문서 패널 고정 섹션(즐겨찾기·공유받음)의 열림 상태 — 기기 기억 */
+const FILE_SECTIONS_KEY = 'dv_files_sections';
 type SortBy = 'name' | 'updated';
 
 const PANEL_TITLE: Record<Panel, string> = {
+  home: '홈',
+  ai: 'AI',
   files: '내 파일',
   favorites: '즐겨찾기',
   shared: '공유 파일',
@@ -170,7 +181,38 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 분할 방향·상한은 화면 폭 기준: 넓으면 좌우 최대 4칸, 좁으면 상하 최대 2칸 (IA — 반응형 기준 768px)
   const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 768px)').matches);
   const selected = panes[Math.min(activeIdx, panes.length - 1)] ?? null;
-  const [panel, setPanel] = useState<Panel>('files');
+  // 레이아웃(홈 중심 / 이전) — 설정의 스위치가 바꾸면 이벤트로 따라간다
+  const [layout, setLayoutState] = useState<AppLayout>(getLayout);
+  useEffect(() => {
+    const on = () => setLayoutState(getLayout());
+    window.addEventListener(LAYOUT_EVENT, on);
+    return () => window.removeEventListener(LAYOUT_EVENT, on);
+  }, []);
+  // 첫 화면은 홈 — 되살릴 문서가 있으면 부팅 복원이 문서로 바꾼다 (IA — 안 B 홈)
+  const [panel, setPanel] = useState<Panel>(() => (getLayout() === 'home' ? 'home' : 'files'));
+  // 홈 "최근 대화"에서 고른 대화 — AI 화면이 열자마자 연다
+  const [aiThreadId, setAiThreadId] = useState<number | null>(null);
+  // 문서 패널의 고정 섹션 열림 상태
+  const [fileSections, setFileSections] = useState<{ favorites: boolean; shared: boolean }>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(FILE_SECTIONS_KEY) ?? '') as Partial<{ favorites: boolean; shared: boolean }>;
+      return { favorites: !!v.favorites, shared: !!v.shared };
+    } catch {
+      return { favorites: false, shared: false };
+    }
+  });
+  const toggleSection = (k: 'favorites' | 'shared') =>
+    setFileSections((s) => {
+      const next = { ...s, [k]: !s[k] };
+      try {
+        localStorage.setItem(FILE_SECTIONS_KEY, JSON.stringify(next));
+      } catch {
+        /* 기억 못 해도 동작은 한다 */
+      }
+      return next;
+    });
+  // 문서 패널 머리의 [+] 메뉴
+  const [plusOpen, setPlusOpen] = useState(false);
   // 설정(SCR-140 개정)과 대화(SCR-188)는 패널이 아니라 본문 전체를 쓰는 "페이지"다 — 닫으면 그 전 패널로 돌아간다
   const [settingsTarget, setSettingsTarget] = useState<SettingsTarget | null>(null);
   const panelBeforePage = useRef<Panel>('files');
@@ -645,6 +687,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         setPanes(restore.panes);
         setActiveIdx(restore.active);
         if (IS_TOUCH) setTouchList(false); // 폰: 되살린 문서를 바로 보여 준다 — 목록은 탭으로
+        setPanel((p) => (PAGE_PANELS.has(p) ? 'files' : p)); // 문서가 열리면 홈은 본문에서 비켜난다 (IA — 안 B 홈)
         if (saved?.ratio) setSplitRatio(saved.ratio);
         return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
       }
@@ -1326,9 +1369,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
-  const RAIL_ICONS: Record<Panel, IconName> = { files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings' };
+  const RAIL_ICONS: Record<Panel, IconName> = { home: 'home', ai: 'sparkle', files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings' };
   // 터치의 문서 탭 칩 이름 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
-  const RAIL_SHORT: Record<Panel, string> = { files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
+  const RAIL_SHORT: Record<Panel, string> = { home: '홈', ai: 'AI', files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition';
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
@@ -1351,6 +1394,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     <button
       onClick={() => {
         if (PAGE_PANELS.has(target)) {
+          // 홈은 "장소"라 토글이 아니다; AI를 레일에서 열면 홈에서 고른 대화는 잊는다
+          if (target === 'home' && panel === 'home') return;
+          if (target === 'ai') setAiThreadId(null);
           // 페이지는 접는 게 아니라 닫는다 — 다시 누르면 그 전 패널로
           if (panel === target) closePage();
           else if (target === 'settings') openSettings();
@@ -1382,10 +1428,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     setTouchList(true);
   };
   /** 하단 탭 바(SCR-102, v0.53 중간 상태: 문서·대화·브리핑·설정) — 같은 탭을 다시 누르면 문서 탭은 목록↔문서를 오간다 */
-  const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
   const tabTarget = (p: Panel): Panel => (DOC_PANELS.includes(p) ? 'files' : p);
   const pressTab = (target: Panel) => {
     if (PAGE_PANELS.has(target)) {
+      if (target === 'home' && panel === 'home') return;
+      if (target === 'ai') setAiThreadId(null);
       if (panel === target) closePage();
       else if (target === 'settings') openSettings();
       else openPage(target);
@@ -1407,16 +1454,23 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       aria-label="주 메뉴"
       aria-hidden={chromeHidden}
       className={`fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur pc:hidden ${
-        immersive || editing || (panel === 'chat' && chatBody) ? 'hidden' : ''
+        immersive || editing || ((panel === 'chat' || panel === 'ai') && chatBody) ? 'hidden' : ''
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
     >
       {(
-        [
-          ['files', '문서', 'files'],
-          ['chat', '대화', 'chat'],
-          ...(canSeeBriefing ? ([['briefing', '브리핑', 'news']] as const) : []),
-          ['settings', '설정', 'settings'],
-        ] as [Panel, string, IconName][]
+        (layout === 'home'
+          ? [
+              ['home', '홈', 'home'],
+              ['files', '문서', 'files'],
+              ['ai', 'AI', 'sparkle'],
+              ['settings', '나', 'settings'],
+            ]
+          : [
+              ['files', '문서', 'files'],
+              ['chat', '대화', 'chat'],
+              ...(canSeeBriefing ? [['briefing', '브리핑', 'news']] : []),
+              ['settings', '설정', 'settings'],
+            ]) as [Panel, string, IconName][]
       ).map(([target, label, icon]) => {
         const active = tabTarget(panel) === target;
         return (
@@ -1464,25 +1518,39 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:hidden">
-        {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01) */}
-        <button
-          onClick={() => setPaletteOpen(true)}
-          title="검색 (Ctrl+K)"
-          className={`${railClass} text-slate-500 hover:text-slate-200`}
-        >
-          <Icon name="search" />
-        </button>
-        {railButton('files', '내 파일')}
-        {railButton('favorites', '즐겨찾기')}
-        {railButton('shared', '공유 파일')}
-        {railButton('cards', '배움 카드')}
-        {railButton('chat', '대화')}
-        {/* 뉴스 브리핑은 관리자(LLM 요금을 내는 사람)와, 관리자가 고른 열람 계정에게만 (설계 — 원칙, v0.49) */}
-        {canSeeBriefing && railButton('briefing', '뉴스 브리핑')}
+        {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01). 안 B에서는 아래 "도구" 묶음으로 */}
+        {layout === 'classic' && (
+          <button onClick={() => setPaletteOpen(true)} title="검색 (Ctrl+K)" className={`${railClass} text-slate-500 hover:text-slate-200`}>
+            <Icon name="search" />
+          </button>
+        )}
+        {layout === 'home' ? (
+          // 안 B: 위는 "가는 곳"(홈·문서·AI), 아래는 "도구와 나"(검색·나). 관리자·나가기는 "나" 안에 (IA — 안 B 레일)
+          <>
+            {railButton('home', '홈')}
+            {railButton('files', '문서')}
+            {railButton('ai', 'AI')}
+          </>
+        ) : (
+          <>
+            {railButton('files', '내 파일')}
+            {railButton('favorites', '즐겨찾기')}
+            {railButton('shared', '공유 파일')}
+            {railButton('cards', '배움 카드')}
+            {railButton('chat', '대화')}
+            {/* 뉴스 브리핑은 관리자(LLM 요금을 내는 사람)와, 관리자가 고른 열람 계정에게만 (설계 — 원칙, v0.49) */}
+            {canSeeBriefing && railButton('briefing', '뉴스 브리핑')}
+          </>
+        )}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
-        {railButton('settings', '설정')}
-        {/* 관리자 화면들은 설정 페이지의 "앱 운영" 카테고리 — 이 버튼은 그 첫 칸(사용자)으로 가는 바로 가기 */}
-        {user.role === 'admin' && (
+        {layout === 'home' && (
+          <button onClick={() => setPaletteOpen(true)} title="검색 (Ctrl+K)" className={`${railClass} text-slate-500 hover:text-slate-200`}>
+            <Icon name="search" />
+          </button>
+        )}
+        {railButton('settings', layout === 'home' ? '나' : '설정')}
+        {/* 관리자 화면들은 설정 페이지의 "앱 운영" 카테고리 — 이 버튼은 그 첫 칸(사용자)으로 가는 바로 가기 (이전 레이아웃에서만) */}
+        {layout === 'classic' && user.role === 'admin' && (
           <button
             onClick={() => openSettings({ category: 'users' })}
             title="관리자"
@@ -1491,13 +1559,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             <Icon name="admin" />
           </button>
         )}
-        <button
-          onClick={handleLogout}
-          title={`로그아웃 (${user.displayName ?? user.username})`}
-          className={`${railClass} text-slate-600 hover:text-slate-300`}
-        >
-          <Icon name="logout" />
-        </button>
+        {layout === 'classic' && (
+          <button
+            onClick={handleLogout}
+            title={`로그아웃 (${user.displayName ?? user.username})`}
+            className={`${railClass} text-slate-600 hover:text-slate-300`}
+          >
+            <Icon name="logout" />
+          </button>
+        )}
       </div>
 
       {/* 접힘은 PC 전용 — 터치의 목록 층은 탭 바가 켜고 끈다 */}
@@ -1506,18 +1576,44 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       <aside
         className={`flex w-72 shrink-0 flex-col border-r border-slate-800 touch:w-full touch:border-r-0 ${panelCollapsed ? 'pc:hidden' : ''}`}
       >
-        <div className="flex items-center gap-2 px-4 py-3">
-          <h1 className="text-sm font-bold tracking-tight">{PANEL_TITLE[panel]}</h1>
+        <div className="relative flex items-center gap-2 px-4 py-3">
+          <h1 className="text-sm font-bold tracking-tight">{layout === 'home' && panel === 'files' ? '문서' : PANEL_TITLE[panel]}</h1>
           <span className="ml-auto truncate text-xs text-slate-600">
             {user.displayName ?? user.username}
           </span>
+          {/* 안 B: 새 문서·업로드·폴더 업로드·새 폴더를 [+] 메뉴 하나로 (불편 8, SCR-111) */}
+          {layout === 'home' && panel === 'files' && (
+            <>
+              <IconButton onClick={() => setPlusOpen((v) => !v)} label="새로 만들기" active={plusOpen} className="-mr-1">
+                <Icon name="plus" size={20} />
+              </IconButton>
+              {plusOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setPlusOpen(false)} />
+                  <div role="menu" className="absolute right-3 top-full z-20 w-52 overflow-hidden rounded-md border border-slate-700 bg-slate-900 py-1 text-sm shadow-lg">
+                    {[
+                      { label: '새 문서', on: () => actions.createDoc(selectedFolder) },
+                      { label: '파일 업로드', on: () => actions.uploadTo(selectedFolder) },
+                      ...(IS_TOUCH ? [] : [{ label: '폴더째 업로드', on: () => dirUploadRef.current?.click() }]),
+                      { label: '새 폴더', on: () => actions.createFolder(selectedFolder) },
+                    ].map((m) => (
+                      <button key={m.label} role="menuitem" onClick={() => (setPlusOpen(false), m.on())} className="block min-h-11 w-full px-3 text-left text-slate-300 hover:bg-slate-800">
+                        {m.label}
+                        {selectedFolder !== null && <span className="ml-1 text-xs text-slate-500">→ {tree.folders.find((f) => f.id === selectedFolder)?.name}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
           {/* 터치: 검색은 상단 바 돋보기 (레일이 없으므로) */}
           <IconButton onClick={() => setPaletteOpen(true)} label="검색" className="-mr-2 pc:hidden">
             <Icon name="search" size={20} />
           </IconButton>
         </div>
         {/* 터치의 문서 탭: 내 파일·즐겨찾기·공유·카드를 칩으로 오간다 — v0.54에서 즐겨찾기·공유는 문서 패널의 섹션이 된다 */}
-        {DOC_PANELS.includes(panel) && (
+        {layout === 'classic' && DOC_PANELS.includes(panel) && (
           <div className="mb-2 flex gap-1 overflow-x-auto px-3 pc:hidden">
             {DOC_PANELS.map((p) => (
               <Chip key={p} active={panel === p} onClick={() => setPanel(p)}>
@@ -1529,7 +1625,34 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
         {panel === 'files' && (
           <>
-            <div className="flex gap-2 px-3">
+            {/* 안 B 고정 섹션 — ★ 즐겨찾기 · 👥 공유받음 (접힘 기본, 열림 상태 기기 기억). 펼치면 SCR-120·130 목록이 그 자리에 (IA — 안 B 문서) */}
+            {layout === 'home' && (
+              <div className="mb-1 border-b border-slate-800 px-2 pb-1">
+                {(
+                  [
+                    ['favorites', '★ 즐겨찾기', tree.files.filter((f) => f.state.isFavorite === 1).length],
+                    ['shared', '👥 공유받음', null],
+                  ] as ['favorites' | 'shared', string, number | null][]
+                ).map(([k, label, n]) => (
+                  <div key={k}>
+                    <ListRow onClick={() => toggleSection(k)} muted>
+                      <span className="w-3 text-[10px] text-slate-500">{fileSections[k] ? '▾' : '▸'}</span>
+                      <span className="flex-1">{label}{n !== null ? ` (${n})` : ''}</span>
+                    </ListRow>
+                    {fileSections[k] && (
+                      <div className="max-h-64 overflow-y-auto pb-1 pl-2">
+                        {k === 'favorites' ? (
+                          <FavoritesPanel files={tree.files} selectedId={selected?.id ?? null} onSelect={(f) => void selectFile(f)} swipe={fileSwipe} />
+                        ) : (
+                          <SharedPanel selectedId={selected?.id ?? null} onSelect={(f) => void selectFile(sharedToTreeFile(f))} />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className={`flex gap-2 px-3 ${layout === 'home' ? 'hidden' : ''}`}>
               {/* accept 없음 — 어떤 파일이든 받아서 서버가 분류한다 (API-031 전량 수용 정책) */}
               <input
                 ref={uploadRef}
@@ -1602,7 +1725,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             <button
               onClick={() => dirUploadRef.current?.click()}
               title="폴더를 하위 구조 그대로 업로드합니다"
-              className="mx-3 mt-1.5 hidden rounded-md border border-dashed border-slate-800 py-1 text-xs text-slate-500 transition hover:border-slate-600 hover:text-slate-300 pc:block"
+              className={`mx-3 mt-1.5 hidden rounded-md border border-dashed border-slate-800 py-1 text-xs text-slate-500 transition hover:border-slate-600 hover:text-slate-300 ${layout === 'classic' ? 'pc:block' : ''}`}
             >
               📂 폴더째 업로드
             </button>
@@ -1681,7 +1804,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               </div>
             )}
             <nav className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-4">
-              <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} swipe={fileSwipe} />
+              {layout === 'classic' && <RecentList files={tree.files} onSelect={(f) => void selectFile(f)} swipe={fileSwipe} />}
               {viewMode === 'grid' ? (
                 <FileGrid
                   files={visibleFiles}
@@ -1706,12 +1829,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 />
               )}
             </nav>
-            <button
-              onClick={() => setTrashOpen(true)}
-              className="mx-3 mb-3 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
-            >
-              🗑 휴지통
-            </button>
+            <div className="mx-2 mb-2 shrink-0 border-t border-slate-800 pt-1">
+              <ListRow onClick={() => setTrashOpen(true)} muted>
+                🗑 휴지통
+              </ListRow>
+            </div>
           </>
         )}
 
@@ -1755,10 +1877,54 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
       {/* 터치: 하단 탭 바 자리를 비운다 — 뷰어 도구막대·분할 칸이 탭 바 밑에 깔리지 않게. 탭 바가 숨는 몰입·편집·대화 본문에서는 비우지 않는다 */}
-      <main className={`relative flex min-w-0 flex-1 flex-col ${IS_TOUCH && !immersive && !editing && !(panel === 'chat' && chatBody) ? 'pb-[var(--tab-bar-h)]' : ''}`}>
+      <main className={`relative flex min-w-0 flex-1 flex-col ${IS_TOUCH && !immersive && !editing && !((panel === 'chat' || panel === 'ai') && chatBody) ? 'pb-[var(--tab-bar-h)]' : ''}`}>
         {/* 설정·대화 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정·SCR-188).
             z-[45]: 뷰어 크롬(z-20)·질문 패널 오버레이(z-30)·브리핑 기사 시트(z-40)보다 위, 확인창·팔레트·토스트(z-50)보다 아래.
             터치는 탭 바 자리(bottom)를 비워 탭 바가 보인다 */}
+        {panel === 'home' && (
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
+            <Home
+              user={user}
+              settings={settings}
+              files={tree.files}
+              onOpenFile={(f) => void selectFile(f)}
+              onOpenFileById={openFileById}
+              onOpenThread={(id) => {
+                setAiThreadId(id);
+                openPage('ai');
+              }}
+              onOpenPanel={(p) => {
+                closePage();
+                setPanel(p === 'shared' && layout === 'home' ? 'files' : p);
+                if (p === 'shared' && layout === 'home' && !fileSections.shared) toggleSection('shared');
+                setTouchList(true);
+              }}
+              onSearch={() => setPaletteOpen(true)}
+              onNewDoc={() => actions.createDoc(null)}
+              onOpenBriefingSettings={() => openSettings({ category: 'briefing' })}
+              onOpenBriefingSources={() => {
+                closePage();
+                openBriefingSources();
+              }}
+            />
+          </div>
+        )}
+        {panel === 'ai' && (
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--tab-bar-h)]">
+            <AiPage
+              initialThreadId={aiThreadId}
+              onOpenFile={(f) => {
+                closePage();
+                void selectFile(f);
+              }}
+              onCardDeleted={(id) => {
+                if (tabs.some((t) => t.id === id)) detachFiles([id]);
+              }}
+              onClose={closePage}
+              onViewChange={(v) => setChatBody(v === 'body')}
+            />
+          </div>
+        )}
         {panel === 'chat' && (
           // SCR-187·188: 대화 — 문서 없이 시작하는 챗봇을 본문 전체에. 페이지를 떠나면 언마운트되지만
           // 서버에 자동 저장되므로 다시 열면 목록에서 이어 간다
