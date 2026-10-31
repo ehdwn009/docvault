@@ -17,6 +17,8 @@ const TWO_LABEL_SUFFIX = new Set(['co.kr', 'or.kr', 'go.kr', 'ne.kr', 're.kr', '
     피드 주소(feeds.feedburner.com)만 목록에 들어가 주소 검사에 걸렸다 (2026-10-30). 열쇠는 "호스트 + 경로" */
 const FEED_ARTICLE_DOMAINS: Record<string, string[]> = {
   'feeds.feedburner.com/zdkorea': ['zdnet.co.kr'],
+  // BBC는 피드 호스트(bbci.co.uk)와 기사 호스트(bbc.co.uk·bbc.com)가 다르다 — 첫 실전 저녁판에서 BBC 기사 하나가 domain으로 빠졌다(2026-10-31). 키는 호스트만
+  'feeds.bbci.co.uk': ['bbc.co.uk', 'bbc.com'],
 };
 
 /** 호스트를 비교 가능한 모양으로 — 소문자, 끝 점 제거. URL 객체가 이미 punycode로 바꿔 준다 */
@@ -55,7 +57,7 @@ export function checkDomainsOf(doc: SourcesDoc): string[] {
       const host = normalizeHost(u.hostname);
       set.add(host.replace(FEED_HOST_PREFIX, ''));
       set.add(registrableDomain(host));
-      for (const d of FEED_ARTICLE_DOMAINS[`${host}${u.pathname.replace(/\/$/, '')}`] ?? []) set.add(d);
+      for (const d of FEED_ARTICLE_DOMAINS[`${host}${u.pathname.replace(/\/$/, '')}`] ?? FEED_ARTICLE_DOMAINS[host] ?? []) set.add(d);
     } catch {
       // 주소가 아니면 건너뛴다 — parseSourcesDoc이 이미 걸렀을 것이다
     }
