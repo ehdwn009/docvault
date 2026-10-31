@@ -1470,7 +1470,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       ref={tabBarRef}
       aria-label="주 메뉴"
       aria-hidden={chromeHidden}
-      className={`fixed inset-x-0 bottom-0 z-30 flex border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur pc:hidden ${
+      // 불투명 + 위 테두리 + 탭 사이 세로선 — 밝은 테마에서 본문이 비쳐 보이고 탭끼리 구분이 안 됐다 (사용자 보고 2026-10-31)
+      className={`fixed inset-x-0 bottom-0 z-30 flex divide-x divide-slate-800 border-t border-slate-800 bg-slate-950 pb-[env(safe-area-inset-bottom)] pc:hidden ${
         immersive || editing || ((panel === 'chat' || panel === 'ai') && chatBody) ? 'hidden' : ''
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
     >
@@ -1495,7 +1496,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             key={target}
             onClick={() => pressTab(target)}
             aria-current={active ? 'page' : undefined}
-            className={`flex h-[var(--tab-bar-h)] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'text-accent-400' : 'text-slate-500'}`}
+            className={`flex h-[var(--tab-bar-h)] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'bg-slate-900 font-semibold text-accent-400' : 'text-slate-500'}`}
           >
             <Icon name={icon} size={22} />
             {label}

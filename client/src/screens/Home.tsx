@@ -78,7 +78,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 px-4 py-3 pc:px-6">
+      <div className="flex min-w-0 items-center gap-2 px-4 py-3 pc:px-6">
         <h2 className="text-base font-bold">홈</h2>
         <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">{dateChip}</span>
         <span className="ml-auto" />
@@ -87,9 +87,10 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
           검색{IS_PC ? ' · Ctrl+K' : ''}
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pc:px-6">
-        <div className="grid max-w-5xl gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="space-y-8">
+      {/* overflow-x-hidden·min-w-0: 긴 파일 이름이나 한 줄 글이 칸을 밀어 폰에서 가로 스크롤이 생기지 않게 (사용자 보고 2026-10-31) */}
+      <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 pb-10 pc:px-6">
+        <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="min-w-0 space-y-8">
             {hasBriefing && (
               <section>
                 <h3 className={sectionTitle}>{briefingOwner ? `${ownerName ?? '관리자'}님의 브리핑` : '오늘의 브리핑'}</h3>
@@ -117,7 +118,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
               )}
             </section>
           </div>
-          <div className="space-y-8">
+          <div className="min-w-0 space-y-8">
             {review && (review.due.length > 0 || review.tomorrow > 0) && (
               // SCR-186 복습 띠 그대로 — 0이면 숨김
               <section className="flex items-center gap-2 rounded-xl border border-card-900 bg-card-950/40 px-3 py-2.5 text-sm">
