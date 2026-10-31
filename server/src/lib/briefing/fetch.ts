@@ -39,8 +39,14 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+// claude.ai 클라우드 세션(구독 생성)은 나가는 요청이 전부 프록시(HTTPS_PROXY)를 거친다 — 주소 찾기도 프록시가 하므로 여기서 dns.lookup을 하면
+// 허용 목록의 호스트조차 "주소를 찾을 수 없음"이 난다(첫 실전 2026-10-31, 피드 26/67 실패). 그 환경에서는 사설망 검사를 건너뛴다 — 울타리는 프록시의 허용 목록이다.
+// 서버(프록시 없음)는 그대로 검사한다. fetch 자체가 프록시를 타게 하는 것은 npm script의 NODE_USE_ENV_PROXY=1
+const VIA_PROXY = !!(process.env.HTTPS_PROXY || process.env.https_proxy);
+
 async function assertPublicUrl(url: URL, signal: AbortSignal): Promise<void> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('http(s) 주소가 아닙니다');
+  if (VIA_PROXY) return;
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addrs = isIP(host) ? [{ address: host }] : await untilAborted(lookup(host, { all: true }), signal);
   if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) throw new Error('내부망 주소는 받을 수 없습니다');

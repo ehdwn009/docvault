@@ -10,7 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "briefing:check": "tsx src/scripts/check-briefing-sources.ts",
     "briefing:readcheck": "tsx src/scripts/check-briefing-reader.ts",
-    "briefing:job": "tsx src/scripts/briefing-job.ts"
+    "briefing:job": "NODE_USE_ENV_PROXY=1 tsx src/scripts/briefing-job.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
