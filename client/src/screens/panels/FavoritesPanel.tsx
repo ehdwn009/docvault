@@ -1,6 +1,7 @@
 import FileName from '../../components/FileName';
 import SwipeRow, { type SwipeConfig } from '../../components/SwipeRow';
 import ListRow from '../../components/ui/ListRow';
+import Icon from '../../components/Icon';
 import type { TreeFile } from '../../lib/api';
 
 type Props = {
@@ -27,7 +28,7 @@ export default function FavoritesPanel({ files, selectedId, onSelect, swipe }: P
       {favorites.map((file) => (
         <SwipeRow key={file.id} {...swipe(file)}>
           <ListRow onClick={() => onSelect(file)} selected={file.id === selectedId}>
-            <span className="leading-5 text-warn-400">★</span>
+            <Icon name="star" size={16} className="mt-0.5 shrink-0 text-warn-400" />
             <FileName name={file.name} wrap expanded={file.id === selectedId} />
           </ListRow>
         </SwipeRow>

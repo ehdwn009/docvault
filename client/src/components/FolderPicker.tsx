@@ -1,3 +1,4 @@
+import Icon from './Icon';
 import type { ReactNode } from 'react';
 import type { TreeFolder } from '../lib/api';
 
@@ -20,7 +21,7 @@ export default function FolderPicker({ folders, title, onPick, onClose }: Props)
             className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800"
             style={{ paddingLeft: `${8 + depth * 16}px` }}
           >
-            <span>📁</span>
+            <Icon name="folder" size={16} className="shrink-0 text-accent-400" />
             <span className="truncate">{folder.name}</span>
           </button>
           {renderLevel(folder.id, depth + 1)}
@@ -39,7 +40,7 @@ export default function FolderPicker({ folders, title, onPick, onClose }: Props)
             onClick={() => onPick(null)}
             className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800"
           >
-            <span>🏠</span> 최상위
+            <Icon name="home" size={16} className="shrink-0 text-slate-500" /> 최상위
           </button>
           {renderLevel(null, 0)}
         </div>

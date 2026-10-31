@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import Icon from '../components/Icon';
+import Icon, { FILE_TYPE_ICON } from '../components/Icon';
+import Group from '../components/ui/Group';
+import GroupRow from '../components/ui/GroupRow';
 import { cleanTitle } from '../components/AskPanel';
 import ReviewDialog from '../components/ReviewDialog';
 import FileName from '../components/FileName';
 import { api, type AskThread, type ReviewList, type TreeFile, type User, type UserSettings } from '../lib/api';
 import { formatDate, formatDateTime } from '../lib/date';
-import { IS_PC } from '../lib/device';
+import { IS_PC, IS_TOUCH } from '../lib/device';
 import { kstToday, longDate } from '../lib/briefing';
 import { btnClass } from './settings/SettingRow';
 import BriefingPanel from './panels/BriefingPanel';
@@ -61,7 +63,8 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
 
   // 아래 "오늘의 브리핑"과 같은 기준(한국 시각) — 자정 전후에 둘이 다른 날짜가 되지 않게
   const dateChip = longDate(kstToday());
-  const sectionTitle = 'mb-2 text-sm font-bold text-slate-200';
+  // 폰 A안: 섹션 이름은 묶음 카드 위 작은 이름, 목록은 카드 한 장 (PC는 그대로)
+  const sectionTitle = IS_TOUCH ? 'mb-1.5 px-4 text-xs font-medium tracking-wide text-slate-500' : 'mb-2 text-sm font-bold text-slate-200';
 
   const startButtons = (
     <div className="grid max-w-sm grid-cols-2 gap-2">
@@ -71,7 +74,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
         { label: '검색', icon: 'search' as const, on: onSearch },
         { label: '새 문서', icon: 'plus' as const, on: onNewDoc },
       ].map((b) => (
-        <button key={b.label} onClick={b.on} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 text-sm font-medium text-slate-200 transition hover:bg-slate-800 active:bg-slate-800">
+        <button key={b.label} onClick={b.on} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 text-sm font-medium text-slate-200 transition hover:bg-slate-800 active:bg-slate-800 touch:border-0 touch:bg-panel">
           <Icon name={b.icon} size={18} />
           {b.label}
         </button>
@@ -81,6 +84,18 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {IS_TOUCH ? (
+        // 폰 A안: 큰 제목 + 날짜, 오른쪽 원형 돋보기
+        <div className="flex items-end gap-3 px-4 pb-2 pt-1">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[30px] font-bold leading-tight tracking-tight">홈</h2>
+          </div>
+          <span className="mb-2 text-xs text-slate-500">{dateChip}</span>
+          <button onClick={onSearch} className="mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-accent-400 active:opacity-70" aria-label="검색">
+            <Icon name="search" size={19} />
+          </button>
+        </div>
+      ) : (
       <div className="flex min-w-0 items-center gap-2 px-4 py-3 pc:px-6">
         <h2 className="text-base font-bold">홈</h2>
         <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">{dateChip}</span>
@@ -90,24 +105,34 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
           검색{IS_PC ? ' · Ctrl+K' : ''}
         </button>
       </div>
+      )}
       {/* overflow-x-hidden·min-w-0: 긴 파일 이름이나 한 줄 글이 칸을 밀어 폰에서 가로 스크롤이 생기지 않게 (사용자 보고 2026-10-31) */}
-      <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 pb-10 pc:px-6">
-        <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] wide:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="min-w-0 space-y-8">
+      <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 pb-10 pc:px-6 touch:pt-2">
+        <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] wide:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] touch:gap-6">
+          <div className="min-w-0 space-y-8 touch:space-y-6">
             {hasBriefing && (
               <section>
                 <h3 className={sectionTitle}>{briefingOwner ? `${ownerName ?? '관리자'}님의 브리핑` : '오늘의 브리핑'}</h3>
                 {/* 패널 SCR-190에 있던 진행 카드·알림 띠·[지금 만들기]·오늘 카드가 그대로 이 섹션으로 — 바닥 한 줄에 다음 예약·비용·지난 브리핑 › */}
-                <BriefingPanel home readOnly={!isAdmin} onOpenFile={onOpenFileById} onOpenSettings={onOpenBriefingSettings} onOpenSources={onOpenBriefingSources} />
+                {/* 폰 A안: 브리핑 섹션도 묶음 카드 한 장 — 안의 회차 카드는 한 단 더 채운 타일(bg-fill) */}
+                <div className="touch:rounded-xl touch:bg-panel touch:px-4 touch:py-3">
+                  <BriefingPanel home readOnly={!isAdmin} onOpenFile={onOpenFileById} onOpenSettings={onOpenBriefingSettings} onOpenSources={onOpenBriefingSources} />
+                </div>
               </section>
             )}
             <section>
               <h3 className={sectionTitle}>이어 읽기</h3>
               {recent.length === 0 ? (
                 <>
-                  <p className="mb-3 text-xs text-slate-500">아직 연 문서가 없어요. 어디서 시작할까요?</p>
+                  <p className="mb-3 text-xs text-slate-500 touch:px-4">아직 연 문서가 없어요. 어디서 시작할까요?</p>
                   {startButtons}
                 </>
+              ) : IS_TOUCH ? (
+                <Group>
+                  {recent.map((f) => (
+                    <GroupRow key={f.id} icon={<Icon name={FILE_TYPE_ICON[f.fileType] ?? 'doc'} size={21} />} title={<FileName name={f.name} wrap />} subtitle={formatDateTime(f.state.lastOpenedAt!)} wrap onClick={() => onOpenFile(f)} />
+                  ))}
+                </Group>
               ) : (
                 <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
                   {recent.map((f) => (
@@ -121,10 +146,10 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
               )}
             </section>
           </div>
-          <div className="min-w-0 space-y-8">
+          <div className="min-w-0 space-y-8 touch:space-y-6">
             {review && review.total > 0 && (
               // SCR-186 복습 띠 — 0장이어도 카드 입구로 남긴다 (폰 감사 2026-10-31)
-              <section className="flex items-center gap-2 rounded-xl border border-card-900 bg-card-950/40 px-3 py-2.5 text-sm">
+              <section className="flex items-center gap-2 rounded-xl border border-card-900 bg-card-950/40 px-3 py-2.5 text-sm touch:min-h-12 touch:border-0 touch:bg-panel touch:px-4">
                 {review.due.length > 0 ? (
                   <span className="text-slate-200">오늘 복습 <b className="text-card-300">{review.due.length}장</b>{review.tomorrow > 0 ? ` · 내일 ${review.tomorrow}장` : ''}</span>
                 ) : (
@@ -138,12 +163,25 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
               </section>
             )}
             <section>
-              <div className="mb-2 flex items-center">
-                <h3 className="flex-1 text-sm font-bold text-slate-200">최근 대화</h3>
-                <button onClick={() => onOpenThread(null)} className={`${btnClass} min-h-8 text-xs touch:min-h-11`}>+ 새 대화</button>
+              <div className={`flex items-center ${IS_TOUCH ? 'mb-1.5 px-4' : 'mb-2'}`}>
+                <h3 className={`flex-1 ${IS_TOUCH ? 'text-xs font-medium tracking-wide text-slate-500' : 'text-sm font-bold text-slate-200'}`}>최근 대화</h3>
+                <button onClick={() => onOpenThread(null)} className={IS_TOUCH ? 'text-xs text-accent-400' : `${btnClass} min-h-8 text-xs`}>+ 새 대화</button>
               </div>
-              {threads && threads.length === 0 && <p className="text-xs text-slate-500">아직 대화가 없어요. 무엇이든 물어보세요.</p>}
-              {threads && threads.length > 0 && (
+              {threads && threads.length === 0 && <p className="text-xs text-slate-500 touch:px-4">아직 대화가 없어요. 무엇이든 물어보세요.</p>}
+              {threads && threads.length > 0 && IS_TOUCH && (
+                <Group>
+                  {threads.slice(0, RECENT_THREADS).map((t) => (
+                    <GroupRow
+                      key={t.id}
+                      icon={<Icon name={t.fileId !== null || t.fileName ? 'doc' : 'chat'} size={21} />}
+                      title={cleanTitle(t.title)}
+                      subtitle={`${formatDate(t.updatedAt)} · ${t.fileId !== null || t.fileName ? (t.fileName ?? '문서') : '자유 대화'}`}
+                      onClick={() => onOpenThread(t.id)}
+                    />
+                  ))}
+                </Group>
+              )}
+              {threads && threads.length > 0 && !IS_TOUCH && (
                 <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
                   {threads.slice(0, RECENT_THREADS).map((t) => (
                     <button key={t.id} onClick={() => onOpenThread(t.id)} className="block w-full px-3 py-2 text-left transition hover:bg-slate-900">

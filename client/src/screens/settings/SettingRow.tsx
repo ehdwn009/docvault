@@ -16,7 +16,7 @@ type Props = {
 
 export default function SettingRow({ id, title, desc, children, below }: Props) {
   return (
-    <div id={id} className="scroll-mt-24 border-b border-slate-800/70 py-3 last:border-0">
+    <div id={id} className="scroll-mt-24 border-b border-slate-800/70 py-3 last:border-0 touch:border-hair">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-52">
           <p className="text-sm text-slate-200">{title}</p>

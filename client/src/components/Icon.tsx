@@ -37,7 +37,41 @@ const PATHS = {
   external: 'M14 4h6v6|M20 4l-9 9|M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4',
   home: 'M3 11l9-8 9 8|M5 10v10h5v-6h4v6h5V10',
   news: 'M4 5h13v14H6a2 2 0 0 1-2-2z|M17 9h3v8a2 2 0 0 1-2 2h-1|M7 9h7|M7 13h7|M7 16h4',
+  // ── 폰 A안(2026-10-31) — 이모지·글자 배지를 전부 선 아이콘으로. 파일 형식은 모양(문서·코드·그림…)으로 ──
+  code: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z|M14 3v6h6|M10 13l-2 2 2 2|M14 13l2 2-2 2',
+  image: 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z|M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z|M20 15l-4-4-8 8',
+  music: 'M9 18V6l10-2v12|M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z|M19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  film: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z|M8 4v16|M16 4v16|M4 9h4|M4 15h4|M16 9h4|M16 15h4',
+  box: 'M12 3l9 4.5v9L12 21l-9-4.5v-9z|M3 7.5l9 4.5 9-4.5|M12 12v9',
+  docPlus: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z|M14 3v6h6|M12 12v6|M9 15h6',
+  folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z|M12 10v6|M9 13h6',
+  move: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z|M9 13h6|M12.5 10.5L15 13l-2.5 2.5',
+  share: 'M12 15V4|M8 8l4-4 4 4|M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7',
+  download: 'M12 4v11|M8 11l4 4 4-4|M4 20h16',
+  copy: 'M9 9h10v11H9z|M5 15V4h10',
+  split: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z|M12 4v16',
+  tag: 'M3 12V4h8l9 9-8 8z|M8 8h.01',
+  list: 'M4 7h16|M4 12h16|M4 17h16',
+  grid: 'M4 4h7v7H4z|M13 4h7v7h-7z|M4 13h7v7H4z|M13 13h7v7h-7z',
+  select: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z|M8.5 12.5l2.5 2.5 4.5-5',
+  chevronLeft: 'M15 6l-6 6 6 6',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z|M4 21a8 8 0 0 1 16 0',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1|M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  chart: 'M4 20V10|M10 20V4|M16 20v-7|M22 20H2',
+  gauge: 'M4 15a8 8 0 1 1 16 0|M12 15l4-5|M12 15h.01',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z|M12 7v5l3 2',
+  circle: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+  clip: 'M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8',
 } as const;
+
+/** 파일 형식 → 아이콘. 글자 배지(MD/HTML) 대신 모양으로 구분하고, 형식 이름은 둘째 줄 글자가 맡는다 (폰 A안) */
+export const FILE_TYPE_ICON: Record<string, IconName> = {
+  md: 'doc', text: 'doc', html: 'code', code: 'code', image: 'image', pdf: 'doc', audio: 'music', video: 'film', binary: 'box',
+};
+/** 파일 형식의 우리말 이름 — 목록 둘째 줄·속성창 */
+export const FILE_TYPE_LABEL: Record<string, string> = {
+  md: '마크다운', text: '텍스트', html: 'HTML', code: '코드', image: '그림', pdf: 'PDF', audio: '소리', video: '영상', binary: '파일',
+};
 
 export type IconName = keyof typeof PATHS;
 

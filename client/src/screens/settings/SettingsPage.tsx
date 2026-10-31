@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import Icon from '../../components/Icon';
+import Icon, { type IconName } from '../../components/Icon';
+import Group from '../../components/ui/Group';
+import GroupRow, { type Tint } from '../../components/ui/GroupRow';
 import type { TreeFile, User, UserSettings } from '../../lib/api';
 import { IS_TOUCH } from '../../lib/device';
 import { pushLayer } from '../../lib/layers';
@@ -30,6 +32,14 @@ type Props = {
   narrow?: boolean;
   /** 값이 바뀌면 목록(뿌리)으로 — 탭 재탭 */
   rootSignal?: number;
+};
+
+/** 폰 목록의 카테고리 아이콘·타일 색 — 아이폰 설정 앱처럼 색 타일 하나가 카테고리를 가리킨다 (폰 A안) */
+const CATEGORY_ICON: Record<SettingsCategoryId, [IconName, Tint]> = {
+  display: ['sliders', 'accent'], cards: ['cards', 'card'], account: ['user', 'muted'],
+  briefing: ['news', 'warn'], subscription: ['link', 'accent'], readers: ['users', 'good'], users: ['users', 'muted'],
+  stats: ['chart', 'accent'], tree: ['files', 'muted'], ai: ['sparkle', 'card'], perf: ['gauge', 'warn'],
+  about: ['info', 'muted'],
 };
 
 /** 바로 가기로 들어온 항목으로 내리기 전 기다리는 시간 — 카테고리 본문이 데이터를 받아 그려질 여유 */
@@ -131,9 +141,34 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
         onChange={(e) => setQuery(e.target.value)}
         placeholder="설정 검색"
         aria-label="설정 검색"
-        className="min-h-11 w-full rounded-md border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-400"
+        className={`min-h-11 w-full rounded-md border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-400 ${IS_TOUCH ? 'min-h-10 rounded-[10px] border-0 bg-fill text-[15px]' : ''}`}
       />
     </label>
+  );
+
+  // 폰 A안: 묶음 카드 — 구역(내 취향 / 앱 운영 / 정보)마다 카드 하나, 행마다 색 타일 아이콘 + ›
+  const phoneCategoryList = (
+    <div className="space-y-5">
+      {SETTINGS_SECTIONS.filter((s) => !s.admin || isAdmin).map((s) => (
+        <Group key={s.title} title={s.title}>
+          {s.items.map((c) => (
+            <GroupRow
+              key={c.id}
+              icon={<Icon name={CATEGORY_ICON[c.id][0]} size={19} />}
+              tint={CATEGORY_ICON[c.id][1]}
+              title={c.name}
+              chevron={narrow}
+              selected={!narrow && category === c.id}
+              onClick={() => {
+                setCategory(c.id);
+                setFirstConnectOpen(false);
+                setPwTarget(false);
+              }}
+            />
+          ))}
+        </Group>
+      ))}
+    </div>
   );
 
   const categoryList = (
@@ -204,49 +239,62 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     if (category === null || q) {
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center gap-2 py-2 pl-4 pr-2">
-            <h2 className="text-base font-bold">나</h2>
-            {roleChip}
+          <div className="flex items-end gap-2 px-4 pb-2 pt-1">
+            <h2 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">나</h2>
+            <span className="mb-2 text-xs text-slate-500">{user.displayName ?? user.username} · {isAdmin ? '관리자' : '일반'}</span>
           </div>
-          <div className="px-4 pb-2">{searchBox}</div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-20">{q ? resultList : categoryList}</div>
+          <div className="px-4 pb-1">{searchBox}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">{q ? resultList : phoneCategoryList}</div>
         </div>
       );
     }
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-1 py-2 pl-2 pr-2">
-          <button onClick={() => setCategory(null)} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm text-slate-300 hover:bg-slate-800" aria-label="나로 돌아가기">‹ 나</button>
-          <h2 className="truncate text-base font-bold">{CATEGORY_BY_ID[category].name}</h2>
+        <button onClick={() => setCategory(null)} className="-mb-1 flex min-h-10 items-center gap-0.5 self-start pl-2 pr-3 text-[15px] text-accent-400" aria-label="나로 돌아가기">
+          <Icon name="chevronLeft" size={22} />
+          나
+        </button>
+        <div className="px-4 pb-2 pt-1">
+          <h2 className="truncate text-[30px] font-bold leading-tight tracking-tight">{CATEGORY_BY_ID[category].name}</h2>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-20">{content(category)}</div>
+        {/* 설정 줄들은 묶음 카드 한 장 안에 — SettingRow의 구분선은 카드 안 가는 선이 된다 */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2">
+          <div className="rounded-xl bg-panel px-4">{content(category)}</div>
+        </div>
       </div>
     );
   }
 
-  // ── PC: 왼쪽 카테고리 + 오른쪽 본문 ──
+  // ── PC·펼친 폰: 왼쪽 카테고리 + 오른쪽 본문 (펼친 폰은 A안 부품 — 큰 제목·채운 검색 칸·묶음 카드) ──
   return (
     <div className="flex min-h-0 flex-1">
-      <div className="flex w-60 shrink-0 flex-col border-r border-slate-800">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <h2 className="text-base font-bold">나</h2>
-          {roleChip}
-        </div>
-        <div className="px-3 pb-3">{searchBox}</div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">{q ? resultList : categoryList}</div>
+      <div className={`flex shrink-0 flex-col border-r border-slate-800 ${IS_TOUCH ? 'w-[300px]' : 'w-60'}`}>
+        {IS_TOUCH ? (
+          <div className="flex items-end gap-2 px-4 pb-2 pt-1">
+            <h2 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">나</h2>
+            <span className="mb-2 truncate text-xs text-slate-500">{user.displayName ?? user.username} · {isAdmin ? '관리자' : '일반'}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-3">
+            <h2 className="text-base font-bold">나</h2>
+            {roleChip}
+          </div>
+        )}
+        <div className={IS_TOUCH ? 'px-4 pb-1' : 'px-3 pb-3'}>{searchBox}</div>
+        <div className={`min-h-0 flex-1 overflow-y-auto ${IS_TOUCH ? 'px-4 pb-6 pt-3' : 'px-2 pb-4'}`}>{q ? resultList : IS_TOUCH ? phoneCategoryList : categoryList}</div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         {firstConnectOpen && category === 'subscription' ? (
           <FirstConnect onClose={() => setFirstConnectOpen(false)} />
         ) : (
           <>
-            <div className="flex items-center gap-2 px-6 py-3">
-              <h2 className="text-base font-semibold text-slate-100">{category ? CATEGORY_BY_ID[category].name : ''}</h2>
+            <div className={`flex items-center gap-2 px-6 ${IS_TOUCH ? 'pb-2 pt-3' : 'py-3'}`}>
+              <h2 className={IS_TOUCH ? 'truncate text-[30px] font-bold leading-tight tracking-tight' : 'text-base font-semibold text-slate-100'}>{category ? CATEGORY_BY_ID[category].name : ''}</h2>
               <span className="ml-auto" />
-              {closeBtn}
+              {!IS_TOUCH && closeBtn}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10">
-              <div className="max-w-3xl">{category && content(category)}</div>
+              <div className={`max-w-3xl ${IS_TOUCH ? 'rounded-xl bg-panel px-4' : ''}`}>{category && content(category)}</div>
             </div>
           </>
         )}

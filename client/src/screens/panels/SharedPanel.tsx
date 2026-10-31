@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ListRow from '../../components/ui/ListRow';
 import FileName from '../../components/FileName';
+import Icon from '../../components/Icon';
 import { api, type SharedFile, type SharedFolder } from '../../lib/api';
 
 type Props = { selectedId: number | null; onSelect: (file: SharedFile) => void };
@@ -61,8 +62,8 @@ export default function SharedPanel({ selectedId, onSelect }: Props) {
           <div key={`d${folder.id}`}>
             <div>
               <ListRow onClick={() => toggleExpand(folder.id)} muted style={{ paddingLeft: `${8 + depth * 14}px` }}>
-                <span className="text-[10px] leading-5">{expanded.has(folder.id) ? '▾' : '▸'}</span>
-                <span className="leading-5">📁</span>
+                <Icon name="chevron" size={12} className={`mt-1 shrink-0 text-slate-500 transition ${expanded.has(folder.id) ? 'rotate-90' : ''}`} />
+                <Icon name="folder" size={16} className="mt-0.5 shrink-0 text-accent-400" />
                 <FileName name={folder.name} wrap />
                 <span className="ml-auto shrink-0 self-center text-[10px] text-slate-600">{folder.ownerName}</span>
               </ListRow>

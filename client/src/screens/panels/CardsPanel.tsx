@@ -9,7 +9,10 @@ import { api, ApiError, cardToTreeFile, type CardSummary, type ReviewList, type 
 import { promptDialog } from '../../lib/dialog';
 import { runGuarded } from '../../lib/guard';
 import { toast } from '../../lib/toast';
-import { IS_PC } from '../../lib/device';
+import { IS_PC, IS_TOUCH } from '../../lib/device';
+import Group from '../../components/ui/Group';
+import GroupRow from '../../components/ui/GroupRow';
+import Icon from '../../components/Icon';
 
 type Props = {
   selectedId: number | null;
@@ -118,13 +121,13 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-col gap-2 px-3 pb-2">
+      <div className="flex flex-col gap-2 px-3 pb-2 touch:px-4">
         <div className="flex items-center gap-2">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="제목·별칭·한 줄·태그"
-            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-600 focus:outline-none"
+            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-600 focus:outline-none touch:min-h-10 touch:rounded-[10px] touch:border-0 touch:bg-fill touch:px-3"
           />
           <button
             onClick={() => void createBlank()}
@@ -185,8 +188,26 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
         // SCR-184 지도 — 검색어는 지도에도 적용된다 (걸린 카드만 그린다)
         <CardMap cards={filtered} onOpen={onSelect} onCardsChanged={reload} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          {sections.map((sec) => (
+        <div className={`min-h-0 flex-1 overflow-y-auto ${IS_TOUCH ? 'space-y-5 px-4 pb-6 pt-1' : 'px-2 pb-4'}`}>
+          {sections.map((sec) => IS_TOUCH ? (
+            // 폰 A안: 주제마다 묶음 카드 하나, 행은 길게 누르기 = 메뉴, 옆으로 밀기 = 삭제
+            <Group key={sec.label} title={`${sec.label} · ${sec.items.length}`}>
+              {sec.items.map((c) => (
+                <SwipeRow key={c.id} surface="panel" right={[{ label: '삭제', icon: 'trash', danger: true, onAction: () => deleteCard(c) }]}>
+                  <GroupRow
+                    icon={<Icon name="card" size={21} />}
+                    iconClass="text-card-400"
+                    title={c.title}
+                    subtitle={c.oneLine}
+                    right={<span className="rounded border border-hair px-1 text-[10px] text-slate-500">{c.kind}</span>}
+                    selected={c.id === selectedId}
+                    onClick={() => onSelect(cardToTreeFile(c))}
+                    onLongPress={() => setMenu({ x: 0, y: 0, items: cardMenu(c) })}
+                  />
+                </SwipeRow>
+              ))}
+            </Group>
+          ) : (
             <div key={sec.label} className="mb-2">
               <div className="px-2 pb-1 pt-2 text-[11px] font-semibold text-slate-500">
                 {sec.label} · {sec.items.length}
@@ -217,9 +238,9 @@ export default function CardsPanel({ selectedId, onSelect, onDeleted }: Props) {
                           openMenu(e, cardMenu(c));
                         }}
                         title="메뉴"
-                        className="ml-auto shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:hidden pc:group-hover:block"
+                        className="ml-auto hidden shrink-0 rounded px-1 text-slate-500 hover:text-slate-200 pc:group-hover:block"
                       >
-                        ⋯
+                        <Icon name="more" size={16} />
                       </button>
                     </div>
                     <div className="truncate text-xs text-slate-500">{c.oneLine}</div>

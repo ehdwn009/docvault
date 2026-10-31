@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import AskPanel from '../components/AskPanel';
 import type { TreeFile } from '../lib/api';
-import { IS_PC } from '../lib/device';
+import { IS_PC, IS_TOUCH } from '../lib/device';
 import CardsPanel from './panels/CardsPanel';
 
 type Tab = 'chat' | 'cards';
@@ -33,7 +33,21 @@ export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onC
   useEffect(() => {
     if (listSignal > 0) setTab('chat');
   }, [listSignal]);
-  const tabs = (
+  // 폰 A안: 아이폰 분절 컨트롤(채운 홈 안에 흰 알약) — PC는 그대로
+  const tabs = IS_TOUCH ? (
+    <div className="mx-4 mb-1 mt-1 grid grid-cols-2 rounded-lg bg-fill p-0.5" role="tablist">
+      {(
+        [
+          ['chat', '대화'],
+          ['cards', '배움 카드'],
+        ] as [Tab, string][]
+      ).map(([t, label]) => (
+        <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`min-h-9 rounded-md text-sm transition ${tab === t ? 'bg-panel font-semibold text-slate-100 shadow-sm' : 'text-slate-400'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  ) : (
     <div className="flex gap-1 px-3 pt-2" role="tablist">
       {(
         [
@@ -78,6 +92,11 @@ export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onC
         // 카드 서랍(SCR-181)은 그대로 — 본문은 카드를 고르면 뷰어가 맡는다
         <div className="flex min-h-0 flex-1">
           <aside className={`flex min-h-0 flex-col ${twoColumn ? 'w-72 shrink-0 border-r border-slate-800' : 'w-full'}`}>
+            {IS_TOUCH && (
+              <div className="flex items-end gap-2 px-4 pb-1 pt-1">
+                <h1 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">AI</h1>
+              </div>
+            )}
             {tabs}
             <div className="h-2" />
             <CardsPanel selectedId={null} onSelect={onOpenFile} onDeleted={onCardDeleted} />

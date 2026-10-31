@@ -23,6 +23,8 @@ import { useVisualViewport } from '../lib/visualViewport';
 import { toast } from '../lib/toast';
 import { renderers } from '../renderers';
 import ContextMenu, { type MenuItem } from './ContextMenu';
+import Group from './ui/Group';
+import GroupRow from './ui/GroupRow';
 import Icon from './Icon';
 import SwipeRow from './SwipeRow';
 import { formatDate } from '../lib/date';
@@ -178,7 +180,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   // 지난 대화의 제목 편집 — 그 자리가 입력창이 되고, 오른쪽 끝의 ✦가 AI 제목을 채운다 (VS Code의 커밋 메시지 생성 자리와 같은 발상)
   const [renaming, setRenaming] = useState<{ id: number; draft: string } | null>(null);
   const [titleBusy, setTitleBusy] = useState(false);
-  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; items: MenuItem[]; title?: string } | null>(null);
   // 답마다 함께 본 내 문서 — 카드와 같은 방식 (meta로 먼저, done에서 답의 id에 붙인다)
   const [usedDocs, setUsedDocs] = useState<Record<number, AskUsedDoc[]>>({});
   const pendingDocsRef = useRef<AskUsedDoc[]>([]);
@@ -615,7 +617,18 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
   );
 
   // 대화 화면(page)의 왼쪽 목록 머리
-  const listHeader = (
+  const listHeader = IS_TOUCH ? (
+    // 폰 A안: 큰 제목 + 원형 [+](새 대화), 그 아래 「대화 ｜ 배움 카드」 탭
+    <>
+      <div className="flex items-end gap-2 px-4 pb-1 pt-1">
+        <h1 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">AI</h1>
+        <button onClick={newThread} className="mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-accent-400 active:opacity-70" aria-label="새 대화">
+          <Icon name="plus" size={20} />
+        </button>
+      </div>
+      {listTop}
+    </>
+  ) : (
     <>
     {listTop}
     <div className={`flex items-center gap-2 pr-2 ${twoColumn ? 'px-4 py-3' : 'py-2 pl-4'}`}>
@@ -627,8 +640,9 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     </>
   );
 
+  // 폰 A안: 목록은 묶음 카드 한 장, 행은 GroupRow(길게 누르기 = 메뉴, 옆으로 밀기 = 제목·삭제)
   const historyView = (
-        <div className="min-h-0 flex-1 overflow-auto p-2">
+        <div className={`min-h-0 flex-1 overflow-auto ${IS_TOUCH && page ? 'px-4 pb-6 pt-3' : 'p-2'}`}>
           {!page && (
           <div className="mb-1 flex items-center justify-between px-1 text-xs text-slate-500">
             <span>최근 30일</span>
@@ -637,6 +651,29 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
           )}
           {history.length === 0 ? (
             <p className="px-2 py-4 text-xs text-slate-600">지난 대화가 없습니다</p>
+          ) : IS_TOUCH && page ? (
+            <Group>
+              {history.map((t) =>
+                renaming?.id === t.id ? (
+                  <form key={t.id} onSubmit={(e) => { e.preventDefault(); void saveTitle(); }} className="flex min-h-11 items-center gap-1 px-3">
+                    <input autoFocus value={renaming.draft} onChange={(e) => setRenaming({ id: t.id, draft: e.target.value.slice(0, 60) })} onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)} placeholder="대화 제목" className="min-w-0 flex-1 bg-transparent py-1 text-[15px] text-slate-100 placeholder:text-slate-600 focus:outline-none" />
+                    <button type="button" onClick={() => void fillAiTitle()} disabled={titleBusy} aria-label="AI가 제목 짓기" className="grid h-10 w-10 place-items-center text-slate-400 disabled:opacity-40"><Icon name="sparkle" size={18} className={titleBusy ? 'animate-pulse' : ''} /></button>
+                    <button type="submit" aria-label="저장" className="grid h-10 w-10 place-items-center text-accent-400"><Icon name="check" size={18} /></button>
+                  </form>
+                ) : (
+                  <SwipeRow key={t.id} surface="panel" left={[{ label: '제목', icon: 'pencil', onAction: () => setRenaming({ id: t.id, draft: t.title }) }]} right={[{ label: '삭제', icon: 'trash', danger: true, onAction: () => void deleteThread(t.id) }]}>
+                    <GroupRow
+                      icon={<Icon name={t.fileId !== null || !!t.fileName ? 'doc' : 'chat'} size={21} />}
+                      title={cleanTitle(t.title)}
+                      subtitle={`${formatDate(t.updatedAt)} · ${t.messageCount ?? 0}개 · ${t.fileId !== null || !!t.fileName ? (t.fileName ?? '문서') : '자유 대화'}`}
+                      selected={page && thread?.id === t.id}
+                      onClick={() => void loadThread(t.id)}
+                      onLongPress={() => setRowMenu({ x: 0, y: 0, items: rowMenuItems(t), title: cleanTitle(t.title) })}
+                    />
+                  </SwipeRow>
+                ),
+              )}
+            </Group>
           ) : (
             history.map((t) =>
               renaming?.id === t.id ? (
@@ -924,9 +961,9 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
               aria-pressed={myStuff}
               aria-label={myStuff ? '내 자료 참고 켬 — 관련 카드·문서 단락을 함께 보냄' : '내 자료 참고 끔 — 질문과 대화만 보냄'}
               title={myStuff ? '내 자료 참고 켬' : '내 자료 참고 끔'}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg border text-base ${myStuff ? 'border-accent-500 bg-accent-950/60' : 'border-slate-700 text-slate-500'}`}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg border ${myStuff ? 'border-accent-500 bg-accent-950/60 text-accent-300' : 'border-slate-700 text-slate-500'}`}
             >
-              📎
+              <Icon name="clip" size={18} />
             </button>
           )}
           <textarea
@@ -986,7 +1023,7 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
 
   const dialogs = (
     <>
-      {rowMenu && <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} onClose={() => setRowMenu(null)} />}
+      {rowMenu && <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} title={rowMenu.title} onClose={() => setRowMenu(null)} />}
       {save && thread && (
         <CardSaveDialog
           threadId={thread.id}

@@ -47,6 +47,11 @@
      탭 줄 56px + 아이폰 홈 표시줄 같은 안전 여백. 여백을 빼먹으면 홈·AI·나 화면이 탭 바의 아이콘 줄을 덮었다 (아이폰 웹앱 보고 2026-10-31) */
   --tab-bar-row: 56px;
   --tab-bar-h: calc(var(--tab-bar-row) + env(safe-area-inset-bottom, 0px));
+  /* 폰 A안(2026-10-31) — 바탕 위에 한 단 떠 보이는 "묶음 카드" 표면. 밝음은 흰 카드, 어두움은 한 단 밝은 카드.
+     panel = 카드 바탕, fill = 원형 단추·검색 칸의 채움, hair = 카드 안 구분선(들여 긋는 가는 선) */
+  --dv-panel: #0f172a;
+  --dv-fill: #1f2937;
+  --dv-hair: #1e293b;
 }
 
 /* dark: 변형도 기기 설정이 아니라 앱 테마를 따르게 */
@@ -76,6 +81,29 @@
   --color-card-300: var(--color-teal-300); --color-card-400: var(--color-teal-400); --color-card-500: var(--color-teal-500);
   --color-card-600: var(--color-teal-600); --color-card-700: var(--color-teal-700); --color-card-800: var(--color-teal-800);
   --color-card-900: var(--color-teal-900); --color-card-950: var(--color-teal-950);
+  /* 폰 A안 표면 — bg-ground(앱 바탕, slate-950과 같은 값), bg-panel(묶음 카드), bg-fill(원형 단추), border-hair(카드 안 선) */
+  --color-ground: var(--color-slate-950);
+  --color-panel: var(--dv-panel);
+  --color-fill: var(--dv-fill);
+  --color-hair: var(--dv-hair);
+}
+
+/* 묶음 카드(ui/Group) 안 행 사이의 들여 그은 가는 선 — 행이 SwipeRow 껍데기에 싸여 있어도 찾도록 자손 선택자.
+   들여쓰기 폭은 행이 --row-inset으로 준다(아이콘이 있으면 아이콘 뒤부터) */
+.dv-group > * + * .dv-row::before,
+.dv-group > * + .dv-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--row-inset, 16px);
+  height: 1px;
+  background: var(--dv-hair);
+}
+
+/* 길게 누르기로 메뉴를 여는 행 — iOS의 글자 선택·말풍선이 먼저 뜨지 않게 */
+@utility touch-callout-none {
+  -webkit-touch-callout: none;
 }
 
 /* ── 명암: 밝음 ── */
@@ -86,6 +114,9 @@
   --color-slate-300: #334155; --color-slate-400: #475569; --color-slate-500: #64748b;
   --color-slate-600: #8b98a8; --color-slate-700: #c0c9d4; --color-slate-800: #d8dee6;
   --color-slate-900: #e9edf1; --color-slate-950: #f4f6f8;
+  --dv-panel: #ffffff;
+  --dv-fill: #e4e7ec;
+  --dv-hair: #e3e6ea;
   /* 하늘 강조(기본) — 의미색과 같은 규칙으로 뒤집는다. 다른 강조색은 아래 [data-accent] 블록이 덮어쓴다 */
   --color-sky-50: #082f49; --color-sky-100: #0c4a6e; --color-sky-200: #075985;
   --color-sky-300: #0369a1; --color-sky-400: #0284c7; --color-sky-500: #0ea5e9;

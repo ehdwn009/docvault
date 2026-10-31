@@ -248,7 +248,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
           </div>
           <div className="space-y-1.5">
             {admin && nextAutoToday && admin.nextAutoAt !== null && (
-              <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2">
+              <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2 touch:border-0 touch:bg-fill">
                 <SlotChip label={slotShort(admin.nextAutoSlot ?? 'adhoc', admin.nextAutoLabel)} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="text-[15px] font-semibold text-slate-400">{runName({ slot: admin.nextAutoSlot ?? 'adhoc', label: admin.nextAutoLabel })} ({admin.mode === 'subscription' ? '구독' : '자동'})</span>
@@ -268,8 +268,8 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
                 <button
                   key={e.fileId}
                   onClick={() => onOpenFile(e.fileId)}
-                  className={`flex min-h-14 w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition hover:bg-slate-900 ${
-                    i === 0 ? 'border-sky-800' : 'border-slate-800'
+                  className={`flex min-h-14 w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition hover:bg-slate-900 touch:bg-fill ${
+                    i === 0 ? 'border-sky-800' : 'border-slate-800 touch:border-transparent'
                   }`}
                 >
                   <SlotChip label={slotShort(e.slot, e.label)} accent={i === 0} />

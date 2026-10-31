@@ -877,15 +877,15 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
           onClick={() => onToggleFavorite(file)}
           title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
           // 터치는 손가락 크기(40px 이상)만큼 누를 자리를 넓힌다 — 글자 하나 크기라 자꾸 빗나갔다 (사용성 평가 2026-10-01)
-          className={`-mx-1 flex shrink-0 items-center justify-center text-lg leading-none touch:h-10 touch:w-10 ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
+          className={`-mx-1 flex shrink-0 items-center justify-center leading-none touch:h-10 touch:w-10 ${isFavorite ? 'text-warn-400 [&_path]:fill-current' : 'text-slate-600 hover:text-slate-400'}`}
         >
-          ★
+          <Icon name="star" size={18} />
         </button>
         {onOpenSwitcher ? (
           // 터치: 파일명이 곧 문서 스위처 버튼 — 탭 바 대신 시트로 오간다 (IA — 문서 스위처)
           <button onClick={onOpenSwitcher} className="flex min-h-10 min-w-0 items-center gap-1.5 text-left">
             <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
-            <span className="shrink-0 text-xs text-slate-500">▾</span>
+            <Icon name="chevron" size={12} className="shrink-0 rotate-90 text-slate-500" />
           </button>
         ) : (
           <h2 className="truncate font-medium text-slate-100">{fileLabel(file)}</h2>
@@ -974,7 +974,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             </div>
           ) : file.fileType === 'audio' ? (
             <div className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-              <span className="text-5xl">🎵</span>
+              <Icon name="music" size={48} className="text-slate-500" />
               <p className="max-w-full truncate text-sm text-slate-400">{file.name}</p>
               <audio key={file.id} src={`/api/v1/files/${file.id}/raw`} controls className="w-full max-w-xl" />
             </div>
@@ -982,7 +982,7 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
             // 미리보기 없는 형식 — "보관돼 있고, 여기서 꺼내가면 된다"는 화면 (아키텍처 — 전량 수용 정책)
             <div className="flex min-h-full items-center justify-center p-6">
               <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/60 px-8 py-10 text-center">
-                <span className="text-5xl">📦</span>
+                <Icon name="box" size={48} className="text-slate-500" />
                 <p className="w-full truncate font-medium text-slate-200" title={file.name}>{file.name}</p>
                 <p className="text-xs text-slate-500">
                   {file.sizeBytes >= 1024 * 1024

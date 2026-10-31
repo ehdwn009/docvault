@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { confirmDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
 import { formatDate } from '../lib/date';
+import Icon from './Icon';
 
 type TrashedFile = {
   id: number;
@@ -42,7 +43,7 @@ export default function TrashPanel({
     >
       <div className="flex max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-slate-100">🗑 휴지통</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-medium text-slate-100"><Icon name="trash" size={16} />휴지통</h3>
           <span className="text-[11px] text-slate-600">30일 뒤 자동으로 비워집니다</span>
           {items && items.length > 0 && (
             <button

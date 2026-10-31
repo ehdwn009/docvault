@@ -636,6 +636,15 @@ v0.21.2의 판정(누적 48px → 숨김, 24px → 복귀)은 켜짐/꺼짐 둘�
 
 **구현 (2026-10-31, 폰 1단계 = 안 ㄱ + 공통 수정, v0.55)** — `lib/layers.ts`(기록 스택: `pushLayer(close)`가 state에 층 번호를 쌓고 popstate가 맨 위 층부터 닫는다; 질문 시트 `Viewer`·대화 본문 `AskPanel page`·설정 상세/처음 연결하기 `SettingsPage`가 쓴다), Workspace popstate는 같은 문서를 가리키는 기록이면 손대지 않고, 폰에서 `/`로 돌아오면 문서를 닫는 대신 목록 층 + 온 곳(`docOriginRef`)으로. `lib/device.ts` `useWindowClass()`(600/480·840, 120ms 디바운스) + `index.css` `narrow:`/`wide:` 변형(터치 안에서 폭으로). Workspace `narrow = IS_TOUCH && wc === 'narrow'`: 목록 층은 narrow에서만 덮고 wide에서는 300px 열로 옆에 선다, 탭 바 숨김(`readingDoc`)은 narrow에서만, `AskPanel twoColumn`·`SettingsPage narrow`·`AiPage twoColumn`으로 구조 분기를 `isPc`에서 떼었다. `tabBarVisible` 플래그 하나가 탭 바·`<main>` 여백·페이지 바닥(`--page-bottom`)을 정한다. 탭 재탭 = 뿌리(`aiListSignal`·`settingsRootSignal`), "나"의 ✕는 폰에서 제거. 홈 순서(오늘 카드 먼저, 큰 단추는 회차 없을 때만), 복습 띠 0장 유지(`review.total`), 입력줄 📎 칩(터치)·각주 숨김, `cleanTitle`, `chromeCollapse` 자동 숨김 설정(`dv_chrome_autohide`, 화면·뷰어 스위치). 2단계(안 ㄴ, 바 하나 `BottomBar`)는 다음 버전.
 
+**폰 A안 — 아이폰 기본 앱 느낌 (2026-10-31 설계·구현, v0.56)** — _v0.55를 폰에서 써 본 사용자 평: "잘 되기는 하는데 너무 촌스럽고 부자연스러움". 원인 다섯: 이모지·글자 배지가 섞인 아이콘, 운영체제 셀렉트 상자, 머리의 사용자 이름, 행마다 "…"·줄 맞춤, 위계 없는 단색 화면. 시안(`scratchpad/uiux/mobile/docs-tab-a.html`)으로 A안(아이폰 파일·설정 앱의 결) 채택. 사용자 결정 셋: 태그 칩 줄은 ⋯ 안에만 · 검색은 제목 아래 검색 칸 · 폴더는 다음 화면으로._
+- **표면 두 단**: 바탕(`bg-ground` = slate-950) 위에 한 단 떠 보이는 **묶음 카드**(`bg-panel` — 밝음 흰색, 어두움 #0f172a). 카드 안 구분선은 들여 그은 가는 선(`--dv-hair`, 아이콘 뒤부터). 원형 단추·검색 칸은 `bg-fill`. 토큰은 `index.css` `:root`/`[data-scheme='light']`에, Tailwind 이름은 `ground`·`panel`·`fill`·`hair`.
+- **부품**: `components/ui/Group`(카드 + 위 작은 이름) · `GroupRow`(아이콘 타일 · 제목/둘째 줄 · 오른쪽 값 · ›; 44px; `tint`로 채운 타일 = 즐겨찾기·공유받음·휴지통·설정 카테고리처럼 "장소", 폴더·문서는 선 아이콘만) · `lib/longPress.ts`(0.45초, 8px 이내; 메뉴가 뜨면 뒤따르는 click을 삼키고 touchend를 막아 합성 click을 끊는다) · `ContextMenu`는 터치에서 **동작 시트**(아래 둥근 카드, 머리에 대상 이름, `section`·`checked`로 정렬/보기 묶음, [취소]; `document.body`에 포털 — 목록 층 z-25 안에 그리면 탭 바가 덮는다; 기록 층은 한 틱 늦춰 쌓는다) · `SwipeRow`에 `surface`(카드 안은 panel)·`tone`·아이콘, 트레이는 밀기 시작해야 그린다(둥근 모서리로 붉은 트레이가 비쳤다).
+- **행은 손짓 셋**: 누르기 = 열기, 길게 누르기 = 메뉴, 옆으로 밀기 = 빠른 동작. 행 안에 "…" 단추를 두지 않는다. 설정류(정렬·보기·태그·선택)는 머리의 ⋯ 안으로, 운영체제 셀렉트 상자는 쓰지 않는다.
+- **아이콘 한 벌**: 이모지(📁📄🗑★👥📎📂)·글자 배지(MD/HTML)·▸▾·▦▤ 전부 `Icon.tsx`의 선 아이콘으로(PC도 같이). 파일 형식은 모양(`FILE_TYPE_ICON`: 문서·코드·그림·소리·영상·상자)과 둘째 줄 글자(`FILE_TYPE_LABEL`: 마크다운·HTML…)로.
+- **문서 탭(SCR-110 폰) = `panels/FilesBrowser.tsx`**: 큰 제목 「문서」 + 원형 [+](새 문서·파일 올리기·새 폴더)·[⋯](선택 / 정렬 / 보기 / 태그) · 검색 칸(팔레트) · 카드 ① 즐겨찾기(n ›)·공유받음(›) · 카드 ② 「내 파일 · 이름순」 폴더(안의 개수 ›)·문서(날짜 · 형식, 태그 점) · 카드 ③ 휴지통. **폴더·즐겨찾기·공유받음은 다음 화면**(머리에 ‹ 온 곳 + 큰 제목, `pushLayer`로 한 층씩 — 뒤로 가기·‹ 둘 다 한 칸) — 펼치기(▾)와 들여쓰기는 묶음 카드와 어울리지 않고 뒤로 가기 셋 원칙과도 맞아서. 지금 보는 폴더가 곧 [+]·올리기의 대상(`selectedFolder`). 속성창의 위치 누르기·홈의 「함께 보는 파일」은 `selectedFolderId`·`jump`로 들어간다. 화면을 떠나면(홈·AI·나) 쌓인 층을 기록에서 걷는다. 폰 `layout === 'home'`에서만; PC·이전 레이아웃은 트리(`FileTree`) 그대로.
+- **홈·AI·나도 같은 부품**: 큰 제목(30px) + 원형 단추(홈 돋보기, AI [+] 새 대화), 섹션 이름은 카드 위 작은 글씨, 이어 읽기·최근 대화·대화 목록·배움 카드(주제마다 카드)·설정 카테고리(색 타일 + ›)·설정 상세(카드 한 장 안에 줄들)가 전부 `Group`/`GroupRow`. AI의 「대화 ｜ 배움 카드」는 분절 컨트롤. 브리핑 섹션은 카드 한 장, 안의 회차 카드는 한 단 더 채운 타일. 펼친 폰의 두 열(문서·AI·나)도 같은 부품. 탭 바는 칸 사이 선·활성 바탕 없이 아이콘+작은 글자, 활성은 강조색만. 사용자 이름은 머리에서 빼고 「나」 제목 옆 작은 글씨로.
+- **구현 파일**: `index.css`(토큰·`.dv-group` 선·`touch-callout-none`), `Icon.tsx`(+24종·형식 표), `ui/Group.tsx`·`ui/GroupRow.tsx`, `lib/longPress.ts`, `ContextMenu.tsx`, `SwipeRow.tsx`, `panels/FilesBrowser.tsx`, Workspace(`phoneFiles` 분기·`filesJump`·탭 바), `Home.tsx`, `AiPage.tsx`, `AskPanel.tsx`(목록), `panels/CardsPanel.tsx`, `settings/SettingsPage.tsx`(`CATEGORY_ICON`)·`SettingRow.tsx`, `FileGrid`·`FavoritesPanel`·`SharedPanel`·`FolderPicker`·`TrashPanel`·`Viewer`(이모지 제거), `WelcomeGuide`(문구). 2단계(안 ㄴ, 바 하나 `BottomBar`)는 여전히 다음 — 사용자가 v0.56을 써 본 뒤.
+
 _v0.53~v0.54의 설계(참고)_: 탭 4개 **홈 · 문서 · AI · 나** = PC 레일과 같은 지도. 떠 있는 ☰·352px 드로어·64px 이름 레일은 없어진다(사용성 평가의 "아이콘 밑 이름"은 탭 글자가 이어받는다).
 - 탭 바는 44px + safe-area, 글자 있는 아이콘. 상단 바: 탭 이름(목록) 또는 ‹ 뒤로 + 제목(상세) + 돋보기(팔레트, 터치 변형 = 전체 화면).
 - 문서를 읽을 때 **상단 바·탭 바가 함께 자동 숨김** — `lib/chromeCollapse.ts`에 탭 바를 등록 요소로 더한다(진행도 모듈 변수·transform, 편집·몰입 예외 그대로). 아래 도구막대([고치기]·[AI 질문]·목차·⋯)는 그대로.
@@ -673,7 +682,7 @@ _v0.53~v0.54의 설계(참고)_: 탭 4개 **홈 · 문서 · AI · 나** = PC �
 **열어 둔 것**
 - 홈 "이어 읽기"의 진행률(시안의 62%) — 열람 기록에는 위치만 있고 HTML(iframe)은 전체 높이를 모른다. 첫 판은 마지막 열람 시각만.
 - "대화"(문서 없는 챗봇)와 "이 문서에 질문"을 한 기능으로 둘지 — 이번에는 자리만 나눈다(시안 가정 2).
-- 폰 검색 자리: 상단 바 돋보기 vs FAB. 첫 판은 상단 바.
+- 폰 검색 자리: 상단 바 돋보기 vs FAB. 첫 판은 상단 바 → v0.56에서 문서 탭은 제목 아래 검색 칸, 홈은 원형 돋보기로 정리(사용자 결정 2026-10-31).
 - 이전 레이아웃 스위치가 되돌리는 범위(레일·홈만 vs 안 A 전부). 첫 판은 레일·홈만.
 - 뷰어 테마를 앱 테마 "어두움"에 맞춰 함께 바꿀지(지금은 독립).
 - Obsidian 교훈 중 미룬 것: 상태 바, 보기 전환 아이콘 고정, 북마크 대상 확장(헤딩·검색·회차·카드), 레일 재배치·숨김(패턴 L).

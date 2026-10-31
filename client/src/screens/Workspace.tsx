@@ -43,6 +43,7 @@ import { BRIEFING_FOLDER_NAME, BRIEFING_READ_EVENT, BRIEFING_SOURCES_FILE_NAME }
 import BriefingPanel from './panels/BriefingPanel';
 import CardsPanel from './panels/CardsPanel';
 import FavoritesPanel from './panels/FavoritesPanel';
+import FilesBrowser from './panels/FilesBrowser';
 import SettingsPage from './settings/SettingsPage';
 import Home from './Home';
 import AiPage from './AiPage';
@@ -240,6 +241,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     });
   // 문서 패널 머리의 [+] 메뉴
   const [plusOpen, setPlusOpen] = useState(false);
+  /** 폰 문서 탭(FilesBrowser)을 밖에서 공유받음·즐겨찾기로 보내는 신호 — 홈의 「함께 보는 파일」 */
+  const [filesJump, setFilesJump] = useState<{ to: 'shared' | 'favorites'; n: number } | null>(null);
   useEffect(() => setPlusOpen(false), [panel]);
   // 설정(SCR-140 개정)과 대화(SCR-188)는 패널이 아니라 본문 전체를 쓰는 "페이지"다 — 닫으면 그 전 패널로 돌아간다
   const [settingsTarget, setSettingsTarget] = useState<SettingsTarget | null>(null);
@@ -1517,14 +1520,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 탭 바는 "가는 곳"을 고를 때만 — 문서를 읽거나 대화 본문에 있을 때는 그 화면의 도구막대만 둔다(바 두 겹 금지, 사용자 결정 2026-10-31).
   // 본문 여백·페이지 바닥도 이 플래그 하나를 따른다 — 어긋나면 숨은 탭 바 자리로 밑의 도구막대가 비친다
   const readingDoc = narrow && !touchList && panes.length > 0 && !PAGE_PANELS.has(panel);
+  // 폰 A안(2026-10-31): 터치의 문서 탭은 FilesBrowser가 머리까지 통째로 그린다 — 큰 제목·[+]·[⋯]·검색 칸·묶음 카드
+  const phoneFiles = IS_TOUCH && layout === 'home' && panel === 'files';
   const tabBarVisible = IS_TOUCH && !immersive && !editing && !readingDoc && !(narrow && (panel === 'chat' || panel === 'ai') && chatBody);
   const tabBar = (
     <nav
       ref={tabBarRef}
       aria-label="주 메뉴"
       aria-hidden={chromeHidden}
-      // 불투명 + 위 테두리 + 탭 사이 세로선 — 밝은 테마에서 본문이 비쳐 보이고 탭끼리 구분이 안 됐다 (사용자 보고 2026-10-31)
-      className={`fixed inset-x-0 bottom-0 z-30 flex divide-x divide-slate-800 border-t border-slate-800 bg-slate-950 pb-[env(safe-area-inset-bottom)] pc:hidden ${
+      // 불투명 + 위 테두리 — 밝은 테마에서 본문이 비쳐 보였다 (사용자 보고 2026-10-31)
+      className={`fixed inset-x-0 bottom-0 z-30 flex border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
         tabBarVisible ? '' : 'hidden'
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
     >
@@ -1549,7 +1554,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             key={target}
             onClick={() => pressTab(target)}
             aria-current={active ? 'page' : undefined}
-            className={`flex h-[var(--tab-bar-row)] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'bg-slate-900 font-semibold text-accent-400' : 'text-slate-500'}`}
+            // 폰 A안: 칸 사이 선·활성 바탕 없이 아이콘+작은 글자, 활성은 강조색만 (아이폰 탭 바)
+            className={`flex h-[var(--tab-bar-row)] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] ${active ? 'font-semibold text-accent-400' : 'text-slate-500'}`}
           >
             <Icon name={icon} size={22} />
             {label}
@@ -1647,6 +1653,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       <aside
         className={`flex w-72 shrink-0 flex-col border-r border-slate-800 narrow:w-full narrow:border-r-0 wide:w-[300px] ${panelCollapsed ? 'pc:hidden wide:hidden' : ''}`}
       >
+        {!phoneFiles && (
         <div className="relative flex items-center gap-2 px-4 py-3">
           <h1 className="text-sm font-bold tracking-tight">{layout === 'home' && panel === 'files' ? '문서' : PANEL_TITLE[panel]}</h1>
           <span className="ml-auto truncate text-xs text-slate-600">
@@ -1683,6 +1690,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             <Icon name="search" size={20} />
           </IconButton>
         </div>
+        )}
         {/* 터치의 문서 탭: 내 파일·즐겨찾기·공유·카드를 칩으로 오간다 — v0.54에서 즐겨찾기·공유는 문서 패널의 섹션이 된다 */}
         {layout === 'classic' && DOC_PANELS.includes(panel) && (
           <div className="mb-2 flex gap-1 overflow-x-auto px-3 pc:hidden">
@@ -1694,20 +1702,55 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </div>
         )}
 
-        {panel === 'files' && (
+        {phoneFiles && (
+          <FilesBrowser
+            folders={sortedFolders}
+            files={visibleFiles}
+            allFiles={tree.files}
+            tags={tags}
+            isAdmin={user.role === 'admin'}
+            selectedId={selected?.id ?? null}
+            onSelect={(f) => void selectFile(f)}
+            onSelectShared={(f) => void selectFile(sharedToTreeFile(f))}
+            actions={actions}
+            onToggleFavorite={toggleFavorite}
+            checked={checked}
+            onCheckChange={setChecked}
+            onBulkDownload={() => downloadArchive({ fileIds: [...checked] })}
+            onBulkMove={() => setMovePickerOpen(true)}
+            onBulkDelete={bulkDelete}
+            swipe={fileSwipe}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={(next) => {
+              localStorage.setItem('dv_viewmode', next);
+              setViewMode(next);
+            }}
+            tagFilter={tagFilter}
+            onTagFilterChange={setTagFilter}
+            selectedFolderId={selectedFolder}
+            onSelectFolder={setSelectedFolder}
+            onOpenTrash={() => setTrashOpen(true)}
+            onSearch={() => setPaletteOpen(true)}
+            jump={filesJump}
+          />
+        )}
+        {panel === 'files' && !phoneFiles && (
           <>
             {/* 안 B 고정 섹션 — ★ 즐겨찾기 · 👥 공유받음 (접힘 기본, 열림 상태 기기 기억). 펼치면 SCR-120·130 목록이 그 자리에 (IA — 안 B 문서) */}
             {layout === 'home' && (
               <div className="mb-1 border-b border-slate-800 px-2 pb-1">
                 {(
                   [
-                    ['favorites', '★ 즐겨찾기', tree.files.filter((f) => f.state.isFavorite === 1).length],
-                    ['shared', '👥 공유받음', null],
+                    ['favorites', '즐겨찾기', tree.files.filter((f) => f.state.isFavorite === 1).length],
+                    ['shared', '공유받음', null],
                   ] as ['favorites' | 'shared', string, number | null][]
                 ).map(([k, label, n]) => (
                   <div key={k}>
                     <ListRow onClick={() => toggleSection(k)} muted>
-                      <span className="w-3 text-[10px] text-slate-500">{fileSections[k] ? '▾' : '▸'}</span>
+                      <Icon name="chevron" size={12} className={`shrink-0 text-slate-500 transition ${fileSections[k] ? 'rotate-90' : ''}`} />
+                      <Icon name={k === 'favorites' ? 'star' : 'users'} size={15} className={`shrink-0 ${k === 'favorites' ? 'text-warn-400' : 'text-accent-400'}`} />
                       <span className="flex-1">{label}{n !== null ? ` (${n})` : ''}</span>
                     </ListRow>
                     {fileSections[k] && (
@@ -1758,7 +1801,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 }
                 className="flex-1 rounded-md border border-dashed border-slate-700 py-2 text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
-                + 업로드{selectedFolder !== null && ' 📁'}
+                + 업로드{selectedFolder !== null && ' (폴더로)'}
               </button>
               <button
                 onClick={() => actions.createFolder(selectedFolder)}
@@ -1798,7 +1841,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               title="폴더를 하위 구조 그대로 업로드합니다"
               className={`mx-3 mt-1.5 hidden rounded-md border border-dashed border-slate-800 py-1 text-xs text-slate-500 transition hover:border-slate-600 hover:text-slate-300 ${layout === 'classic' ? 'pc:block' : ''}`}
             >
-              📂 폴더째 업로드
+              폴더째 업로드
             </button>
             {uploadProgress !== null && (
               <div className="mx-3 mt-2 h-1 overflow-hidden rounded bg-slate-800">
@@ -1842,7 +1885,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 label={viewMode === 'list' ? '격자 보기' : '목록 보기'}
                 className="h-8 w-8 border border-slate-800 bg-slate-900 text-[11px]"
               >
-                {viewMode === 'list' ? '▦' : '▤'}
+                <Icon name={viewMode === 'list' ? 'grid' : 'list'} size={14} />
               </IconButton>
             </div>
             {checked.size > 0 && (
@@ -1902,7 +1945,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             </nav>
             <div className="mx-2 mb-2 shrink-0 border-t border-slate-800 pt-1">
               <ListRow onClick={() => setTrashOpen(true)} muted>
-                🗑 휴지통
+                <Icon name="trash" size={15} className="shrink-0" />
+                휴지통
               </ListRow>
             </div>
           </>
@@ -1973,7 +2017,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               onOpenPanel={(p) => {
                 closePage();
                 setPanel(p === 'shared' && layout === 'home' ? 'files' : p);
-                if (p === 'shared' && layout === 'home' && !fileSections.shared) toggleSection('shared');
+                if (p === 'shared' && layout === 'home') {
+                  if (IS_TOUCH) setFilesJump({ to: 'shared', n: Date.now() });
+                  else if (!fileSections.shared) toggleSection('shared');
+                }
                 setTouchList(true);
               }}
               onSearch={() => setPaletteOpen(true)}
