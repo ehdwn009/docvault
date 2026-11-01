@@ -32,7 +32,7 @@ import {
 import Icon from './Icon';
 import type { AskSeed } from './AskPanel';
 
-// SCR-191 회차 화면 (v0.45 개편, 개선 합의안 6장) — 회차 막대 → 오늘의 핵심 → 고정 [국내|세계]+분야 막대 → 목록.
+// SCR-191 회차 화면 (v0.45 개편, 개선 합의안 6장) — 회차 막대 → 고정 [국내|세계]+분야 막대 → 오늘의 핵심(그 탭의 핵심 전부, v0.60) → 목록.
 // 폰: 핵심·주요는 전체 화면 시트로 열고(아래 고정 이전·다음, 좌우 밀기, 뒤로 제스처로 닫힘), 참고는 그 자리에서 펼친다.
 // PC(보이는 폭 넓음): 목록|상세 두 칸. 상세는 리드 → 왜 중요한가 → 영향 → 골라 쓴 칸 → 해설 상자(접힘, v0.48) → 근거 줄 → 원문 카드 → 묻기.
 // 요약 보기(기본·글머리표·5W·양쪽 시각)는 기기가 기억하지만 해설 상자는 기사마다 접힌 채 시작한다. 원문을 다녀오면 그 기사로 돌아온다.
@@ -255,8 +255,10 @@ function splitLead(text: string): [string, string] {
 export default function BriefingView({ fileId, content, theme, stickyBg, isActive, readerEnabled, onOpenFile, onAsk, fallback }: Props) {
   const edition = useMemo(() => parseEdition(content), [content]);
   const located = useMemo(() => (edition ? locateAll(edition) : new Map<string, Located>()), [edition]);
-  const lead = useMemo(() => (edition ? leadIdsOf(edition).map((id) => located.get(id)).filter((l): l is Located => !!l) : []), [edition, located]);
+  const leadAll = useMemo(() => (edition ? leadIdsOf(edition).map((id) => located.get(id)).filter((l): l is Located => !!l) : []), [edition, located]);
   const [tab, setTabState] = useState<Section>(() => readTab(fileId));
+  // 핵심 상자는 탭을 따라간다 — 국내 탭엔 국내 핵심만, 세계 탭엔 세계 핵심만. 국내 핵심이 없으면 상자도 없다 (사용자 결정 2026-11-01)
+  const lead = useMemo(() => leadAll.filter((l) => l.section === tab), [leadAll, tab]);
   const [filter, setFilterState] = useState<Filter>(readFilter);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [refOpen, setRefOpen] = useState<Set<string>>(() => new Set());
@@ -779,26 +781,19 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
     );
   };
 
+  // 탭 막대 아래, 목록 맨 위 — 탭을 바꾸면 그 탭의 핵심이 먼저 보인다 (전에는 탭 위에 국내·세계를 함께 두었다)
   const leadBox = lead.length > 0 && (
-    <section className={`rounded-2xl px-3.5 pb-1.5 pt-3.5 ${p.soft}`}>
+    <section className={`mt-3 rounded-2xl px-3.5 pb-1.5 pt-3.5 ${p.soft}`}>
       <div className="flex items-baseline gap-2">
         <h2 className="m-0 text-[1.1em] font-bold">오늘의 핵심</h2>
-        <span className={`text-[0.78em] ${p.muted}`}>{lead.length}건 · 약 1분</span>
+        <span className={`text-[0.78em] ${p.muted}`}>
+          {tab} {lead.length}건
+        </span>
         <span className={`ml-auto text-[0.78em] font-semibold ${p.accent}`}>
           {leadRead}/{lead.length} 읽음
         </span>
       </div>
-      {/* 국내 따로 세계 따로 — 번호는 묶음마다 1부터 (사용자 결정 2026-11-01) */}
-      {(['국내', '세계'] as const).map((section) => {
-        const group = lead.filter((l) => l.section === section);
-        if (group.length === 0) return null;
-        return (
-          <div key={section}>
-            <p className={`mb-0 mt-2 text-[0.78em] font-semibold ${p.muted}`}>{section}</p>
-            <ul className="m-0 p-0">{group.map((l, i) => row(l, { lead: i + 1 }))}</ul>
-          </div>
-        );
-      })}
+      <ul className="m-0 p-0">{lead.map((l, i) => row(l, { lead: i + 1 }))}</ul>
     </section>
   );
 
@@ -857,6 +852,8 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
           </button>
         ))}
       </div>
+
+      {leadBox}
 
       {visible.length === 0 ? (
         <p className="py-8 text-center text-[0.9em] opacity-60">이 조건에 맞는 기사가 없어요</p>
@@ -958,7 +955,6 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
       {wide ? (
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] items-start gap-6">
           <div className="flex min-w-0 flex-col gap-4">
-            {leadBox}
             <div>{list}</div>
           </div>
           <aside className={`sticky top-4 flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden rounded-2xl border ${p.line}`}>
@@ -984,10 +980,7 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
           </aside>
         </div>
       ) : (
-        <>
-          {leadBox}
-          <div>{list}</div>
-        </>
+        <div>{list}</div>
       )}
 
       {/* 폰 시트 — 핵심·주요를 전체 화면으로. 뒤로 제스처(popstate)와 [← 목록]으로 닫힌다 */}

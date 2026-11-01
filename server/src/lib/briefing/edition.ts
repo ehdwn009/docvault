@@ -126,7 +126,7 @@ export type Edition = {
   impactVisible?: boolean;
   /** 해설 상자를 그리나 — EXPLAIN_MODE가 show일 때 true (v0.48) */
   explainVisible?: boolean;
-  /** 오늘의 핵심 기사 id (국내·세계 각 LEAD_PER_SECTION). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
+  /** 오늘의 핵심 기사 id (국내·세계의 핵심 전부, 국내가 앞 — v0.60). 패널의 "핵심 읽음" 세기용. 화면은 같은 규칙(leadIdsOf)으로 섹션에서 다시 계산한다 */
   lead?: string[];
   sections: {
     section: BriefingSection;
@@ -365,9 +365,10 @@ function otherOutlets(p: Picked): { source: string; url: string }[] {
   return out;
 }
 
-/** 오늘의 핵심 — 국내·세계 따로 LEAD_PER_SECTION건씩: 핵심(3)을 다룬 언론사 수 많은 순, 같으면 최신순, 모자라면 주요(2)로 채운다.
-    한 줄로 겨루게 했더니 11/1 회차의 핵심 6건이 전부 세계였다(사용자 결정 2026-11-01 "국내 따로 세계 따로").
-    AI를 부르지 않는다: 여러 언론이 다룬 사건일수록 큰 뉴스라는 신호다 (설계 "lead"). 클라이언트에도 같은 규칙이 있다(옛 회차용) */
+/** 오늘의 핵심 — 국내·세계 따로, 그 섹션의 핵심(3) **전부**를 다룬 언론사 수 많은 순(같으면 최신순)으로. 개수 상한도, 주요(2)로 채우기도 없다 —
+    국내 핵심이 하나도 없으면 국내는 비어 있다(사용자 결정 2026-11-01 "국내 핵심 티오가 꼭 있어야 하는 건 아니다"; 그 전엔 섹션마다 3건을 주요로 채웠다).
+    화면은 [국내|세계] 탭을 따라 그 섹션 것만 보인다. AI를 부르지 않는다: 여러 언론이 다룬 사건일수록 큰 뉴스라는 신호다 (설계 "lead").
+    클라이언트는 저장된 lead 대신 같은 규칙으로 섹션에서 다시 계산한다(옛 회차도 같은 모양으로) — 여기 lead는 패널의 "핵심 읽음" 세기용 */
 export function leadIdsOf(sections: Edition['sections']): string[] {
   // 옛 회차(outlets 없음)는 related에서 서로 다른 언론사만 센다 — 옛 related에는 같은 언론사가 겹쳐 있다
   const outlets = (it: EditionItem) =>
@@ -375,8 +376,10 @@ export function leadIdsOf(sections: Edition['sections']): string[] {
   const pick = (section: '국내' | '세계'): string[] => {
     const items: EditionItem[] = [];
     for (const s of sections) if (s.section === section) for (const c of s.categories) for (const sub of c.subs) items.push(...sub.items);
-    const ranked = (n: 2 | 3) => items.filter((it) => it.importance === n).sort((a, b) => outlets(b) - outlets(a) || b.publishedAt - a.publishedAt);
-    return [...ranked(3), ...ranked(2)].slice(0, BRIEFING.LEAD_PER_SECTION).map((it) => it.id);
+    return items
+      .filter((it) => it.importance === 3)
+      .sort((a, b) => outlets(b) - outlets(a) || b.publishedAt - a.publishedAt)
+      .map((it) => it.id);
   };
   return [...pick('국내'), ...pick('세계')];
 }

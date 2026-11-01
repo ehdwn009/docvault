@@ -1,7 +1,7 @@
 {
   "name": "docvault",
   "private": true,
-  "version": "0.59.2",
+  "version": "0.60.0",
   "workspaces": [
     "client",
     "server"
