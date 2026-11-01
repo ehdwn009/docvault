@@ -247,7 +247,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     window.addEventListener(LAYOUT_EVENT, on);
     return () => window.removeEventListener(LAYOUT_EVENT, on);
   }, []);
-  // 첫 화면은 홈 — 되살릴 문서가 있으면 부팅 복원이 문서로 바꾼다 (IA — 안 B 홈)
+  // 첫 화면은 홈 — 주소가 문서를 가리킬 때만 부팅 복원이 문서로 바꾼다 (IA — 안 B 홈, 2026-11-01부터 지난 문서는 다시 펼치지 않는다)
   const [panel, setPanel] = useState<Panel>(() => (getLayout() === 'home' ? 'home' : 'files'));
   // 홈 "최근 대화"에서 고른 대화 — AI 화면이 열자마자 연다
   const [aiThreadId, setAiThreadId] = useState<number | null>(null);
@@ -742,10 +742,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const ids = [...new Set([...(saved?.tabs ?? []), ...(id !== null ? [id] : [])])];
         const found = (await Promise.all(ids.map((x) => resolveFile(x)))).filter((f): f is TreeFile => f !== null);
         const byId = new Map(found.map((f) => [f.id, f]));
+        const linked = id !== null ? byId.get(id) : undefined;
+        // 홈 구조에서는 지난번 보던 문서를 다시 펼치지 않는다 — 앱을 켜면 홈이 먼저(사용자 결정 2026-11-01 "들어가면 왜 계속 이전에 봤던 게 나오냐").
+        // 주소가 문서를 가리킬 때(새로고침·링크)만 그 문서 하나. 열어 둔 탭 목록은 그대로 기억한다(탭 바에서 다시 연다)
+        if (getLayout() === 'home') return { tabs: found, panes: linked ? [linked] : [], active: 0 };
         let paneList = (saved?.panes ?? []).map((x) => byId.get(x)).filter((f): f is TreeFile => !!f);
         let active = Math.min(saved?.active ?? 0, Math.max(0, paneList.length - 1));
         // 주소가 가리키는 문서가 우선 — 이미 칸에 있으면 그 칸을, 없으면 활성 칸 자리에 둔다
-        const linked = id !== null ? byId.get(id) : undefined;
         if (linked) {
           const at = paneList.findIndex((f) => f.id === linked.id);
           if (at !== -1) active = at;
