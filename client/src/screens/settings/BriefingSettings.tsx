@@ -159,10 +159,11 @@ export default function BriefingSettings({ onOpenSources, onOpenSubscription }: 
                     className={`${inputCls} w-24 min-w-0 flex-1`}
                   />
                   <input
-                    type="text"
-                    inputMode="numeric"
+                    // 기기의 시계 휠(iOS)·브라우저 시각 칸(PC) — 글자 칸 + 숫자 키패드였을 때 콜론을 못 치고 아이폰이 전화번호로 오해해 "자동 완성 연락처"를 내밀었다(사용자 결정 2026-11-01)
+                    type="time"
+                    step={60}
+                    max="21:59"
                     value={t.at}
-                    placeholder="HH:MM"
                     // 꺼진 타이머도 시각은 고칠 수 있어야 한다 — 켜려다 간격에 걸리면 시각부터 옮겨야 하므로(검토 2026-10-31)
                     disabled={!status.autoEnabled}
                     onChange={(e) => editTimer(t.id, { at: e.target.value })}
