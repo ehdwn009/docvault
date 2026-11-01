@@ -11,6 +11,8 @@ export type FeedItem = {
   publishedAt: number | null;
   /** 피드가 알려 준 언론사 (Google 뉴스의 <source>). 없으면 null — 피드 이름을 쓴다 */
   source: string | null;
+  /** 그 언론사의 주소 (Google 뉴스 <source url="…">). 이름은 "KBS 뉴스"·"Chosunbiz"처럼 흔들리지만 주소는 안 흔들린다 — 아는 언론사 판정에 쓴다 */
+  sourceUrl: string | null;
   /** HTML을 벗긴 발췌. AI에게 보여 주는 데만 쓰고 저장하지 않는다 */
   snippet: string;
   /** 피드가 본문을 통째로 줄 때(content:encoded·긴 description) 그 앞부분 — 원문을 받기 전에 이미 재료가 된다.
@@ -35,6 +37,16 @@ function text(node: unknown): string {
   if (Array.isArray(node)) return text(node[0]);
   if (typeof node === 'object' && '#text' in node) return text((node as Record<string, unknown>)['#text']);
   return '';
+}
+
+/** 요소의 속성 하나 — 파서가 '@_' 접두어로 둔다(<source url="…">). 없으면 null */
+function attr(node: unknown, name: string): string | null {
+  if (Array.isArray(node)) return attr(node[0], name);
+  if (node && typeof node === 'object') {
+    const v = (node as Record<string, unknown>)[`@_${name}`];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
 }
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', middot: '·', hellip: '…' };
@@ -121,6 +133,7 @@ export function parseFeed(xml: string): FeedItem[] {
       link: text(it.link).trim() || text(it.guid).trim(),
       publishedAt: parseDate(text(it.pubDate) || text(it['dc:date'])),
       source: plainText(text(it.source)) || null,
+      sourceUrl: attr(it.source, 'url'),
       snippet: snippetOf(it.description, it['content:encoded']),
       fullText: fullTextOf(it['content:encoded'], it.description),
     }));
@@ -132,6 +145,7 @@ export function parseFeed(xml: string): FeedItem[] {
       link: atomLink(e.link).trim(),
       publishedAt: parseDate(text(e.published) || text(e.updated)),
       source: null,
+      sourceUrl: null,
       snippet: snippetOf(e.summary, e.content),
       fullText: fullTextOf(e.content, e.summary),
     }));

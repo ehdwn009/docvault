@@ -166,7 +166,7 @@ const DEFAULT_QUERIES: Record<string, string> = {
 // ---- 후보 출처 (개선 합의안 S5, 2026-10-11) — 직접 RSS를 약 70곳으로 넓히기 위한 후보. 이 코드를 쓴 환경에서는 주소를 열어 보지 못했다.
 // 그래서 기본 목록에 넣되 **꺼진 상태(disabled)**로 둔다. 서버에서 `npm run briefing:check -w server`로 살아 있는 것을 확인한 뒤
 // 수집 목록 문서의 disabled에서 이름을 지우면 켜진다. 이미 수집 목록 문서가 있는 사람은 이 후보가 저절로 들어가지 않는다 —
-// 문서를 지우면 다음 생성 때 기본값(후보 포함)으로 다시 생긴다. 기본 목록 27곳 + 후보 43곳 = 70곳
+// 문서를 지우면 다음 생성 때 기본값(후보 포함)으로 다시 생긴다. 기본 목록 27곳 + 후보 44곳 = 71곳(그중 CANDIDATE_ON 10곳은 기본으로 켜짐, 2026-11-01)
 
 export const CANDIDATE_FEEDS: SourcesDoc['feeds'] = [
   { name: '연합뉴스 전체', url: 'https://www.yna.co.kr/rss/news.xml', publisher: '연합뉴스', region: '국내' },
@@ -215,12 +215,19 @@ export const CANDIDATE_FEEDS: SourcesDoc['feeds'] = [
   { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', publisher: 'MIT Technology Review', region: '세계' },
 ];
 
+/**
+ * 기본으로 켜는 후보 — 2026-11-01 점검(briefing:check, 44곳 중 32곳 성공)에서 살아 있고, 14:35 구독 회차에 Google 검색 링크로만 들어와
+ * 원문을 읽을 수 없던 언론사(뉴시스·머니투데이 등)를 직접 피드로 받기 위해 켠다(사용자 결정 2026-11-01). 이미 있는 수집 목록 문서는
+ * 건드리지 않는다 — 그 문서의 disabled에서 같은 이름을 지워야 켜진다
+ */
+export const CANDIDATE_ON = new Set(['뉴시스 경제', '머니투데이', '조선비즈', '매일경제 경제', '매일경제 증권', '매일경제 기업', '매일경제 IT', '아시아경제', 'SBS 뉴스', '한국경제 정치']);
+
 export function defaultSourcesDoc(): SourcesDoc {
   return {
     feeds: [...DEFAULT_FEEDS, ...CANDIDATE_FEEDS],
     searches: SUBS.map((s) => ({ sub: subPath(s), query: DEFAULT_QUERIES[subPath(s)] ?? s.name })),
-    // 후보는 꺼진 채로 — 점검 명령으로 확인한 뒤 켠다
-    disabled: CANDIDATE_FEEDS.map((f) => f.name),
+    // 후보는 꺼진 채로 — 점검 명령으로 확인한 뒤 켠다. CANDIDATE_ON은 확인을 마쳐 켜 둔 것
+    disabled: CANDIDATE_FEEDS.map((f) => f.name).filter((n) => !CANDIDATE_ON.has(n)),
   };
 }
 

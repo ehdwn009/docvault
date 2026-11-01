@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { stripMeta } from './clean.js';
-import type { Candidate } from './collect.js';
+import { isAggregator, isDirectUrl, type Candidate } from './collect.js';
 import { HANGUL, type Picked } from './select.js';
 import { findSubById, type BriefingSub } from './taxonomy.js';
 
@@ -100,10 +100,15 @@ export function toPicked(selected: Selected, byIndex: Map<number, Candidate>, pr
       return;
     }
     const summary = stripMeta(s.summary);
+    // 발췌가 있고 받을 수 있는 주소(Google 아님)인 기사를 대표로 — 서버 selectOne과 같은 점수. 세션이 Google 링크를 대표로 고르면
+    // 원문을 읽을 수 없어 참고로 내려갔다(11/1 14:35 회차에서 핵심·주요 16건 중 7건). 같은 사건의 피드 기사가 있으면 그쪽이 대표가 된다
+    const pool = [main, ...related];
+    const score = (c: Candidate) => (c.snippet ? 2 : 0) + (isAggregator(c.source) ? 0 : 1) + (isDirectUrl(c.url) ? 2 : 0) + (c.feedText ? 1 : 0);
+    const lead = pool.reduce((a, b) => (score(b) > score(a) ? b : a));
     picked.push({
       sub: subOrThrow(s.subId, `stories[${n}]`),
-      main,
-      related,
+      main: lead,
+      related: pool.filter((c) => c !== lead),
       importance,
       prevStoryId: s.prevStoryId && prevIds.has(s.prevStoryId) ? s.prevStoryId : null,
       brief: importance === 1 ? { title, summary, why: stripMeta(s.why) === s.why.trim() ? s.why.trim() : '' } : null,

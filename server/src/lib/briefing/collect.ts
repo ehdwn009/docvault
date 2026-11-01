@@ -2,7 +2,7 @@ import { BRIEFING } from '../../constants.js';
 import { fetchGuarded } from './fetch.js';
 import { errorText, mapLimit } from './limit.js';
 import { parseFeed, type FeedItem } from './rss.js';
-import { isKnownOutlet, outletName } from './outlets.js';
+import { isKnownOutlet, outletHost, outletName } from './outlets.js';
 import type { Source } from './sources.js';
 import type { BriefingSection, BriefingSub } from './taxonomy.js';
 
@@ -67,7 +67,7 @@ export function usefulSnippet(title: string, snippet: string): string {
   return snippet;
 }
 
-function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>, known: ReadonlySet<string>, drops: Map<string, number>): Candidate[] {
+function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>, known: ReadonlySet<string>, knownHosts: ReadonlySet<string>, drops: Map<string, number>): Candidate[] {
   const out: Candidate[] = [];
   for (const it of items) {
     if (!it.title || !/^https?:\/\//i.test(it.link)) continue;
@@ -79,7 +79,7 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
     const source = outletName(it.source ?? src.publisher);
     // Google 검색 후보는 아는 언론사만 — 블로그·브로커·개인 매체가 참고 기사로 섞였다 (11/1 06:00 회차, 사용자 결정 2026-11-01).
     // 수집 목록의 피드는 사용자가 고른 곳이라 그대로 받는다
-    if (src.sub && !isKnownOutlet(source, known)) {
+    if (src.sub && !isKnownOutlet(source, known, it.sourceUrl, knownHosts)) {
       drops.set(source, (drops.get(source) ?? 0) + 1);
       continue;
     }
@@ -261,12 +261,14 @@ export async function collect(
   opts.onProgress?.(0, sources.length);
   // 수집 목록의 언론사(name·publisher)는 Google 검색 후보의 출처로도 안다
   const known = new Set(sources.flatMap((s) => [s.name, s.publisher ?? '']).map((n) => n.trim().toLowerCase()).filter(Boolean));
+  // 피드의 주소도 아는 언론사 — Google이 이름을 "KBS 뉴스"로 주든 "KBS"로 주든 주소(news.kbs.co.kr)는 같다
+  const knownHosts = new Set(sources.filter((s) => !s.sub).map((s) => outletHost(s.url)).filter((h): h is string => h !== null));
   const drops = new Map<string, number>();
   const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (src) => {
     const finish = opts.track?.(src.name);
     try {
       const xml = await fetchSource(src, opts.signal);
-      return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls, known, drops);
+      return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls, known, knownHosts, drops);
     } finally {
       finish?.();
       opts.onProgress?.(++done, sources.length);

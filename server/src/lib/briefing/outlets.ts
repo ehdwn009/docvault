@@ -83,7 +83,8 @@ const KNOWN_OUTLET_NAMES = [
   '더스쿠프', '시사인', '시사위크', '일요신문', '주간조선', '주간동아', '한겨레21', '중앙선데이', '신동아', '월간조선',
   // 국내 IT·산업·전문지
   '아이티데일리', '데이터넷', '보안뉴스', '데일리시큐', '테크M', '바이라인네트워크', '더구루', '뉴스핌', '데일리팜', '약업신문', '메디게이트뉴스', '청년의사', '메디칼타임즈', '히트뉴스', '팜이데일리',
-  '전기신문', '에너지경제', '에너지신문', '건설경제', '대한경제', '물류신문', '교통신문', '한국농어민신문', '농민신문', '코인데스크코리아', '디지털애셋', '블록미디어', '디지털투데이', '테크홀릭',
+  '연합인포맥스', '이코노미스트', 'AI타임스', '브릿지경제', '메트로신문', '한국금융신문', '금융신문',
+  '전기신문', '에너지경제', '에너지경제신문', '에너지신문', '건설경제', '대한경제', '물류신문', '교통신문', '한국농어민신문', '농민신문', '코인데스크코리아', '디지털애셋', '블록미디어', '디지털투데이', '테크홀릭',
   // 방송·통신
   'KBS', 'MBC', 'SBS', 'JTBC', 'YTN', 'MBN', '채널A', 'TV조선', '연합뉴스TV', '뉴스1', '뉴시스', 'OBS', 'KNN', 'TBC', 'KBC', 'JTV', 'G1', 'CJB', 'TJB', 'UBC', 'JIBS',
   // 해외
@@ -93,17 +94,33 @@ const KNOWN_OUTLET_NAMES = [
 ];
 const KNOWN_LOWER = new Set([...Object.values(OUTLETS), ...KNOWN_OUTLET_NAMES].map((n) => n.toLowerCase()));
 
-/** 아는 언론사인가 — 표의 이름·주소, 위 목록, 그리고 호출자가 준 이름(수집 목록 피드의 name·publisher) */
-export function isKnownOutlet(source: string, extra: ReadonlySet<string>): boolean {
+/**
+ * 아는 언론사인가 — 표의 이름·주소, 위 목록, 호출자가 준 이름(수집 목록 피드의 name·publisher), 그리고 **언론사 주소**(Google 뉴스 <source url>)가
+ * 표의 주소나 수집 목록 피드의 주소(extraHosts)와 같은 곳. 이름만 보면 "KBS 뉴스"·"Chosunbiz"·"DongA Science"·"에너지경제신문"처럼
+ * 표기가 흔들려 아는 곳을 버렸다(11/1 14:35 회차에서 183건) — 주소가 더 믿을 만하다
+ */
+export function isKnownOutlet(source: string, extra: ReadonlySet<string>, sourceUrl: string | null = null, extraHosts: ReadonlySet<string> = EMPTY): boolean {
   const name = source.trim().toLowerCase();
-  if (!name) return false;
-  if (KNOWN_LOWER.has(name) || extra.has(name)) return true;
+  if (name && (KNOWN_LOWER.has(name) || extra.has(name))) return true;
   // 주소로 온 출처는 표에 있는 주소(하위 → 상위)일 때만 — 표 밖 주소는 맨몸 주소로 줄어들 뿐 아는 곳이 아니다
-  const host = hostOf(name);
+  return hostKnown(hostOf(name), extraHosts) || hostKnown(hostOf(sourceUrl ?? ''), extraHosts);
+}
+
+const EMPTY: ReadonlySet<string> = new Set();
+
+function hostKnown(host: string | null, extraHosts: ReadonlySet<string>): boolean {
   if (!host) return false;
   const labels = host.split('.');
-  for (let i = 0; i < labels.length - 1; i++) if (OUTLETS[labels.slice(i).join('.')]) return true;
+  for (let i = 0; i < labels.length - 1; i++) {
+    const h = labels.slice(i).join('.');
+    if (OUTLETS[h] || extraHosts.has(h)) return true;
+  }
   return false;
+}
+
+/** 주소의 호스트(www.·m. 뗀 것) — 수집 목록 피드 주소를 "아는 언론사 주소"로 쓸 때 */
+export function outletHost(url: string): string | null {
+  return hostOf(url);
 }
 
 /** 이름 자리에 온 것이 주소처럼 생겼을 때만 표를 찾는다 (공백 없음 + 점 포함). "https://www.x.co.kr/"처럼 주소 전체가 오기도 한다 */
