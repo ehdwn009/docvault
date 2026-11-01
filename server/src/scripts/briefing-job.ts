@@ -10,13 +10,14 @@ import { stripMeta } from '../lib/briefing/clean.js';
 import { bigramSimilarity, collect, numberSet, titleKey, type Candidate } from '../lib/briefing/collect.js';
 import { needsDemotion } from '../lib/briefing/fallback.js';
 import { checkUrl } from '../lib/briefing/jobDomains.js';
+import { CandidatesFileSchema, MaterialsResponseSchema, SelectedSchema, toCandidate, toPicked, toStored, type CandidatesFile, type StoredCandidate } from '../lib/briefing/jobCandidates.js';
 import { buildInstruction } from '../lib/briefing/jobInstruction.js';
 import { checkItems, ResultSchema, tooManyDropped } from '../lib/briefing/jobResult.js';
 import { finalizeBullets, LENS_RULES } from '../lib/briefing/lenses.js';
 import { HANGUL, MAX_INPUT_PER_SUB, pickForSelect, selectRules, type Picked, type PrevStory } from '../lib/briefing/select.js';
 import { CANDIDATE_FEEDS, defaultSourcesDoc, parseSourcesDoc, toSources, type SourcesDoc } from '../lib/briefing/sourcesDoc.js';
 import { describe, evidenceOf, explainEligible, finalizeItem, impactEligible, lengthTarget, SummaryItemSchema, summaryRules, type Evidence, type Written } from '../lib/briefing/summarize.js';
-import { findSubById, SUBS, subPath, type BriefingSub } from '../lib/briefing/taxonomy.js';
+import { findSubById, SUBS, subPath } from '../lib/briefing/taxonomy.js';
 import { kstParts } from '../lib/briefing/time.js';
 import { outletName } from '../lib/briefing/outlets.js';
 import { titleOverlap } from '../lib/briefing/verify.js';
@@ -25,12 +26,13 @@ import { WEB_TITLE_OVERLAP_MIN } from '../lib/briefing/webfill.js';
 // 구독 생성 방식의 "기계가 하는 일" (뉴스 브리핑 설계 "구독 생성 방식", v0.50) — claude.ai 세션이 저장소를 받아 이 명령을 돌린다.
 // 수집·선별 입력 자르기·원문 읽기·숫자 검사·건강 숫자는 서버와 **같은 코드**로 하고, 판단과 글쓰기(분류·선별·요약·검수)만 에이전트가 한다.
 // DB·API 키 없이 돈다(db/index.ts를 import하지 않는다). 단계마다 파일 하나를 읽고 하나를 쓴다 — 세션의 명령 시간 상한(2~10분) 안에 끝나게.
+// --server(v0.59, "재료는 서버가"): 수집과 원문 읽기를 docvault 서버에 맡긴다 — 클라우드에서 막히는 피드·원문이 서버에서는 열린다. 서버가 재료를 못 주면(404) 같은 명령을 --server 없이 돌린다
 //
 //   npm run briefing:job -w server -- rules                          지시문(분류·요약·글머리표) 출력 — 서버와 같은 글자
 //   npm run briefing:job -w server -- instruction <dir> [옵션]        시험용 지시서 만들기 (실전에서는 API-151이 준다)
-//   npm run briefing:job -w server -- collect <dir>                   지시서 → candidates.json + classify-NN.txt
+//   npm run briefing:job -w server -- collect <dir> [--server]        지시서 → candidates.json + classify-NN.txt (--server: 서버가 수집해 둔 후보를 받는다, API-154)
 //   npm run briefing:job -w server -- group <dir>                     classified.json → groups.json + select/<분야>.txt
-//   npm run briefing:job -w server -- read <dir>                      selected.json → materials.json + summarize/*.txt + fallback.txt + webfill-targets.txt
+//   npm run briefing:job -w server -- read <dir> [--server]           selected.json → materials.json + summarize/*.txt + fallback.txt + webfill-targets.txt (--server: 원문을 서버가 읽는다, API-155·156)
 //   npm run briefing:job -w server -- webfill <dir>                   webfill.json(웹 검색으로 찾은 보도) → materials.json에 W 재료 + 요약 입력 다시 쓰기
 //   npm run briefing:job -w server -- verify <dir>                    written.json → result.json(완성본, API-153 본문) + verify-report.txt
 
@@ -84,44 +86,8 @@ const InstructionSchema = z.object({
 });
 type Instruction = z.infer<typeof InstructionSchema>;
 
-/** 후보 — Candidate에서 sub 객체를 id로 바꾼 저장용 모양. i는 전역 번호(분류·선별·요약 파일이 전부 이 번호로 가리킨다) */
-const StoredCandidateSchema = z.object({
-  i: z.number(),
-  title: z.string(),
-  url: z.string(),
-  publishedAt: z.number(),
-  source: z.string(),
-  snippet: z.string(),
-  feedText: z.string(),
-  region: z.enum(['국내', '세계']),
-  subId: z.string().nullable(),
-  related: z.array(z.object({ source: z.string(), url: z.string() })),
-});
-type StoredCandidate = z.infer<typeof StoredCandidateSchema>;
-
-const CandidatesFileSchema = z.object({
-  stats: z.object({ sources: z.number(), sourcesFailed: z.number(), failedSources: z.array(z.string()), candidates: z.number(), attached: z.number(), wouldMerge: z.number(), outletDrops: z.number().default(0), outletDropNames: z.array(z.string()).default([]) }),
-  candidates: z.array(StoredCandidateSchema),
-});
-
 /** 분류 답 — 분야를 모르는 후보마다 subId. 빈 문자열이면 뺀다(스포츠·연예·광고). 적지 않은 후보도 뺀다 */
 const ClassifiedSchema = z.object({ assignments: z.array(z.object({ i: z.number(), subId: z.string() })) });
-
-/** 선별 답 — 전역 번호로 대표(main)와 같은 사건(related)을 가리킨다. 참고(1)만 title·summary·why를 쓴다 */
-const SelectedSchema = z.object({
-  stories: z.array(
-    z.object({
-      subId: z.string(),
-      main: z.number(),
-      related: z.array(z.number()).default([]),
-      importance: z.number(),
-      prevStoryId: z.string().nullable().default(null),
-      title: z.string().default(''),
-      summary: z.string().default(''),
-      why: z.string().default(''),
-    }),
-  ),
-});
 
 const EvidenceSchema = z.object({ id: z.string(), source: z.string(), url: z.string(), text: z.string(), via: z.enum(['body', 'feed', 'web', 'lede']) });
 
@@ -147,59 +113,6 @@ const WrittenFileSchema = z.object({
 });
 
 // ---- 공용 ----
-
-function toStored(c: Candidate, i: number): StoredCandidate {
-  return { i, title: c.title, url: c.url, publishedAt: c.publishedAt, source: c.source, snippet: c.snippet, feedText: c.feedText, region: c.region, subId: c.sub?.id ?? null, related: c.related };
-}
-
-function toCandidate(s: StoredCandidate): Candidate {
-  return { title: s.title, url: s.url, publishedAt: s.publishedAt, source: s.source, snippet: s.snippet, feedText: s.feedText, region: s.region, sub: s.subId ? (findSubById(s.subId) ?? null) : null, related: s.related };
-}
-
-function subOrThrow(id: string, where: string): BriefingSub {
-  const sub = findSubById(id);
-  if (!sub) throw new Error(`${where}: 분류표에 없는 분야 id "${id}"`);
-  return sub;
-}
-
-/** 선별 답 → Picked[] (서버 selectOne의 뒷부분과 같은 규칙 — 번호가 없거나 겹치면 버린다, 참고 제목에 한글이 없으면 싣지 않는다) */
-function toPicked(selected: z.infer<typeof SelectedSchema>, byIndex: Map<number, Candidate>, prevIds: Set<string>): { picked: Picked[]; warnings: string[] } {
-  const used = new Set<number>();
-  const picked: Picked[] = [];
-  const warnings: string[] = [];
-  selected.stories.forEach((s, n) => {
-    const main = byIndex.get(s.main);
-    if (!main || used.has(s.main)) {
-      warnings.push(`stories[${n}]: 대표 번호 ${s.main}이(가) 없거나 이미 쓰였음 — 버림`);
-      return;
-    }
-    used.add(s.main);
-    const related: Candidate[] = [];
-    for (const r of s.related) {
-      const c = byIndex.get(r);
-      if (c && !used.has(r)) {
-        used.add(r);
-        related.push(c);
-      }
-    }
-    const importance = Math.min(3, Math.max(1, Math.round(s.importance))) as 1 | 2 | 3;
-    const title = s.title.trim() || main.title;
-    if (importance === 1 && !HANGUL.test(title)) {
-      warnings.push(`stories[${n}]: 참고 기사 제목에 한글이 없음("${title.slice(0, 30)}") — 싣지 않음`);
-      return;
-    }
-    const summary = stripMeta(s.summary);
-    picked.push({
-      sub: subOrThrow(s.subId, `stories[${n}]`),
-      main,
-      related,
-      importance,
-      prevStoryId: s.prevStoryId && prevIds.has(s.prevStoryId) ? s.prevStoryId : null,
-      brief: importance === 1 ? { title, summary, why: stripMeta(s.why) === s.why.trim() ? s.why.trim() : '' } : null,
-    });
-  });
-  return { picked, warnings };
-}
 
 // ---- 명령 ----
 
@@ -234,42 +147,112 @@ function cmdInstruction(dir: string): void {
   console.log(`지시서 → ${path.join(dir, 'instruction.json')} — ${slot} · 범위 ${kstParts(since).date} ${kstParts(since).hour}:${pad2(kstParts(since).minute)} ~ ${kstParts(until).date} ${kstParts(until).hour}:${pad2(kstParts(until).minute)} KST · 출처 ${toSources(doc).length}곳 · 허용 도메인 ${instruction.allowedDomains.length}개 · 마감 ${kstParts(instruction.deadline).hour}:${pad2(kstParts(instruction.deadline).minute)} KST (지금 ${k.hour}:${pad2(k.minute)}) · 구성 ${config}`);
 }
 
-async function cmdCollect(dir: string): Promise<void> {
-  const ins = readJson(path.join(dir, 'instruction.json'), InstructionSchema);
-  const doc = parseSourcesDoc(JSON.stringify(ins.sources));
-  const sources = toSources(doc);
-  console.log(`수집 시작 — 출처 ${sources.length}곳, 범위 ${new Date(ins.since).toISOString()} ~ ${new Date(ins.until).toISOString()}`);
-  let shown = 0;
-  const got = await collect(sources, {
-    since: ins.since,
-    until: ins.until,
-    excludeUrls: new Set(ins.excludeUrls),
-    onProgress: (d, t) => {
-      if (d - shown >= 10 || d === t) {
-        shown = d;
-        console.log(`  ${d}/${t}`);
-      }
-    },
-  });
-  const feedFailed = got.failed.filter((f) => f.kind === 'feed').length;
-  const outletDropNames = got.outletDrops.slice(0, BRIEFING.OUTLET_DROPS_LOG_MAX).map((d) => `${d.source} ${d.count}`);
-  const stats = { sources: got.sourceCount, sourcesFailed: got.failed.length, failedSources: got.failed.map((f) => f.name), candidates: got.candidates.length, attached: got.attached, wouldMerge: got.wouldMerge, outletDrops: got.outletDrops.reduce((a, d) => a + d.count, 0), outletDropNames };
-  writeJson(path.join(dir, 'candidates.json'), { stats, candidates: got.candidates.map(toStored) });
+// ---- 서버의 재료 (--server) — 환경 변수 DOCVAULT_URL + 지시서의 jobId. 열쇠는 네트워크 시크릿이 붙이고, DOCVAULT_TOKEN이 있을 때만 직접 붙인다(값은 어디에도 찍지 않는다) ----
 
+function serverBase(ins: Instruction): { url: string; headers: Record<string, string> } {
+  const base = process.env.DOCVAULT_URL?.replace(/\/+$/, '');
+  // https만 — 평문으로 열쇠가 나가면 안 된다. 로컬 시험(같은 기계)만 http를 허용한다
+  if (!base || !(base.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base))) throw new Error('--server에는 환경 변수 DOCVAULT_URL(https://…)이 필요합니다');
+  const token = process.env.DOCVAULT_TOKEN;
+  return { url: `${base}/api/v1/briefing/jobs/${encodeURIComponent(ins.jobId)}`, headers: { accept: 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } };
+}
+
+/** 응답을 공통 에러 형식으로 읽어 한 줄로 — 서버가 재료를 못 주는 경우(404 BRIEFING_MATERIALS_UNAVAILABLE)는 "--server 없이"를 안내한다 */
+async function serverFailure(res: Response): Promise<Error> {
+  let code = '';
+  let message = '';
+  try {
+    const body = (await res.json()) as { code?: string; message?: string };
+    code = body.code ?? '';
+    message = body.message ?? '';
+  } catch {
+    // JSON이 아니면 상태 코드만
+  }
+  const hint = code === 'BRIEFING_MATERIALS_UNAVAILABLE' ? ' → 같은 명령을 --server 없이 돌려 직접 한다' : code === 'BRIEFING_JOB_CLOSED' ? ' → 실행이 닫혔다. 멈추고 보고한다' : '';
+  return new Error(`서버 ${res.status}${code ? ` ${code}` : ''}${message ? ` — ${message}` : ''}${hint}`);
+}
+
+/** 200이 올 때까지 기다린다 — 202 { status, done, total }이면 SUB_MATERIALS_POLL_MS마다 다시, 최대 SUB_MATERIALS_WAIT_MAX_MS */
+async function pollServer<T>(url: string, headers: Record<string, string>, schema: z.ZodType<T>, what: string): Promise<T> {
+  const started = Date.now();
+  let shown = '';
+  for (;;) {
+    const res = await fetch(url, { headers, redirect: 'error' });
+    if (res.status === 202) {
+      const p = (await res.json()) as { status?: string; done?: number; total?: number };
+      const line = `  ${what} 서버에서 진행 중 — ${p.done ?? 0}/${p.total ?? 0}`;
+      if (line !== shown) {
+        shown = line;
+        console.log(line);
+      }
+      if (Date.now() - started > BRIEFING.SUB_MATERIALS_WAIT_MAX_MS) throw new Error(`${what}을(를) ${BRIEFING.SUB_MATERIALS_WAIT_MAX_MS / 60_000}분 기다렸지만 서버가 끝내지 못했다 → 같은 명령을 --server 없이 돌려 직접 한다`);
+      await new Promise((r) => setTimeout(r, BRIEFING.SUB_MATERIALS_POLL_MS));
+      continue;
+    }
+    if (!res.ok) throw await serverFailure(res);
+    const raw: unknown = await res.json();
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new Error(`서버 응답 형식 오류(${what}) — ${issue?.path.map((p) => String(p)).join('.') ?? ''}: ${issue?.message ?? '알 수 없음'}`);
+    }
+    return parsed.data;
+  }
+}
+
+/** candidates.json → 분류 입력(classify-NN.txt). 수집을 어디서 했든(세션·서버) 같은 파일을 만든다 */
+function writeClassifyInputs(dir: string, stored: StoredCandidate[]): { unknown: number; files: number } {
   // 분류 입력 — 분야를 모르는(언론사 피드) 후보만, 서버와 같은 묶음 크기. 번호는 전역 i (서버는 묶음 안 1..n이지만, 사람이 답을 옮겨 적는 일이 없게 전역으로)
-  const unknown = got.candidates.map((c, i) => ({ c, i })).filter(({ c }) => c.sub === null);
+  const unknown = stored.filter((c) => c.subId === null);
   const header = ['아래 기사마다 가장 맞는 세부 분야 id 하나를 골라라. 번호는 전역 번호(i)다 — classified.json의 i로 그대로 쓴다.', REGION_RULE, SUB_RULE, '', '분야 목록:', SUB_LIST, ''].join('\n');
   let files = 0;
   for (let k = 0; k < unknown.length; k += BRIEFING.CLASSIFY_CHUNK) {
     const chunk = unknown.slice(k, k + BRIEFING.CLASSIFY_CHUNK);
-    const lines = chunk.map(({ c, i }) => `${i}. [${c.region}] ${c.title}${c.snippet ? ` — ${c.snippet}` : ''}`).join('\n');
+    const lines = chunk.map((c) => `${c.i}. [${c.region}] ${c.title}${c.snippet ? ` — ${c.snippet}` : ''}`).join('\n');
     writeText(path.join(dir, `classify-${pad2(++files)}.txt`), `${header}\n<기사>\n${lines}\n</기사>`);
   }
-  console.log(`수집 끝 — 후보 ${got.candidates.length}건 (분야 아는 것 ${got.candidates.length - unknown.length}, 분류할 것 ${unknown.length} → classify-01~${pad2(files)}.txt)${got.attached ? `, Google 기사 ${got.attached}건 붙임` : ''}${got.failed.length ? `, 못 받은 출처 ${got.failed.length}곳(언론사 ${feedFailed})` : ''}`);
+  return { unknown: unknown.length, files };
+}
+
+async function cmdCollect(dir: string): Promise<void> {
+  const ins = readJson(path.join(dir, 'instruction.json'), InstructionSchema);
+  const doc = parseSourcesDoc(JSON.stringify(ins.sources));
+  const sources = toSources(doc);
+  let file: CandidatesFile;
+  if (rest.includes('--server')) {
+    // 서버가 트리거 때 수집해 둔 후보(API-154) — 수집 중이면 기다린다
+    const api = serverBase(ins);
+    console.log(`서버의 후보를 받는다 — ${api.url.replace(/\/jobs\/.*$/, '/jobs/…')}/candidates`);
+    file = await pollServer(`${api.url}/candidates`, api.headers, CandidatesFileSchema, '수집');
+  } else {
+    console.log(`수집 시작 — 출처 ${sources.length}곳, 범위 ${new Date(ins.since).toISOString()} ~ ${new Date(ins.until).toISOString()}`);
+    let shown = 0;
+    const got = await collect(sources, {
+      since: ins.since,
+      until: ins.until,
+      excludeUrls: new Set(ins.excludeUrls),
+      onProgress: (d, t) => {
+        if (d - shown >= 10 || d === t) {
+          shown = d;
+          console.log(`  ${d}/${t}`);
+        }
+      },
+    });
+    const outletDropNames = got.outletDrops.slice(0, BRIEFING.OUTLET_DROPS_LOG_MAX).map((d) => `${d.source} ${d.count}`);
+    const stats = { sources: got.sourceCount, sourcesFailed: got.failed.length, failedSources: got.failed.map((f) => f.name), candidates: got.candidates.length, attached: got.attached, wouldMerge: got.wouldMerge, outletDrops: got.outletDrops.reduce((a, d) => a + d.count, 0), outletDropNames };
+    file = { stats, candidates: got.candidates.map(toStored) };
+    if (got.failed.length) console.log(got.failed.map((f) => `  못 받음: ${f.name} — ${f.reason}`).join('\n'));
+  }
+  writeJson(path.join(dir, 'candidates.json'), file);
+  const { unknown, files } = writeClassifyInputs(dir, file.candidates);
+  const { stats } = file;
+  // 언론사 피드 실패 수 — 검색 출처(분야가 있는 출처)는 분모에서 뺀다(서버 collect와 같은 규칙). 서버가 수집했으면 이름으로 가른다
+  const searchNames = new Set(sources.filter((s) => s.sub).map((s) => s.name));
+  const feedFailed = stats.failedSources.filter((n) => !searchNames.has(n)).length;
+  console.log(`수집 끝 — 후보 ${stats.candidates}건 (분야 아는 것 ${stats.candidates - unknown}, 분류할 것 ${unknown} → classify-01~${pad2(files)}.txt)${stats.attached ? `, Google 기사 ${stats.attached}건 붙임` : ''}${stats.sourcesFailed ? `, 못 받은 출처 ${stats.sourcesFailed}곳(언론사 ${feedFailed})` : ''}`);
   const feedCount = sources.filter((s) => !s.sub).length;
   if (feedCount > 0 && (feedCount - feedFailed) / feedCount < BRIEFING.MIN_SOURCE_OK_RATIO) console.log(`경고: 언론사 피드 성공 비율이 ${Math.round(((feedCount - feedFailed) / feedCount) * 100)}% — 서버 기준(${BRIEFING.MIN_SOURCE_OK_RATIO * 100}%) 미만. 이 상태로 만든 회차는 직전 회차보다 나쁘다`);
-  if (got.failed.length) console.log(got.failed.map((f) => `  못 받음: ${f.name} — ${f.reason}`).join('\n'));
-  if (stats.outletDrops) console.log(`아는 언론사가 아니라 버린 검색 후보 ${stats.outletDrops}건 — ${outletDropNames.join(', ')} (진짜 언론이면 outlets.ts나 수집 목록에 더한다)`);
+  if (stats.outletDrops) console.log(`아는 언론사가 아니라 버린 검색 후보 ${stats.outletDrops}건 — ${stats.outletDropNames.join(', ')} (진짜 언론이면 outlets.ts나 수집 목록에 더한다)`);
 }
 
 function cmdGroup(dir: string): void {
@@ -382,16 +365,36 @@ async function cmdRead(dir: string): Promise<void> {
   const { picked, warnings } = toPicked(selected, byIndex, new Set(ins.prevStories.map((p) => p.storyId)));
   warnings.forEach((w) => console.log(`경고: ${w}`));
   const targets = picked.filter((p) => p.importance >= BRIEFING.BODY_FETCH_MIN_IMPORTANCE).length;
-  console.log(`원문 읽기 시작 — 선별 ${picked.length}건 중 핵심·주요 ${targets}건`);
-  let shown = 0;
-  const read = await readBodies(picked, {
-    onProgress: (d, t) => {
-      if (d - shown >= 10 || d === t) {
-        shown = d;
-        console.log(`  ${d}/${t}`);
-      }
-    },
-  });
+  let read: { materials: Map<number, Material[]>; fromFeed: number; rejected: number };
+  if (rest.includes('--server')) {
+    // 서버가 읽는다(API-155 → 156) — 같은 selected.json을 보내고, 돌아온 재료를 대표 후보 번호(main)로 내 picked에 맞춘다
+    const api = serverBase(ins);
+    console.log(`서버에 원문 읽기를 맡긴다 — 선별 ${picked.length}건 중 핵심·주요 ${targets}건`);
+    const res = await fetch(`${api.url}/read`, { method: 'POST', headers: { ...api.headers, 'content-type': 'application/json' }, body: JSON.stringify(selected), redirect: 'error' });
+    if (!res.ok && res.status !== 202) throw await serverFailure(res);
+    const got = await pollServer(`${api.url}/materials`, api.headers, MaterialsResponseSchema, '원문 읽기');
+    got.warnings.forEach((w) => console.log(`서버 경고: ${w}`));
+    // byIndex의 값이 곧 picked[].main 객체다(toPicked가 같은 맵에서 꺼냈다) — 전역 번호 → picked 위치
+    const indexOf = new Map([...byIndex].map(([i, c]) => [c, i]));
+    const pickedAt = new Map(picked.map((p, i) => [indexOf.get(p.main), i]));
+    const materials = new Map<number, Material[]>();
+    for (const st of got.stories) {
+      const i = pickedAt.get(st.main);
+      if (i !== undefined) materials.set(i, st.materials);
+    }
+    read = { materials, fromFeed: got.stats.fromFeed, rejected: got.stats.extractRejected };
+  } else {
+    console.log(`원문 읽기 시작 — 선별 ${picked.length}건 중 핵심·주요 ${targets}건`);
+    let shown = 0;
+    read = await readBodies(picked, {
+      onProgress: (d, t) => {
+        if (d - shown >= 10 || d === t) {
+          shown = d;
+          console.log(`  ${d}/${t}`);
+        }
+      },
+    });
+  }
   const stories: z.infer<typeof MaterialsFileSchema>['stories'] = picked.map((p, i) => {
     const materials: Material[] | undefined = read.materials.get(i);
     const evidence = evidenceOf(p, materials);

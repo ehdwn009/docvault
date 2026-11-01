@@ -5,6 +5,7 @@ import { db } from '../../db/index.js';
 import { briefingRuns, files } from '../../db/schema.js';
 import { callClaude, callWebSearch, costOf, type AiCaller, type Usage, type WebCaller } from './ai.js';
 import { saveEdition, slotLabel, type Slot } from './edition.js';
+import { dropMaterials } from './jobMaterials.js';
 import { abortLive, addLog, closeLive, liveView, openLive, track } from './live.js';
 import { BriefingFailure, generateEdition, type Stage } from './pipeline.js';
 import { kstMonthStart, kstParts } from './time.js';
@@ -107,6 +108,7 @@ export function closeSubscriptionRun(runId: number, status: 'missing' | 'cancell
     .where(and(eq(briefingRuns.id, runId), eq(briefingRuns.status, 'running'), eq(briefingRuns.trigger, 'subscription')))
     .run();
   closeLive(runId);
+  dropMaterials(runId);
   return r.changes > 0;
 }
 

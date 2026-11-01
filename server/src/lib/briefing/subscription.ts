@@ -11,10 +11,11 @@ import { isAggregator } from './collect.js';
 import { layoutEdition, readPrevious, saveEdition, slotLabel, type Edition, type ItemDraft, type Slot } from './edition.js';
 import { isPrivateAddress } from './fetch.js';
 import { buildInstruction, type Instruction, type PrevStoryRef } from './jobInstruction.js';
+import { dropMaterials, startCollect } from './jobMaterials.js';
 import { checkItems, ResultSchema, tooManyDropped, type JobResult, type ResultItem } from './jobResult.js';
 import { addLog, closeLive, openRemoteLive, setRemoteStage, type RemoteStage } from './live.js';
 import { closeSubscriptionRun, nextSinceAt, runningSubscriptionRun } from './run.js';
-import { loadSourcesDoc } from './sources.js';
+import { loadSourcesDoc, toSources } from './sources.js';
 import { SourcesError } from './sourcesDoc.js';
 import { SUBS } from './taxonomy.js';
 import { kstParts } from './time.js';
@@ -226,6 +227,8 @@ export async function createJob(args: { ownerId: number; slot: Slot; label: stri
     closeSubscriptionRun(run.id, 'error', `수집 목록 문서가 잘못되어 예약 작업을 켜지 않았어요 — ${badDoc}`);
     return db.select().from(briefingRuns).where(eq(briefingRuns.id, run.id)).get() ?? run;
   }
+  // 재료는 서버가(v0.59) — 트리거와 나란히 수집을 시작해 두면 세션이 기동을 마칠 즈음(5~10분) 후보가 준비돼 있다. 범위·중복 제외는 지시서와 같은 값
+  startCollect(run.id, toSources(loadSourcesDoc(args.ownerId).doc), { since: run.sinceAt, until: run.untilAt, excludeUrls: readPrevious(prevOkFileId(args.ownerId)).urls });
   const fired = await fireTrigger(args.ownerId, `BRIEFING_JOB_ID=${run.jobId} — docvault 뉴스 브리핑 회차를 만들 차례입니다. briefing-subscription 스킬을 실전 모드로 실행하세요.`);
   if (!fired.ok) {
     closeSubscriptionRun(run.id, 'error', `예약 작업을 켜지 못했어요 — ${fired.reason}`);
@@ -268,6 +271,13 @@ function sourcesDocOrClose(run: RunRow) {
     closeSubscriptionRun(run.id, 'error', `수집 목록 문서가 잘못되어 실행을 닫았어요 — ${e.message}`);
     throw new JobError(409, 'BRIEFING_JOB_CLOSED', `수집 목록 문서가 잘못되어 이 실행을 닫았어요 — ${e.message}`);
   }
+}
+
+/** 직전 회차의 사건 id들 — API-155가 세션의 prevStoryId를 지시서와 같은 회차로 검사한다 */
+export function prevStoryIdsOf(ownerId: number): Set<string> {
+  const ids = new Set<string>();
+  for (const list of readPrevious(prevOkFileId(ownerId)).storiesBySub.values()) for (const p of list) ids.add(p.storyId);
+  return ids;
 }
 
 /** 직전 회차 — 끝 시각이 가장 늦은 ok 실행. 지시서(excludeUrls·prevStories)와 완성본 검사(excludeUrls·prevStoryId)가 같은 회차를 보게 한 곳에서 고른다 */
@@ -421,6 +431,7 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
   for (const line of result.log) addLog(live, cleanLogLine(line), now);
   if (unknownPrev) addLog(live, `직전 회차에 없는 사건 id ${unknownPrev}건은 새 사건으로 바꿨어요`, now);
   closeLive(run.id);
+  dropMaterials(run.id);
   console.log(`[briefing] ${edition.edition.date} ${edition.edition.label} ok(구독) ${edition.stats.items}건 ${Math.round((now - run.startedAt) / 60_000)}분 → ${saved.name}`);
   return { fileId: saved.fileId, itemCount: edition.stats.items, dropped, already: false };
 }

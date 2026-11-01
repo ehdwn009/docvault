@@ -4,7 +4,7 @@
 
 ## 공통 규약
 
-- **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50)**: `/briefing/jobs/*` 세 주소(API-151~153)는 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
+- **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50)**: `/briefing/jobs/*` 주소들(API-151~153, v0.59부터 154~156도)은 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
 - **권한 등급**: 공개(로그인 불필요) 없음 — 로그인 화면 외 전 API가 인증 필수. `관리자` 표시 API는 role=admin만 호출 가능.
 - **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가).
 - **공통 에러 응답**: `{ "code": "ERROR_CODE", "message": "설명" }`
@@ -36,6 +36,8 @@
 | BRIEFING_JOB_REJECTED | 422 | 완성본 검사에서 뺀 기사가 30%를 넘음, 또는 기사가 0건 — 통째로 거절, 구독 실행은 `running` 유지. 본문 `{ code, message, dropped }`, `dropped`는 이유별 수 (v0.50) |
 | BRIEFING_TRIGGER_FAILED | 502 | claude.ai 예약 작업 트리거 호출 실패 (주소·토큰 틀림, 네트워크). [연결 확인]과 자동 트리거 둘 다 (v0.50) |
 | BRIEFING_TRIGGER_NOT_SET | 409 | 생성 방식이 구독인데 트리거 주소·토큰이 없음 (v0.50) |
+| BRIEFING_MATERIALS_UNAVAILABLE | 404 | 서버가 가진 재료(후보·읽은 원문)가 없음 — 서버 재시작·수집 실패·읽기를 시작한 적 없음. 세션은 직접 수집·원문 읽기로 돌아간다 (v0.59) |
+| BRIEFING_MATERIALS_NOT_READY | 409 | 서버 수집이 아직 끝나지 않았는데 원문 읽기(API-155)를 요청함 — API-154가 200이 된 뒤 다시 (v0.59) |
 
 ## API 목록
 
@@ -134,6 +136,9 @@
 | API-151 | GET | /briefing/jobs/{jobId} | 지시서 — 예약 작업이 일할 재료(범위·마감·수집 목록·허용 도메인·직전 회차) (v0.50) | **연결 열쇠(Bearer)** |
 | API-152 | POST | /briefing/jobs/{jobId}/progress | 진행 보고 한 줄 — 화면 [진행 기록]에 실시간 (v0.50) | **연결 열쇠(Bearer)** |
 | API-153 | POST | /briefing/jobs/{jobId}/result | 완성본 — 기사 목록 + 건강 숫자. 서버가 검사·조립·저장 (v0.50) | **연결 열쇠(Bearer)** |
+| API-154 | GET | /briefing/jobs/{jobId}/candidates | 서버가 트리거 때 수집해 둔 후보 — `candidates.json`과 같은 모양. 수집 중이면 202 (v0.59) | **연결 열쇠(Bearer)** |
+| API-155 | POST | /briefing/jobs/{jobId}/read | 세션이 고른 기사(`selected.json` 그대로)의 원문을 서버가 읽기 시작 → 202 (v0.59) | **연결 열쇠(Bearer)** |
+| API-156 | GET | /briefing/jobs/{jobId}/materials | 서버가 읽은 재료 — 읽는 중이면 202, 끝나면 기사마다 재료 목록 (v0.59) | **연결 열쇠(Bearer)** |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -679,9 +684,9 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ### API-140 — PUT /briefing/readers/{userId} (v0.49)
 **Body** `{ "on": boolean }` → **200** API-139와 같은 목록. 켜면 그 계정의 briefing_owner_id를 나로, 끄면 **내가 주인일 때만** null로(다른 관리자가 열어 준 것을 내가 닫지 않는다). 대상이 없거나 일반 계정이 아니면 404 NOT_FOUND. 효과는 즉시 — 그 계정의 다음 `/me/settings`에 `briefingOwnerId`가 실려 레일 버튼이 생기고, 회차 파일 읽기가 `canReadFile`에서 열린다.
 
-## API-141 ~ API-153: 뉴스 브리핑 구독 생성 방식 (v0.50 — 서버·화면 2026-10-30 구현)
+## API-141 ~ API-156: 뉴스 브리핑 구독 생성 방식 (v0.50 — 서버·화면 2026-10-30 구현 · v0.59 재료는 서버가)
 
-설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md) "구독 생성 방식". 두 묶음이다 — **API-141~144는 관리자가 쿠키로**(설정 화면), **API-151~153은 claude.ai 예약 작업이 연결 열쇠(Bearer)로** 부른다. 열쇠로는 이 세 주소 외 어디에도 못 들어간다(공통 규약).
+설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md) "구독 생성 방식". 두 묶음이다 — **API-141~144는 관리자가 쿠키로**(설정 화면), **API-151~156은 claude.ai 예약 작업이 연결 열쇠(Bearer)로** 부른다. 열쇠로는 이 주소들 외 어디에도 못 들어간다(공통 규약). 154~156(v0.59)은 "재료는 서버가" — 세션이 수집·원문 읽기를 서버에 맡기는 길이고, 서버가 못 주면(404) 세션이 직접 한다(설계 "재료는 서버가").
 
 ### API-141 — POST /briefing/token
 **200** `{ "token": "dvt_…", "prefix": "dvt_8f3k", "createdAt": 1790780000000 }` — 열쇠 원문은 **이 응답에 한 번만**. 서버는 SHA-256 해시와 앞 8자만 남긴다(USER_SETTINGS.briefing_token_hash·_prefix). 이미 있으면 재발급이고 이전 열쇠는 즉시 무효 — 마감 전 도는 예약 작업이 있으면 그 완성본은 401이 되므로 화면이 한 번 묻는다(「열쇠가 샌 것 같을 때만 하세요 — 새면 남이 가짜 회차를 보낼 수 있어요. 지금 열쇠는 바로 쓸 수 없게 되고, claude.ai 환경의 DOCVAULT_TOKEN도 새 값으로 바꿔야 해요.」, 도는 예약 작업이 있으면 「지금 도는 예약 작업은 옛 열쇠라 완성본을 보내지 못해요.」가 붙는다). 만료 없음, 비밀번호 변경과도 무관.
@@ -730,4 +735,13 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 - 형식 오류(400)·0건·30% 초과(422)는 응답만 내고 **구독 실행은 `running` 그대로** — 스킬은 마감 전이면 고쳐 최대 2번 다시 보낸다. 끝내 안 오면 마감에 `missing`. 수집 목록 문서가 그사이 틀려졌으면 실행을 `error`로 닫고 409.
 - 같은 job에 다시 오면(이미 `ok`) **200 + 같은 fileId**(`already: true`, 본문은 보지 않는다). `missing`이면 **그 구독 실행이 시작된 뒤에 시작된 `ok` 또는 `running` 실행이 하나도 없을 때만** 받아 `ok`로, 있으면 409 BRIEFING_JOB_CLOSED(`running`도 보는 이유 — [지금 만들기]가 도는 중에 받으면 같은 시간대 회차가 둘 생긴다). `cancelled`·`error`, 지시서를 받아 간 적 없음(`remote_started_at` 없음)도 409.
 - 서버는 이 경로에서 **AI를 부르지 않는다**(글머리표까지 완성본에 들어 있어야 한다 — 없으면 그 기사는 글머리표 없이 실린다).
+
+### API-154 — GET /briefing/jobs/{jobId}/candidates (Bearer, v0.59)
+서버가 예약 작업을 켤 때 나란히 수집한 후보(`createJob` → `startCollect`, 지시서와 같은 범위·`excludeUrls`). **202** `{ "status": "collecting", "done": 12, "total": 67 }`(수집 중 — 세션 명령이 15초마다 다시 묻는다) → **200** `{ "stats": { sources, sourcesFailed, failedSources, candidates, attached, wouldMerge, outletDrops, outletDropNames }, "candidates": [{ "i": 0, "title", "url", "publishedAt", "source", "snippet", "feedText", "region", "subId", "related": [{ source, url }] }] }` — 세션의 `candidates.json`과 같은 모양(`jobCandidates.ts` `CandidatesFileSchema`). `i`는 서버 후보 배열의 위치. 서버가 가진 것이 없으면(재시작·수집 실패) **404 BRIEFING_MATERIALS_UNAVAILABLE** — 세션은 직접 수집한다. 실행이 `running`이고 지시서를 받아 간 뒤(`remote_started_at`)에만, 아니면 409 BRIEFING_JOB_CLOSED(지시서 전이면 "지시서를 먼저 받아 가세요"). 메모리에만 있고 실행이 닫히면 지워진다.
+
+### API-155 — POST /briefing/jobs/{jobId}/read (Bearer, v0.59)
+**Body** 세션의 `selected.json` 그대로 — `{ "stories": [{ "subId", "main": 12, "related": [40, 77], "importance": 3, "prevStoryId": null, "title"?, "summary"?, "why"? }] }`(`SelectedSchema`; 기사 ≤400건 `SUB_ITEMS_MAX`, 본문 1MB `SUB_READ_MAX_BYTES` 초과는 413). 서버가 자기 후보로 `toPicked`(세션과 같은 함수) → `readBodies`(API 방식과 같은 코드)를 **시작하고 바로** **202** `{ "status": "reading", "done": 0, "total": 38 }`. 이미 읽는 중이면 그 진행을 돌려준다(두 번 시작하지 않는다); 끝난 뒤 다시 부르면 새로 읽는다(선별을 고친 경우). 번호가 없거나 겹친 기사는 빼고 API-156의 `warnings`에 적는다. 분류표에 없는 `subId`·형식 오류는 400 VALIDATION_ERROR, 서버 후보가 없으면 404 BRIEFING_MATERIALS_UNAVAILABLE, 수집이 아직 끝나지 않았으면 409 BRIEFING_MATERIALS_NOT_READY. 진행은 실행 기록과 `live.remote.stage = 'read'`로.
+
+### API-156 — GET /briefing/jobs/{jobId}/materials (Bearer, v0.59)
+**202** `{ "status": "reading", "done", "total" }` → **200** `{ "stats": { "bodiesRead": 31, "fromFeed": 4, "extractRejected": 2 }, "stories": [{ "main": 12, "materials": [{ "id": "A", "source": "연합뉴스", "url", "title", "text", "via": "body" | "feed" | "web" }] }], "warnings": ["stories[4]: 대표 번호 999이(가) 없거나 이미 쓰였음 — 버림"] }`. 기사는 **대표 후보의 전역 번호 `main`**으로 가리킨다 — 세션은 같은 `selected.json`으로 다시 만든 목록에 그 번호로 재료를 맞춘다. 재료를 하나도 못 얻은 기사는 `stories`에 없다(세션이 참고로 내리거나 웹 검색으로 채운다). 읽기를 시작한 적 없거나 실패했으면 404 BRIEFING_MATERIALS_UNAVAILABLE. 원문 글은 이 응답으로만 흐르고 서버에 저장되지 않는다.
 

@@ -492,4 +492,9 @@ export const BRIEFING = {
   SUB_TOKEN_PREFIX_CHARS: 8,
   /** 완성본 검사용 허용 도메인에 늘 들어가는 것 — 통신사(WEB_FILL_WIRES)와 Google 뉴스 링크(검색 기사가 그대로 남는다) */
   SUB_CHECK_EXTRA_DOMAINS: ['news.google.com'],
+  /** 재료는 서버가(v0.59) — 세션이 API-154·156을 몇 초마다, 최대 몇 분 기다리나. 서버 수집은 보통 1~4분, 원문 읽기는 2~5분 */
+  SUB_MATERIALS_POLL_MS: 15_000,
+  SUB_MATERIALS_WAIT_MAX_MS: 15 * 60 * 1000,
+  /** API-155(선별 답) 본문 상한 — 기사 400건 × related 100개의 번호라도 수백 KB */
+  SUB_READ_MAX_BYTES: 1024 * 1024,
 } as const;
