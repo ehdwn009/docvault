@@ -383,7 +383,7 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
   const edition: Edition = layoutEdition(
     kept.map((it) => toDraft(it, knownStoryIds)),
     { slot: run.slot, label: run.label, since: run.sinceAt, until: run.untilAt, createdAt: now },
-    { sources: s.sources, sourcesFailed: s.sourcesFailed, candidates: s.candidates, attached: s.attached, bodiesRead: s.bodiesRead, fromFeed: s.fromFeed, extractRejected: s.extractRejected, webFilled: s.webFilled, lensDrops: s.lensDrops, wouldMerge: s.wouldMerge },
+    { sources: s.sources, sourcesFailed: s.sourcesFailed, candidates: s.candidates, attached: s.attached, bodiesRead: s.bodiesRead, fromFeed: s.fromFeed, extractRejected: s.extractRejected, webFilled: s.webFilled, lensDrops: s.lensDrops, wouldMerge: s.wouldMerge, outletDrops: s.outletDrops },
     { numberDrops: s.numberDrops, demoted: s.demoted, overruns: s.overruns, impactDrops: s.impactDrops, explainDrops: s.explainDrops, titleMismatch: s.titleMismatch },
     { usd: 0, haiku: { input: 0, output: 0 }, sonnet: { input: 0, output: 0 }, opus: { input: 0, output: 0 }, webSearches: 0 },
     undefined,

@@ -72,6 +72,9 @@ export const ResultStatsSchema = z.object({
   impactDrops: z.number().int().min(0).default(0),
   explainDrops: z.number().int().min(0).default(0),
   titleMismatch: z.number().int().min(0).default(0),
+  outletDrops: z.number().int().min(0).default(0),
+  /** 발췌·재료 없이 요약이 적힌 참고를 코드가 제목만으로 되돌린 수 (2026-11-01) */
+  titleOnlyFixed: z.number().int().min(0).default(0),
 });
 
 export const ResultSchema = z.object({

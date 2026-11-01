@@ -3,10 +3,8 @@
 
 /** 서버 BRIEFING.EDITION_VERSION과 같아야 한다 — 모르는 버전이면 코드 뷰어로 연다 */
 export const BRIEFING_EDITION_VERSION = 1;
-/** 오늘의 핵심 기사 수 — 서버 BRIEFING.LEAD_COUNT와 같아야 한다 (옛 회차는 화면이 계산한다) */
-export const BRIEFING_LEAD_COUNT = 6;
-/** 오늘의 핵심 중 세계 몫 — 서버 BRIEFING.LEAD_WORLD_MIN과 같아야 한다 */
-export const BRIEFING_LEAD_WORLD_MIN = 2;
+/** 오늘의 핵심 — 국내·세계 따로 이만큼씩. 서버 BRIEFING.LEAD_PER_SECTION과 같아야 한다 (옛 회차는 화면이 계산한다) */
+export const BRIEFING_LEAD_PER_SECTION = 3;
 /** 회차 화면에서 기사를 읽었다 — 패널이 듣고 읽음 상태를 다시 받는다 */
 export const BRIEFING_READ_EVENT = 'dv:briefing-read';
 /** 브리핑 폴더·수집 목록 문서 이름 — 서버 BRIEFING.FOLDER_NAME·SOURCES_FILE_NAME과 같아야 한다 */
@@ -204,17 +202,17 @@ export function outletsOf(it: EditionItem): number {
   return 1 + new Set((it.related ?? []).map((r) => r.source.trim().toLowerCase()).filter((s) => s !== main && !AGGREGATORS.has(s))).size;
 }
 
-/** 오늘의 핵심 — 서버 leadIdsOf와 같은 규칙(lead가 없는 옛 회차용): 핵심(3)을 언론사 수 많은 순, 같으면 최신순.
-    세계 핵심이 있으면 최소 BRIEFING_LEAD_WORLD_MIN자리는 세계에 */
+/** 오늘의 핵심 — 서버 leadIdsOf와 같은 규칙(lead가 없는 옛 회차용): 국내·세계 따로 BRIEFING_LEAD_PER_SECTION건씩,
+    핵심(3)을 언론사 수 많은 순·같으면 최신순, 모자라면 주요(2)로 채운다 (사용자 결정 2026-11-01) */
 export function leadIdsOf(e: Edition): string[] {
   if (e.lead) return e.lead;
-  const top: { it: EditionItem; world: boolean }[] = [];
-  for (const s of e.sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push({ it, world: s.section === '세계' });
-  const ranked = top.sort((a, b) => outletsOf(b.it) - outletsOf(a.it) || b.it.publishedAt - a.it.publishedAt);
-  const world = ranked.filter((x) => x.world).slice(0, BRIEFING_LEAD_WORLD_MIN);
-  const rest = ranked.filter((x) => !world.includes(x)).slice(0, Math.max(0, BRIEFING_LEAD_COUNT - world.length));
-  const chosen = new Set([...world, ...rest]);
-  return ranked.filter((x) => chosen.has(x)).map((x) => x.it.id);
+  const pick = (section: '국내' | '세계'): string[] => {
+    const items: EditionItem[] = [];
+    for (const s of e.sections) if (s.section === section) for (const c of s.categories) for (const sub of c.subs) items.push(...sub.items);
+    const ranked = (n: 2 | 3) => items.filter((it) => it.importance === n).sort((a, b) => outletsOf(b) - outletsOf(a) || b.publishedAt - a.publishedAt);
+    return [...ranked(3), ...ranked(2)].slice(0, BRIEFING_LEAD_PER_SECTION).map((it) => it.id);
+  };
+  return [...pick('국내'), ...pick('세계')];
 }
 
 /** 한국시간 몇 시 */

@@ -788,7 +788,17 @@ export default function BriefingView({ fileId, content, theme, stickyBg, isActiv
           {leadRead}/{lead.length} 읽음
         </span>
       </div>
-      <ul className="m-0 mt-1 p-0">{lead.map((l, i) => row(l, { lead: i + 1 }))}</ul>
+      {/* 국내 따로 세계 따로 — 번호는 묶음마다 1부터 (사용자 결정 2026-11-01) */}
+      {(['국내', '세계'] as const).map((section) => {
+        const group = lead.filter((l) => l.section === section);
+        if (group.length === 0) return null;
+        return (
+          <div key={section}>
+            <p className={`mb-0 mt-2 text-[0.78em] font-semibold ${p.muted}`}>{section}</p>
+            <ul className="m-0 p-0">{group.map((l, i) => row(l, { lead: i + 1 }))}</ul>
+          </div>
+        );
+      })}
     </section>
   );
 

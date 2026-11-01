@@ -70,17 +70,58 @@ const OUTLETS: Record<string, string> = {
   'theverge.com': 'The Verge',
 };
 
-/** 이름 자리에 온 것이 주소처럼 생겼을 때만 표를 찾는다 (공백 없음 + 점 포함) */
-const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+/**
+ * 표(OUTLETS) 밖인데 언론으로 아는 곳 — Google 뉴스 검색 후보의 출처 허용 목록에 더해진다 (2026-11-01 사용자 결정).
+ * 11/1 06:00 회차에 브런치(블로그)·증권 브로커·개인 매체가 참고 기사로 섞여, 검색 후보는 **아는 언론사만** 받기로 했다.
+ * 여기 없는 출처가 버려지면 실행 기록에 이름과 건수가 남는다 — 진짜 언론이면 여기에 더하거나 수집 목록 문서에 피드로 넣는다
+ */
+const KNOWN_OUTLET_NAMES = [
+  // 국내 종합·경제·지역지
+  '국제신문', '부산일보', '매일신문', '영남일보', '경북매일', '경북일보', '대구일보', '대전일보', '중도일보', '충청투데이', '충청일보', '전남일보', '광주일보', '전북일보', '전북도민일보', '전민일보',
+  '강원일보', '강원도민일보', '경인일보', '중부일보', '인천일보', '경남신문', '경남일보', '울산매일', '제주일보', '제민일보', '한라일보', '서울일보',
+  '더팩트', '위키트리', '뉴데일리', '데일리안', '미디어오늘', '민중의소리', '오마이뉴스', '프레시안', '한국경제TV', '매일경제TV', '이투데이', '뉴스토마토', '더벨', '인베스트조선', '조세일보',
+  '더스쿠프', '시사인', '시사위크', '일요신문', '주간조선', '주간동아', '한겨레21', '중앙선데이', '신동아', '월간조선',
+  // 국내 IT·산업·전문지
+  '아이티데일리', '데이터넷', '보안뉴스', '데일리시큐', '테크M', '바이라인네트워크', '더구루', '뉴스핌', '데일리팜', '약업신문', '메디게이트뉴스', '청년의사', '메디칼타임즈', '히트뉴스', '팜이데일리',
+  '전기신문', '에너지경제', '에너지신문', '건설경제', '대한경제', '물류신문', '교통신문', '한국농어민신문', '농민신문', '코인데스크코리아', '디지털애셋', '블록미디어', '디지털투데이', '테크홀릭',
+  // 방송·통신
+  'KBS', 'MBC', 'SBS', 'JTBC', 'YTN', 'MBN', '채널A', 'TV조선', '연합뉴스TV', '뉴스1', '뉴시스', 'OBS', 'KNN', 'TBC', 'KBC', 'JTV', 'G1', 'CJB', 'TJB', 'UBC', 'JIBS',
+  // 해외
+  'Reuters', 'AP', 'AP News', 'AFP', 'Bloomberg', 'Financial Times', 'The Wall Street Journal', 'The New York Times', 'New York Times', 'The Washington Post', 'Washington Post', 'BBC', 'BBC News', 'CNBC', 'CNN', 'NBC News', 'CBS News', 'ABC News', 'NPR', 'PBS',
+  'The Guardian', 'The Economist', 'The Times', 'The Telegraph', 'Politico', 'Axios', 'Semafor', 'The Hill', 'USA Today', 'Los Angeles Times', 'The Atlantic', 'Time', 'Fortune', 'Forbes', 'Business Insider', 'MarketWatch', "Barron's", 'Yahoo Finance', 'Nikkei Asia', 'Nikkei', 'Kyodo News', 'Japan Wire by Kyodo News', 'NHK', 'South China Morning Post', 'The Straits Times', 'Channel NewsAsia', 'Al Jazeera', 'DW', 'France 24', 'Le Monde', 'Der Spiegel', 'ABC News & Headlines – Australian Broadcasting Corporation', 'Sydney Morning Herald',
+  'TechCrunch', 'The Verge', 'Ars Technica', 'Wired', 'Engadget', 'The Register', 'ZDNet', 'ZDNet Korea', 'Tom\'s Hardware', 'AnandTech', 'MIT Technology Review', 'Nature', 'Science', 'Scientific American', 'New Scientist', 'Space.com', 'STAT', 'The Information', 'Mashable', 'The Economic Times', 'Livemint', 'Moneycontrol.com', 'NDTV', 'The Times of India', 'The Hindu',
+];
+const KNOWN_LOWER = new Set([...Object.values(OUTLETS), ...KNOWN_OUTLET_NAMES].map((n) => n.toLowerCase()));
 
-/** 주소면 언론사 이름으로. 하위 주소(biz.chosun.com)를 먼저 찾고, 없으면 상위(chosun.com)로 올라간다 */
+/** 아는 언론사인가 — 표의 이름·주소, 위 목록, 그리고 호출자가 준 이름(수집 목록 피드의 name·publisher) */
+export function isKnownOutlet(source: string, extra: ReadonlySet<string>): boolean {
+  const name = source.trim().toLowerCase();
+  if (!name) return false;
+  if (KNOWN_LOWER.has(name) || extra.has(name)) return true;
+  // 주소로 온 출처는 표에 있는 주소(하위 → 상위)일 때만 — 표 밖 주소는 맨몸 주소로 줄어들 뿐 아는 곳이 아니다
+  const host = hostOf(name);
+  if (!host) return false;
+  const labels = host.split('.');
+  for (let i = 0; i < labels.length - 1; i++) if (OUTLETS[labels.slice(i).join('.')]) return true;
+  return false;
+}
+
+/** 이름 자리에 온 것이 주소처럼 생겼을 때만 표를 찾는다 (공백 없음 + 점 포함). "https://www.x.co.kr/"처럼 주소 전체가 오기도 한다 */
+const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+function hostOf(source: string): string | null {
+  const host = source.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/?#].*$/, '').replace(/^(www|m)\./, '');
+  return DOMAIN.test(host) ? host : null;
+}
+
+/** 주소면 언론사 이름으로. 하위 주소(biz.chosun.com)를 먼저 찾고, 없으면 상위(chosun.com)로 올라간다.
+    표에 없으면 맨몸 주소(seoulilbo.co.kr)로 — 틀린 이름보다 주소가 낫지만 "https://www…/" 전체보다는 짧은 쪽이 읽힌다 */
 export function outletName(source: string): string {
-  const host = source.trim().toLowerCase().replace(/^(www|m)\./, '');
-  if (!DOMAIN.test(host)) return source;
+  const host = hostOf(source);
+  if (!host) return source;
   const labels = host.split('.');
   for (let i = 0; i < labels.length - 1; i++) {
     const name = OUTLETS[labels.slice(i).join('.')];
     if (name) return name;
   }
-  return source;
+  return host;
 }

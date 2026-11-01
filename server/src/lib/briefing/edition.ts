@@ -116,6 +116,8 @@ export type Edition = {
     titleMismatch?: number;
     /** 수집 단계 사건 묶기를 켰다면 묶였을 후보 수 */
     wouldMerge?: number;
+    /** 아는 언론사가 아니라 버린 Google 검색 후보 수 (2026-11-01) — 이름·건수는 실행 기록에 */
+    outletDrops?: number;
     /** 단계별 비용 분해 (모델·호출 수·토큰·추정 비용) */
     byStage?: Record<string, { model: string; calls: number; input: number; output: number; webSearches: number; usd: number }>;
   };
@@ -124,7 +126,7 @@ export type Edition = {
   impactVisible?: boolean;
   /** 해설 상자를 그리나 — EXPLAIN_MODE가 show일 때 true (v0.48) */
   explainVisible?: boolean;
-  /** 오늘의 핵심 기사 id (최대 LEAD_COUNT). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
+  /** 오늘의 핵심 기사 id (국내·세계 각 LEAD_PER_SECTION). v0.43부터, 옛 회차에는 없다 — 화면이 같은 규칙(leadIdsOf)으로 계산한다 */
   lead?: string[];
   sections: {
     section: BriefingSection;
@@ -164,7 +166,7 @@ export function assembleEdition(args: {
   since: number;
   until: number;
   createdAt: number;
-  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number };
+  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number; outletDrops?: number };
   usage: Usage;
 }): Edition {
   const drafts: ItemDraft[] = [];
@@ -250,7 +252,7 @@ export function assembleEdition(args: {
 export function layoutEdition(
   drafts: ItemDraft[],
   meta: EditionMeta,
-  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number },
+  stats: { sources: number; sourcesFailed: number; candidates: number; attached: number; bodiesRead: number; fromFeed: number; extractRejected: number; webFilled: number; lensDrops: number; wouldMerge: number; outletDrops?: number },
   counters: VerifyCounters,
   cost: Edition['cost'],
   byStage: Edition['stats']['byStage'],
@@ -363,20 +365,20 @@ function otherOutlets(p: Picked): { source: string; url: string }[] {
   return out;
 }
 
-/** 오늘의 핵심 — 핵심(3) 기사를 다룬 언론사 수 많은 순, 같으면 최신순. 세계 핵심이 있으면 최소 LEAD_WORLD_MIN자리는 세계에 —
-    영어 기사는 다른 보도가 거의 안 묶여 언론사 수로만 겨루면 구조적으로 밀린다(6건 모두 국내였다).
+/** 오늘의 핵심 — 국내·세계 따로 LEAD_PER_SECTION건씩: 핵심(3)을 다룬 언론사 수 많은 순, 같으면 최신순, 모자라면 주요(2)로 채운다.
+    한 줄로 겨루게 했더니 11/1 회차의 핵심 6건이 전부 세계였다(사용자 결정 2026-11-01 "국내 따로 세계 따로").
     AI를 부르지 않는다: 여러 언론이 다룬 사건일수록 큰 뉴스라는 신호다 (설계 "lead"). 클라이언트에도 같은 규칙이 있다(옛 회차용) */
 export function leadIdsOf(sections: Edition['sections']): string[] {
-  const top: { it: EditionItem; world: boolean }[] = [];
-  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) if (it.importance === 3) top.push({ it, world: s.section === '세계' });
   // 옛 회차(outlets 없음)는 related에서 서로 다른 언론사만 센다 — 옛 related에는 같은 언론사가 겹쳐 있다
   const outlets = (it: EditionItem) =>
     it.outlets ?? 1 + new Set((it.related ?? []).map((r) => r.source.trim().toLowerCase()).filter((src) => src !== it.source.trim().toLowerCase() && !isAggregator(src))).size;
-  const ranked = top.sort((a, b) => outlets(b.it) - outlets(a.it) || b.it.publishedAt - a.it.publishedAt);
-  const world = ranked.filter((x) => x.world).slice(0, BRIEFING.LEAD_WORLD_MIN);
-  const rest = ranked.filter((x) => !world.includes(x)).slice(0, Math.max(0, BRIEFING.LEAD_COUNT - world.length));
-  const chosen = new Set([...world, ...rest]);
-  return ranked.filter((x) => chosen.has(x)).map((x) => x.it.id);
+  const pick = (section: '국내' | '세계'): string[] => {
+    const items: EditionItem[] = [];
+    for (const s of sections) if (s.section === section) for (const c of s.categories) for (const sub of c.subs) items.push(...sub.items);
+    const ranked = (n: 2 | 3) => items.filter((it) => it.importance === n).sort((a, b) => outlets(b) - outlets(a) || b.publishedAt - a.publishedAt);
+    return [...ranked(3), ...ranked(2)].slice(0, BRIEFING.LEAD_PER_SECTION).map((it) => it.id);
+  };
+  return [...pick('국내'), ...pick('세계')];
 }
 
 /** 직전 회차에서 다음 회차가 쓰는 것 — 분야별 이슈 목록(updated 판정)과 이미 실린 링크(중복 제외).

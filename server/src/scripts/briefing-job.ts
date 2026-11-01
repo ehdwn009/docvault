@@ -100,7 +100,7 @@ const StoredCandidateSchema = z.object({
 type StoredCandidate = z.infer<typeof StoredCandidateSchema>;
 
 const CandidatesFileSchema = z.object({
-  stats: z.object({ sources: z.number(), sourcesFailed: z.number(), failedSources: z.array(z.string()), candidates: z.number(), attached: z.number(), wouldMerge: z.number() }),
+  stats: z.object({ sources: z.number(), sourcesFailed: z.number(), failedSources: z.array(z.string()), candidates: z.number(), attached: z.number(), wouldMerge: z.number(), outletDrops: z.number().default(0), outletDropNames: z.array(z.string()).default([]) }),
   candidates: z.array(StoredCandidateSchema),
 });
 
@@ -252,7 +252,8 @@ async function cmdCollect(dir: string): Promise<void> {
     },
   });
   const feedFailed = got.failed.filter((f) => f.kind === 'feed').length;
-  const stats = { sources: got.sourceCount, sourcesFailed: got.failed.length, failedSources: got.failed.map((f) => f.name), candidates: got.candidates.length, attached: got.attached, wouldMerge: got.wouldMerge };
+  const outletDropNames = got.outletDrops.slice(0, BRIEFING.OUTLET_DROPS_LOG_MAX).map((d) => `${d.source} ${d.count}`);
+  const stats = { sources: got.sourceCount, sourcesFailed: got.failed.length, failedSources: got.failed.map((f) => f.name), candidates: got.candidates.length, attached: got.attached, wouldMerge: got.wouldMerge, outletDrops: got.outletDrops.reduce((a, d) => a + d.count, 0), outletDropNames };
   writeJson(path.join(dir, 'candidates.json'), { stats, candidates: got.candidates.map(toStored) });
 
   // 분류 입력 — 분야를 모르는(언론사 피드) 후보만, 서버와 같은 묶음 크기. 번호는 전역 i (서버는 묶음 안 1..n이지만, 사람이 답을 옮겨 적는 일이 없게 전역으로)
@@ -268,6 +269,7 @@ async function cmdCollect(dir: string): Promise<void> {
   const feedCount = sources.filter((s) => !s.sub).length;
   if (feedCount > 0 && (feedCount - feedFailed) / feedCount < BRIEFING.MIN_SOURCE_OK_RATIO) console.log(`경고: 언론사 피드 성공 비율이 ${Math.round(((feedCount - feedFailed) / feedCount) * 100)}% — 서버 기준(${BRIEFING.MIN_SOURCE_OK_RATIO * 100}%) 미만. 이 상태로 만든 회차는 직전 회차보다 나쁘다`);
   if (got.failed.length) console.log(got.failed.map((f) => `  못 받음: ${f.name} — ${f.reason}`).join('\n'));
+  if (stats.outletDrops) console.log(`아는 언론사가 아니라 버린 검색 후보 ${stats.outletDrops}건 — ${outletDropNames.join(', ')} (진짜 언론이면 outlets.ts나 수집 목록에 더한다)`);
 }
 
 function cmdGroup(dir: string): void {
@@ -546,7 +548,7 @@ function cmdVerify(dir: string): void {
 
   const items: ResultItem[] = [];
   const report: string[] = [];
-  const counters = { numberDrops: 0, overruns: 0, demoted: 0, impactDrops: 0, explainDrops: 0, titleMismatch: 0, lensDrops: 0, skipped: 0, titleTooLong: 0 };
+  const counters = { numberDrops: 0, overruns: 0, demoted: 0, impactDrops: 0, explainDrops: 0, titleMismatch: 0, lensDrops: 0, skipped: 0, titleTooLong: 0, titleOnlyFixed: 0 };
   const storyOf: number[] = [];
 
   picked.forEach((p, i) => {
@@ -587,9 +589,17 @@ function cmdVerify(dir: string): void {
         counters.skipped++;
         return;
       }
-      const summary = stripMeta(brief.summary);
+      let summary = stripMeta(brief.summary);
+      let why = p.importance === 1 ? p.brief!.why : '';
       const hasSnippet = [p.main, ...p.related].some((c) => c.snippet || c.feedText);
-      items.push({ ...base, title, summary, why: p.importance === 1 ? p.brief!.why : '', importance: 1, summaryFrom: [], whyFrom: [], blocks: [], sides: null, lenses: null, w5: null, impact: null, explain: null, changed: null, titleOnly: !summary && !hasSnippet });
+      // 발췌도 재료도 없는 참고는 제목만 — 선별이 제목에서 지어낸 요약·왜가 11/1 06:00 회차에 2건 실렸다 (재료 보장 규칙, 사용자 결정 2026-11-01)
+      if (!hasSnippet && evidence.length === 0 && (summary || why)) {
+        report.push(`story ${i}: 발췌·재료 없는 참고에 요약이 적혀 있어 제목만으로 되돌림`);
+        counters.titleOnlyFixed++;
+        summary = '';
+        why = '';
+      }
+      items.push({ ...base, title, summary, why, importance: 1, summaryFrom: [], whyFrom: [], blocks: [], sides: null, lenses: null, w5: null, impact: null, explain: null, changed: null, titleOnly: !summary && !hasSnippet });
       storyOf.push(i);
       return;
     }
@@ -655,13 +665,15 @@ function cmdVerify(dir: string): void {
     impactDrops: counters.impactDrops,
     explainDrops: counters.explainDrops,
     titleMismatch: counters.titleMismatch,
+    titleOnlyFixed: counters.titleOnlyFixed,
   };
   const byImportance = [3, 2, 1].map((n) => items.filter((it) => it.importance === n).length);
   const log = [
     `수집 — 출처 ${stats.sources}곳(못 받음 ${stats.sourcesFailed}), 후보 ${stats.candidates}건`,
     `선별 — ${picked.length}건 (핵심 ${byImportance[0]} · 주요 ${byImportance[1]} · 참고 ${byImportance[2]})`,
     `원문 읽기 — 재료 있는 기사 ${stats.bodiesRead}건, 피드 본문 ${stats.fromFeed}, 버림 ${stats.extractRejected}`,
-    `검증 — 숫자 대조 ${stats.numberDrops}, 참고로 내림 ${stats.demoted}, 길이 초과 ${stats.overruns}, 영향 지움 ${stats.impactDrops}, 해설 지움 ${stats.explainDrops}, 글머리표 지움 ${stats.lensDrops}`,
+    `검증 — 숫자 대조 ${stats.numberDrops}(${BRIEFING.NUMBER_CHECK_MODE === 'drop' ? '지움' : '기록만'}), 참고로 내림 ${stats.demoted}, 제목만으로 되돌림 ${stats.titleOnlyFixed}, 길이 초과 ${stats.overruns}, 영향 지움 ${stats.impactDrops}, 해설 지움 ${stats.explainDrops}, 글머리표 지움 ${stats.lensDrops}`,
+    ...(cands.stats.outletDrops ? [`출처 — 아는 언론사가 아니라 버린 검색 후보 ${cands.stats.outletDrops}건: ${cands.stats.outletDropNames.join(', ')}`] : []),
   ].slice(0, BRIEFING.SUB_LOG_MAX_LINES);
   const result = { generator, items, stats, log };
   writeJson(path.join(dir, 'result.json'), result);

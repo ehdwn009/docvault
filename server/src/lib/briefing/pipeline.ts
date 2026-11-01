@@ -84,6 +84,7 @@ export async function generateEdition(args: {
       throw new Error(`언론사 피드 ${feedCount}곳 중 ${feedFailed}곳을 받지 못했습니다`);
     }
     if (got.wouldMerge > 0) log(`같은 사건으로 묶일 후보 ${got.wouldMerge}건 (세기만, 아직 묶지 않음)`);
+    if (got.outletDrops.length) log(`아는 언론사가 아니라 버린 검색 후보 ${got.outletDrops.reduce((a, d) => a + d.count, 0)}건 — ${got.outletDrops.slice(0, BRIEFING.OUTLET_DROPS_LOG_MAX).map((d) => `${d.source} ${d.count}`).join(', ')}`);
     if (got.candidates.length === 0) return { kind: 'empty', usage, message: '새 기사가 없어요' };
 
     // ② 분류
@@ -167,6 +168,7 @@ export async function generateEdition(args: {
         webFilled,
         lensDrops: lens.dropped,
         wouldMerge: got.wouldMerge,
+        outletDrops: got.outletDrops.reduce((a, d) => a + d.count, 0),
       },
       usage,
     });

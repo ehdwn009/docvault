@@ -2,7 +2,7 @@ import { BRIEFING } from '../../constants.js';
 import { fetchGuarded } from './fetch.js';
 import { errorText, mapLimit } from './limit.js';
 import { parseFeed, type FeedItem } from './rss.js';
-import { outletName } from './outlets.js';
+import { isKnownOutlet, outletName } from './outlets.js';
 import type { Source } from './sources.js';
 import type { BriefingSection, BriefingSub } from './taxonomy.js';
 
@@ -34,6 +34,8 @@ export type CollectResult = {
   attached: number;
   /** 수집 단계 사건 묶기를 켜면 묶일 후보 수 — 첫 실측 5회차는 세기만 한다 (v0.46) */
   wouldMerge: number;
+  /** 아는 언론사가 아니라 버린 Google 검색 후보 — 출처 이름별 건수, 많은 순 (2026-11-01). 진짜 언론이면 outlets.ts나 수집 목록에 더한다 */
+  outletDrops: { source: string; count: number }[];
 };
 
 /** 중복 판정용 제목 열쇠 — 말머리([속보]·[단독]), 공백, 문장부호를 지운다 */
@@ -65,7 +67,7 @@ export function usefulSnippet(title: string, snippet: string): string {
   return snippet;
 }
 
-function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>): Candidate[] {
+function toCandidates(src: Source, items: FeedItem[], since: number, until: number, excludeUrls: Set<string>, known: ReadonlySet<string>, drops: Map<string, number>): Candidate[] {
   const out: Candidate[] = [];
   for (const it of items) {
     if (!it.title || !/^https?:\/\//i.test(it.link)) continue;
@@ -73,12 +75,19 @@ function toCandidates(src: Source, items: FeedItem[], since: number, until: numb
     if (it.publishedAt === null || it.publishedAt <= since || it.publishedAt > until) continue;
     if (excludeUrls.has(it.link)) continue;
     const title = stripSourceSuffix(it.title, it.source);
+    // 주소로 온 언론사는 이름으로 — 화면의 출처와 "다른 보도" 세기가 둘 다 이름 기준이 된다
+    const source = outletName(it.source ?? src.publisher);
+    // Google 검색 후보는 아는 언론사만 — 블로그·브로커·개인 매체가 참고 기사로 섞였다 (11/1 06:00 회차, 사용자 결정 2026-11-01).
+    // 수집 목록의 피드는 사용자가 고른 곳이라 그대로 받는다
+    if (src.sub && !isKnownOutlet(source, known)) {
+      drops.set(source, (drops.get(source) ?? 0) + 1);
+      continue;
+    }
     out.push({
       title,
       url: it.link,
       publishedAt: it.publishedAt,
-      // 주소로 온 언론사는 이름으로 — 화면의 출처와 "다른 보도" 세기가 둘 다 이름 기준이 된다
-      source: outletName(it.source ?? src.publisher),
+      source,
       snippet: usefulSnippet(title, it.snippet),
       feedText: it.fullText,
       region: src.region,
@@ -250,11 +259,14 @@ export async function collect(
 ): Promise<CollectResult> {
   let done = 0;
   opts.onProgress?.(0, sources.length);
+  // 수집 목록의 언론사(name·publisher)는 Google 검색 후보의 출처로도 안다
+  const known = new Set(sources.flatMap((s) => [s.name, s.publisher ?? '']).map((n) => n.trim().toLowerCase()).filter(Boolean));
+  const drops = new Map<string, number>();
   const results = await mapLimit(sources, BRIEFING.FETCH_CONCURRENCY, async (src) => {
     const finish = opts.track?.(src.name);
     try {
       const xml = await fetchSource(src, opts.signal);
-      return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls);
+      return toCandidates(src, parseFeed(xml), opts.since, opts.until, opts.excludeUrls, known, drops);
     } finally {
       finish?.();
       opts.onProgress?.(++done, sources.length);
@@ -269,5 +281,6 @@ export async function collect(
   });
   const joined = attachToDirect(dedupe(all));
   const candidates = spreadPick(joined.list, BRIEFING.MAX_CANDIDATES, opts.since, opts.until);
-  return { candidates, sourceCount: sources.length, failed, attached: joined.attached, wouldMerge: countStoryGroups(candidates) };
+  const outletDrops = [...drops].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
+  return { candidates, sourceCount: sources.length, failed, attached: joined.attached, wouldMerge: countStoryGroups(candidates), outletDrops };
 }
