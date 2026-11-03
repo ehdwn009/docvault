@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>docvault 고도화 방향 시장조사</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Serif+KR:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위에서 아래로 "답 → 근거 → 순서 → 결정". 한눈 요약 카드가 먼저, 네 방향은 같은 뼈대로 반복, 끝에 매트릭스·로드맵·결정표 */
+:root {
+  --bg: #f5f4f0; --surface: #ffffff; --sunk: #ecebe5; --fg: #1b1d22; --muted: #5f6672; --line: #d9d7cf;
+  --accent: #1f6f5f; --accent-soft: #dfeee9; --accent-ink: #ffffff;
+  --a: #4556b8; --a-soft: #e4e8fa;   /* A 지식 연결 */
+  --b: #c7552f; --b-soft: #fbe6de;   /* B 음성 */
+  --c: #1f7f86; --c-soft: #dcf0f1;   /* C AI */
+  --d: #9a6b12; --d-soft: #f7ebcf;   /* D 캡처 */
+  --s1: #1f6f5f; --s1-soft: #dfeee9; --s2: #3b6fb6; --s2-soft: #e1ebf8; --s3: #7d7466; --s3-soft: #ecebe5; --hold: #a33a3a; --hold-soft: #f6e0e0;
+  --warn: #a33a3a; --warn-soft: #f6e0e0;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-display: "Noto Serif KR", "Apple SD Gothic Neo", serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --surface: #1d2026; --sunk: #272a31; --fg: #e8e7e2; --muted: #a0a6b0; --line: #353943;
+    --accent: #5fc0a8; --accent-soft: #1d3a34; --accent-ink: #0f1a17;
+    --a: #93a2f2; --a-soft: #262c4d; --b: #f0906f; --b-soft: #4a2a1f; --c: #5dc3cb; --c-soft: #1d3c3f; --d: #e0b65a; --d-soft: #433618;
+    --s1: #5fc0a8; --s1-soft: #1d3a34; --s2: #82aef0; --s2-soft: #22324c; --s3: #a9a295; --s3-soft: #2d2f35; --hold: #ef8a8a; --hold-soft: #4a2626;
+    --warn: #ef8a8a; --warn-soft: #4a2626;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --surface: #1d2026; --sunk: #272a31; --fg: #e8e7e2; --muted: #a0a6b0; --line: #353943;
+  --accent: #5fc0a8; --accent-soft: #1d3a34; --accent-ink: #0f1a17;
+  --a: #93a2f2; --a-soft: #262c4d; --b: #f0906f; --b-soft: #4a2a1f; --c: #5dc3cb; --c-soft: #1d3c3f; --d: #e0b65a; --d-soft: #433618;
+  --s1: #5fc0a8; --s1-soft: #1d3a34; --s2: #82aef0; --s2-soft: #22324c; --s3: #a9a295; --s3-soft: #2d2f35; --hold: #ef8a8a; --hold-soft: #4a2626;
+  --warn: #ef8a8a; --warn-soft: #4a2626;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.65; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 72px; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3, h4 { text-wrap: balance; margin: 0; }
+h1 { font-family: var(--f-display); font-size: clamp(26px, 4.5vw, 40px); line-height: 1.25; }
+h2 { font-family: var(--f-display); font-size: clamp(21px, 3vw, 27px); line-height: 1.3; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--f-mono); font-size: .92em; }
+.lede { font-size: 17px; line-height: 1.6; max-width: 46em; }
+
+/* 머리 */
+header.hero { display: flex; flex-direction: column; gap: 14px; padding-block: 8px 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.thesis { border-left: 4px solid var(--accent); padding: 12px 16px; background: var(--surface); font-size: 16px; font-weight: 500; line-height: 1.55; }
+
+/* 이동 바 */
+nav.jump { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; margin-inline: -4px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+nav.jump::-webkit-scrollbar { display: none; }
+nav.jump a { flex: 0 0 auto; font-size: 13px; padding: 6px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-decoration: none; white-space: nowrap; }
+nav.jump a.na { border-color: var(--a); color: var(--a); } nav.jump a.nb { border-color: var(--b); color: var(--b); }
+nav.jump a.nc { border-color: var(--c); color: var(--c); } nav.jump a.nd { border-color: var(--d); color: var(--d); }
+
+/* 절 */
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 64px; }
+.sec-head { display: flex; flex-direction: column; gap: 8px; }
+.conclusion { font-weight: 600; font-size: 16px; line-height: 1.55; max-width: 52em; padding: 10px 14px; background: var(--sunk); border-radius: 8px; }
+.dir .conclusion { background: var(--dir-soft); border-left: 4px solid var(--dir); }
+.dir h2 .tag { display: inline-block; font-family: var(--f-body); font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--dir); margin-right: 8px; vertical-align: middle; }
+.dir-a { --dir: var(--a); --dir-soft: var(--a-soft); } .dir-b { --dir: var(--b); --dir-soft: var(--b-soft); }
+.dir-c { --dir: var(--c); --dir-soft: var(--c-soft); } .dir-d { --dir: var(--d); --dir-soft: var(--d-soft); }
+.sub { display: flex; flex-direction: column; gap: 10px; }
+.sub h3 { display: flex; align-items: baseline; gap: 8px; }
+.sub h3 .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-weight: 500; }
+.sub .one { font-weight: 500; color: var(--fg); max-width: 52em; }
+
+/* 한눈 요약 카드 */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card .rank { font-family: var(--f-display); font-size: 26px; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.card h3 { font-size: 16px; line-height: 1.4; }
+.card .why { font-size: 14px; color: var(--muted); line-height: 1.55; }
+.card .foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); margin-top: auto; padding-top: 4px; border-top: 1px dashed var(--line); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; line-height: 1.6; white-space: nowrap; }
+.chip.a { background: var(--a-soft); color: var(--a); } .chip.b { background: var(--b-soft); color: var(--b); }
+.chip.c { background: var(--c-soft); color: var(--c); } .chip.d { background: var(--d-soft); color: var(--d); }
+.chip.m { background: var(--sunk); color: var(--muted); }
+.chip.s1 { background: var(--s1-soft); color: var(--s1); } .chip.s2 { background: var(--s2-soft); color: var(--s2); }
+.chip.s3 { background: var(--s3-soft); color: var(--s3); } .chip.hold { background: var(--hold-soft); color: var(--hold); }
+.chip.cost { background: transparent; border: 1px solid var(--line); color: var(--fg); font-weight: 500; white-space: normal; }
+
+/* 핵심 결론 */
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.key { background: var(--surface); border-top: 3px solid var(--accent); padding: 12px 14px; font-size: 14.5px; line-height: 1.6; }
+.key b { display: block; margin-bottom: 4px; font-size: 15px; }
+
+/* 표 */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.5; min-width: 560px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; letter-spacing: .03em; color: var(--muted); font-weight: 600; background: var(--sunk); white-space: nowrap; position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.us td { background: var(--accent-soft); }
+.cap { font-size: 12.5px; color: var(--muted); line-height: 1.55; max-width: 60em; }
+
+/* 둘 칸 (쓴다 / 안 쓴다, 피할 것) */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.panel h4 { font-size: 13px; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+.panel ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.panel li b { font-weight: 600; }
+.panel.good { border-top: 3px solid var(--accent); } .panel.bad { border-top: 3px solid var(--warn); }
+.avoid { background: var(--warn-soft); border-radius: 10px; padding: 12px 14px; }
+.avoid h4 { font-size: 13px; color: var(--warn); margin-bottom: 8px; letter-spacing: .04em; }
+.avoid ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+
+/* 우선순위 목록 */
+ol.plan { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: p; }
+ol.plan li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+ol.plan li > div { min-width: 0; }
+.two > * { min-width: 0; }
+ol.plan li::before { counter-increment: p; content: counter(p); font-family: var(--f-display); font-size: 20px; color: var(--dir, var(--accent)); line-height: 1.2; }
+ol.plan li.hold::before { content: "보류"; font-family: var(--f-body); font-size: 11px; font-weight: 700; color: var(--hold); padding-top: 4px; }
+ol.plan .t { font-weight: 600; font-size: 14.5px; }
+ol.plan .d { font-size: 13.5px; color: var(--muted); line-height: 1.55; margin-top: 2px; }
+ol.plan .f { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* 매트릭스 점수 */
+.bar { display: inline-flex; gap: 2px; vertical-align: middle; margin-right: 6px; }
+.bar i { width: 9px; height: 9px; border-radius: 2px; background: var(--line); display: inline-block; }
+.bar i.on { background: var(--accent); }
+.quad { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 8px; }
+.quad .lab { font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; align-items: center; }
+.quad .lab.top { justify-content: center; text-align: center; }
+.quad .cell { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; min-height: 96px; }
+.quad .cell.hot { border-color: var(--accent); background: var(--accent-soft); }
+.quad .cell .chip { white-space: normal; }
+@media (max-width: 520px) { .quad { grid-template-columns: 70px 1fr 1fr; } .quad .lab { font-size: 11.5px; } }
+
+/* 로드맵 */
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; border-top: 4px solid var(--st); }
+.stage.one { --st: var(--s1); } .stage.two-s { --st: var(--s2); } .stage.three { --st: var(--s3); }
+.stage .num { font-family: var(--f-display); font-size: 22px; color: var(--st); }
+.stage ul { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 5px; }
+.stage .eff { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+.stage .pre { font-size: 12.5px; padding: 8px 10px; background: var(--sunk); border-radius: 8px; line-height: 1.5; }
+
+/* 결론 */
+.final { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.final .panel { font-size: 14.5px; line-height: 1.6; }
+.final .panel b { display: block; margin-bottom: 4px; }
+footer { font-size: 12.5px; color: var(--muted); line-height: 1.6; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">시장조사 보고서 · 세 번째</div>
+  <h1>docvault 고도화 방향 시장조사</h1>
+  <div class="meta"><span>2026-11-03</span><span>대상 docvault v0.60</span><span>조사 에이전트 5개 병렬 데스크리서치</span><span>가격은 2026-11-03 확인, 원 통화 유지</span></div>
+  <p class="lede">"남에게 보여줄 제품"으로 키운다는 전제로, 지식 연결(옵시디언류) · 음성·회의록(클로바노트류) · AI 심화 · 캡처·형식 확장 네 방향을 시장과 사용자 증거로 비교하고 순서를 매겼습니다. 외부 유료 API 사용은 허용된 조건입니다.</p>
+  <div class="thesis">2026년 말 시장의 공통 분모는 "내 자료만 근거로 출처를 달아 답하는 Q&amp;A", "[[링크]]와 백링크", "한 번 탭으로 저장되는 캡처" 세 가지입니다. docvault는 셋 다 반쯤 갖고 있어 완성 비용이 낮습니다.</div>
+</header>
+
+<nav class="jump" aria-label="절 이동">
+  <a href="#summary">한눈 요약</a>
+  <a href="#market">시장 프레임</a>
+  <a class="na" href="#dir-a">A 지식 연결</a>
+  <a class="nb" href="#dir-b">B 음성·회의록</a>
+  <a class="nc" href="#dir-c">C AI 심화</a>
+  <a class="nd" href="#dir-d">D 캡처·형식</a>
+  <a href="#matrix">우선순위</a>
+  <a href="#roadmap">로드맵</a>
+  <a href="#decide">정할 것</a>
+</nav>
+
+<!-- 한눈 요약 -->
+<section id="summary">
+  <div class="sec-head">
+    <h2>한눈 요약 — 추천 기능 7개</h2>
+    <p class="muted">여기까지만 읽어도 답이 됩니다. 순위는 사용자 가치 × 차별화 ÷ 비용·난이도 순입니다.</p>
+  </div>
+  <div class="cards">
+    <article class="card">
+      <div class="top"><span class="rank">1</span><span class="chip c">C · AI 심화</span></div>
+      <h3>인용 Q&amp;A — "내 자료 참고"를 하이브리드 검색 + 출처 인용으로 승격</h3>
+      <p class="why">NotebookLM·Obsidian Copilot·Smart Connections가 증명한, 사용자가 유일하게 "계속 쓰는" AI 기능입니다. 지금 docvault의 가장 큰 격차(임베딩 없음)이기도 합니다. FTS5 + sqlite-vec + Claude Citations 조합이 소형 SQLite 앱의 정석입니다.</p>
+      <div class="foot"><span class="chip cost">전체 색인 USD 1 미만</span><span class="chip cost">질의당 USD 0.015(Sonnet)</span><span class="chip m">난이도 중</span></div>
+    </article>
+    <article class="card">
+      <div class="top"><span class="rank">2</span><span class="chip a">A · 지식 연결</span></div>
+      <h3>[[위키링크]] 자동완성 + 백링크 패널 + 제목 변경 전파</h3>
+      <p class="why">2026년 모든 노트 앱의 표준 사양입니다. 팀 위키인 Outline과 Docmost조차 2026년에 백링크를 추가했습니다. 저장 시 링크를 DB 테이블로 뽑아 두는 방식이 셀프호스팅 구현의 공통 패턴입니다.</p>
+      <div class="foot"><span class="chip cost">외부 비용 0</span><span class="chip m">난이도 중</span></div>
+    </article>
+    <article class="card">
+      <div class="top"><span class="rank">3</span><span class="chip d">D · 캡처</span></div>
+      <h3>캡처 경로 3종 — 토큰 인증 엔드포인트 + iOS 단축어, 수신 메일, 서버 URL→Markdown 추출</h3>
+      <p class="why">iPhone Safari는 PWA 공유 대상(share_target)을 지원하지 않아 지금 있는 라우트는 iPhone에서 호출될 수 없습니다. 한국 사용자의 1차 인박스는 카카오톡 "나에게 보내기"이므로 공유 시트에서 한 번에 닿는 길이 필요합니다.</p>
+      <div class="foot"><span class="chip cost">메일 수신 월 USD 0~1</span><span class="chip m">난이도 중</span></div>
+    </article>
+    <article class="card">
+      <div class="top"><span class="rank">4</span><span class="chip b">B · 음성</span></div>
+      <h3>음성 파일 가져오기 → 외부 STT 전사 → 문서화·검색·질문</h3>
+      <p class="why">클로바노트는 개인 유료 플랜이 없어 월 300분에 막힙니다. iOS 26 PWA는 브라우저 녹음이 불안정하므로 "녹음"이 아니라 "가져오기"로 시작하고, 전사 결과를 일반 문서로 만들어 검색·버전·AI 질문을 그대로 씁니다.</p>
+      <div class="foot"><span class="chip cost">월 10시간당 약 4,500원(Deepgram)~11,000원(RTZR)</span><span class="chip m">난이도 중</span></div>
+    </article>
+    <article class="card">
+      <div class="top"><span class="rank">5</span><span class="chip a">A</span><span class="chip c">C</span></div>
+      <h3>연관 문서 추천 + 로컬 그래프(깊이 1~2)</h3>
+      <p class="why">1번의 임베딩과 기존 학습 카드 그래프(cytoscape)를 그대로 재사용합니다. 전체 그래프는 수백 노트부터 "헤어볼"이 되어 안 쓰이지만, 현재 문서 중심의 작은 그래프는 비판자도 유용하다고 인정합니다.</p>
+      <div class="foot"><span class="chip cost">추가 비용 0</span><span class="chip m">난이도 하 (1·2번 이후)</span></div>
+    </article>
+    <article class="card">
+      <div class="top"><span class="rank">6</span><span class="chip d">D · 형식</span></div>
+      <h3>PDF 하이라이트(DB 저장) → 노트·학습 카드로 추출</h3>
+      <p class="why">Zotero·Heptabase·Readwise·Obsidian PDF++가 공유하는 핵심 루프입니다. 주석을 PDF 파일에 굽지 않고 DB에 두면 기존 PDF 뷰어·학습 카드·20버전 정책과 바로 이어집니다.</p>
+      <div class="foot"><span class="chip cost">외부 비용 0</span><span class="chip m">난이도 중상</span></div>
+    </article>
+    <article class="card">
+      <div class="top"><span class="rank">7</span><span class="chip m">시장 프레임</span></div>
+      <h3>데이터 소유권 패키지 — Markdown 일괄 내보내기 + AI 전송 옵트인·로그</h3>
+      <p class="why">Evernote 이탈(최근 리뷰 1.34/5)과 Notion이 Enterprise에만 주는 LLM 무보존(ZDR) 약속이 보여 주는 빈 자리입니다. "폐쇄형 셀프호스팅"의 서사를 완성하는 가장 싼 기능입니다.</p>
+      <div class="foot"><span class="chip cost">비용 0</span><span class="chip m">난이도 하</span></div>
+    </article>
+  </div>
+
+  <div class="keys">
+    <div class="key"><b>격차와 비용은 정반대 순서</b>격차 크기는 AI(임베딩 부재) &gt; 캡처(iPhone 경로 부재) &gt; 지식 연결(링크 부재) &gt; 음성(전무)이고, 비용은 음성만 사용자당 월 수천~만 원대이며 나머지는 거의 0입니다.</div>
+    <div class="key"><b>비어 있는 칸</b>"가볍게 셀프호스팅되고, 관리자가 계정을 발급하며, AI Q&amp;A가 내장된 소그룹 문서함"은 기성 제품이 없습니다. 가장 가까운 대안은 셀프호스트 위키 + AnythingLLM을 따로 운영하는 조합입니다.</div>
+    <div class="key"><b>피할 것</b>전체 그래프 뷰, 2인 대화형 오디오 오버뷰, 실시간 공동 편집, 브라우저 내 장시간 녹음, tldraw, PDF 파일에 주석 굽기, 좌석당 과금. 모두 시장이 이미 시험했고 유지 사용률이나 라이선스·기술 제약에서 실패한 영역입니다.</div>
+    <div class="key"><b>외부 API는 어댑터로 감싼다</b>OpenAI 전사 모델 2027-02 종료, AssemblyAI의 한국어 Pro 미지원, Gemini 2026-12 가격 2배 인상처럼 2026년 한 해에만 큰 변동이 세 번 있었습니다.</div>
+  </div>
+</section>
+
+<!-- 시장 프레임 -->
+<section id="market">
+  <div class="sec-head">
+    <h2>시장 프레임</h2>
+    <p class="conclusion">시장 규모 숫자는 정의에 따라 6배 넘게 벌어지므로 인용하지 말고, "Notion 1억 사용자 중 한국이 2위 시장"과 "Evernote 이탈" 같은 간접 지표로 수요를 말하는 편이 안전합니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">2.1</span>규모와 주요 플레이어 신호</h3>
+    <div class="tw"><table>
+      <thead><tr><th>출처</th><th>2025년 규모</th><th>성장률</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td class="k">The Business Research Company</td><td class="num">USD 110.2억</td><td class="num">CAGR 20.5%</td><td>협업 워크스페이스 포함, 2030년 280.5억</td></tr>
+        <tr><td class="k">Maximize Market Research</td><td class="num">USD 105.5억</td><td class="num">CAGR 16.4%</td><td>유료 보고서 요약</td></tr>
+        <tr><td class="k">GII / SkyQuest</td><td class="num">USD 17.1억</td><td class="num">2033년 45.2억</td><td>협소 정의</td></tr>
+        <tr><td class="k">Technavio (AI 노트만)</td><td class="num">2024→2029 +USD 8.21억</td><td class="num">CAGR 21.3%</td><td>회의 녹취 AI 세그먼트</td></tr>
+      </tbody>
+    </table></div>
+    <div class="tw"><table>
+      <thead><tr><th>플레이어</th><th>2026년 신호</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Notion</td><td>밸류에이션 USD 110억(2026-01), ARR USD 6억 돌파(2025-12, Forbes; Sacra는 8.65억 추정으로 상충), 사용자 1억+. AI 애드온 폐지 후 Business USD 20/인/월에 번들</td></tr>
+        <tr><td class="k">Obsidian</td><td>2025-02 상업 라이선스 선택 사항으로 전환, 1만 개 이상 조직 사용, 플러그인·테마 8,000개 이상(2026-10). 사용자·매출 비공개</td></tr>
+        <tr><td class="k">Evernote</td><td>가격 약 3배 인상 + 2025-11 용량 제한 → 월 다운로드 −64%, 월 매출 +39%, 최근 리뷰 1.34/5. "클라우드 종속 이탈"의 최신 증거</td></tr>
+        <tr><td class="k">Logseq</td><td>2026-04 파일 기반 "OG"(유지보수)와 DB 버전으로 분리, DB 2.0은 2026-07 첫 공개 베타</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">2.2</span>셀프호스팅 경쟁 지도</h3>
+    <p class="one">docvault의 "SQLite 단일 파일 + 작은 VM"은 Trilium·SiYuan·memos 급의 가벼움이고, Notion 대체를 표방하는 제품은 예외 없이 Postgres + Redis를 요구합니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>제품</th><th>GitHub 스타(2026-11 추정)</th><th>스택</th><th>링크/백링크</th><th>내장 AI Q&amp;A</th><th>멀티유저</th></tr></thead>
+      <tbody>
+        <tr><td class="k">AppFlowy</td><td class="num">약 78k</td><td>Postgres+Redis</td><td>있음</td><td>플러그인</td><td>있음</td></tr>
+        <tr><td class="k">AFFiNE</td><td class="num">약 74k</td><td>Postgres+Redis</td><td>양방향 링크</td><td>부분</td><td>있음</td></tr>
+        <tr><td class="k">memos</td><td class="num">약 64k</td><td>단일 바이너리</td><td>없음</td><td>없음</td><td>있음</td></tr>
+        <tr><td class="k">Joplin</td><td class="num">약 57k</td><td>클라이언트+동기화 서버</td><td>있음</td><td>플러그인</td><td>개인용</td></tr>
+        <tr><td class="k">SiYuan</td><td class="num">약 47k</td><td>단일 앱, SQLite</td><td>블록 참조 테이블</td><td>없음</td><td>개인용</td></tr>
+        <tr><td class="k">Outline</td><td class="num">약 40k (BSL)</td><td>Postgres+Redis+S3+외부 IdP 필수</td><td>백링크(v0.33~)</td><td>클라우드만</td><td>있음</td></tr>
+        <tr><td class="k">Trilium / TriliumNext</td><td class="num">약 37k</td><td>단일 프로세스</td><td>백링크·Link map</td><td>없음</td><td>단일 사용자</td></tr>
+        <tr><td class="k">Docmost</td><td class="num">약 21k</td><td>Postgres+Redis</td><td>백링크(v0.90)·bases(v0.95)</td><td>없음</td><td>있음</td></tr>
+        <tr class="us"><td class="k">docvault</td><td class="num">—</td><td>Hono+SQLite 단일 파일</td><td>없음</td><td>Claude(단순 검색)</td><td>관리자 발급</td></tr>
+      </tbody>
+    </table></div>
+    <p class="cap">"내장 AI Q&amp;A + 관리자 계정 발급 + 가벼운 스택"을 동시에 갖춘 셀프호스팅 제품은 발견되지 않았습니다. 소규모 팀은 Outline/Wiki.js + 별도 AnythingLLM 조합을 씁니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">2.3</span>가격 모델</h3>
+    <p class="one">개인용은 "앱 무료 + 동기화·퍼블리시 과금(월 USD 4~10)", 팀용은 좌석당 USD 10~20, AI는 2026년 들어 "포함"에서 "크레딧 종량"으로 이동했습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>제품</th><th>가격 (2026-11 기준)</th><th>모델</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Obsidian</td><td>앱 무료, Sync USD 4/월(연납)·5(월납), Publish USD 8/10, 상업 라이선스 USD 50/인/년(선택)</td><td>무료 코어 + 서비스</td></tr>
+        <tr><td class="k">Notion</td><td>Plus USD 10, Business USD 20(인/월, 연납), Custom Agents USD 10/1,000크레딧</td><td>좌석 + AI 크레딧</td></tr>
+        <tr><td class="k">Capacities</td><td>Pro USD 11.99/월, Believer USD 12.49/월(연납 환산), AI 애드온 USD 8.33/월</td><td>구독, unlinked mentions는 유료 벽 뒤</td></tr>
+        <tr><td class="k">Heptabase</td><td>Pro USD 8.99/월(연납), Premium USD 17.99, 2026-08 AI 크레딧 종량 도입</td><td>구독 + AI 크레딧</td></tr>
+        <tr><td class="k">Tana</td><td>Pro USD 19/인/월(공식) — 애그리게이터는 USD 35로 기록해 상충</td><td>미팅 AI 중심 재포지셔닝</td></tr>
+        <tr><td class="k">NotebookLM(Gemini Notebook)</td><td>무료 노트북 100개·소스 50개, Google AI Pro USD 19.99/월(제3자 수치)</td><td>한도 기반</td></tr>
+      </tbody>
+    </table></div>
+    <p class="cap">소그룹용이라면 "호스트 1명 정액(월 1만 원 내외, 계정 N개 포함) + AI 사용량 패스스루"가 Obsidian Sync 2~3석·Notion Plus 1석 가격대와 어긋나지 않습니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">2.4</span>이탈 요인 · 한국 시장 · 규제</h3>
+    <div class="two">
+      <div class="panel"><h4>이탈 요인 (반복 순)</h4><ul>
+        <li><b>성능</b> — Notion은 Electron·서버 의존 성능 불만 1위. Obsidian iOS는 5천 노트에서 재시작 반복. 서버 인덱스·PWA 구조인 docvault는 이 모바일 문제를 구조적으로 피합니다.</li>
+        <li><b>학습 곡선</b> — Obsidian 이탈자의 최다 행선지는 Notion(23.72%, 독자 투표 약 2,600명).</li>
+        <li><b>종속·가격 정책 변경</b> — Evernote 사례. Notion은 Enterprise에만 LLM 무보존(ZDR) 약속.</li>
+        <li><b>AI 프라이버시</b> — Evernote는 2016년 "직원이 ML 학습용으로 노트 열람 가능" 정책을 며칠 만에 철회.</li>
+      </ul></div>
+      <div class="panel"><h4>한국 시장 · 규제 (법률 자문 아님)</h4><ul>
+        <li><b>Notion</b> — 한국은 미국 다음 시장. 2025년 한국 사용자 템플릿 복제 약 2,000만 회. 2026-05부터 Enterprise 한정 한국 데이터 레지던시.</li>
+        <li><b>카카오톡 "나에게 보내기"</b> — 사용자 4,823만 명의 사실상 캡처 도구이나 검색·분류 불가 불만 반복.</li>
+        <li><b>통신판매업 신고</b> — 직전 연도 거래 50회 미만 또는 간이과세자면 면제. 단 PG가 신고번호 요구 가능.</li>
+        <li><b>개인정보 처리방침</b> — 보호법 제30조 필수 항목. 문서 본문을 Claude API로 보내므로 "처리 위탁(미국)·국외 이전" 고지 필요 가능성 높음.</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- 방향 A -->
+<section id="dir-a" class="dir dir-a">
+  <div class="sec-head">
+    <h2><span class="tag">방향 A</span>지식 연결 (옵시디언류)</h2>
+    <p class="conclusion">[[위키링크]]와 백링크 패널은 2026년의 기본 사양이고, 차별화는 속성 기반 뷰와 unlinked mentions에 있으며, 전체 그래프 뷰는 눈요기입니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">A-1</span>시장은 어떻게 하나</h3>
+    <p class="one">2025~2026년 "Obsidian-like"의 실체는 그래프가 아니라 properties + Bases(노트를 DB 뷰로)로 이동했습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>제품</th><th>가격 (2026-11)</th><th>연결 기능</th><th>2025~2026 변화</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Obsidian</td><td>무료, Sync USD 4~10/월</td><td>[[ ]]·백링크(linked/unlinked)·로컬/전체 그래프·속성·Canvas</td><td>Bases 2025-08 정식, 2026년 체인지로그 대부분이 Bases. 그래프 변경은 "lazy load" 한 줄</td></tr>
+        <tr><td class="k">Logseq</td><td>무료</td><td>블록 참조·백링크</td><td>DB 버전으로 분리(2026-04), 2.0 베타</td></tr>
+        <tr><td class="k">Notion</td><td>Plus USD 10</td><td>relation·backlink·DB</td><td>3.0 Agents(2025-09), 행 단위 권한. relation 많으면 느려짐</td></tr>
+        <tr><td class="k">Capacities</td><td>Pro USD 11.99/월</td><td>객체 타입·백링크·그래프</td><td>unlinked mentions·related content는 Pro 이상에만</td></tr>
+        <tr><td class="k">Tana</td><td>Pro USD 19/인/월</td><td>supertag·References</td><td>미팅 AI 중심으로 재포지셔닝</td></tr>
+        <tr><td class="k">Heptabase</td><td>Pro USD 8.99/월</td><td>화이트보드 카드 연결</td><td>MCP(2025-12), AI Tutor(2026-03)</td></tr>
+        <tr><td class="k">Craft / Apple Notes</td><td>—</td><td>Craft 자동 Backlinks / Apple Notes는 링크만</td><td>—</td></tr>
+        <tr><td class="k">Outline / Docmost / AFFiNE</td><td>셀프호스팅</td><td>백링크 패널만, 그래프 없음</td><td>Docmost v0.90 백링크·v0.95 bases(2026)</td></tr>
+        <tr><td class="k">SiYuan / Trilium / Foam</td><td>셀프호스팅</td><td>블록 참조 테이블 / Link map / [[ ]] + rename 자동 갱신</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">A-2</span>사용자가 실제로 쓰는 것 vs 안 쓰는 것</h3>
+    <div class="two">
+      <div class="panel good"><h4>매일 또는 자주 쓴다</h4><ul>
+        <li><b>템플릿·속성 쿼리·데일리 노트</b> — 2025년 Obsidian 플러그인 다운로드: Templater 151만, Dataview 119만, Tasks 108만, Calendar 74만. 그래프 강화 플러그인은 TOP10에 없음.</li>
+        <li><b>백링크</b> — "과거의 기록이 현재의 글쓰기에 자동으로 참여" (국내 UX 리서처 후기).</li>
+        <li><b>로컬 그래프(1~2홉)</b> — 그래프 비판자도 "어떤 규모에서도 쓸 만하다"고 인정.</li>
+      </ul></div>
+      <div class="panel bad"><h4>안 쓰거나 유료 벽 뒤</h4><ul>
+        <li><b>전체 그래프</b> — r/ObsidianMD 은어 "the hairball". 1.5만 노트 그래프 게시물 캡션 "YES this view is unusable". 국내 스터디 후기도 필터·폴더 한정 요구.</li>
+        <li><b>unlinked mentions·related content</b> — Capacities가 Pro 이상에만 제공하는 "유료 가치" 기능.</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">A-3</span>docvault에 넣는다면</h3>
+    <p class="one">링크를 DB 테이블로 물질화하는 것이 모든 셀프호스팅 구현의 공통 패턴이고, docvault는 이미 SQLite 중심이라 가장 자연스러운 길입니다.</p>
+    <ol class="plan">
+      <li><div><div class="t">[[제목]] 자동완성(fuzzy) + 렌더링 + 백링크 패널(문맥 스니펫)</div><div class="d">저장 시 remark로 링크를 뽑아 file_links 테이블에 upsert하고, 뷰어 remark 파이프라인에 wiki-link 플러그인을 더합니다. 버전 복원도 저장 경로를 타므로 자동 갱신됩니다.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">제목 변경 전파 + 미존재 링크 클릭 시 생성</div><div class="d">영향받는 문서만 찾아 치환하고, 각 문서를 "하나의 편집"으로 스냅샷해 20버전 정책과 맞춥니다. 전체 스캔은 금지.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">템플릿 + 데일리 노트</div><div class="d">다운로드 1·4위 기능. 데일리 노트는 "다 던지기"보다 원자 노트 + 날짜 링크를 권장 UI로.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">Unlinked mentions + "링크로 바꾸기"</div><div class="d">기존 FTS로 제목 후보를 좁힌 뒤 정확 매칭. 한국어 조사 결합("docvault를") 때문에 접두 매칭 + 2글자 이하 제목 제외 휴리스틱이 필요합니다(선행 사례 없음, 설계 판단).</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">로컬 그래프(깊이 1~2, 폴더/태그/최소 링크 수 필터)</div><div class="d">학습 카드 그래프(cytoscape) 렌더러 재사용. 간선 가중치 = 링크 수. 1천 노드 이상이면 canvas/WebGL 검토.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">속성(frontmatter) 기반 표 뷰(Bases류)</div><div class="d">2026년 Obsidian·Docmost가 가장 많이 투자한 영역이지만 docvault 핵심 사용자(열람·정독)에게는 후순위.</div><div class="f"><span class="chip m">난이도 상</span><span class="chip cost">비용 0</span></div></div></li>
+    </ol>
+  </div>
+
+  <div class="avoid"><h4>피할 것</h4><ul>
+    <li>전체 그래프 뷰를 핵심 기능으로 내세우기 — 온보딩 효과만 있고 유지 사용률이 낮습니다.</li>
+    <li>블록 단위 참조·Canvas — SiYuan식 블록 ID와 전용 인덱서가 필요합니다.</li>
+    <li>클라이언트 측 인덱싱 — Obsidian 모바일 메모리 문제의 원인. 링크 인덱스는 서버 DB에 둡니다.</li>
+  </ul></div>
+</section>
+
+<!-- 방향 B -->
+<section id="dir-b" class="dir dir-b">
+  <div class="sec-head">
+    <h2><span class="tag">방향 B</span>음성·회의록 (클로바노트류)</h2>
+    <p class="conclusion">음성은 "브라우저에서 녹음"이 아니라 "녹음 파일 가져오기 → 외부 STT → 문서로 보관·검색·질문"으로 시작해야 하며, 1 GB VM에서 Whisper 셀프호스팅은 불가능합니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">B-1</span>시장은 어떻게 하나</h3>
+    <p class="one">한국은 클로바노트(개인 유료 없음)·다글로·티로 3강이고, 2026년 경쟁축은 성문 기반 화자 식별, 요약·AI 채팅의 크레딧 과금, 녹음 외 입력(파일·유튜브·통화)으로 옮겨갔습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>제품</th><th>가격 (2026-11)</th><th>핵심 기능</th><th>한국어</th></tr></thead>
+      <tbody>
+        <tr><td class="k">네이버 클로바노트</td><td>개인 무료 월 300분(데이터 동의 시 600분), 1건 180분, AI 요약 월 15회, 개인 유료 없음. 네이버웍스 Lite 20,000원/월 1,000분</td><td>화자 분리("초안"이라 명시), 통화 녹음 가져오기. App Store 4.9/5(약 13만 평가)</td><td>한·영 혼용 모델</td></tr>
+        <tr><td class="k">다글로</td><td>Pro 14,900원/월(연납 11,900원) 또는 USD 11.66 — 표기 공존. Premium 24,900원</td><td>녹음 무제한, 파일·유튜브, 2026-10 성문 "보이스매칭"(자사 94%)</td><td>한국어</td></tr>
+        <tr><td class="k">티로</td><td>Lite USD 7.79/월(App Store) — 블로그는 USD 7로 상충</td><td>화자 분리는 Pro부터, API·MCP·웹훅</td><td>한국어</td></tr>
+        <tr><td class="k">리턴제로(비토)</td><td>B2C 앱 / B2B</td><td>자체 벤치 통화 1시간 오류율 4.66%(자사)</td><td>한국어 특화</td></tr>
+        <tr><td class="k">Otter.ai</td><td>Pro USD 16.99/월(연납 8.33) 1,200분</td><td>회의 봇</td><td>AI 전사 언어에 한국어 미표기</td></tr>
+        <tr><td class="k">Fireflies / tl;dv / Granola</td><td>USD 10/월 · EUR 29/월 · USD 14/인/월</td><td>봇 또는 기기 오디오 캡처</td><td>Fireflies "90%+" 자사 주장</td></tr>
+        <tr><td class="k">Notion AI Meeting Notes</td><td>Business USD 20~24/인/월 필요</td><td>전사·요약, Notion AI 검색 대상</td><td>한국어 포함, 화자 식별 미지원</td></tr>
+        <tr><td class="k">Apple iOS 18.1~26 / Galaxy AI</td><td>무료(기기 내장)</td><td>통화 녹음·메모 전사·요약</td><td>한국어 포함</td></tr>
+        <tr><td class="k">Plaud(하드웨어)</td><td>기기 약 USD 159, Pro 약 USD 99.99/년</td><td>전용 녹음기</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">B-2</span>사용자가 실제로 쓰는 것 vs 안 쓰는 것</h3>
+    <div class="two">
+      <div class="panel good"><h4>체감 가치</h4><ul>
+        <li><b>녹음을 잃지 않고 나중에 검색·인용</b> — 강의·회의·인터뷰·통화. r/PlaudAI 인기 스레드 "AI 기능을 정말 쓰나, 녹음+전사만 쓰나?". 클로바노트는 요약 월 15회에도 4.9점.</li>
+        <li><b>요약은 보조</b> — 다글로 불만 축이 "요약·채팅 크레딧 소모 + 미이월".</li>
+      </ul></div>
+      <div class="panel bad"><h4>불만 1~4순위</h4><ul>
+        <li><b>영어·전문용어 혼용 시 한국어 정확도</b> — ChatGPT 후교정도 불만족.</li>
+        <li><b>화자 분리 오류</b> — 클로바노트 스스로 "초안"이라 명시.</li>
+        <li><b>한도·크레딧, 개인 유료 부재</b> — 돈을 내도 늘릴 수 없음.</li>
+        <li><b>서버 업로드 프라이버시, 기기 원격 차단(Plaud)</b></li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">B-3</span>한국어 STT API 비교</h3>
+    <p class="one">한국어 정확도를 택하면 RTZR·CLOVA, 비용을 택하면 Deepgram·AssemblyAI인데 후자는 한국어 벤치가 약합니다. 벤치는 리턴제로 자체 공개 자료(7셋 평균 CER)라는 한계가 있습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>API</th><th>가격 (2026-11)</th><th>화자 분리</th><th>한국어 CER</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td class="k">RTZR STT</td><td>1,000원/시간, 무료 10시간</td><td>포함(10명)</td><td class="num">5.91% (1위)</td><td>키워드 부스팅, 한국 리전</td></tr>
+        <tr><td class="k">CLOVA Speech</td><td>약 20원/분 ≈ 1,200원/시간(역산, VAT 별도)</td><td>별도 단가(미확인)</td><td class="num">7.52%</td><td>한·영 혼용 모델, 배치 6시간</td></tr>
+        <tr><td class="k">Deepgram Nova-3</td><td>USD 0.0043/분 ≈ 0.26/시간</td><td>포함</td><td class="num">nova-2 21.02%</td><td>Nova-3 한국어는 2025-11 추가, 벤치 없음. USD 200 크레딧</td></tr>
+        <tr><td class="k">AssemblyAI Universal-2</td><td>USD 0.15/시간 + 화자 0.02</td><td>있음</td><td>미측정</td><td>U-3.5 Pro는 한국어 "Coming soon", 구모델 폴백 위험</td></tr>
+        <tr><td class="k">OpenAI gpt-transcribe</td><td>USD 0.0045/분</td><td>없음</td><td class="num">Whisper 11.39%</td><td>25 MB 제한, diarize 모델 2027-02 종료</td></tr>
+        <tr><td class="k">ElevenLabs Scribe v2</td><td>USD 0.22/시간</td><td>32명</td><td>자체 등급 "Good(10~25%)"</td><td>—</td></tr>
+        <tr><td class="k">Azure / AWS / Google v2</td><td>USD 0.18/시간 / 0.006/분 / 0.016/분</td><td>별도 / 포함 / 비스트리밍</td><td class="num">10.88 / 11.11 / 11.50%</td><td>—</td></tr>
+        <tr><td class="k">Gemini 2.5 Flash(LLM 직접)</td><td>입력 약 USD 0.0019/분 + 출력</td><td>프롬프트 의존</td><td class="num">2.0 Flash 16.58%</td><td>1차 전사기 부적합, 후교정·요약용</td></tr>
+        <tr><td class="k">faster-whisper 셀프호스팅</td><td>0</td><td>pyannote 별도</td><td class="num">11.39%</td><td>small int8만 피크 약 1,477 MB → 1 GB VM 불가</td></tr>
+      </tbody>
+    </table></div>
+    <div class="tw"><table>
+      <thead><tr><th>월 10시간 사용자 1인 원가</th><th>STT</th><th>요약(Claude)</th><th>합계</th></tr></thead>
+      <tbody>
+        <tr><td class="k">RTZR + Sonnet 5.5</td><td class="num">10,000원</td><td class="num">약 USD 0.65</td><td class="num">약 11,000원</td></tr>
+        <tr><td class="k">CLOVA + Sonnet 5.5</td><td class="num">약 12,000원+</td><td class="num">약 USD 0.65</td><td class="num">약 13,000원+</td></tr>
+        <tr><td class="k">Deepgram + Sonnet 5.5</td><td class="num">약 USD 2.6</td><td class="num">약 USD 0.65</td><td class="num">약 USD 3.2 (≈4,500원)</td></tr>
+        <tr><td class="k">AssemblyAI U-2 + Haiku 5.5</td><td class="num">약 USD 1.7</td><td class="num">약 USD 0.03</td><td class="num">약 USD 1.7 (≈2,400원)</td></tr>
+      </tbody>
+    </table></div>
+    <p class="cap">다글로 Pro(11,900~14,900원/월)와 비교하면 국산 STT를 쓰는 순간 마진이 거의 없습니다. 요약 비용은 입력 25만·출력 1.5만 토큰 가정이며 한국어 토큰 밀도는 실측이 필요합니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">B-4</span>docvault에 넣는다면</h3>
+    <ol class="plan">
+      <li><div><div class="t">음성 파일 업로드(Apple 음성메모·통화 녹음 m4a 공유) + 서버 전사 → 타임스탬프 Markdown 문서</div><div class="d">전사 결과가 일반 문서가 되어 FTS·버전·태그·공유·Claude 질문 패널이 그대로 적용됩니다. STT 공급자는 어댑터 + 관리자 설정으로 교체 가능하게.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">위 원가표</span></div></div></li>
+      <li><div><div class="t">전사 문서 → 요약·액션아이템·학습 카드 초안</div><div class="d">기존 Claude 키 사용. 프롬프트 캐싱으로 후속 질문 입력비 절감.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">10시간당 USD 0.03~1.3</span></div></div></li>
+      <li><div><div class="t">사용자 용어집(키워드 부스팅)</div><div class="d">영어 혼용·전문용어 불만에 대한 직접 대응. RTZR·CLOVA·Deepgram 모두 지원.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">짧은 브라우저 음성 메모(화면 켠 채 수 분)</div><div class="d">webm/opus → mp4 폴백, timeslice 1초 이상, IndexedDB 누적 후 단일 Blob 업로드, 서버 ffmpeg 재먹싱, Wake Lock.</div><div class="f"><span class="chip m">난이도 중</span></div></div></li>
+      <li class="hold"><div><div class="t">잠금 중 장시간(강의 90분) 녹음</div><div class="d">PWA로는 답이 없습니다. 홈화면 PWA에서 MediaRecorder가 첫 세션만 동작(iOS 26 버그 다수), 화면 잠금 시 녹음 중단. 네이티브 래퍼(Capacitor) 또는 OS 녹음 앱 "가져오기"로.</div><div class="f"><span class="chip m">난이도 상</span></div></div></li>
+    </ol>
+  </div>
+
+  <div class="avoid"><h4>피할 것</h4><ul>
+    <li>브라우저 내 장시간 녹음을 1차 기능으로 — 지원 비용이 크고 신뢰성이 없습니다.</li>
+    <li>1 GB VM 또는 iPhone 브라우저에서 Whisper 실행 — 메모리 한계·크래시 보고.</li>
+    <li>단일 STT 벤더 종속 — 2027-02 OpenAI 모델 종료처럼 1년 안에 바뀝니다.</li>
+    <li>성문 기반 화자 자동 식별 — "민감한 음성 정보"로 사전 동의 필요, 1인 운영 범위를 넘습니다.</li>
+    <li>요약 횟수로 과금하는 UX — 다글로 불만의 중심.</li>
+  </ul></div>
+</section>
+
+<!-- 방향 C -->
+<section id="dir-c" class="dir dir-c">
+  <div class="sec-head">
+    <h2><span class="tag">방향 C</span>AI 심화 (NotebookLM류)</h2>
+    <p class="conclusion">가장 먼저 좁혀야 할 격차는 "내 자료 참고"에 임베딩이 없는 것이며, 하이브리드 검색 + Claude Citations로 승격하면 NotebookLM식 인용 Q&amp;A가 되고 전체 색인 비용은 USD 1 미만입니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">C-1</span>시장은 어떻게 하나</h3>
+    <p class="one">공통 분모는 (1) 내 자료 근거 Q&amp;A + 출처 인용, (2) 자료를 오디오·슬라이드·퀴즈로 바꾸는 Studio형 출력, (3) 승인 단계가 있는 에이전트입니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>제품</th><th>가격 (2026-11)</th><th>핵심 AI 기능</th></tr></thead>
+      <tbody>
+        <tr><td class="k">NotebookLM → Gemini Notebook(2026-07 개명)</td><td>무료 노트북 100·소스 50, Google AI Pro USD 19.99/월</td><td>소스 인용 Q&amp;A, Audio/Video Overview, 플래시카드·퀴즈, Data Tables, 2026-06 에이전트형 리서치, 2026-09 모바일 음성 대화</td></tr>
+        <tr><td class="k">Notion AI</td><td>Business USD 20/인/월 번들, Custom Agents USD 10/1,000크레딧</td><td>Enterprise Search, Agent(계획 검토·승인 후 실행), AI Meeting Notes</td></tr>
+        <tr><td class="k">Obsidian Copilot</td><td>무료(자기 키) + Plus 유료</td><td>볼트 채팅·전체 볼트 질의. 누적 다운로드 314만</td></tr>
+        <tr><td class="k">Obsidian Smart Connections</td><td>무료 + 후원 Pro</td><td>로컬 임베딩 기본, 연관 노트 사이드바, 시맨틱 검색. 누적 126만</td></tr>
+        <tr><td class="k">Readwise Reader Ghostreader</td><td>Full USD 9.99/월(연납)</td><td>요약·용어 조회·커스텀 프롬프트, 라이브러리 전체 검색 + 출처 링크</td></tr>
+        <tr><td class="k">Claude Projects</td><td>Pro USD 17~20/월</td><td>프로젝트 지식, 유료는 RAG 모드로 용량 10배</td></tr>
+        <tr><td class="k">MS Copilot Notebooks</td><td>M365 상업 계정</td><td>Audio Overview, 2026-10 Critique·Debate 포맷</td></tr>
+        <tr><td class="k">클로바노트 / 카카오 카나나</td><td>개인 무료 / —</td><td>요약 월 15회 / 2026-10 카나나 스페이스·칸바스 공개</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">C-2</span>계속 쓰는 것 vs 한 번 써보는 것</h3>
+    <p class="one">계속 쓰는 기능은 "이미 하려던 일(읽기·찾기·쓰기)의 마찰을 줄이는 것"이고, 한 번 써보는 기능은 "새 소비 형식을 만드는 것"입니다.</p>
+    <div class="two">
+      <div class="panel good"><h4>계속 쓴다 · 조건부</h4><ul>
+        <li><b>출처 인용 Q&amp;A</b> — r/notebooklm 핵심 가치 "소스 밖을 아는 척하지 않고 답마다 구절 링크".</li>
+        <li><b>연관 노트 추천(수동적 회상)</b> — Smart Connections 126만 다운로드, "passive recall에 강함".</li>
+        <li><b>자동 태그·링크(조건부)</b> — 모든 플러그인이 "기존 태그와 대조 → 미리보기 → 확인" 설계.</li>
+        <li><b>AI 플래시카드(조건부)</b> — Brown 의대 2025: 시험 점수 차이 없음, 91%가 "시간 절약". 학습 효과가 아니라 시간 절약으로 포지셔닝.</li>
+      </ul></div>
+      <div class="panel bad"><h4>한 번 써본다 · 과금 안 된다</h4><ul>
+        <li><b>오디오 오버뷰</b> — "첫 주엔 목소리가 훌륭하다, 그 다음엔 늘 같은 두 사람". 통근 청취 상황이 있을 때만 유지.</li>
+        <li><b>답변 품질 자체</b> — NotebookLM 무료가 95% 커버, Plus 구매자 후회. Notion은 AI를 USD 20 플랜 업셀 명분으로 씁니다.</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">C-3</span>docvault에 넣는다면</h3>
+    <p class="one">FTS5(BM25) + sqlite-vec(brute-force KNN) → RRF 융합 → Claude Citations가 소형 Node+SQLite 앱의 정석이며, 벡터 테이블은 기존 SQLite 파일에 넣어 백업 단위를 깨지 않습니다.</p>
+    <ol class="plan">
+      <li><div><div class="t">하이브리드 RAG + 인용</div><div class="d">저장 시 헤딩 기준 400~512토큰 청크 → 임베딩 → vec0 테이블. 질의 시 FTS5+KNN을 RRF로 합쳐 상위 청크를 Claude 커스텀 콘텐츠 문서로 전달하고, 인용 위치를 UI에서 해당 청크로 점프. 기존 "내 자료 참고" 스위치·FTS·모델 선택기·비용 추적을 그대로 승격.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">색인 1회 USD 0~1</span><span class="chip cost">질의당 USD 0.015(Sonnet)·0.00075(Haiku)</span></div></div></li>
+      <li><div><div class="t">연관 문서 사이드바("이 문서와 비슷한 문서")</div><div class="d">1번 임베딩 재사용. 열람 화면·학습 카드에 배치. A-3의 로컬 그래프와 한 묶음.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">문서 → 학습 카드 자동 초안 + FSRS 복습 스케줄링</div><div class="d">기존 학습 카드 생성·병합·복습에 "초안"과 "간격 반복"만 보강하면 NotebookLM 플래시카드와 격차가 작습니다.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">카드 10장당 USD 0.01 미만</span></div></div></li>
+      <li><div><div class="t">자동 태그·링크 제안(확인 후 적용, 되돌리기 가능)</div><div class="d">기존 태그 체계와 대조하고, A-3의 file_links에 기록.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">문서당 USD 0.001 미만</span></div></div></li>
+      <li><div><div class="t">비용 라우팅: 프롬프트 캐싱(1시간) + 10만 토큰 미만은 Haiku, 초과는 Sonnet 자동 승격</div><div class="d">질문 패널의 "문서 열어둔 채 여러 번 질문" 패턴에 직결. 비용 추적에 캐시 읽기·쓰기 구분 기록.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">입력비 10~20배 절감</span></div></div></li>
+      <li><div><div class="t">읽어주기(read-aloud)</div><div class="d">1단계 브라우저 speechSynthesis(무료) → 2단계 요약 대본을 1인 낭독 MP3로 캐시. 2인 대화형은 수요 확인 후.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">10분당 USD 0.02~0.1</span></div></div></li>
+      <li><div><div class="t">글쓰기 보조(교정·다듬기·문체 맞추기)</div><div class="d">편집기 선택 영역에. 차별점은 아니고 기본기.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">질의당 센트 미만</span></div></div></li>
+    </ol>
+    <div class="two">
+      <div class="tw"><table style="min-width:0">
+        <thead><tr><th>임베딩 모델</th><th>USD/1M 토큰</th><th>500만 자 1회 색인</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Voyage voyage-4-lite / 4</td><td class="num">0.02 / 0.06 (각 2억 토큰 무료)</td><td class="num">USD 0</td></tr>
+          <tr><td class="k">OpenAI text-embedding-3-small / large</td><td class="num">0.02 / 0.13</td><td class="num">USD 0.05~0.12 / 0.30~0.75</td></tr>
+          <tr><td class="k">Gemini embedding-001 / Embedding 2</td><td class="num">0.15 / 0.20</td><td class="num">USD 0.35~1.16 (한국어 벤치 1위, 벤더 자료)</td></tr>
+          <tr><td class="k">로컬 bge-m3 / e5</td><td class="num">0</td><td>VM CPU 시간, 1 GB에서 부담</td></tr>
+          <tr><td class="k">Cohere Embed 5</td><td class="num">전용 인스턴스 USD 2,000/월~</td><td>소형 앱 제외</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tw"><table style="min-width:0">
+        <thead><tr><th>Claude 모델 (USD/1M 토큰)</th><th>입력</th><th>출력</th><th>캐시 읽기</th><th>docvault 매핑</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Haiku 5.5 (≤10만 / 초과)</td><td class="num">0.10 / 0.50</td><td class="num">0.50 / 2.50</td><td class="num">0.01 / 0.05</td><td>fast</td></tr>
+          <tr><td class="k">Sonnet 5.5</td><td class="num">2</td><td class="num">10</td><td class="num">0.10</td><td>standard</td></tr>
+          <tr><td class="k">Opus 5.5</td><td class="num">4</td><td class="num">20</td><td class="num">0.20</td><td>top</td></tr>
+          <tr><td class="k">Fable 5.1</td><td class="num">10</td><td class="num">50</td><td class="num">0.25</td><td>top의 선택 옵션</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <p class="cap">벡터 저장 용량은 1024차원 기준 16~46 MB라 ANN 인덱스가 필요 없습니다. 장문 컨텍스트로 라이브러리 전체를 대체하는 것은 사용자별 데이터라 캐시가 공유되지 않아 RAG보다 3배 이상 비쌉니다. Gemini 3.8 Flash는 2027-01-01부터 2배 인상 예고.</p>
+  </div>
+
+  <div class="avoid"><h4>피할 것</h4><ul>
+    <li>2인 대화형 오디오 오버뷰를 먼저 만들기 — 구현 복잡도에 비해 유지 사용률이 낮습니다.</li>
+    <li>승인 단계 없는 자율 에이전트("폴더 자동 정리") — Notion조차 계획 검토·승인 UX를 기본으로 둡니다.</li>
+    <li>답변 품질로 과금 — 과금은 한도(질문 수·생성 수·색인 문서 수)와 BYOK 해제가 업계 패턴.</li>
+    <li>사용자 문서를 LLM 제공사 학습에 쓰이는 무료 티어로 보내기 — Evernote 2016의 교훈.</li>
+  </ul></div>
+</section>
+
+<!-- 방향 D -->
+<section id="dir-d" class="dir dir-d">
+  <div class="sec-head">
+    <h2><span class="tag">방향 D</span>캡처·수집·형식 확장</h2>
+    <p class="conclusion">iPhone Safari는 PWA share_target을 지원하지 않으므로 iOS 단축어 + 메일 수신 + 서버 URL 추출을 먼저 깔고, PDF 하이라이트는 DB에 저장하며, 형식 확장은 "가져오기 시점에 Markdown으로 변환"으로 기존 뷰어·검색·버전을 재사용합니다.</p>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">D-1</span>시장은 어떻게 하나</h3>
+    <p class="one">Omnivore(2024-11)와 Pocket(2025-07) 종료 후 생존자는 PDF·EPUB·뉴스레터·하이라이트·AI를 한 인박스로 묶는 쪽으로 수렴했고, 오픈소스 4종은 결국 네이티브 모바일 앱을 만들었습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>제품</th><th>가격·라이선스 (2026-11)</th><th>핵심 기능</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Readwise Reader</td><td>Full USD 9.99/월, Reader only 7.99(연납)</td><td>PDF·EPUB·RSS·뉴스레터(고유 메일 주소)·하이라이트·Ghostreader</td></tr>
+        <tr><td class="k">Instapaper / Matter</td><td>USD 5.99/월 · 59.99/년 / 약 USD 60/년</td><td>전문 검색·Kindle / iOS 전용, TTS 강점</td></tr>
+        <tr><td class="k">Obsidian Web Clipper</td><td>무료, MIT</td><td>사이트별 템플릿, 하이라이터, LLM 추출, Safari iOS 확장, Defuddle 기반</td></tr>
+        <tr><td class="k">Karakeep</td><td>AGPL, 30.3k 스타</td><td>LLM 자동 태깅·요약, OCR, monolith 전체 페이지 아카이브, Safari 확장, iOS/Android 앱</td></tr>
+        <tr><td class="k">Linkwarden</td><td>AGPL, 20.3k</td><td>스크린샷+PDF+SingleFile+리더뷰 보존, 하이라이트, iOS Shortcut</td></tr>
+        <tr><td class="k">Wallabag</td><td>MIT, 13.0k</td><td>사이트별 규칙(ftr-site-config), 중복 제거</td></tr>
+        <tr><td class="k">Readeck</td><td>AGPL, 1.2k</td><td>EPUB 내보내기·OPDS, 가볍다, 중복 허용</td></tr>
+        <tr><td class="k">Defuddle / SingleFile</td><td>MIT 9.9k / AGPL 22.8k</td><td>Readability 대체·Markdown 직접 출력 / 단일 HTML 아카이브</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">D-2</span>사용자가 실제로 쓰는 것 vs 안 쓰는 것</h3>
+    <p class="one">사용자는 "읽으려고"가 아니라 "저장하려고" 쓰며, 리텐션은 "한 번에 저장되고 나중에 검색으로 다시 찾히는가"에 달렸습니다.</p>
+    <div class="two">
+      <div class="panel good"><h4>쓴다</h4><ul>
+        <li><b>1탭 저장(공유 시트·확장)</b> — Pocket 사용자 대부분은 읽지 않고 저장했습니다. 카카오톡 "나에게 보내기"에 380개 쌓였지만 다시 본 건 손에 꼽는다는 후기.</li>
+      </ul></div>
+      <div class="panel bad"><h4>불만 · 플랫폼 제약</h4><ul>
+        <li><b>본문 추출 누락</b> — 이미지·첫 링크에서 잘림.</li>
+        <li><b>네이버 블로그 iframe</b> — 최상위 DOM만 읽으면 껍데기. 모바일 URL 치환 + se-module-text 파싱으로 우회.</li>
+        <li><b>중복 저장, 로그인·페이월 뒤 미수집</b></li>
+        <li><b>Safari·iOS Safari share_target 미지원</b> — WebKit 입장 neutral(2019년 버그), Firefox 미구현. Chrome Android만 지원.</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3><span class="n">D-3</span>docvault에 넣는다면</h3>
+    <p class="one">캡처 경로 보강 → PDF 하이라이트 → 이미지 OCR → Excalidraw·DOCX/HWPX 가져오기 → EPUB 순이 증거가 가리키는 순서입니다.</p>
+    <ol class="plan">
+      <li><div><div class="t">토큰 인증 캡처 엔드포인트(URL 또는 HTML 본문) + iOS 단축어 배포</div><div class="d">기존 PWA share-target 라우트를 같은 서비스 함수로. 카카오톡 → 공유 시트 → 단축어 → docvault 흐름을 온보딩에 문서화. Linkwarden·Obsidian 모바일 1.11.0 선례.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">서버 추출기: Defuddle + linkedom → Markdown</div><div class="d">사이트 규칙 테이블(네이버 모바일 URL 치환), URL 정규화 해시로 중복 감지, 실패 시 사용자 선택 텍스트 폴백, 추출 텍스트를 FTS·RAG 인덱스에 즉시 반영. 원본 보존은 기본 꺼짐 + 용량 쿼터.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">비용 0 (linkedom 약 100 MB 실측)</span></div></div></li>
+      <li><div><div class="t">사용자별 수신 메일 주소 → 같은 캡처 서비스</div><div class="d">뉴스레터 구독도 같은 파이프라인. 뉴스 브리핑의 RSS와 합류 가능.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">Mailgun Free 100통/일 또는 SES USD 0.10/1,000통</span></div></div></li>
+      <li><div><div class="t">PDF 하이라이트(DB 저장) → Markdown 노트·학습 카드 추출</div><div class="d">pdf_highlights 테이블에 W3C 선택자 + 정규화 좌표 + 색 + 메모. 현 뷰어가 pdf.js면 react-pdf-highlighter 패턴, 교체 가능하면 EmbedPDF(MIT). PDF는 불변 원본으로 두어 20버전 정책과 정합.</div><div class="f"><span class="chip m">난이도 중상</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">이미지 업로드: HEIC → 서버 JPEG/WebP 변환, 썸네일, OCR 텍스트를 검색·Q&amp;A에 포함</div><div class="d">Safari 17+만 HEIC 네이티브 표시. 손글씨·화이트보드는 멀티모달 LLM으로 "요약+텍스트화".</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">Upstage OCR USD 0.0015/쪽 · Google Vision USD 1.50/1,000쪽</span></div></div></li>
+      <li><div><div class="t">.excalidraw JSON을 텍스트 형식으로 추가 + Excalidraw 뷰어/에디터</div><div class="d">텍스트 저장 경로·버전 관리 재사용, SVG 내보내기를 Markdown에 삽입. MIT, 135k 스타.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">DOCX(mammoth.js)·HWPX(python-hwpx/hwpforge) 가져오기 → Markdown/HTML + 원본 첨부</div><div class="d">양방향 편집(다시 DOCX로)은 보류. HWP5는 여전히 장벽.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">EPUB 뷰어(foliate-js, iframe 샌드박스 + CSP 필수)</div><div class="d">리더 모드·이어읽기 연장. "deny by default" 원칙과 부합.</div><div class="f"><span class="chip m">난이도 중</span><span class="chip cost">비용 0</span></div></div></li>
+      <li><div><div class="t">Telegram 봇 수신(서버 웹훅)</div><div class="d">Obsidian 플러그인의 "데스크톱 켜져 있어야 함" 한계 없음. 카카오톡 봇은 공식 수신 경로 불명.</div><div class="f"><span class="chip m">난이도 하</span><span class="chip cost">비용 0</span></div></div></li>
+    </ol>
+    <p class="cap">Claude에 PDF를 매번 통째로 넘기면 쪽당 1,500~3,000 텍스트 토큰 + 이미지 토큰이 들므로, 업로드 시 1회 추출(디지털 PDF는 pdftotext 무료, 스캔본만 OCR)로 비용을 고정합니다.</p>
+  </div>
+
+  <div class="avoid"><h4>피할 것</h4><ul>
+    <li>tldraw — SDK 4.0(2025-09)부터 프로덕션에 라이선스 키 필수, 상업 가격 비공개, 서버 핑.</li>
+    <li>PDF.js로 주석을 PDF에 굽기 — 주석별 API가 없고 버전 폭증을 부릅니다.</li>
+    <li>Nutrient/PSPDFKit — 웹 전용 연 USD 10,000~15,000부터, 구매 중앙값 USD 31,000(제3자).</li>
+    <li>손글씨 전용 캔버스 자체 구현 — GoodNotes가 네이티브로 수년간 다듬은 영역.</li>
+    <li>기본 켜짐 전체 페이지 아카이브, Tesseract 단독 한국어 OCR, 카카오톡 봇 수신에 의존한 설계, 호출 없어도 유지비가 나가는 CLOVA OCR 플랜.</li>
+  </ul></div>
+</section>
+
+<!-- 우선순위 매트릭스 -->
+<section id="matrix">
+  <div class="sec-head">
+    <h2>종합 — 우선순위 매트릭스</h2>
+    <p class="conclusion">가치 높고 난이도 낮은 칸에 인용 Q&amp;A·위키링크·캡처 경로·연관 추천이 몰려 있고, 이것만으로 1단계가 꽉 찹니다.</p>
+  </div>
+  <div class="quad" aria-label="가치 대 난이도 2x2">
+    <div></div>
+    <div class="lab top">난이도 낮음 (하~중)</div>
+    <div class="lab top">난이도 높음 (중상~상)</div>
+    <div class="lab">가치 높음<br>(4~5)</div>
+    <div class="cell hot"><span class="chip s1">인용 Q&amp;A</span><span class="chip s1">위키링크+백링크</span><span class="chip s1">캡처 경로</span><span class="chip s1">데이터 소유권 패키지</span><span class="chip s2">연관 추천+로컬 그래프</span><span class="chip s2">음성 파일 가져오기</span></div>
+    <div class="cell"><span class="chip s2">PDF 하이라이트</span></div>
+    <div class="lab">가치 낮음<br>(1~3)</div>
+    <div class="cell"><span class="chip s2">수신 메일</span><span class="chip s2">템플릿/데일리 노트</span><span class="chip s2">캐싱/라우팅</span><span class="chip s2">카드 자동 초안</span><span class="chip s3">자동 태그 제안</span><span class="chip s3">읽어주기</span><span class="chip s3">Excalidraw</span><span class="chip s3">OCR</span><span class="chip s3">DOCX/HWPX</span></div>
+    <div class="cell"><span class="chip hold">속성 뷰</span><span class="chip hold">오디오 오버뷰</span><span class="chip hold">네이티브 녹음</span><span class="chip hold">실시간 공동 편집</span><span class="chip hold">전체 그래프</span></div>
+  </div>
+  <p class="cap">칩 색은 추천 단계입니다. 초록 = 1단계, 파랑 = 2단계, 회색 = 3단계, 빨강 = 보류.</p>
+  <div class="tw"><table>
+    <thead><tr><th>후보 기능</th><th>사용자 가치</th><th>차별화</th><th>난이도</th><th>월 운영비 (1인, 2026-11)</th><th>단계</th></tr></thead>
+    <tbody>
+      <tr><td class="k">하이브리드 RAG + 인용 Q&amp;A</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>5</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td>중</td><td>색인 USD 0~1, 질의 1,000건 USD 15</td><td><span class="chip s1">1</span></td></tr>
+      <tr><td class="k">[[위키링크]] + 백링크 + rename 전파</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>5</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>중</td><td>0</td><td><span class="chip s1">1</span></td></tr>
+      <tr><td class="k">캡처 엔드포인트 + iOS 단축어 + 서버 URL 추출</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>5</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td>중</td><td>0</td><td><span class="chip s1">1</span></td></tr>
+      <tr><td class="k">데이터 소유권 패키지(내보내기 + AI 옵트인·로그)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td>하</td><td>0</td><td><span class="chip s1">1</span></td></tr>
+      <tr><td class="k">연관 문서 추천 + 로컬 그래프</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td>하</td><td>0</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">음성 파일 가져오기 → STT → 문서 + 용어집</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td>중</td><td>10시간 약 2,400~13,000원</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">사용자별 수신 메일 주소</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td>하</td><td>USD 0~1</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">PDF 하이라이트(DB) → 노트·카드</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td>중상</td><td>0</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">문서 → 학습 카드 자동 초안 + FSRS</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>4</td><td>중</td><td>센트 수준</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">프롬프트 캐싱 + Haiku/Sonnet 자동 라우팅</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i></i><i></i><i></i><i></i></span>1</td><td>하</td><td>비용 절감</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">템플릿 + 데일리 노트</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i></i><i></i><i></i><i></i></span>1</td><td>하</td><td>0</td><td><span class="chip s2">2</span></td></tr>
+      <tr><td class="k">Unlinked mentions</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td>중</td><td>0</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">이미지 업로드 + HEIC 변환 + 한국어 OCR</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>중</td><td>100장 약 USD 0.15</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">자동 태그·링크 제안(확인 UX)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>하</td><td>문서당 USD 0.001 미만</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">읽어주기(speechSynthesis → 1인 낭독 MP3)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>하</td><td>10분당 USD 0.02~0.1</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">.excalidraw 형식 + 뷰어</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>하</td><td>0</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">DOCX·HWPX 가져오기</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td>중</td><td>0</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">EPUB 뷰어(foliate-js)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>중</td><td>0</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">짧은 브라우저 음성 메모</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td><span class="bar"><i class="on"></i><i></i><i></i><i></i><i></i></span>1</td><td>중</td><td>STT 단가</td><td><span class="chip s3">3</span></td></tr>
+      <tr><td class="k">속성 기반 표 뷰(Bases류)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>상</td><td>0</td><td><span class="chip hold">보류</span></td></tr>
+      <tr><td class="k">2인 대화형 오디오 오버뷰</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>상</td><td>100편 USD 10~50</td><td><span class="chip hold">보류</span></td></tr>
+      <tr><td class="k">잠금 중 장시간 녹음(네이티브 래퍼)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>3</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td>상</td><td>—</td><td><span class="chip hold">보류</span></td></tr>
+      <tr><td class="k">실시간 공동 편집(Yjs)</td><td><span class="bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>2</td><td><span class="bar"><i class="on"></i><i></i><i></i><i></i><i></i></span>1</td><td>상</td><td>0</td><td><span class="chip hold">보류</span></td></tr>
+      <tr><td class="k">전체 그래프 뷰</td><td><span class="bar"><i class="on"></i><i></i><i></i><i></i><i></i></span>1</td><td><span class="bar"><i class="on"></i><i></i><i></i><i></i><i></i></span>1</td><td>중</td><td>0</td><td><span class="chip hold">보류</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 로드맵 -->
+<section id="roadmap">
+  <div class="sec-head">
+    <h2>로드맵 제안</h2>
+    <p class="conclusion">1단계는 외부 비용이 거의 0인 네 가지로 "제품처럼 보이는" 수준을 만들고, 2단계에서 음성과 PDF로 폭을 넓히며, 3단계는 사용 로그를 보고 고릅니다.</p>
+  </div>
+  <div class="stages">
+    <article class="stage one">
+      <div class="num">1단계</div>
+      <h3>핵심 격차 메우기</h3>
+      <ul><li>하이브리드 RAG + 인용 Q&amp;A</li><li>[[위키링크]] + 백링크 + rename 전파</li><li>캡처 엔드포인트 + iOS 단축어 + 서버 URL 추출</li><li>Markdown 일괄 내보내기 + AI 옵트인·전송 로그</li></ul>
+      <p class="eff">"내 자료만 근거로 출처를 달아 답하고, 문서끼리 이어지고, iPhone에서 한 번에 저장되는" 시연 가능한 제품. 셀프호스팅 경쟁 체크리스트의 약점(이식성·AI 투명성) 해소.</p>
+      <p class="pre">선행 조건: 설계 문서(ERD의 file_links·chunks 테이블, API 명세의 캡처 ID) 먼저 갱신. 임베딩 공급자 선택(Voyage 무료 또는 OpenAI small). STT는 아직 불필요.</p>
+    </article>
+    <article class="stage two-s">
+      <div class="num">2단계</div>
+      <h3>폭 넓히기</h3>
+      <ul><li>음성 파일 가져오기 → STT 어댑터 → 전사 문서 + 용어집 + 요약·카드 초안</li><li>PDF 하이라이트(DB) → 노트·카드</li><li>연관 문서 추천 + 로컬 그래프</li><li>수신 메일 주소 + 프롬프트 캐싱·모델 라우팅</li></ul>
+      <p class="eff">클로바노트 개인 사용자의 "유료로 못 늘리는 한도" 공백 공략, 학습 카드 루프 완성, AI 비용 구조 안정.</p>
+      <p class="pre">선행 조건: 결정 2(녹음을 외부 STT로 보내도 되는가)와 결정 3(정확도 vs 비용). PDF 뷰어 라이브러리 결정(pdf.js 유지 vs EmbedPDF).</p>
+    </article>
+    <article class="stage three">
+      <div class="num">3단계</div>
+      <h3>사용 로그 보고 선택 (4개 이하)</h3>
+      <ul><li>후보: unlinked mentions, 이미지 OCR, 자동 태그 제안, 읽어주기, Excalidraw, DOCX/HWPX, EPUB, 짧은 음성 메모</li></ul>
+      <p class="eff">업로드되는 형식·질문 패턴·캡처 채널 실측값에 맞춰 고릅니다.</p>
+      <p class="pre">선행 조건: 1·2단계 배포 후 관리자 대시보드에 형식별 업로드 수·캡처 채널별 건수·AI 기능별 호출 수 지표 추가.</p>
+    </article>
+  </div>
+  <p class="cap">모든 단계는 프로젝트 규칙대로 설계 문서를 먼저 고치고, 표를 새로 만들면 ERD의 엔티티 블록과 관계 설명을 함께 갱신하며, 사용자에게 보이는 변경은 CHANGELOG.md에 기록합니다.</p>
+</section>
+
+<!-- 정할 것 -->
+<section id="decide">
+  <div class="sec-head">
+    <h2>사용자가 정해야 할 것</h2>
+    <p class="conclusion">아래 다섯 가지는 시장 자료로 답할 수 없고 소유자가 정해야 하며, 특히 2번과 3번은 2단계 착수 전에 필요합니다.</p>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>결정</th><th>선택지</th><th>영향</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="k">과금 여부와 방식</td><td>(A) 무료·자발적 후원(Obsidian 모델) / (B) 호스트 1인 정액(월 1만 원 내외, 계정 N개 포함) + AI 사용량 패스스루 / (C) 좌석당 과금</td><td>(C)는 가족·스터디에서 심리적 저항이 큽니다. 유료화 시 통신판매업 신고·처리방침 정비가 따라옵니다</td></tr>
+      <tr><td class="num">2</td><td class="k">사용자 녹음·문서를 외부 STT·임베딩 API로 보내도 되는가</td><td>전면 허용 / 사용자별 옵트인 + 공급자 명시 / 한국 리전(CLOVA·RTZR)만</td><td>"폐쇄형 셀프호스팅"의 서사와 직결. 옵트인 + 전송 로그가 Notion Enterprise ZDR에 대응하는 차별점</td></tr>
+      <tr><td class="num">3</td><td class="k">음성의 우선 기준</td><td>한국어 정확도(RTZR·CLOVA, 10시간 약 10,000~13,000원) / 비용(Deepgram·AssemblyAI, 약 2,400~4,500원, 한국어 벤치 약함)</td><td>월 원가가 3~5배 차이. 과금 모델(1번)과 연동</td></tr>
+      <tr><td class="num">4</td><td class="k">대상 니치</td><td>튜터–학생/스터디 / 가족 아카이브 / 소규모 전문 사무소(법률·세무·의원) / 교회·동호회</td><td>2단계 우선순위(학습 카드 vs PDF vs 음성)와 처리방침의 책임 구조가 달라집니다</td></tr>
+      <tr><td class="num">5</td><td class="k">배포 형태</td><td>소유자가 운영하는 단일 인스턴스 / 셀프호스팅 배포(관리자가 자기 VM에 설치) / 둘 다</td><td>셀프호스팅 배포는 개발자의 법적 부담을 줄이지만 "비개발자도 되는 설치"가 새 작업이 됩니다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 결론 -->
+<section id="final">
+  <div class="sec-head">
+    <h2>결론 및 제언</h2>
+    <p class="conclusion">기존 기능 세 가지(내 자료 참고 · 공유 라우트 · 학습 카드 그래프)를 승격하는 것만으로 1단계가 성립하고, 음성은 "녹음 앱"이 아니라 "녹음을 문서로 바꾸는 곳"으로 정의할 때만 1인 운영 범위에 들어옵니다.</p>
+  </div>
+  <div class="final">
+    <div class="panel"><b>docvault가 서 있는 자리는 비어 있는 칸</b>개인용 로컬 퍼스트(Obsidian)와 기업 위키(Notion·Outline) 사이에서 "가볍게 셀프호스팅되고, 관리자가 소수 계정을 발급하며, AI Q&amp;A가 내장된 소그룹 문서함"을 하나의 제품으로 내놓은 곳은 없습니다. 가장 가까운 대안이 두 제품을 따로 운영하는 것이라는 사실 자체가 포지셔닝 문장이 됩니다.</div>
+    <div class="panel"><b>먼저 할 일은 새 방향이 아니라 기존 기능의 승격</b>"내 자료 참고"에 임베딩과 인용을 붙이고, 문서에 [[링크]]를 붙이고, 이미 있는 share-target 라우트를 iPhone에서도 닿게 하는 세 가지는 외부 비용이 거의 0이고 설계 상수와 백업 단위를 건드리지 않습니다.</div>
+    <div class="panel"><b>음성은 하되 순서와 경계를 지킨다</b>클로바노트가 개인 유료를 열지 않아 생긴 공백은 실재하지만, iOS 26 PWA의 녹음 버그와 1 GB VM의 한계 때문에 "녹음 파일을 문서로 바꿔 보관·검색·질문하는 곳"으로 정의해야 합니다.</div>
+    <div class="panel"><b>다음 행동</b>결정 2(외부 API 전송 정책)를 정한 뒤 1단계 네 가지의 설계 문서(ERD·API 명세)를 갱신하는 것입니다.</div>
+  </div>
+</section>
+
+<footer>
+  근거·출처 310여 개는 같은 폴더의 마크다운 보고서 <span class="mono">docs/시장조사보고서_고도화방향_20261103.md</span> 부록에 방향별로 정리되어 있습니다. 가격은 2026-11-03 확인 기준이며, 클로바노트·CLOVA Speech/OCR·티로의 공식 요금은 동적 페이지라 2차 자료에 의존했습니다. 기능별 실제 사용률·리텐션의 1차 설문은 어느 방향에도 없어 플러그인 다운로드·커뮤니티 정리·제품 로드맵을 대리 지표로 썼습니다.
+</footer>
+
+</div>
+</body>
+</html>
