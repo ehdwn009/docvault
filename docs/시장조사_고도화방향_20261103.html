@@ -105,6 +105,14 @@ section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 6
 .chip.cost { background: transparent; border: 1px solid var(--line); color: var(--fg); font-weight: 500; white-space: normal; }
 
 /* 핵심 결론 */
+.card .plain { font-size: 14px; line-height: 1.55; background: var(--sunk); border-radius: 8px; padding: 8px 10px; }
+.card .plain b { color: var(--accent); margin-right: 6px; font-weight: 600; }
+.plain-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; line-height: 1.6; }
+.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.gloss .panel dl { margin: 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+.gloss dt { font-weight: 600; font-size: 14px; }
+.gloss dd { margin: 0 0 2px; font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+.gloss .panel h4 { color: var(--fg); font-size: 14px; }
 .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .key { background: var(--surface); border-top: 3px solid var(--accent); padding: 12px 14px; font-size: 14.5px; line-height: 1.6; }
 .key b { display: block; margin-bottom: 4px; font-size: 15px; }
@@ -182,6 +190,7 @@ footer { font-size: 12.5px; color: var(--muted); line-height: 1.6; border-top: 1
 
 <nav class="jump" aria-label="절 이동">
   <a href="#summary">한눈 요약</a>
+  <a href="#terms">용어 풀이</a>
   <a href="#market">시장 프레임</a>
   <a class="na" href="#dir-a">A 지식 연결</a>
   <a class="nb" href="#dir-b">B 음성·회의록</a>
@@ -203,42 +212,49 @@ footer { font-size: 12.5px; color: var(--muted); line-height: 1.6; border-top: 1
       <div class="top"><span class="rank">1</span><span class="chip c">C · AI 심화</span></div>
       <h3>인용 Q&amp;A — "내 자료 참고"를 하이브리드 검색 + 출처 인용으로 승격</h3>
       <p class="why">NotebookLM·Obsidian Copilot·Smart Connections가 증명한, 사용자가 유일하게 "계속 쓰는" AI 기능입니다. 지금 docvault의 가장 큰 격차(임베딩 없음)이기도 합니다. FTS5 + sqlite-vec + Claude Citations 조합이 소형 SQLite 앱의 정석입니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> 내 문서들한테 물어보면 AI가 답하면서 &quot;이건 이 문서 어디에서 가져왔어요&quot;라고 출처를 짚어 주는 기능. 지금도 물어볼 수는 있지만, 단어가 똑같이 들어간 문서만 찾고 출처는 안 짚어 준다</p>
       <div class="foot"><span class="chip cost">전체 색인 USD 1 미만</span><span class="chip cost">질의당 USD 0.015(Sonnet)</span><span class="chip m">난이도 중</span></div>
     </article>
     <article class="card">
       <div class="top"><span class="rank">2</span><span class="chip a">A · 지식 연결</span></div>
       <h3>[[위키링크]] 자동완성 + 백링크 패널 + 제목 변경 전파</h3>
       <p class="why">2026년 모든 노트 앱의 표준 사양입니다. 팀 위키인 Outline과 Docmost조차 2026년에 백링크를 추가했습니다. 저장 시 링크를 DB 테이블로 뽑아 두는 방식이 셀프호스팅 구현의 공통 패턴입니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> 문서 안에서 다른 문서 제목을 [[ ]]로 감싸면 눌러서 바로 이어지고, 반대로 &quot;나를 가리키는 문서들&quot;도 자동으로 모여 보이는 기능. 문서 제목을 바꿔도 연결이 안 끊긴다</p>
       <div class="foot"><span class="chip cost">외부 비용 0</span><span class="chip m">난이도 중</span></div>
     </article>
     <article class="card">
       <div class="top"><span class="rank">3</span><span class="chip d">D · 캡처</span></div>
       <h3>캡처 경로 3종 — 토큰 인증 엔드포인트 + iOS 단축어, 수신 메일, 서버 URL→Markdown 추출</h3>
       <p class="why">iPhone Safari는 PWA 공유 대상(share_target)을 지원하지 않아 지금 있는 라우트는 iPhone에서 호출될 수 없습니다. 한국 사용자의 1차 인박스는 카카오톡 "나에게 보내기"이므로 공유 시트에서 한 번에 닿는 길이 필요합니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> 카카오톡·사파리에서 본 글을 &quot;공유&quot; 한 번으로 docvault에 저장하는 길. 아이폰은 웹앱이 공유 목록에 못 들어가서 단축어와 이메일로 우회한다</p>
       <div class="foot"><span class="chip cost">메일 수신 월 USD 0~1</span><span class="chip m">난이도 중</span></div>
     </article>
     <article class="card">
       <div class="top"><span class="rank">4</span><span class="chip b">B · 음성</span></div>
       <h3>음성 파일 가져오기 → 외부 STT 전사 → 문서화·검색·질문</h3>
       <p class="why">클로바노트는 개인 유료 플랜이 없어 월 300분에 막힙니다. iOS 26 PWA는 브라우저 녹음이 불안정하므로 "녹음"이 아니라 "가져오기"로 시작하고, 전사 결과를 일반 문서로 만들어 검색·버전·AI 질문을 그대로 씁니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> 녹음 파일을 올리면 글로 받아써서 문서로 만들어 주는 기능(클로바노트가 하는 일). 녹음 자체는 아이폰 기본 녹음 앱에 맡기고, 받아쓰기는 외부 업체 API에 맡긴다</p>
       <div class="foot"><span class="chip cost">월 10시간당 약 4,500원(Deepgram)~11,000원(RTZR)</span><span class="chip m">난이도 중</span></div>
     </article>
     <article class="card">
       <div class="top"><span class="rank">5</span><span class="chip a">A</span><span class="chip c">C</span></div>
       <h3>연관 문서 추천 + 로컬 그래프(깊이 1~2)</h3>
       <p class="why">1번의 임베딩과 기존 학습 카드 그래프(cytoscape)를 그대로 재사용합니다. 전체 그래프는 수백 노트부터 "헤어볼"이 되어 안 쓰이지만, 현재 문서 중심의 작은 그래프는 비판자도 유용하다고 인정합니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> 지금 보는 문서와 내용이 비슷한 문서를 옆에 보여 주고, 이 문서 주변만 작은 지도로 그려 주는 기능. 1·2번을 만들면 거의 공짜로 따라온다</p>
       <div class="foot"><span class="chip cost">추가 비용 0</span><span class="chip m">난이도 하 (1·2번 이후)</span></div>
     </article>
     <article class="card">
       <div class="top"><span class="rank">6</span><span class="chip d">D · 형식</span></div>
       <h3>PDF 하이라이트(DB 저장) → 노트·학습 카드로 추출</h3>
       <p class="why">Zotero·Heptabase·Readwise·Obsidian PDF++가 공유하는 핵심 루프입니다. 주석을 PDF 파일에 굽지 않고 DB에 두면 기존 PDF 뷰어·학습 카드·20버전 정책과 바로 이어집니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> PDF에 형광펜을 긋고, 그은 부분을 모아 메모나 학습 카드로 만드는 기능. PDF 파일은 그대로 두고 어디에 그었는지만 따로 기록한다</p>
       <div class="foot"><span class="chip cost">외부 비용 0</span><span class="chip m">난이도 중상</span></div>
     </article>
     <article class="card">
       <div class="top"><span class="rank">7</span><span class="chip m">시장 프레임</span></div>
       <h3>데이터 소유권 패키지 — Markdown 일괄 내보내기 + AI 전송 옵트인·로그</h3>
       <p class="why">Evernote 이탈(최근 리뷰 1.34/5)과 Notion이 Enterprise에만 주는 LLM 무보존(ZDR) 약속이 보여 주는 빈 자리입니다. "폐쇄형 셀프호스팅"의 서사를 완성하는 가장 싼 기능입니다.</p>
+      <p class="plain"><b>쉽게 말하면</b> 내 문서를 통째로 내려받는 단추 + AI에 뭘 보냈는지 기록 보기. &quot;언제든 떠날 수 있다&quot;는 믿음을 주는 가장 싼 기능</p>
       <div class="foot"><span class="chip cost">비용 0</span><span class="chip m">난이도 하</span></div>
     </article>
   </div>
@@ -251,6 +267,81 @@ footer { font-size: 12.5px; color: var(--muted); line-height: 1.6; border-top: 1
   </div>
 </section>
 
+<!-- 용어 풀이 -->
+<section id="terms">
+  <div class="sec-head">
+    <h2>용어 풀이 — 읽기 전에</h2>
+    <p class="conclusion">이 페이지에 나오는 말을 "쉽게 말하면" 한 줄로 풀었습니다. 정확한 정의보다 감을 잡는 용도이며, 처음 보는 말이 나오면 여기로 돌아오면 됩니다.</p>
+  </div>
+  <div class="gloss">
+    <div class="panel"><h4>문서 연결 (방향 A)</h4><dl>
+      <dt>링크 / 위키링크 [[ ]]</dt><dd>문서 안에서 다른 문서 제목을 [[ ]]로 감싸면 눌러서 바로 가는 연결. 웹의 하이퍼링크와 같지만 주소 대신 제목으로 건다</dd>
+      <dt>백링크</dt><dd>거꾸로 &quot;이 문서를 가리키는 문서들&quot; 목록. 내가 따로 적지 않아도 자동으로 생긴다. 책 맨 뒤 찾아보기(색인)와 비슷하다</dd>
+      <dt>제목 변경 전파 (rename)</dt><dd>문서 제목을 바꾸면 그 문서를 가리키던 링크들도 자동으로 새 제목으로 바뀌는 것. 없으면 링크가 끊긴다</dd>
+      <dt>Unlinked mentions</dt><dd>링크는 안 걸었지만 본문에 그 문서 제목이 글자로 들어 있는 자리. &quot;여기 링크로 바꿀까요?&quot; 제안에 쓴다</dd>
+      <dt>그래프 뷰 / 로컬 그래프</dt><dd>문서를 점, 링크를 선으로 그린 지도. 전체 그래프는 문서가 수백 개 되면 털뭉치처럼 엉켜 못 쓴다. 로컬 그래프는 지금 보는 문서 주변 1~2칸만 그린다</dd>
+      <dt>데일리 노트</dt><dd>날짜가 제목인 하루 한 장 메모</dd>
+      <dt>템플릿</dt><dd>새 문서를 만들 때 미리 짜 둔 틀(회의록 틀, 독서 메모 틀)</dd>
+      <dt>속성(frontmatter) / Bases</dt><dd>문서 맨 위에 &quot;상태: 진행 중, 마감: 11월&quot; 같은 꼬리표를 적어 두고, 그 꼬리표로 문서들을 표처럼 모아 보는 기능</dd>
+      <dt>블록 참조</dt><dd>문서 전체가 아니라 한 문단만 집어 다른 문서에서 인용하는 것. 구현이 무겁다</dd>
+    </dl></div>
+    <div class="panel"><h4>AI (방향 C)</h4><dl>
+      <dt>임베딩 / 벡터</dt><dd>글을 숫자 좌표로 바꾼 것. 뜻이 비슷한 글은 좌표가 가깝다. &quot;비슷한 문서 찾기&quot;의 바탕</dd>
+      <dt>FTS5 (전문 검색)</dt><dd>단어가 정확히 들어 있는 문서를 찾는, 지금 docvault의 검색 방식</dd>
+      <dt>하이브리드 검색 / RRF</dt><dd>단어 검색(FTS5)과 뜻 검색(임베딩)을 둘 다 돌려 순위를 합치는 것. RRF는 두 순위를 합치는 공식 이름</dd>
+      <dt>sqlite-vec</dt><dd>우리 DB(SQLite 파일) 안에 좌표를 저장하고 가까운 것을 찾아 주는 부품. 서버를 하나 더 둘 필요가 없다</dd>
+      <dt>RAG</dt><dd>AI에게 물을 때 내 문서 중 관련 조각을 먼저 찾아 같이 보여 주고 답하게 하는 방식. &quot;내 자료 참고&quot; 스위치가 지금 하는 일의 정식 이름</dd>
+      <dt>청크</dt><dd>긴 문서를 검색하기 좋게 자른 조각. 문단 몇 개 크기</dd>
+      <dt>인용 (Claude Citations)</dt><dd>AI 답변의 문장마다 &quot;어느 문서 몇 번째 조각에서 가져왔다&quot;를 붙여 주는 기능</dd>
+      <dt>토큰</dt><dd>AI가 글을 세는 단위. 한국어 한 글자가 대략 1~2토큰. 요금은 토큰 수로 매긴다</dd>
+      <dt>프롬프트 캐싱</dt><dd>같은 문서를 두고 여러 번 질문할 때 두 번째부터 입력 요금을 크게 깎아 주는 기능</dd>
+      <dt>Haiku / Sonnet / Opus</dt><dd>Claude 모델의 작은·중간·큰 등급. docvault의 빠름/표준/최고 선택과 같다</dd>
+      <dt>리랭크</dt><dd>검색으로 뽑은 후보들을 한 번 더 정밀하게 순위 매기는 단계. 선택 사항</dd>
+      <dt>오디오 오버뷰</dt><dd>NotebookLM이 문서를 두 사람의 팟캐스트 대화로 바꿔 들려주는 기능</dd>
+      <dt>FSRS / 간격 반복</dt><dd>잊을 때쯤 다시 보여 주도록 복습 간격을 정해 주는 공식. Anki 같은 암기 앱이 쓴다</dd>
+      <dt>에이전트</dt><dd>AI가 답만 하는 게 아니라 &quot;폴더 정리&quot; 같은 일을 여러 단계 스스로 하는 것</dd>
+      <dt>BYOK</dt><dd>사용자가 자기 AI 열쇠(API 키)를 가져와 쓰는 방식. 비용을 사용자가 낸다</dd>
+      <dt>ZDR (Zero Data Retention)</dt><dd>AI 회사가 &quot;보낸 데이터를 저장하지 않겠다&quot;고 하는 약속</dd>
+      <dt>옵트인</dt><dd>기본은 꺼져 있고 사용자가 직접 켜야 동작하는 방식</dd>
+    </dl></div>
+    <div class="panel"><h4>음성 (방향 B)</h4><dl>
+      <dt>STT / TTS</dt><dd>STT는 소리를 글로(받아쓰기), TTS는 글을 소리로(읽어주기)</dd>
+      <dt>화자 분리</dt><dd>녹음에서 &quot;누가 말했는지&quot;를 나누는 것. 성문 식별은 목소리로 사람 이름까지 맞히는 것</dd>
+      <dt>CER (글자 오류율)</dt><dd>100글자 받아쓰면 몇 글자 틀리는가. 낮을수록 좋다. 5.9%면 100글자 중 6글자 정도</dd>
+      <dt>키워드 부스팅 / 용어집</dt><dd>받아쓰기 전에 &quot;이런 단어가 나올 거야&quot;라고 미리 알려 주는 것. 전문용어 오타를 줄인다</dd>
+      <dt>MediaRecorder / PWA 녹음</dt><dd>브라우저가 마이크로 녹음하는 기능. 아이폰 홈 화면 웹앱에서는 자주 끊기고 화면을 끄면 멈춘다</dd>
+      <dt>Whisper</dt><dd>OpenAI가 공개한 무료 받아쓰기 모델. 직접 돌리려면 메모리가 많이 필요해 우리 서버(1 GB)에서는 안 된다</dd>
+    </dl></div>
+    <div class="panel"><h4>캡처·형식 (방향 D)</h4><dl>
+      <dt>캡처</dt><dd>다른 앱이나 웹에서 본 것을 한 번에 내 문서함으로 가져오기</dd>
+      <dt>웹 클리퍼</dt><dd>웹 페이지에서 광고·메뉴를 빼고 본문만 뽑아 저장하는 도구</dd>
+      <dt>share_target (공유 대상)</dt><dd>폰의 &quot;공유&quot; 단추 목록에 우리 앱이 나오게 하는 웹 표준. 안드로이드 크롬만 되고 아이폰 사파리는 안 된다</dd>
+      <dt>iOS 단축어</dt><dd>아이폰에 내장된 자동화 앱. &quot;공유 → 단축어 → 우리 서버로 보내기&quot; 통로로 쓴다</dd>
+      <dt>수신 메일</dt><dd>사용자마다 전용 이메일 주소를 주고, 거기로 보내면 문서로 저장되는 방식</dd>
+      <dt>Defuddle / Readability</dt><dd>웹 페이지에서 본문만 추려내는 오픈소스 부품</dd>
+      <dt>OCR</dt><dd>사진 속 글자를 텍스트로 바꾸는 것</dd>
+      <dt>HEIC</dt><dd>아이폰 사진의 기본 파일 형식. 웹에서 바로 안 보여 서버에서 JPEG로 바꿔야 한다</dd>
+      <dt>PDF 하이라이트 (DB 저장)</dt><dd>PDF에 형광펜을 긋되 PDF 파일은 건드리지 않고 &quot;몇 쪽 어디&quot;만 따로 기록하는 방식</dd>
+      <dt>Excalidraw / tldraw</dt><dd>손으로 그리는 화이트보드 도구. Excalidraw는 무료 자유 사용, tldraw는 상업용 열쇠가 필요하다</dd>
+      <dt>EPUB / DOCX / HWPX</dt><dd>전자책 / 워드 / 한글(HWP)의 새 열린 형식. 옛 HWP는 닫힌 형식이라 다루기 어렵다</dd>
+    </dl></div>
+    <div class="panel"><h4>시장·운영</h4><dl>
+      <dt>셀프호스팅</dt><dd>남의 서비스가 아니라 내 서버에 설치해 직접 운영하는 것. docvault가 이 방식</dd>
+      <dt>로컬 퍼스트</dt><dd>데이터가 먼저 내 기기에 있고 동기화는 덤인 설계 철학. Obsidian이 대표</dd>
+      <dt>PWA</dt><dd>홈 화면에 설치해 앱처럼 쓰는 웹사이트. docvault를 아이폰에서 쓰는 방식</dd>
+      <dt>SQLite / Postgres / Redis</dt><dd>데이터베이스 종류. SQLite는 파일 하나로 끝나고, 나머지 둘은 별도 서버 프로그램이 필요하다</dd>
+      <dt>e2-micro / 1 GB VM</dt><dd>docvault가 도는 서버의 크기. 메모리 1 GB짜리 아주 작은 클라우드 컴퓨터</dd>
+      <dt>GitHub 스타</dt><dd>오픈소스 프로젝트에 누른 &quot;좋아요&quot; 수. 인기 지표</dd>
+      <dt>MIT / AGPL / BSL</dt><dd>오픈소스 사용 조건. MIT는 거의 자유, AGPL은 고쳐 쓰면 공개 의무, BSL은 상업 이용 제한</dd>
+      <dt>좌석당 과금 / 크레딧 종량</dt><dd>사람 수대로 내는 요금 / 쓴 만큼 내는 요금</dd>
+      <dt>ARR / CAGR</dt><dd>연간 반복 매출 / 연평균 성장률</dd>
+      <dt>실시간 공동 편집 (Yjs)</dt><dd>구글 문서처럼 여러 명이 동시에 타이핑하는 것. Yjs는 그걸 만드는 기술 부품</dd>
+      <dt>Electron</dt><dd>웹 기술로 만든 데스크톱 앱 틀. 무겁다는 평이 많다</dd>
+      <dt>어댑터</dt><dd>받아쓰기·임베딩 업체를 나중에 갈아 끼울 수 있게 중간에 두는 코드 층</dd>
+      <dt>통신판매업 신고 / 처리방침</dt><dd>유료 서비스를 열 때의 신고 절차 / 개인정보를 어떻게 다루는지 적은 문서. 둘 다 법으로 정해진 항목이 있다</dd>
+    </dl></div>
+  </div>
+</section>
 <!-- 시장 프레임 -->
 <section id="market">
   <div class="sec-head">
