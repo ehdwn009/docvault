@@ -318,8 +318,8 @@ export const notifications = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패 */
-    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing'] }).notNull(),
+    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패, upload_done = 오래 걸린 올리기가 끝남 (2026-11-04) */
+    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'upload_done'] }).notNull(),
     title: text('title').notNull(),
     body: text('body'),
     /** 누르면 열 문서. 회차 문서가 지워지면 NULL — 알림은 남되 열 곳만 없어진다 */

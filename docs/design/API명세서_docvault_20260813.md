@@ -225,6 +225,8 @@
 |---|---|---|
 | PAYLOAD_TOO_LARGE | 413 | 파일당 크기 제한 초과 (텍스트 10MB, html 30MB, 바이너리 50MB). html만 넓힌 이유(2026-11-04): 내보내기한 html은 이미지가 base64로 박혀 20MB를 쉽게 넘는데 대개 읽기만 한다. 본문이 DB에 들어가는 비용은 같으므로 md·코드로는 넓히지 않는다 |
 
+**진행 표시·완료 알림 (2026-11-04)**: 클라이언트는 XHR 진행 이벤트(올린 바이트/전체)를 작업 공간의 업로드 띠(SCR-113)에 그리고, [취소]는 요청을 끊는다(서버는 끊긴 본문을 버리므로 반쯤 올라간 파일은 생기지 않는다). 서버는 요청 시작부터 본문을 다 받기까지가 `NOTIFICATION.UPLOAD_SLOW_MS`(10초)를 넘고 파일이 하나라도 만들어졌으면 `upload_done` 알림(API-160 kind)을 올린 사람에게 남긴다 — 제목 「올리기가 끝났어요」, 본문 「폴더 › 첫 파일 외 n개 · 23MB」, fileId는 한 개 올렸을 때만. dedupe_key는 `upload:{userId}:{시작 시각}`. 짧은 올리기는 띠의 「올렸어요」 2.5초로 끝나고 알림함에는 쌓이지 않는다.
+
 업로드에서 UNSUPPORTED_TYPE은 더 이상 발생하지 않습니다(전량 수용). 이름 변경(API-035)에서 저장 방식의 경계(텍스트↔바이너리)를 넘는 확장자 변경 시에만 남아 있습니다.
 
 ---
@@ -750,7 +752,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ## 알림 (API-16x, 2026-11-04 — 1단계)
 
-알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 사건은 지금 둘 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
+알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
 
 ### API-160 — GET /notifications
 내 알림함. **200** `{ "notifications": [{ "id", "kind": "briefing_ready" | "briefing_missing", "title", "body": string | null, "fileId": number | null, "readAt": number | null, "createdAt" }], "unread": 3 }` — 최신순 50개(`NOTIFICATION.LIST_MAX`). `fileId`는 누르면 열 회차 문서(지워졌으면 null → 화면은 브리핑이 있는 곳으로). 종 배지와 목록이 같은 응답을 쓴다.

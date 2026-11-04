@@ -174,7 +174,7 @@ export type FileContent = {
 /** 알림 한 줄 (API-160). fileId가 있으면 누를 때 그 문서를 연다 */
 export type Notification = {
   id: number;
-  kind: 'briefing_ready' | 'briefing_missing';
+  kind: 'briefing_ready' | 'briefing_missing' | 'upload_done';
   title: string;
   body: string | null;
   fileId: number | null;
@@ -194,16 +194,20 @@ export function markNotificationsRead(ids?: number[]): Promise<{ unread: number 
 /** 업로드 전용 — fetch는 업로드 진행률을 주지 않아 XHR을 쓴다 (대용량 PDF 대비) */
 export function uploadFiles(
   fd: FormData,
-  onProgress?: (pct: number) => void,
+  opts: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
 ): Promise<{ files: TreeFile[] }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/v1/files');
-    if (onProgress) {
+    if (opts.onProgress) {
+      const report = opts.onProgress;
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        if (e.lengthComputable) report(e.loaded, e.total);
       };
     }
+    // [취소] — 끊으면 onabort로 떨어진다. 서버는 본문이 끊긴 요청을 버리므로 반쯤 올라간 파일은 생기지 않는다
+    opts.signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+    xhr.onabort = () => reject(new ApiError(0, 'ABORTED', '취소했어요'));
     xhr.onload = () => {
       type UploadBody = { code?: string; message?: string; files?: TreeFile[] };
       let body: UploadBody | null = null;

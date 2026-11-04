@@ -8,6 +8,7 @@ import {
   MAX_ARCHIVE_ENTRIES,
   MAX_ARCHIVE_ID_PARAMS,
   MAX_VERSIONS_PER_FILE,
+  NOTIFICATION,
 } from '../constants.js';
 import { db } from '../db/index.js';
 import { askThreads, cardThreads, fileTags, fileVersions, files, folders, tags, userFileState } from '../db/schema.js';
@@ -22,6 +23,7 @@ import {
 } from '../lib/archive.js';
 import { saveTextContent } from '../lib/content.js';
 import { fail } from '../lib/errors.js';
+import { pushNotification } from '../lib/notifications.js';
 import {
   ALL_EXTENSIONS,
   classifyUpload,
@@ -110,6 +112,8 @@ export const fileRoutes = new Hono<AppEnv>()
   // API-031: 파일 업로드 (multipart, 여러 파일 동시 지원)
   .post('/', async (c) => {
     const user = c.get('user');
+    // 본문을 받는 시간이 곧 올리는 시간 — 여기서 재야 "오래 걸린 올리기"를 안다
+    const started = Date.now();
     const body = await c.req.parseBody({ all: true });
 
     const raw = body['files'];
@@ -119,6 +123,7 @@ export const fileRoutes = new Hono<AppEnv>()
     }
 
     let folderId: number | null = null;
+    let folderName: string | null = null;
     if (typeof body['folderId'] === 'string' && body['folderId'] !== '') {
       folderId = parseId(body['folderId']);
       if (folderId === null) return fail(c, 400, 'VALIDATION_ERROR', 'folderId: 올바르지 않은 값');
@@ -126,6 +131,7 @@ export const fileRoutes = new Hono<AppEnv>()
       if (!folder || folder.ownerId !== user.id) {
         return fail(c, 404, 'NOT_FOUND', '대상 폴더가 없습니다');
       }
+      folderName = folder.name;
     }
 
     // 저장 전에 전체 파일을 먼저 검증한다 — 일부만 올라가는 어중간한 결과를 만들지 않기 위해.
@@ -179,6 +185,20 @@ export const fileRoutes = new Hono<AppEnv>()
         ...toFileMeta(row),
         tags: [] as number[],
         state: DEFAULT_FILE_STATE,
+      });
+    }
+
+    // 오래 걸린 올리기는 알림으로 남긴다 — 올리는 동안 다른 탭·다른 기기로 갔어도 끝난 걸 안다 (알림 4단계 앞부분, 2026-11-04)
+    if (Date.now() - started >= NOTIFICATION.UPLOAD_SLOW_MS && created.length > 0) {
+      const totalBytes = uploads.reduce((n, f) => n + f.size, 0);
+      const label = `${names[0]}${names.length > 1 ? ` 외 ${names.length - 1}개` : ''}`;
+      pushNotification({
+        userIds: [user.id],
+        kind: 'upload_done',
+        title: '올리기가 끝났어요',
+        body: `${folderName ? `${folderName} › ` : ''}${label} · ${Math.round(totalBytes / 1024 / 1024)}MB`,
+        fileId: created.length === 1 ? created[0]!.id : null,
+        dedupeKey: `upload:${user.id}:${started}`,
       });
     }
 

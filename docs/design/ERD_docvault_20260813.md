@@ -229,7 +229,7 @@ erDiagram
     NOTIFICATIONS {
         integer id PK
         integer user_id FK "받는 사람"
-        text kind "briefing_ready | briefing_missing (2026-11-04)"
+        text kind "briefing_ready | briefing_missing | upload_done (2026-11-04)"
         text title
         text body "nullable, 한 줄 설명"
         integer file_id FK "nullable — 누르면 열 회차 문서. 문서를 지우면 NULL(SET NULL)"

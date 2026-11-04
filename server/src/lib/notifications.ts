@@ -8,7 +8,7 @@ import { sendPushToUser } from './push.js';
 // 알림은 "사건 한 표"에 쌓고, 화면·푸시·메신저는 그 위의 배달 통로다 (알림 설계 2026-11-04 — 1단계는 앱 안 알림함만).
 // 사건을 만드는 쪽(브리핑 실행)은 배달 방식을 모른다 — 여기 함수 하나만 부른다.
 
-export type NotificationKind = 'briefing_ready' | 'briefing_missing';
+export type NotificationKind = 'briefing_ready' | 'briefing_missing' | 'upload_done';
 
 type NewNotification = {
   userIds: number[];

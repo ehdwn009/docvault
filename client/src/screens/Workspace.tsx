@@ -56,6 +56,7 @@ import SharedPanel from './panels/SharedPanel';
 import AskPanel from '../components/AskPanel';
 import Icon, { type IconName } from '../components/Icon';
 import NotificationCenter from '../components/NotificationCenter';
+import UploadStrip, { type UploadState } from '../components/UploadStrip';
 import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
@@ -315,7 +316,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     if (IS_TOUCH && (panes.length === 0 || touchList || PAGE_PANELS.has(panel))) showChrome();
   }, [panes.length, touchList, panel]);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  // 업로드 진행 띠(SCR-113) — 패널이 아니라 작업 공간에 둔다: 탭을 옮겨도 보이고 폰·PC가 같은 띠를 쓴다 (2026-11-04, 시안 A)
+  const [upload, setUpload] = useState<UploadState | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   // 알림함(SCR-103) — 종 배지와 목록이 한 훅을 본다. 열려 있는 동안도 주기 새로고침은 계속
   const [notifOpen, setNotifOpen] = useState(false);
   const notif = useNotifications(true);
@@ -962,7 +965,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const fd = new FormData();
         for (const f of resolved.toUpload) fd.append('files', f);
         if (folderId !== null) fd.append('folderId', String(folderId));
-        created = (await uploadFiles(fd, setUploadProgress)).files;
+        const names = resolved.toUpload.map((f) => f.name);
+        const total = resolved.toUpload.reduce((n, f) => n + f.size, 0);
+        const controller = new AbortController();
+        uploadAbortRef.current = controller;
+        setUpload({ phase: 'uploading', names, loaded: 0, total, startedAt: Date.now() });
+        created = (
+          await uploadFiles(fd, {
+            signal: controller.signal,
+            onProgress: (loaded, t) => setUpload((u) => (u?.phase === 'uploading' ? { ...u, loaded, total: t || u.total } : u)),
+          })
+        ).files;
       }
       return { created, overwritten: resolved.overwritten, skipped: resolved.skipped };
     },
@@ -981,23 +994,27 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     async (fileList: FileList | File[], folderId: number | null) => {
       const list = [...fileList];
       if (list.length === 0) return;
-      setUploadProgress(0);
       try {
         const r = await uploadCore(list, folderId);
-        if (r === null) return; // 충돌 대화상자에서 취소
+        if (r === null) {
+          setUpload(null);
+          return; // 충돌 대화상자에서 취소
+        }
         await loadTree();
-        toast(
-          summarize(r.created.length, r.overwritten, r.skipped) || '업로드한 파일이 없습니다',
-          r.created.length || r.overwritten ? 'success' : 'info',
-        );
+        const summary = summarize(r.created.length, r.overwritten, r.skipped);
+        setUpload(summary ? { phase: 'done', summary: `올렸어요 — ${summary}` } : null);
+        if (!summary) toast('업로드한 파일이 없습니다', 'info');
         if (r.created[0]) void selectFile(r.created[0]);
       } catch (e) {
-        toast(e instanceof ApiError ? e.message : '업로드에 실패했습니다', 'error');
-      } finally {
-        setUploadProgress(null);
+        if (e instanceof ApiError && e.code === 'ABORTED') {
+          setUpload({ phase: 'done', summary: '취소했어요' });
+          return;
+        }
+        // 띠에 빨갛게 남긴다 — 토스트 한 줄은 지나가 버려서 이유를 못 읽는다. [다시]는 같은 파일로 한 번 더
+        setUpload({ phase: 'error', message: e instanceof ApiError ? e.message : '업로드에 실패했습니다', names: list.map((f) => f.name), retry: () => void doUpload(list, folderId) });
       }
     },
-    [loadTree, selectFile, uploadCore],
+    [loadTree, selectFile, uploadCore], // eslint-disable-line react-hooks/exhaustive-deps -- retry가 자기 자신을 부른다
   );
 
   /** "a/b" 경로의 폴더 체인을 보장하고 마지막 폴더 id를 돌려준다 — 기존 폴더는 재사용 */
@@ -1037,7 +1054,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const doUploadTree = useCallback(
     async (items: { file: File; relPath: string }[], baseId: number | null) => {
       if (items.length === 0) return;
-      setUploadProgress(0);
       try {
         // 폴더 경로별로 파일을 묶는다 ('' = 드롭 지점 바로 아래)
         const groups = new Map<string, File[]>();
@@ -1059,16 +1075,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           skipped += r.skipped;
         }
         await loadTree();
-        toast(
-          summarize(created, overwritten, skipped)
-            ? `폴더 업로드 완료 — ${summarize(created, overwritten, skipped)}`
-            : '업로드한 파일이 없습니다',
-          created || overwritten ? 'success' : 'info',
-        );
+        const summary = summarize(created, overwritten, skipped);
+        setUpload(summary ? { phase: 'done', summary: `폴더째 올렸어요 — ${summary}` } : null);
+        if (!summary) toast('업로드한 파일이 없습니다', 'info');
       } catch (e) {
-        toast(e instanceof ApiError ? e.message : '폴더 업로드에 실패했습니다', 'error');
-      } finally {
-        setUploadProgress(null);
+        if (e instanceof ApiError && e.code === 'ABORTED') {
+          setUpload({ phase: 'done', summary: '취소했어요 — 이미 올린 파일은 남아 있어요' });
+          return;
+        }
+        setUpload({ phase: 'error', message: e instanceof ApiError ? e.message : '폴더 업로드에 실패했습니다', names: items.map((i) => i.file.name), retry: null });
       }
     },
     [ensureFolderPath, uploadCore, loadTree],
@@ -1477,6 +1492,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const RAIL_ICONS: Record<Panel, IconName> = { home: 'home', ai: 'sparkle', files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings' };
   // 터치의 문서 탭 칩 이름 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
   const RAIL_SHORT: Record<Panel, string> = { home: '홈', ai: 'AI', files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
+  // "올렸어요" 띠는 읽을 만큼만 보이고 사라진다. 실패 띠는 사람이 닫을 때까지 남는다
+  useEffect(() => {
+    if (upload?.phase !== 'done') return;
+    const t = window.setTimeout(() => setUpload(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [upload]);
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition';
   /** 알림 한 줄을 누름 — 읽음 처리 뒤 그 사건의 자리로: 회차 문서가 있으면 문서, 없으면(못 만듦·문서 삭제) 브리핑이 있는 곳 */
   const openNotification = (n: { id: number; fileId: number | null; readAt: number | null }) => {
@@ -1664,6 +1685,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
+      {upload && <UploadStrip state={upload} onCancel={() => uploadAbortRef.current?.abort()} onClose={() => setUpload(null)} />}
       {notifOpen && (
         <NotificationCenter items={notif.items} unread={notif.unread} onClose={() => setNotifOpen(false)} onOpen={openNotification} onReadAll={() => void notif.markRead()} onOpenSettings={() => openSettings({ category: 'notifications' })} />
       )}
@@ -1929,14 +1951,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             >
               폴더째 업로드
             </button>
-            {uploadProgress !== null && (
-              <div className="mx-3 mt-2 h-1 overflow-hidden rounded bg-slate-800">
-                <div
-                  className="h-full bg-sky-500 transition-all"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            )}
             <div className="mt-2 flex items-start gap-1 px-3">
               {tags.length > 0 && (
                 <div className="flex min-w-0 flex-1 flex-wrap gap-1">

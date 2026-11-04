@@ -22,9 +22,10 @@ type Props = {
   onOpenSettings: () => void;
 };
 
-const KIND_ICON: Record<Notification['kind'], { icon: IconName; tint: 'accent' | 'warn' }> = {
+const KIND_ICON: Record<Notification['kind'], { icon: IconName; tint: 'accent' | 'warn' | 'good' }> = {
   briefing_ready: { icon: 'news', tint: 'accent' },
   briefing_missing: { icon: 'info', tint: 'warn' },
+  upload_done: { icon: 'upload', tint: 'good' },
 };
 
 function dayKey(ms: number, now: Date): '오늘' | '어제' | '그 전' {
@@ -84,7 +85,7 @@ function Empty() {
     <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-slate-500">
       <Icon name="bell" size={28} className="text-slate-700" />
       <p>아직 알림이 없어요</p>
-      <p className="text-xs">브리핑이 도착하거나 만들지 못했을 때 여기에 쌓여요</p>
+      <p className="text-xs">브리핑이 도착하거나 만들지 못했을 때, 오래 걸린 올리기가 끝났을 때 여기에 쌓여요</p>
     </div>
   );
 }
