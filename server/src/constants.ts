@@ -39,6 +39,10 @@ export const HEALTH_PATH = '/api/v1/health';
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 
+/** html만 30MB (API-031, 2026-11-04). 내보내기한 html은 이미지가 base64로 박혀 20MB를 쉽게 넘는데 대개 읽기만 한다 —
+    본문은 여전히 DB에 들어가므로 편집·버전 스냅샷 비용은 그대로다. 그래서 md·코드까지 넓히지 않고 html에만 연다 */
+export const MAX_HTML_FILE_BYTES = 30 * 1024 * 1024;
+
 /** 바이너리 업로드 크기 제한 50MB (API-031) */
 export const MAX_BINARY_FILE_BYTES = 50 * 1024 * 1024;
 

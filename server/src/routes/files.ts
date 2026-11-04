@@ -7,8 +7,6 @@ import {
   DEFAULT_FILE_STATE,
   MAX_ARCHIVE_ENTRIES,
   MAX_ARCHIVE_ID_PARAMS,
-  MAX_BINARY_FILE_BYTES,
-  MAX_TEXT_FILE_BYTES,
   MAX_VERSIONS_PER_FILE,
 } from '../constants.js';
 import { db } from '../db/index.js';
@@ -30,6 +28,7 @@ import {
   extensionOf,
   GENERIC_BINARY,
   isTextType,
+  maxUploadBytes,
   UNKNOWN_TEXT,
   type TypeMeta,
 } from '../lib/filetypes.js';
@@ -139,7 +138,7 @@ export const fileRoutes = new Hono<AppEnv>()
     for (const [i, file] of uploads.entries()) {
       const name = names[i]!;
       const meta = await classifyUpload(file);
-      const limit = isTextType(meta.fileType) ? MAX_TEXT_FILE_BYTES : MAX_BINARY_FILE_BYTES;
+      const limit = maxUploadBytes(meta.fileType);
       if (file.size > limit) {
         return fail(c, 413, 'PAYLOAD_TOO_LARGE', `${name}: ${Math.round(limit / 1024 / 1024)}MB까지 가능합니다`);
       }

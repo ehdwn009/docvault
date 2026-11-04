@@ -1,4 +1,4 @@
-import { MAX_TEXT_FILE_BYTES, TEXT_SNIFF_BYTES } from '../constants.js';
+import { MAX_BINARY_FILE_BYTES, MAX_HTML_FILE_BYTES, MAX_TEXT_FILE_BYTES, TEXT_SNIFF_BYTES } from '../constants.js';
 
 // 형식 분류 (API-031 전량 수용 정책, 2026-08-27): 어떤 확장자도 거절하지 않는다.
 // 이 맵은 "더 나은 미리보기·저장 방식"을 아는 형식만 담고, 여기 없는 확장자는
@@ -20,6 +20,12 @@ export type TypeMeta = { fileType: FileType; mimeType: string };
 /** 텍스트 계열(DB 본문 저장) 판정 — 저장·편집·버전·검색이 모두 이 경계를 따른다 */
 export function isTextType(fileType: string): boolean {
   return fileType === 'md' || fileType === 'html' || fileType === 'code' || fileType === 'text';
+}
+
+/** 형식별 업로드 상한 (API-031) — 업로드·공유 받기가 같은 표를 쓴다 */
+export function maxUploadBytes(fileType: FileType): number {
+  if (fileType === 'html') return MAX_HTML_FILE_BYTES;
+  return isTextType(fileType) ? MAX_TEXT_FILE_BYTES : MAX_BINARY_FILE_BYTES;
 }
 
 // 코드의 MIME은 전부 text/plain — .js를 application/javascript로 내리면 브라우저가 실행
