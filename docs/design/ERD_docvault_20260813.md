@@ -30,6 +30,7 @@ erDiagram
     USERS ||--o{ BRIEFING_RUNS : "브리핑을 만든다"
     FILES ||--o| BRIEFING_RUNS : "성공한 실행의 회차 문서"
     USERS ||--o{ NOTIFICATIONS : "받는다"
+    USERS ||--o{ PUSH_SUBSCRIPTIONS : "기기를 등록한다"
     FILES ||--o{ NOTIFICATIONS : "누르면 여는 문서"
 
     USERS {
@@ -236,6 +237,17 @@ erDiagram
         integer read_at "nullable — 읽은 시각"
         integer created_at
     }
+
+    PUSH_SUBSCRIPTIONS {
+        integer id PK
+        integer user_id FK "기기의 주인"
+        text endpoint "UK — 푸시 서버가 준 기기 주소 (알림 2단계 2026-11-04)"
+        text p256dh "브라우저가 준 암호 열쇠 — 본문을 그 기기만 푼다"
+        text auth
+        text label "사람이 읽는 기기 이름 (iPhone · Safari)"
+        integer created_at
+        integer last_sent_at "nullable — 마지막으로 보낸 시각"
+    }
 ```
 
 ## 엔티티 설명
@@ -256,6 +268,7 @@ erDiagram
 | ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나, 또는 문서 없이 시작한 자유 대화(챗봇, file_id NULL). 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다. model은 이 대화의 답변 모델. item_id가 있으면 브리핑 기사 묻기 — context는 서버가 그 회차에서 조립한 "우리가 쓴 글 전체"(v0.48) |
 | CARD_THREADS | 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때). 카드가 참조하는 대화는 30일 정리에서 빠진다 |
 | NOTIFICATIONS | 알림 한 줄 — 사건은 여기에 쌓고, 앱 안 알림함·(나중의) 푸시·메신저는 이 표 위의 배달 통로. `dedupe_key`로 같은 사건(같은 실행의 같은 결과)이 두 번 쌓이지 않는다. 30일 지나면 자동 삭제 (2026-11-04, 알림 1단계) |
+| PUSH_SUBSCRIPTIONS | 웹 푸시 구독 — 기기(브라우저)마다 한 줄. endpoint가 곧 기기 주소라 유일. 알림 표에 새 줄이 생기면 주인의 기기 전부로 보내고, 푸시 서버가 404·410을 돌려주면 지운다. VAPID 열쇠는 표가 아니라 `data/vapid.json`에 (알림 2단계 2026-11-04) |
 | BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
 
@@ -265,7 +278,7 @@ erDiagram
 - 폴더는 자기참조(parent_id)로 트리를 구성합니다. 폴더 삭제 시 하위 폴더는 CASCADE 삭제되고, 안의 파일은 folder_id를 끊고 휴지통으로 이동합니다 (2026-08-15 휴지통 도입).
 - **휴지통 (2026-08-15)**: FILES.deleted_at(nullable)로 soft delete. null이면 정상, 값이 있으면 휴지통. 휴지통 파일은 모든 목록·검색·접근에서 제외되며(복원·영구삭제 라우트만 예외), 30일 경과 시 서버가 자동 영구 삭제(기동 시 + 일 1회). 휴지통의 파일은 이름을 점유하지 않고, 복원 시 충돌하면 "이름 (2)" 형식으로 자동 개명, 원 폴더가 사라졌으면 최상위로 복원.
 - 파일 1개는 버전 스냅샷 여러 개를 가지며, 저장 시 20개 초과분은 오래된 것부터 삭제.
-- **알림 (2026-11-04)**: 사용자 1명은 알림 여러 개를 받는다(사용자 삭제 시 CASCADE). 알림이 가리키는 회차 문서(file_id)는 지워질 수 있으므로 SET NULL — 알림은 남되 열 곳만 없어진다. 브리핑 도착은 만든 사람과 열람 계정(USER_SETTINGS.briefing_reader=1) 모두에게 한 줄씩, 못 만듦은 만든 사람에게만 쌓인다. (user_id, dedupe_key) 유일 제약이 같은 사건의 중복을 막고, (user_id, created_at) 인덱스가 알림함 목록·안 읽음 개수를 받친다.
+- **알림 (2026-11-04)**: 사용자 1명은 알림 여러 개를 받는다(사용자 삭제 시 CASCADE). 알림이 가리키는 회차 문서(file_id)는 지워질 수 있으므로 SET NULL — 알림은 남되 열 곳만 없어진다. 브리핑 도착은 만든 사람과 열람 계정(USER_SETTINGS.briefing_reader=1) 모두에게 한 줄씩, 못 만듦은 만든 사람에게만 쌓인다. (user_id, dedupe_key) 유일 제약이 같은 사건의 중복을 막고, (user_id, created_at) 인덱스가 알림함 목록·안 읽음 개수를 받친다. 사용자 1명은 푸시 기기를 여러 대(최대 10) 등록하며(사용자 삭제 시 CASCADE), 같은 endpoint를 다른 계정이 다시 등록하면 주인이 바뀐다 — 한 폰에서 계정을 바꿔 들어온 경우.
 - **화면 맞춤 (2026-08-18)**: viewer_fit은 뷰어가 HTML 문서를 좁은 화면에 맞게 보정할지 여부입니다(기본 1=켬). 문서가 아니라 "이 사람이 이 문서를 어떻게 볼지"의 선택이므로 FILES가 아니라 USER_FILE_STATE에 둡니다 — 같은 공유 문서를 A는 보정해서, B는 원본으로 볼 수 있습니다.
 - **글자 크기 2층 구조 (2026-08-18)**: HTML 글자 크기는 USER_SETTINGS.html_font_scale(전역 기본 배율)과 USER_FILE_STATE.font_scale(이 파일만의 배율)로 나뉩니다. font_scale이 **NULL이면 전역을 따르고**, 값이 있으면 그것으로 **대체**합니다(곱하지 않습니다). NULL을 "없음"으로 쓰기 때문에 대부분의 파일은 전역 설정을 바꾸면 같이 따라오고, 유별난 문서만 자기 값을 갖습니다 — 그래서 UI에는 반드시 "기본값 따르기"(= NULL로 되돌리기)가 있어야 합니다. font_scale은 형식을 가리지 않습니다 — HTML은 문서 자신의 크기를 100%로, md·텍스트는 USER_SETTINGS.font_size를 100%로 삼을 뿐 규칙은 같습니다(전역 기본 배율 html_font_scale은 HTML에만 있습니다).
 - **복습 (2026-09-20)**: 카드의 복습 상태(next_review_at·review_interval_days)도 USER_FILE_STATE에 둡니다 — 카드는 files의 한 행이고 "이 사람이 이 카드를 얼마나 외웠나"는 사용자×파일 사실이라 즐겨찾기와 같은 자리입니다. NULL이면 아직 복습한 적 없음 = 만든 날 + 1일에 첫 복습. 몰랐다 → 1일, 알았다 → 간격 두 배(2·4·8…60일 상한). 문서(kind=doc) 행에는 늘 NULL입니다.

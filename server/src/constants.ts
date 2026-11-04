@@ -44,6 +44,20 @@ export const NOTIFICATION = {
   KEEP_MS: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
+/** 웹 푸시 (API-162~165, 알림 2단계 2026-11-04) */
+export const PUSH = {
+  /** VAPID 연락처 — 푸시 서버가 문제 생겼을 때 연락할 곳. 메일이 없어 저장소 주소 */
+  CONTACT: 'https://github.com/ehdwn009/docvault',
+  /** 기기가 꺼져 있을 때 푸시 서버가 들고 있어 주는 시간 — 하루. 어제 아침 브리핑을 오늘 받아도 뜻은 있다 */
+  TTL_S: 24 * 60 * 60,
+  /** 기기 이름 글자 수 상한 */
+  LABEL_MAX: 80,
+  /** 한 사람의 기기 수 상한 — 끊지 않고 쌓이는 걸 막는다 */
+  MAX_DEVICES: 10,
+  /** VAPID 열쇠 파일 (data/ 안 — 백업·이사 단위에 같이 묶인다) */
+  KEY_FILE: 'vapid.json',
+} as const;
+
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 

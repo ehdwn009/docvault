@@ -3,6 +3,7 @@ import { NOTIFICATION } from '../constants.js';
 import { db } from '../db/index.js';
 import { briefingRuns, notifications, userSettings } from '../db/schema.js';
 import { slotLabel } from './briefing/edition.js';
+import { sendPushToUser } from './push.js';
 
 // 알림은 "사건 한 표"에 쌓고, 화면·푸시·메신저는 그 위의 배달 통로다 (알림 설계 2026-11-04 — 1단계는 앱 안 알림함만).
 // 사건을 만드는 쪽(브리핑 실행)은 배달 방식을 모른다 — 여기 함수 하나만 부른다.
@@ -22,10 +23,15 @@ type NewNotification = {
 export function pushNotification(n: NewNotification): void {
   const now = Date.now();
   for (const userId of new Set(n.userIds)) {
-    db.insert(notifications)
+    const r = db
+      .insert(notifications)
       .values({ userId, kind: n.kind, title: n.title, body: n.body ?? null, fileId: n.fileId ?? null, dedupeKey: n.dedupeKey, createdAt: now })
       .onConflictDoNothing()
       .run();
+    // 새로 생긴 줄만 밖으로 보낸다 — 중복으로 막힌 사건은 푸시도 가지 않는다 (2단계: 웹 푸시)
+    if (r.changes > 0) {
+      sendPushToUser(userId, { title: n.title, body: n.body ?? null, url: n.fileId ? `/f/${n.fileId}` : '/', tag: n.dedupeKey });
+    }
   }
 }
 

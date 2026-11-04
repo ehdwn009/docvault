@@ -32,10 +32,16 @@ export function useNotifications(enabled: boolean) {
     const timer = window.setInterval(tick, NOTIFICATION_POLL_MS);
     document.addEventListener('visibilitychange', tick);
     window.addEventListener('focus', tick);
+    // 서비스 워커가 푸시를 받으면 쪽지를 보낸다 — 1분을 기다리지 않고 배지를 올린다 (알림 2단계)
+    const onMessage = (e: MessageEvent) => {
+      if (e.data && typeof e.data === 'object' && (e.data as { type?: string }).type === 'dv:push') void refresh();
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
     return () => {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', tick);
       window.removeEventListener('focus', tick);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
     };
   }, [enabled, refresh]);
 

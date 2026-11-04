@@ -1665,7 +1665,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
       {notifOpen && (
-        <NotificationCenter items={notif.items} unread={notif.unread} onClose={() => setNotifOpen(false)} onOpen={openNotification} onReadAll={() => void notif.markRead()} />
+        <NotificationCenter items={notif.items} unread={notif.unread} onClose={() => setNotifOpen(false)} onOpen={openNotification} onReadAll={() => void notif.markRead()} onOpenSettings={() => openSettings({ category: 'notifications' })} />
       )}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:hidden">
         {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01). 안 B에서는 아래 "도구" 묶음으로 */}

@@ -13,6 +13,7 @@ import CardsSettings from './CardsSettings';
 import { CATEGORY_BY_ID, isAdminCategory, rowId, SETTINGS_INDEX, SETTINGS_SECTIONS, type SettingsCategoryId, type SettingsTarget } from './catalog';
 import DisplaySettings from './DisplaySettings';
 import FirstConnect from './FirstConnect';
+import NotificationSettings from './NotificationSettings';
 import ReadersSettings from './ReadersSettings';
 import SubscriptionSettings from './SubscriptionSettings';
 
@@ -36,7 +37,7 @@ type Props = {
 
 /** 폰 목록의 카테고리 아이콘·타일 색 — 아이폰 설정 앱처럼 색 타일 하나가 카테고리를 가리킨다 (폰 A안) */
 const CATEGORY_ICON: Record<SettingsCategoryId, [IconName, Tint]> = {
-  display: ['sliders', 'accent'], cards: ['cards', 'card'], account: ['user', 'muted'],
+  display: ['sliders', 'accent'], cards: ['cards', 'card'], notifications: ['bell', 'accent'], account: ['user', 'muted'],
   briefing: ['news', 'warn'], subscription: ['link', 'accent'], readers: ['users', 'good'], users: ['users', 'muted'],
   stats: ['chart', 'accent'], tree: ['files', 'muted'], ai: ['sparkle', 'card'], perf: ['gauge', 'warn'],
   about: ['info', 'muted'],
@@ -217,6 +218,7 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     switch (cat) {
       case 'display': return <DisplaySettings settings={settings} onChange={onChange} onShowShortcuts={onShowShortcuts} />;
       case 'cards': return <CardsSettings settings={settings} onChange={onChange} />;
+      case 'notifications': return <NotificationSettings />;
       case 'account': return <AccountSettings user={user} openPassword={pwTarget} onLogout={onLogout} />;
       case 'briefing': return <BriefingSettings onOpenSources={onOpenBriefingSources} onOpenSubscription={() => setCategory('subscription')} />;
       case 'subscription': return <SubscriptionSettings onOpenFirstConnect={() => setFirstConnectOpen(true)} />;

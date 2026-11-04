@@ -25,12 +25,14 @@
     "jose": "^5.9.6",
     "linkedom": "^0.18.13",
     "tsx": "^4.19.2",
+    "web-push": "^3.6.7",
     "yazl": "^3.3.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.1",
+    "@types/web-push": "^3.6.4",
     "@types/yazl": "^3.3.1",
     "drizzle-kit": "^0.30.4",
     "typescript": "^5.7.3"

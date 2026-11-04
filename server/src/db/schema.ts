@@ -334,3 +334,23 @@ export const notifications = sqliteTable(
     index('notifications_user_created').on(t.userId, t.createdAt),
   ],
 );
+
+/** 웹 푸시 구독 — 기기(브라우저)마다 한 줄. endpoint가 곧 기기의 주소라 유일. 푸시 서버가 410·404를 돌려주면 지운다 (알림 2단계 2026-11-04) */
+export const pushSubscriptions = sqliteTable(
+  'push_subscriptions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    /** 브라우저가 준 암호 열쇠 둘 — 본문을 그 기기만 풀 수 있게 */
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    /** 설정 화면의 기기 이름 — 브라우저가 보낸 UA를 사람이 읽게 줄인 것 ("iPhone · Safari") */
+    label: text('label').notNull(),
+    createdAt: integer('created_at').notNull(),
+    lastSentAt: integer('last_sent_at'),
+  },
+  (t) => [index('push_subscriptions_user').on(t.userId)],
+);

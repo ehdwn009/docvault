@@ -1,7 +1,7 @@
 // 설정 페이지의 지도 — 카테고리(왼쪽 목록)와 항목 색인(검색 SCR-405). 본문은 카테고리별 컴포넌트가 그린다 (IA — 안 B "나").
 
 export type SettingsCategoryId =
-  | 'display' | 'cards' | 'account'
+  | 'display' | 'cards' | 'notifications' | 'account'
   | 'briefing' | 'subscription' | 'readers' | 'stats' | 'users' | 'tree' | 'ai' | 'perf'
   | 'about';
 
@@ -16,6 +16,7 @@ export const SETTINGS_SECTIONS: { title: string; admin?: boolean; items: Setting
     items: [
       { id: 'display', name: '화면·뷰어', scr: 'SCR-141' },
       { id: 'cards', name: '배움 카드', scr: 'SCR-401' },
+      { id: 'notifications', name: '알림', scr: 'SCR-406' },
       { id: 'account', name: '계정', scr: 'SCR-142' },
     ],
   },
@@ -62,6 +63,9 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { category: 'display', item: 'shortcuts', title: '단축키 · 제스처', desc: '숨어 있는 단축키와 제스처 전체 목록' },
   { category: 'cards', item: 'termHighlight', title: '문서 속 내 카드 용어에 점선 밑줄', desc: '누르면 한 줄 정의가 뜨고 카드로 갈 수 있습니다' },
   { category: 'cards', item: 'askWithCards', title: '질문할 때 관련 카드 함께 보내기', desc: '질문에 내 카드의 이름이 나오면 그 카드를 AI가 먼저 읽습니다' },
+  { category: 'notifications', item: 'thisDevice', title: '이 기기에서 푸시 받기', desc: '앱을 닫아도 이 기기에 알림이 뜹니다' },
+  { category: 'notifications', item: 'devices', title: '푸시 받는 기기', desc: '켜 둔 기기 목록 · 시험 알림 · 끊기' },
+  { category: 'notifications', item: 'kinds', title: '어떤 알림이 오나요', desc: '브리핑 도착 · 브리핑 못 만듦' },
   { category: 'account', item: 'who', title: '로그인한 계정', desc: '아이디와 역할' },
   { category: 'account', item: 'password', title: '비밀번호', desc: '비밀번호 바꾸기' },
   { category: 'account', item: 'logout', title: '나가기', desc: '로그아웃' },

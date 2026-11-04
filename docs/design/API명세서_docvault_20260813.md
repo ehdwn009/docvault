@@ -19,6 +19,8 @@
 | NOT_FOUND | 404 | 대상 없음, **또는 열람 권한이 없는 자원** (403은 존재를 알려 주므로 통일 — 정보 노출 방지). `/briefing/jobs/*`에서는 jobId가 없음·남의 것·80자 초과·ping 만료(10분) (v0.50) |
 | CONFLICT | 409 | 중복 (username, 같은 폴더 내 동일 이름 등) |
 | PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과. 구독 완성본(API-153) 2MB·진행 보고(API-152) 16KB 초과 (v0.50) |
+| PUSH_DEVICE_GONE | 410 | 시험 알림(API-166)을 보냈더니 푸시 서버가 그 기기를 모른다고 함 — 구독을 지웠으니 그 기기에서 다시 켜야 한다 (알림 2단계) |
+| PUSH_FAILED | 502 | 푸시 서버가 받지 않음(네트워크·일시 장애). 구독은 그대로 (알림 2단계) |
 | GOOGLE_NOT_CONNECTED | 409 | 구글 계정 미연결 (클라이언트는 연결 화면으로 유도) |
 | GOOGLE_ERROR | 502 | 구글 API 호출 실패 — 토큰 만료·사용자가 권한 회수·드라이브 장애. message에 사람이 읽을 사유 |
 | ASK_NOT_CONFIGURED | 503 | 서버에 LLM API 키(`ANTHROPIC_API_KEY`)가 없음. 질문 기능만 막히고 나머지는 정상 |
@@ -755,3 +757,21 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-161 — POST /notifications/read
 **Body** `{ "ids"?: number[] }` — 비우면 전부 읽음([모두 읽음]). 남의 id는 조건에서 걸러져 아무 일도 없다. **200** `{ "unread" }`.
+
+#### 웹 푸시 (2단계, 2026-11-04)
+알림 표에 **새 줄이 생길 때마다**(중복으로 막힌 사건은 제외) 그 사람의 등록된 기기 전부로 밀어 준다 — 서버가 직접 보내는 VAPID 방식이라 가입·비용이 없고 브라우저 제조사의 푸시 서버만 거친다. 본문 `{ title, body, url, tag }`는 기기 열쇠로 잠겨 푸시 서버도 못 읽는다. `url`은 `/f/{fileId}` 또는 `/`, `tag`는 dedupe_key(같은 사건은 기기에서도 한 장). VAPID 열쇠 한 쌍은 처음 기동 때 만들어 `data/vapid.json`(0600)에 둔다 — 바뀌면 모든 기기가 다시 구독해야 하므로 백업 단위(`data/`)에 같이 묶인다. 보내다가 404·410이 오면 그 구독을 지운다. 만드는 쪽(브리핑 저장)은 푸시 결과를 기다리지 않는다. 서비스 워커(`/sw.js`)는 푸시를 받아 띄우고, 누르면 열린 창을 앞으로 가져와 `url`로 보내며, 앱이 열려 있으면 `dv:push` 쪽지로 알림함을 바로 새로고침한다. **캐시는 하지 않는다** — 오프라인 앱이 아니라 푸시를 받는 귀일 뿐. 아이폰은 홈 화면에 추가한 앱에서만(16.4+), 권한 요청은 사용자가 스위치를 켠 그 호출 안에서만.
+
+### API-162 — GET /notifications/push/key
+**200** `{ "publicKey" }` — 브라우저가 구독할 때 `applicationServerKey`로 넣는 VAPID 공개 열쇠.
+
+### API-163 — GET /notifications/push/devices
+**200** `{ "devices": [{ "id", "endpoint", "label", "createdAt", "lastSentAt": number | null }] }` — 내 기기. `label`은 등록할 때 브라우저가 보낸 사람이 읽는 이름("iPhone · Safari (홈 화면 앱)"). 화면은 `endpoint`가 이 브라우저의 구독과 같으면 「이 기기」 표시.
+
+### API-164 — POST /notifications/push/devices
+**Body** `{ "endpoint", "keys": { "p256dh", "auth" }, "label" }` (브라우저 `PushSubscription.toJSON()` 모양 + 이름, `PUSH.LABEL_MAX` 80자). 같은 `endpoint`가 있으면 열쇠·이름·주인을 갱신(같은 폰에서 다른 계정으로 들어온 경우) → **200**, 새로 만들면 **201**. 둘 다 `{ "device": { "id" } }`. 한 사람 10대(`PUSH.MAX_DEVICES`) 넘으면 409 CONFLICT.
+
+### API-165 — DELETE /notifications/push/devices/{id} · POST /notifications/push/unsubscribe
+설정 화면의 [끊기]는 id로, 브라우저가 구독을 풀 때는 `{ "endpoint" }`로. **200** `{ "ok": true }`. id가 내 것이 아니면 404. 이 기기를 끊을 때 화면은 브라우저 구독도 함께 푼다 — 서버만 지우면 다시 켤 때 "구독은 있는데 등록이 없는" 어중간한 상태가 된다.
+
+### API-166 — POST /notifications/push/devices/{id}/test
+[시험 알림] — 그 기기 한 대로 「시험 알림이에요」를 보내고 결과를 기다린다. **200** `{ "sent": true }` · 푸시 서버가 기기를 모르면 410 PUSH_DEVICE_GONE(구독 삭제) · 그 밖의 실패는 502 PUSH_FAILED.

@@ -18,6 +18,8 @@ type Props = {
   /** 누르면 읽음 처리 + 그 사건의 자리로 (회차 문서, 없으면 브리핑 패널) */
   onOpen: (n: Notification) => void;
   onReadAll: () => void;
+  /** 톱니 — 설정 › 알림(SCR-406)으로 */
+  onOpenSettings: () => void;
 };
 
 const KIND_ICON: Record<Notification['kind'], { icon: IconName; tint: 'accent' | 'warn' }> = {
@@ -87,7 +89,7 @@ function Empty() {
   );
 }
 
-export default function NotificationCenter({ items, unread, onClose, onOpen, onReadAll }: Props) {
+export default function NotificationCenter({ items, unread, onClose, onOpen, onReadAll, onOpenSettings }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const groups = groupByDay(items);
 
@@ -125,6 +127,18 @@ export default function NotificationCenter({ items, unread, onClose, onOpen, onR
       모두 읽음
     </button>
   );
+  const settingsButton = (
+    <button
+      onClick={() => {
+        onClose();
+        onOpenSettings();
+      }}
+      className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-200 touch:h-10 touch:w-10 touch:rounded-full touch:bg-fill touch:text-slate-200"
+      aria-label="알림 설정"
+    >
+      <Icon name="sliders" size={16} />
+    </button>
+  );
 
   if (IS_TOUCH) {
     return createPortal(
@@ -135,6 +149,7 @@ export default function NotificationCenter({ items, unread, onClose, onOpen, onR
           </button>
           <span className="flex-1" />
           {readAllButton}
+          {settingsButton}
         </div>
         <div className="flex items-baseline gap-2 px-4 pb-2">
           <h2 className="text-[30px] font-bold leading-tight tracking-tight">알림</h2>
@@ -172,6 +187,7 @@ export default function NotificationCenter({ items, unread, onClose, onOpen, onR
         {unread > 0 && <span className="text-xs text-slate-500">안 읽음 {unread}</span>}
         <span className="flex-1" />
         {readAllButton}
+        {settingsButton}
         <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-200" aria-label="닫기">
           <Icon name="close" size={16} />
         </button>
