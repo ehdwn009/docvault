@@ -320,6 +320,8 @@ erDiagram
 
 ## 비고
 
+- **전문 검색 색인 (FTS5, 2026-11-05 개정)**: `files_fts`는 Drizzle 스키마 밖의 파생 색인. 원본은 FILES가 아니라 **뷰 `files_fts_src`**(`substr(content_text, 1, FTS_INDEX_MAX_CHARS=1,000,000)`)라 본문 앞 100만 글자만 색인한다 — 23MB HTML은 대부분 base64 이미지라 낱말이 수백만 개인데 검색 가치가 없고, 색인 한 번에 3~4초가 걸려 휴지통 보내기까지 느렸다. UPDATE 트리거는 `AFTER UPDATE OF name, content_text`라 휴지통·즐겨찾기·폴더 이동(본문과 무관한 변경)에는 돌지 않는다. 색인 정의에 버전 표식(`v2-prefix`)을 넣어 두고, 기동 때 표식이 다르면 색인을 지우고 `rebuild`한다(외부 내용 FTS는 'delete'에 넣은 값이 넣었을 때와 같아야 하므로 트리거·rebuild·snippet이 전부 같은 뷰를 읽는다). 남은 비용: 본문이 메타와 같은 행이라 메타 한 칸을 바꿔도 23MB 행을 다시 쓴다(0.1~0.2초) — 본문 분리는 다음 과제.
+
 - 타임스탬프는 전부 unix epoch 밀리초 정수(UTC)로 저장하고 표시 시점에 로컬 변환합니다.
 - 전문 검색용 FTS5 가상 테이블 `files_fts(name, content_text)`는 ERD에는 표시하지 않는 파생 인덱스이며, FILES 변경 시 트리거로 동기화합니다.
 - **FILES 커버링 인덱스 `files_owner_kind_idx`** (2026-09-20, v0.38.0): `(owner_id, kind, deleted_at, folder_id, name, file_type, size_bytes, is_shared, sort_order, updated_at)`. 본문(content_text)이 같은 행에 있어서, 인덱스 없이는 트리(API-021)·카드 목록이 행마다 본문을 지나가며 DB 전체를 읽었다(e2-micro에서 `/tree` 2.85초). 목록에 필요한 칸을 전부 담아 두어 목록 질의가 본문 행을 아예 안 건드린다. 본문을 따로 표로 떼는 대신 인덱스로 푼 이유: 마이그레이션 한 줄이고, 본문 저장·검색(FTS 트리거) 경로를 건드리지 않는다.

@@ -64,5 +64,10 @@ export const WINDOW_WIDE_MIN_H = 480;
 export const WINDOW_XWIDE_MIN_W = 840;
 export const WINDOW_CLASS_DEBOUNCE_MS = 120;
 
+/** 이보다 큰 HTML은 본문(JSON)을 받아 iframe에 넣지 않고 서버 원문 주소를 iframe src로 바로 연다 (2026-11-05).
+    23MB를 JSON으로 받아 파싱하고 다시 srcdoc에 넣으면 아이폰이 메모리 한계에서 렌더링을 끊어 반만 보였다.
+    대가: 목차·찾기·글자 배율·읽던 위치 같은 덧붙임이 빠진다 */
+export const HTML_INLINE_MAX_BYTES = 2 * 1024 * 1024;
+
 /** 알림함 새로고침 주기 — 1단계는 푸시 없이 묻는 방식이라, 화면이 보일 때만 이 간격으로 (알림 설계 2026-11-04) */
 export const NOTIFICATION_POLL_MS = 60 * 1000;

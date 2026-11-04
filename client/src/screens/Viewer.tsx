@@ -8,7 +8,7 @@ import VersionPanel from '../components/VersionPanel';
 import ViewerMenu, { type ViewerAction } from '../components/ViewerMenu';
 import { isDarkViewerTheme, api, ApiError, isTextFileType, type FileContent, type TreeFile, type UserSettings } from '../lib/api';
 import { CHROME_HEIGHT, reportChromeScroll, showChrome, useChromeTarget } from '../lib/chromeCollapse';
-import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT } from '../lib/constants';
+import { ASK_CONTEXT_MAX_CHARS, ASK_QUOTE_MAX_CHARS, FONT_SCALE_DEFAULT, HTML_INLINE_MAX_BYTES } from '../lib/constants';
 import { fileLabel } from '../lib/briefing';
 import { useBottomSlot } from '../lib/bottomBar';
 import { confirmDialog } from '../lib/dialog';
@@ -255,12 +255,14 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
 
   // 바이너리는 본문(JSON)이 없다 — /raw를 렌더러에 직접 물린다 (아키텍처 — 저장 전략)
   const isBinary = !isTextFileType(file.fileType);
+  // 큰 HTML도 본문을 안 받는다 — /raw를 iframe src로 바로 연다 (HTML_INLINE_MAX_BYTES 주석). 편집·코드 보기도 없다
+  const isLargeHtml = file.fileType === 'html' && file.sizeBytes > HTML_INLINE_MAX_BYTES;
 
   // 뉴스 브리핑 회차 — 본문(JSON)을 전용 뷰어(SCR-191)로 그린다. 기계가 만든 문서라 편집은 없다
   const isBriefing = file.kind === 'briefing';
   // 렌더링 대신 코드(강조+줄 번호)로 볼 수 있는 형식 — code 형식은 이미 코드 뷰어라 제외(브리핑은 JSON 원문을 볼 수 있게)
   const canCodeView =
-    !isBinary && (file.fileType === 'md' || file.fileType === 'html' || file.fileType === 'text' || isBriefing);
+    !isBinary && !isLargeHtml && (file.fileType === 'md' || file.fileType === 'html' || file.fileType === 'text' || isBriefing);
   // 코드로 보기 — 세션 한정 임시 모드. 줄 앵커로 열리면 자동으로 켠다 (IA — 코드로 보기)
   const [codeView, setCodeView] = useState(() => canCodeView && !!jumpLines);
   // 줄을 가리키는 링크는 "코드를 보라"는 뜻으로 해석한다
@@ -286,8 +288,9 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
     api<{ state: TreeFile['state'] }>(`/me/files/${file.id}/state`)
       .then((r) => setFreshState(r.state))
       .catch(() => setFreshState(file.state));
-    if (isBinary) {
+    if (isBinary || isLargeHtml) {
       setData({ id: file.id, fileType: file.fileType, content: '', updatedAt: file.updatedAt, readonly: true });
+      if (isLargeHtml) finishBoot();
     } else {
       // 시작 측정: 첫 문서 본문까지가 "앱이 떴다"의 끝 (딥링크로 열었을 때). 이후 문서는 timed가 무시한다
       timed('문서 본문 (/files/:id/content)', () => api<FileContent>(`/files/${file.id}/content`), [`/files/${file.id}/content`])
@@ -1007,6 +1010,20 @@ export default function Viewer({ file, settings, immersive, onToggleImmersive, o
                   ⬇ 다운로드
                 </a>
               </div>
+            </div>
+          ) : isLargeHtml ? (
+            // 큰 HTML: 서버 원문을 그대로 — 심(목차·찾기·배율)을 넣지 않아 폰 메모리를 1/3만 쓴다
+            <div className="flex h-full min-h-0 flex-col">
+              <p className="shrink-0 border-b border-slate-800 bg-slate-900/80 px-3 py-1 text-[11px] text-slate-500">
+                큰 문서({(file.sizeBytes / 1024 / 1024).toFixed(0)}MB)라 원문 그대로 보여 드려요 — 목차·찾기·글자 크기·읽던 위치는 꺼져 있어요
+              </p>
+              <iframe
+                key={file.id}
+                sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups"
+                src={`/api/v1/files/${file.id}/raw`}
+                title="html-raw"
+                className="h-full w-full flex-1 bg-white"
+              />
             </div>
           ) : file.fileType === 'html' && Renderer && !showAsCode ? (
             // 앱형 HTML은 여백·폭 제한 없이 화면을 꽉 채워 렌더링한다

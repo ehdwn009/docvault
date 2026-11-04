@@ -60,6 +60,10 @@ export const PUSH = {
   KEY_FILE: 'vapid.json',
 } as const;
 
+/** 전문 검색 색인에 넣는 본문 길이 상한(글자). 그 뒤는 색인하지 않는다 — 23MB HTML은 대부분 base64 이미지라
+    낱말이 수백만 개인데 검색 가치가 없고, 색인 한 번에 3~4초가 걸려 휴지통 보내기까지 느려졌다 (2026-11-05) */
+export const FTS_INDEX_MAX_CHARS = 1_000_000;
+
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 
