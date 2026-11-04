@@ -1699,6 +1699,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         )}
       </div>
 
+      {/* 숨긴 파일 선택창은 패널 밖에 둔다 — 폰 문서 탭(FilesBrowser)의 [+]·스와이프 "올리기"도 이 요소를 누르는데,
+          PC 전용 블록 안에 있으면 폰에서는 그려지지 않아 눌러도 아무 일이 없었다 (v0.56.0 회귀, 2026-11-04).
+          accept 없음 — 어떤 파일이든 받아서 서버가 분류한다 (API-031 전량 수용 정책) */}
+      <input
+        ref={uploadRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const folderId = uploadFolderRef.current;
+          uploadFolderRef.current = null;
+          if (e.target.files) void doUpload(e.target.files, folderId);
+          e.target.value = '';
+        }}
+      />
       {/* 접힘은 PC 전용 — 터치의 목록 층은 탭 바가 켜고 끈다 */}
       {/* 설정·대화는 패널이 아니라 본문 전체 페이지다(SCR-140 개정·SCR-188) — 그때는 사이드 패널을 그리지 않는다 */}
       {!PAGE_PANELS.has(panel) && (
@@ -1820,19 +1835,6 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               </div>
             )}
             <div className={`flex gap-2 px-3 ${layout === 'home' ? 'hidden' : ''}`}>
-              {/* accept 없음 — 어떤 파일이든 받아서 서버가 분류한다 (API-031 전량 수용 정책) */}
-              <input
-                ref={uploadRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const folderId = uploadFolderRef.current;
-                  uploadFolderRef.current = null;
-                  if (e.target.files) void doUpload(e.target.files, folderId);
-                  e.target.value = '';
-                }}
-              />
               {/* 폴더가 선택돼 있으면 새 문서·업로드·새 폴더가 그 폴더로 들어간다 (IA — 폴더 선택) */}
               <button
                 onClick={() => actions.createDoc(selectedFolder)}
