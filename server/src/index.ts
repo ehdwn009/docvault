@@ -8,6 +8,7 @@ import { APP_VERSION, config } from './config.js';
 import { HEALTH_PATH, SLOW_REQUEST_MS, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
+import { purgeOldNotifications } from './lib/notifications.js';
 import { purgeExpiredTrash } from './lib/trash.js';
 import { authGuard } from './middleware/auth.js';
 import { adminRoutes } from './routes/admin.js';
@@ -22,6 +23,7 @@ import { authRoutes } from './routes/auth.js';
 import { fileRoutes } from './routes/files.js';
 import { folderRoutes } from './routes/folders.js';
 import { meRoutes } from './routes/me.js';
+import { notificationRoutes } from './routes/notifications.js';
 import { searchRoutes } from './routes/search.js';
 import { sharedRoutes } from './routes/shared.js';
 import { tagRoutes } from './routes/tags.js';
@@ -37,6 +39,9 @@ setInterval(purgeExpiredTrash, TRASH_PURGE_INTERVAL_MS);
 // 저장 안 한 질문 대화도 같은 주기로 정리한다 (배움 카드 설계 — 30일 보관)
 purgeExpiredThreads();
 setInterval(purgeExpiredThreads, TRASH_PURGE_INTERVAL_MS);
+
+purgeOldNotifications();
+setInterval(purgeOldNotifications, TRASH_PURGE_INTERVAL_MS);
 // 뉴스 브리핑 — 재시작 전에 돌던 실행은 끝난 것으로 정리한다 (설계 — 실패 처리)
 recoverStaleRuns();
 // 자동 생성 시계 — 켜 둔 관리자가 없으면 1분마다 한 번 확인만 하고 끝난다
@@ -103,6 +108,7 @@ api.route('/tree', treeRoutes);
 api.route('/files', fileRoutes);
 api.route('/folders', folderRoutes);
 api.route('/me', meRoutes);
+api.route('/notifications', notificationRoutes);
 api.route('/search', searchRoutes);
 api.route('/shared', sharedRoutes);
 api.route('/tags', tagRoutes);

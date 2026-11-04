@@ -55,12 +55,14 @@ import { isAdminCategory, type SettingsTarget } from './settings/catalog';
 import SharedPanel from './panels/SharedPanel';
 import AskPanel from '../components/AskPanel';
 import Icon, { type IconName } from '../components/Icon';
+import NotificationCenter from '../components/NotificationCenter';
 import PropertiesDialog, { type PropertiesTarget } from '../components/PropertiesDialog';
 import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
 import { IS_TOUCH, useWindowClass } from '../lib/device';
 import { BottomSlotContext } from '../lib/bottomBar';
+import { useNotifications } from '../lib/useNotifications';
 import { useVisualViewport } from '../lib/visualViewport';
 
 // home·ai·files·settings = 안 B(v0.54) 레일 네 개. favorites·shared·cards·chat·briefing은 "이전 레이아웃"(classic)에서만 레일에 보인다 (IA — 안 B 결정 1)
@@ -314,6 +316,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }, [panes.length, touchList, panel]);
   const [immersive, setImmersive] = useState(false); // 몰입 모드: 레일·패널·헤더 숨기고 본문만
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  // 알림함(SCR-103) — 종 배지와 목록이 한 훅을 본다. 열려 있는 동안도 주기 새로고침은 계속
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notif = useNotifications(true);
   const [checked, setChecked] = useState<Set<number>>(new Set()); // 다중 선택된 파일 id
   // 선택된 폴더 — 패널의 업로드·새 폴더가 이 폴더를 대상으로 동작 (IA — 폴더 선택)
   const [selectedFolder, setSelectedFolder] = useState<number | null>(null);
@@ -1473,6 +1478,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 터치의 문서 탭 칩 이름 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
   const RAIL_SHORT: Record<Panel, string> = { home: '홈', ai: 'AI', files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition';
+  /** 알림 한 줄을 누름 — 읽음 처리 뒤 그 사건의 자리로: 회차 문서가 있으면 문서, 없으면(못 만듦·문서 삭제) 브리핑이 있는 곳 */
+  const openNotification = (n: { id: number; fileId: number | null; readAt: number | null }) => {
+    if (n.readAt === null) void notif.markRead([n.id]);
+    setNotifOpen(false);
+    if (n.fileId !== null) openFileById(n.fileId);
+    else if (layout === 'home') openPage('home');
+    else openPanel('briefing');
+  };
+  const bellBadge = notif.unread > 0 && (
+    <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent-400 px-1 text-center text-[10px] font-bold leading-4 text-ground" aria-hidden="true">
+      {notif.unread > 99 ? '99+' : notif.unread}
+    </span>
+  );
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
   /** 본문 전체 페이지(설정·대화) 열기 — 닫을 때 돌아갈 패널을 기억한다 */
@@ -1646,6 +1664,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
+      {notifOpen && (
+        <NotificationCenter items={notif.items} unread={notif.unread} onClose={() => setNotifOpen(false)} onOpen={openNotification} onReadAll={() => void notif.markRead()} />
+      )}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:hidden">
         {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01). 안 B에서는 아래 "도구" 묶음으로 */}
         {layout === 'classic' && (
@@ -1672,6 +1693,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </>
         )}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
+        {/* 알림함 종 — 레일 아래 "도구" 묶음에 (알림 설계 2026-11-04). 팝오버는 이 종 옆에 뜬다 */}
+        <button
+          onClick={() => setNotifOpen((v) => !v)}
+          title={notif.unread > 0 ? `알림 ${notif.unread}개` : '알림'}
+          aria-label={notif.unread > 0 ? `알림 ${notif.unread}개` : '알림'}
+          className={`relative ${railClass} ${notifOpen ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
+        >
+          <Icon name="bell" />
+          {bellBadge}
+        </button>
         {layout === 'home' && (
           <button onClick={() => setPaletteOpen(true)} title="검색 (Ctrl+K)" className={`${railClass} text-slate-500 hover:text-slate-200`}>
             <Icon name="search" />
@@ -2080,6 +2111,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 setTouchList(true);
               }}
               onSearch={() => setPaletteOpen(true)}
+              unread={notif.unread}
+              onOpenNotifications={() => setNotifOpen(true)}
               onNewDoc={() => actions.createDoc(null)}
               onOpenBriefingSettings={() => openSettings({ category: 'briefing' })}
               onOpenBriefingSources={() => {

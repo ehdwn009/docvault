@@ -5,6 +5,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 
@@ -306,4 +307,30 @@ export const briefingRuns = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (t) => [index('briefing_runs_owner_started_idx').on(t.ownerId, t.startedAt)],
+);
+
+/** 알림 한 줄 — 사건은 여기에 쌓고, 푸시·텔레그램 같은 배달 통로는 이 표 위에 얹는다 (알림 설계 2026-11-04).
+    dedupe_key: 같은 사건(예: 같은 회차)이 두 번 쌓이지 않게 — PC·폰 어디서 읽든 한 줄이다 */
+export const notifications = sqliteTable(
+  'notifications',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패 */
+    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing'] }).notNull(),
+    title: text('title').notNull(),
+    body: text('body'),
+    /** 누르면 열 문서. 회차 문서가 지워지면 NULL — 알림은 남되 열 곳만 없어진다 */
+    fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
+    dedupeKey: text('dedupe_key').notNull(),
+    readAt: integer('read_at'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('notifications_user_key').on(t.userId, t.dedupeKey),
+    // 알림함 목록·안 읽음 개수 — 둘 다 "내 것, 최신순"으로 읽는다
+    index('notifications_user_created').on(t.userId, t.createdAt),
+  ],
 );

@@ -36,6 +36,14 @@ export const SLOW_REQUEST_MS = 500;
 /** 헬스체크 경로 — 인증 예외이자 요청 로그에서도 뺀다 (도커가 30초마다 두드린다) */
 export const HEALTH_PATH = '/api/v1/health';
 
+/** 알림 (API-160·161, 알림 설계 2026-11-04) */
+export const NOTIFICATION = {
+  /** 알림함에 한 번에 내려주는 최대 줄 수 — 더 오래된 것은 보지 않는다 */
+  LIST_MAX: 50,
+  /** 이보다 오래된 알림은 자동 삭제 (휴지통과 같은 30일) */
+  KEEP_MS: 30 * 24 * 60 * 60 * 1000,
+} as const;
+
 /** 텍스트 파일 업로드 크기 제한 10MB (API-031) */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 

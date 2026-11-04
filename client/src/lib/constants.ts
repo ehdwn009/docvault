@@ -63,3 +63,6 @@ export const WINDOW_WIDE_MIN_W = 600;
 export const WINDOW_WIDE_MIN_H = 480;
 export const WINDOW_XWIDE_MIN_W = 840;
 export const WINDOW_CLASS_DEBOUNCE_MS = 120;
+
+/** 알림함 새로고침 주기 — 1단계는 푸시 없이 묻는 방식이라, 화면이 보일 때만 이 간격으로 (알림 설계 2026-11-04) */
+export const NOTIFICATION_POLL_MS = 60 * 1000;

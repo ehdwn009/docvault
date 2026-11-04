@@ -8,6 +8,7 @@ import { saveEdition, slotLabel, type Slot } from './edition.js';
 import { dropMaterials } from './jobMaterials.js';
 import { abortLive, addLog, closeLive, liveView, openLive, track } from './live.js';
 import { BriefingFailure, generateEdition, type Stage } from './pipeline.js';
+import { notifyBriefingFailed, notifyBriefingReady } from '../notifications.js';
 import { kstMonthStart, kstParts } from './time.js';
 
 // 실행 관리 — 한 번에 하나, 진행 상태, 실패 이유, 비용 기록 (뉴스 브리핑 설계 "실행 관리").
@@ -97,6 +98,7 @@ function closeRun(runId: number, status: 'error' | 'cancelled', message: string)
     .run();
   abortLive(runId);
   closeLive(runId);
+  if (r.changes > 0 && status === 'error') notifyBriefingFailed(runId);
   return r.changes > 0;
 }
 
@@ -109,6 +111,7 @@ export function closeSubscriptionRun(runId: number, status: 'missing' | 'cancell
     .run();
   closeLive(runId);
   dropMaterials(runId);
+  if (r.changes > 0 && status !== 'cancelled') notifyBriefingFailed(runId);
   return r.changes > 0;
 }
 
@@ -234,6 +237,7 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller, web
       return s;
     });
     if (!saved) return;
+    notifyBriefingReady(run.id);
     const u = result.usage;
     console.log(
       `[briefing] ${result.edition.edition.date} ${result.edition.edition.label} ok ${result.edition.stats.items}건 ${Math.round((Date.now() - started) / 1000)}s ` +
@@ -246,7 +250,8 @@ async function execute(run: RunRow, prevFileId: number | null, ai: AiCaller, web
     const message = full.length > MESSAGE_MAX ? `${full.slice(0, MESSAGE_MAX)}…` : full;
     // 이미 닫힌 실행(중지·시간 초과)이면 이유는 그대로 두고 쓴 비용만 더한다
     if (usage) db.update(briefingRuns).set(usageColumns(usage)).where(eq(briefingRuns.id, run.id)).run();
-    db.update(briefingRuns).set({ status: 'error', message, finishedAt: Date.now() }).where(stillRunning).run();
+    const closed = db.update(briefingRuns).set({ status: 'error', message, finishedAt: Date.now() }).where(stillRunning).run();
+    if (closed.changes > 0) notifyBriefingFailed(run.id);
     console.log(`[briefing] run ${run.id} error: ${full}`);
   } finally {
     clearTimeout(timer);

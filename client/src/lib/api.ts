@@ -171,6 +171,26 @@ export type FileContent = {
   readonly: boolean;
 };
 
+/** 알림 한 줄 (API-160). fileId가 있으면 누를 때 그 문서를 연다 */
+export type Notification = {
+  id: number;
+  kind: 'briefing_ready' | 'briefing_missing';
+  title: string;
+  body: string | null;
+  fileId: number | null;
+  readAt: number | null;
+  createdAt: number;
+};
+
+export function fetchNotifications(): Promise<{ notifications: Notification[]; unread: number }> {
+  return api('/notifications');
+}
+
+/** ids를 비우면 전부 읽음 (API-161) */
+export function markNotificationsRead(ids?: number[]): Promise<{ unread: number }> {
+  return api('/notifications/read', { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) });
+}
+
 /** 업로드 전용 — fetch는 업로드 진행률을 주지 않아 XHR을 쓴다 (대용량 PDF 대비) */
 export function uploadFiles(
   fd: FormData,

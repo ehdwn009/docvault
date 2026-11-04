@@ -169,6 +169,13 @@
       "when": 1793439520203,
       "tag": "0023_briefing_timers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793807108261,
+      "tag": "0024_notifications",
+      "breakpoints": true
     }
   ]
 }

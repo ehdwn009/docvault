@@ -15,6 +15,7 @@ import { dropMaterials, startCollect } from './jobMaterials.js';
 import { checkItems, ResultSchema, tooManyDropped, type JobResult, type ResultItem } from './jobResult.js';
 import { addLog, closeLive, openRemoteLive, setRemoteStage, type RemoteStage } from './live.js';
 import { closeSubscriptionRun, nextSinceAt, runningSubscriptionRun } from './run.js';
+import { notifyBriefingFailed, notifyBriefingReady } from '../notifications.js';
 import { loadSourcesDoc, toSources } from './sources.js';
 import { SourcesError } from './sourcesDoc.js';
 import { SUBS } from './taxonomy.js';
@@ -427,6 +428,7 @@ export function acceptResult(run: RunRow, body: unknown, now = Date.now()): { fi
     return file;
   });
   if (!saved) throw new JobError(409, 'BRIEFING_JOB_CLOSED', '이 구독 실행은 그사이 닫혔어요');
+  notifyBriefingReady(run.id);
   const live = openRemoteLive(run.id);
   for (const line of result.log) addLog(live, cleanLogLine(line), now);
   if (unknownPrev) addLog(live, `직전 회차에 없는 사건 id ${unknownPrev}건은 새 사건으로 바꿨어요`, now);
@@ -467,9 +469,12 @@ export function hasRunFor(ownerId: number, date: string, slot: Slot): boolean {
 }
 
 function recordMissing(ownerId: number, slot: Slot, label: string | null, editionDate: string, deadlineAt: number, message: string, now: number): void {
-  db.insert(briefingRuns)
+  const row = db
+    .insert(briefingRuns)
     .values({ ownerId, trigger: 'subscription', slot, label, editionDate, status: 'missing', stage: 'remote', deadlineAt, message, sinceAt: now, untilAt: now, startedAt: now, finishedAt: now })
-    .run();
+    .returning({ id: briefingRuns.id })
+    .get();
+  notifyBriefingFailed(row.id);
 }
 
 /** 마감이 지난 running 구독 실행 → missing. 방식·자동 켬과 무관하게 매 틱 — 돌던 중 자동을 꺼도 닫혀야 한다 */

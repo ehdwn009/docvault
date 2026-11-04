@@ -745,3 +745,13 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 ### API-156 — GET /briefing/jobs/{jobId}/materials (Bearer, v0.59)
 **202** `{ "status": "reading", "done", "total" }` → **200** `{ "stats": { "bodiesRead": 31, "fromFeed": 4, "extractRejected": 2 }, "stories": [{ "main": 12, "materials": [{ "id": "A", "source": "연합뉴스", "url", "title", "text", "via": "body" | "feed" | "web" }] }], "warnings": ["stories[4]: 대표 번호 999이(가) 없거나 이미 쓰였음 — 버림"] }`. 기사는 **대표 후보의 전역 번호 `main`**으로 가리킨다 — 세션은 같은 `selected.json`으로 다시 만든 목록에 그 번호로 재료를 맞춘다. 재료를 하나도 못 얻은 기사는 `stories`에 없다(세션이 참고로 내리거나 웹 검색으로 채운다). 읽기를 시작한 적 없거나 실패했으면 404 BRIEFING_MATERIALS_UNAVAILABLE. 원문 글은 이 응답으로만 흐르고 서버에 저장되지 않는다.
 
+
+## 알림 (API-16x, 2026-11-04 — 1단계)
+
+알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 사건은 지금 둘 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
+
+### API-160 — GET /notifications
+내 알림함. **200** `{ "notifications": [{ "id", "kind": "briefing_ready" | "briefing_missing", "title", "body": string | null, "fileId": number | null, "readAt": number | null, "createdAt" }], "unread": 3 }` — 최신순 50개(`NOTIFICATION.LIST_MAX`). `fileId`는 누르면 열 회차 문서(지워졌으면 null → 화면은 브리핑이 있는 곳으로). 종 배지와 목록이 같은 응답을 쓴다.
+
+### API-161 — POST /notifications/read
+**Body** `{ "ids"?: number[] }` — 비우면 전부 읽음([모두 읽음]). 남의 id는 조건에서 걸러져 아무 일도 없다. **200** `{ "unread" }`.

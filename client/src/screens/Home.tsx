@@ -27,13 +27,16 @@ type Props = {
   onOpenCards: () => void;
   onOpenPanel: (p: 'files' | 'shared') => void;
   onSearch: () => void;
+  /** 알림함(SCR-103) — 폰 머리의 종. PC는 레일의 종이 맡는다 */
+  unread: number;
+  onOpenNotifications: () => void;
   onNewDoc: () => void;
   onOpenBriefingSettings: () => void;
   onOpenBriefingSources: () => void;
 };
 
 // SCR-101: 홈 — 로그인 직후·`/`의 첫 화면. 매일 들어오는 것(브리핑·복습)과 이어 갈 것(문서·대화)이 한 화면에 (IA — 안 B 홈)
-export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, onNewDoc, onOpenBriefingSettings, onOpenBriefingSources }: Props) {
+export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, unread, onOpenNotifications, onNewDoc, onOpenBriefingSettings, onOpenBriefingSources }: Props) {
   const isAdmin = user.role === 'admin';
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 브리핑이 있다 (v0.49)
   const briefingOwner = isAdmin ? null : (settings.briefingOwnerId ?? null);
@@ -91,6 +94,14 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
             <h2 className="truncate text-[30px] font-bold leading-tight tracking-tight">홈</h2>
           </div>
           <span className="mb-2 text-xs text-slate-500">{dateChip}</span>
+          <button onClick={onOpenNotifications} className="relative mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-slate-200 active:opacity-70" aria-label={unread > 0 ? `알림 ${unread}개` : '알림'}>
+            <Icon name="bell" size={19} />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent-400 px-1 text-center text-[10px] font-bold leading-4 text-ground" aria-hidden="true">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+          </button>
           <button onClick={onSearch} className="mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-accent-400 active:opacity-70" aria-label="검색">
             <Icon name="search" size={19} />
           </button>
