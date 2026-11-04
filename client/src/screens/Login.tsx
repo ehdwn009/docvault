@@ -28,7 +28,7 @@ export default function Login({ onLogin }: { onLogin: (user: User) => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-xl bg-slate-900 p-8 shadow-lg">
-        <h1 className="text-2xl font-bold tracking-tight">docvault</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Loft</h1>
         <p className="mt-1 text-sm text-slate-400">로그인이 필요합니다</p>
 
         <label className="mt-6 block text-sm text-slate-300">

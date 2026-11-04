@@ -1,11 +1,11 @@
 {
-  "name": "docvault",
-  "short_name": "docvault",
-  "description": "폐쇄형 문서 열람·편집 플랫폼",
+  "name": "Loft",
+  "short_name": "Loft",
+  "description": "문서·브리핑·AI가 한 방에 — 아직 짓는 중인 집의 위층",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

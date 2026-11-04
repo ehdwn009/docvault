@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#09090b"/>
-  <rect x="120" y="96" width="272" height="320" rx="24" fill="none" stroke="#38bdf8" stroke-width="28"/>
-  <line x1="176" y1="192" x2="336" y2="192" stroke="#e4e4e7" stroke-width="24" stroke-linecap="round"/>
-  <line x1="176" y1="256" x2="336" y2="256" stroke="#e4e4e7" stroke-width="24" stroke-linecap="round"/>
-  <line x1="176" y1="320" x2="272" y2="320" stroke="#71717a" stroke-width="24" stroke-linecap="round"/>
+  <!-- Loft: 로프트로 올라가는 사다리 하나 (이름·아이콘 결정 2026-11-04). 살짝 기울여 "오르는 중"으로 -->
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  <g transform="rotate(-14 256 256)" fill="none" stroke-linecap="round" stroke-width="44">
+    <path d="M176 72V440M336 72V440" stroke="#7dd3fc"/>
+    <path d="M176 164H336M176 256H336M176 348H336" stroke="#38bdf8"/>
+  </g>
 </svg>

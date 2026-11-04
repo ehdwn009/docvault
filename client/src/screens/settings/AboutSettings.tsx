@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import NameStory from './NameStory';
 import { downloadArchive } from '../../lib/download';
 import { rowId } from './catalog';
 import SettingRow, { btnClass } from './SettingRow';
@@ -8,9 +9,10 @@ type Props = { onShowChangelog: () => void };
 // SCR-404: 정보 — 버전·업데이트 기록(SCR-144)·내보내기
 export default function AboutSettings({ onShowChangelog }: Props) {
   const [withManifest, setWithManifest] = useState(true);
+  const [storyOpen, setStoryOpen] = useState(false);
   return (
     <>
-      <SettingRow id={rowId('about', 'version')} title={<>docvault <span className="font-medium">v{__APP_VERSION__}</span></>} desc={`${__BUILD_DATE__} 빌드`}>
+      <SettingRow id={rowId('about', 'version')} title={<>Loft <span className="font-medium">v{__APP_VERSION__}</span></>} desc={`${__BUILD_DATE__} 빌드`}>
         <button onClick={onShowChangelog} className={btnClass}>업데이트 기록</button>
       </SettingRow>
       <SettingRow
@@ -25,6 +27,12 @@ export default function AboutSettings({ onShowChangelog }: Props) {
         }
       >
         <button onClick={() => downloadArchive({ all: true, manifest: withManifest })} className={btnClass}>내 자료 전부 내보내기</button>
+      </SettingRow>
+      {/* 이름 이야기 — 설정의 유일한 읽을거리. 접어 두고 궁금한 사람만 펼친다 (이름·아이콘 결정 2026-11-04) */}
+      <SettingRow id={rowId('about', 'nameStory')} title="이름 이야기" desc="docvault가 왜 Loft가 됐고, 아이콘은 왜 사다리인지" below={storyOpen ? <NameStory /> : undefined}>
+        <button onClick={() => setStoryOpen((v) => !v)} className={btnClass} aria-expanded={storyOpen}>
+          {storyOpen ? '접기' : '읽기'}
+        </button>
       </SettingRow>
     </>
   );
