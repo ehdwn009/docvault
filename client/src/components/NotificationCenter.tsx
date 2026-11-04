@@ -26,6 +26,7 @@ const KIND_ICON: Record<Notification['kind'], { icon: IconName; tint: 'accent' |
   briefing_ready: { icon: 'news', tint: 'accent' },
   briefing_missing: { icon: 'info', tint: 'warn' },
   upload_done: { icon: 'upload', tint: 'good' },
+  export_done: { icon: 'download', tint: 'good' },
 };
 
 function dayKey(ms: number, now: Date): '오늘' | '어제' | '그 전' {

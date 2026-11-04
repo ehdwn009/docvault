@@ -44,6 +44,25 @@ export const NOTIFICATION = {
   KEEP_MS: 30 * 24 * 60 * 60 * 1000,
   /** 올리기가 이만큼 넘게 걸렸을 때만 "끝났어요" 알림을 남긴다 — 1초짜리까지 쌓이면 알림함이 영수증이 된다 */
   UPLOAD_SLOW_MS: 10 * 1000,
+  /** 조용한 시간이 끝났는지 보고 보류한 푸시를 한 통으로 묶어 보내는 주기 */
+  QUIET_FLUSH_MS: 60 * 1000,
+} as const;
+
+/** 알림 종류 — 설정 화면의 켜고 끄기 목록도 이 순서 (알림 3단계) */
+export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] as const;
+
+/** 텔레그램 봇 통로 (API-167~170, 알림 3단계 2026-11-05) */
+export const TELEGRAM = {
+  API: 'https://api.telegram.org',
+  /** 연결 코드 유효 시간 — 링크를 눌러 봇에 /start 보낼 때까지 */
+  LINK_CODE_TTL_MS: 10 * 60 * 1000,
+  /** getUpdates 긴 폴링 대기(초) — 웹훅 대신 폴링: 공개 주소 설정이 필요 없다 */
+  POLL_TIMEOUT_S: 20,
+  /** 폴링이 실패했을 때 다시 묻기까지 */
+  POLL_RETRY_MS: 5 * 1000,
+  /** app_settings 열쇠·암호화 용도 */
+  SETTING_KEY: 'telegram_bot',
+  PURPOSE: 'telegram-bot',
 } as const;
 
 /** 웹 푸시 (API-162~165, 알림 2단계 2026-11-04) */
@@ -130,6 +149,9 @@ export const DEFAULT_USER_SETTINGS = {
   briefingSchedule: null as string | null,
   /** 앱 안 원문 보기 스위치(기본 꺼짐) — 서버에서 추출 품질을 잰 뒤(briefing:readcheck) 관리자가 켠다 (개선 합의안 7장) */
   briefingReader: 0,
+  /** 알림 종류별 켜고 끄기·조용한 시간 — null = 전부 켬·조용한 시간 없음 (알림 3단계) */
+  notifyPrefs: null as string | null,
+  quietHours: null as string | null,
   /** 함께 보는 브리핑의 주인(관리자 id) — 관리자가 고른 일반 계정에만 값이 생긴다 (v0.49) */
   briefingOwnerId: null as number | null,
   /** 회차 생성 방식 — api(지금 방식) · subscription(구독으로 받기) (v0.50) */

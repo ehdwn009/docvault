@@ -8,6 +8,7 @@ import {
   FONT_SCALE_MIN,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
+  NOTIFICATION_KINDS,
 } from '../constants.js';
 import { db } from '../db/index.js';
 import { files, userFileState, userSettings } from '../db/schema.js';
@@ -27,6 +28,9 @@ const settingsSchema = z.object({
   lastSeenVersion: z.string().max(20).optional(),
   termHighlight: z.number().int().min(0).max(1).optional(),
   askWithCards: z.number().int().min(0).max(1).optional(),
+  // 알림 3단계 — 화면은 객체, 저장은 JSON 글자. 종류 열쇠는 NOTIFICATION_KINDS만
+  notifyPrefs: z.record(z.enum(NOTIFICATION_KINDS), z.union([z.literal(0), z.literal(1)])).nullable().optional(),
+  quietHours: z.object({ enabled: z.union([z.literal(0), z.literal(1)]), start: z.string().regex(/^\d{2}:\d{2}$/), end: z.string().regex(/^\d{2}:\d{2}$/) }).nullable().optional(),
 });
 
 const stateSchema = z
@@ -69,8 +73,18 @@ const stateSchema = z
   );
 
 function pickSettings(row: typeof userSettings.$inferSelect) {
-  const { userId: _omit, updatedAt: _omit2, ...rest } = row;
-  return rest;
+  // 텔레그램 연결 칸은 설정 응답에 싣지 않는다 — 상태는 API-167이 따로 준다
+  const { userId: _omit, updatedAt: _omit2, telegramChatId: _t1, telegramLinkCode: _t2, telegramLinkExpiresAt: _t3, ...rest } = row;
+  return { ...rest, notifyPrefs: parseJsonOrNull(rest.notifyPrefs), quietHours: parseJsonOrNull(rest.quietHours) };
+}
+
+function parseJsonOrNull(raw: string | null): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 export const meRoutes = new Hono<AppEnv>()
@@ -91,7 +105,16 @@ export const meRoutes = new Hono<AppEnv>()
     const patch = c.req.valid('json');
 
     const existing = db.select().from(userSettings).where(eq(userSettings.userId, userId)).get();
-    const merged = { ...DEFAULT_USER_SETTINGS, ...(existing ? pickSettings(existing) : {}), ...patch };
+    const { notifyPrefs, quietHours, ...rest } = patch;
+    const merged = {
+      ...DEFAULT_USER_SETTINGS,
+      ...(existing ? { ...existing, userId: undefined, updatedAt: undefined } : {}),
+      ...rest,
+      ...(notifyPrefs !== undefined ? { notifyPrefs: notifyPrefs ? JSON.stringify(notifyPrefs) : null } : {}),
+      ...(quietHours !== undefined ? { quietHours: quietHours ? JSON.stringify(quietHours) : null } : {}),
+    };
+    delete (merged as { userId?: unknown }).userId;
+    delete (merged as { updatedAt?: unknown }).updatedAt;
 
     const row = db
       .insert(userSettings)

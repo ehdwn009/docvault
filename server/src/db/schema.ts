@@ -181,6 +181,15 @@ export const userSettings = sqliteTable('user_settings', {
   briefingTriggerEnc: text('briefing_trigger_enc'),
   /** 마지막 [연결 확인] 결과 JSON {at, result} — ping job은 메모리라 결과만 남긴다 (v0.50) */
   briefingLastPing: text('briefing_last_ping'),
+  /** 알림 종류별 켜고 끄기 JSON {kind: 0|1} — null이면 전부 켬 (알림 3단계 2026-11-05). 끈 종류는 알림함에도 안 쌓인다 */
+  notifyPrefs: text('notify_prefs'),
+  /** 조용한 시간 JSON {enabled, start:"23:00", end:"06:30"} — 푸시·텔레그램만 보류, 알림함엔 그대로. null이면 꺼짐 */
+  quietHours: text('quiet_hours'),
+  /** 텔레그램 연결 — 봇이 /start 코드를 받으면 적힌다. null이면 미연결 */
+  telegramChatId: text('telegram_chat_id'),
+  /** 연결 코드와 만료 — [연결] 누르면 생기고 봇이 받으면 지운다 */
+  telegramLinkCode: text('telegram_link_code'),
+  telegramLinkExpiresAt: integer('telegram_link_expires_at'),
   updatedAt: integer('updated_at').notNull(),
 });
 
@@ -318,14 +327,16 @@ export const notifications = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패, upload_done = 오래 걸린 올리기가 끝남 (2026-11-04) */
-    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'upload_done'] }).notNull(),
+    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패, upload_done = 오래 걸린 올리기가 끝남, export_done = 내보내기 작업이 끝남 (4단계). 목록은 constants NOTIFICATION_KINDS */
+    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] }).notNull(),
     title: text('title').notNull(),
     body: text('body'),
     /** 누르면 열 문서. 회차 문서가 지워지면 NULL — 알림은 남되 열 곳만 없어진다 */
     fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
     dedupeKey: text('dedupe_key').notNull(),
     readAt: integer('read_at'),
+    /** 1 = 조용한 시간에 생겨 푸시·텔레그램을 보류 중 — 시간이 끝나면 한 통으로 묶어 보내고 0으로 (알림 3단계) */
+    deferredPush: integer('deferred_push').notNull().default(0),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [
@@ -354,3 +365,10 @@ export const pushSubscriptions = sqliteTable(
   },
   (t) => [index('push_subscriptions_user').on(t.userId)],
 );
+
+/** 서버 하나에 하나인 설정 — 텔레그램 봇처럼 계정이 아니라 앱에 속하는 값. 값은 필요하면 암호화해 넣는다 (알림 3단계 2026-11-05) */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

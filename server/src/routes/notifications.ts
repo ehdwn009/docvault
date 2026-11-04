@@ -4,6 +4,7 @@ import { PUSH } from '../constants.js';
 import { fail } from '../lib/errors.js';
 import { countUnread, listNotifications, markNotificationsRead } from '../lib/notifications.js';
 import { countDevices, getVapid, listDevices, removeDevice, saveSubscription, sendTest } from '../lib/push.js';
+import { botStatus, clearBot, createLinkCode, linkStatus, sendTelegram, setBotToken, unlink } from '../lib/telegram.js';
 import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
@@ -20,6 +21,8 @@ const subscribeSchema = z.object({
 });
 
 const unsubscribeSchema = z.object({ endpoint: z.string().url().max(2000) });
+
+const botTokenSchema = z.object({ token: z.string().trim().regex(/^\d{6,}:[A-Za-z0-9_-]{20,}$/, 'BotFather가 준 토큰 모양(숫자:글자)이 아니에요') });
 
 export const notificationRoutes = new Hono<AppEnv>()
 
@@ -74,5 +77,44 @@ export const notificationRoutes = new Hono<AppEnv>()
     if (result === 'none') return fail(c, 404, 'NOT_FOUND', '그 기기가 없어요');
     if (result === 'gone') return fail(c, 410, 'PUSH_DEVICE_GONE', '이 기기의 구독이 만료됐어요. 그 기기에서 다시 켜 주세요');
     if (result === 'failed') return fail(c, 502, 'PUSH_FAILED', '푸시 서버가 받지 않았어요. 잠시 뒤 다시 해 보세요');
+    return c.json({ sent: true });
+  })
+
+  // API-167: 텔레그램 상태 — 봇이 있나(관리자가 넣었나), 나는 연결됐나
+  .get('/telegram', (c) => c.json({ bot: botStatus(), ...linkStatus(c.get('user').id) }))
+
+  // API-168: 봇 토큰 넣기·빼기 (관리자) — getMe로 확인하고 암호화해 app_settings에
+  .put('/telegram/bot', jsonBody(botTokenSchema), async (c) => {
+    if (c.get('user').role !== 'admin') return fail(c, 403, 'FORBIDDEN', '관리자만 봇을 연결할 수 있어요');
+    try {
+      const r = await setBotToken(c.req.valid('json').token);
+      return c.json({ bot: { configured: true, username: r.username } });
+    } catch (e) {
+      return fail(c, 502, 'TELEGRAM_FAILED', `텔레그램이 토큰을 받지 않았어요 — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  })
+  .delete('/telegram/bot', (c) => {
+    if (c.get('user').role !== 'admin') return fail(c, 403, 'FORBIDDEN', '관리자만 봇을 끊을 수 있어요');
+    clearBot();
+    return c.json({ bot: { configured: false, username: null } });
+  })
+
+  // API-169: [연결] — 코드와 t.me 링크. 봇이 /start 코드를 받으면 연결된다
+  .post('/telegram/link', (c) => {
+    try {
+      return c.json(createLinkCode(c.get('user').id));
+    } catch (e) {
+      return fail(c, 409, 'TELEGRAM_NOT_CONFIGURED', e instanceof Error ? e.message : '봇이 없어요');
+    }
+  })
+  .post('/telegram/unlink', (c) => {
+    unlink(c.get('user').id);
+    return c.json({ ok: true });
+  })
+
+  // API-170: 시험 메시지
+  .post('/telegram/test', async (c) => {
+    const ok = await sendTelegram(c.get('user').id, '시험 메시지예요 — Loft 알림이 이 대화로 옵니다');
+    if (!ok) return fail(c, 502, 'TELEGRAM_FAILED', '보내지 못했어요. 연결이 끊겼거나 봇이 없어요');
     return c.json({ sent: true });
   });

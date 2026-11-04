@@ -5,10 +5,11 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { logger } from 'hono/logger';
 import { APP_VERSION, config } from './config.js';
-import { HEALTH_PATH, SLOW_REQUEST_MS, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
+import { HEALTH_PATH, NOTIFICATION, SLOW_REQUEST_MS, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
-import { purgeOldNotifications } from './lib/notifications.js';
+import { flushDeferredPushes, purgeOldNotifications } from './lib/notifications.js';
+import { startTelegramPolling } from './lib/telegram.js';
 import { purgeExpiredTrash } from './lib/trash.js';
 import { authGuard } from './middleware/auth.js';
 import { adminRoutes } from './routes/admin.js';
@@ -42,6 +43,8 @@ setInterval(purgeExpiredThreads, TRASH_PURGE_INTERVAL_MS);
 
 purgeOldNotifications();
 setInterval(purgeOldNotifications, TRASH_PURGE_INTERVAL_MS);
+setInterval(flushDeferredPushes, NOTIFICATION.QUIET_FLUSH_MS);
+startTelegramPolling();
 // 뉴스 브리핑 — 재시작 전에 돌던 실행은 끝난 것으로 정리한다 (설계 — 실패 처리)
 recoverStaleRuns();
 // 자동 생성 시계 — 켜 둔 관리자가 없으면 1분마다 한 번 확인만 하고 끝난다

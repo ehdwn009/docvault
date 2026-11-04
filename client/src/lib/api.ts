@@ -153,6 +153,10 @@ export type UserSettings = {
   termHighlight: number;
   /** 질문할 때 관련 카드를 문맥으로 함께 보내기 (1=켬) */
   askWithCards: number;
+  /** 알림 종류별 켜고 끄기 — null이면 전부 켬 (알림 3단계) */
+  notifyPrefs?: NotifyPrefs | null;
+  /** 조용한 시간 — null이면 없음. 푸시·텔레그램만 보류된다 */
+  quietHours?: QuietHours | null;
   /** 브리핑 앱 안 원문 보기 (1=켬, 관리자만 의미 있음, v0.45) */
   briefingReader?: number;
   /** 함께 보는 브리핑의 주인(관리자 id) — 값이 있으면 일반 계정에도 브리핑 패널이 열린다 (v0.49) */
@@ -171,16 +175,24 @@ export type FileContent = {
   readonly: boolean;
 };
 
+/** 알림 종류 — 서버 constants NOTIFICATION_KINDS와 같은 순서 */
+export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+export type NotifyPrefs = Partial<Record<NotificationKind, 0 | 1>>;
+export type QuietHours = { enabled: 0 | 1; start: string; end: string };
+
 /** 알림 한 줄 (API-160). fileId가 있으면 누를 때 그 문서를 연다 */
 export type Notification = {
   id: number;
-  kind: 'briefing_ready' | 'briefing_missing' | 'upload_done';
+  kind: NotificationKind;
   title: string;
   body: string | null;
   fileId: number | null;
   readAt: number | null;
   createdAt: number;
 };
+
+export type TelegramStatus = { bot: { configured: boolean; username: string | null }; linked: boolean };
 
 export function fetchNotifications(): Promise<{ notifications: Notification[]; unread: number }> {
   return api('/notifications');

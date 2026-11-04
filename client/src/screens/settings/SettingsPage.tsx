@@ -218,7 +218,7 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
     switch (cat) {
       case 'display': return <DisplaySettings settings={settings} onChange={onChange} onShowShortcuts={onShowShortcuts} />;
       case 'cards': return <CardsSettings settings={settings} onChange={onChange} />;
-      case 'notifications': return <NotificationSettings />;
+      case 'notifications': return <NotificationSettings user={user} settings={settings} onChange={onChange} />;
       case 'account': return <AccountSettings user={user} openPassword={pwTarget} onLogout={onLogout} />;
       case 'briefing': return <BriefingSettings onOpenSources={onOpenBriefingSources} onOpenSubscription={() => setCategory('subscription')} />;
       case 'subscription': return <SubscriptionSettings onOpenFirstConnect={() => setFirstConnectOpen(true)} />;

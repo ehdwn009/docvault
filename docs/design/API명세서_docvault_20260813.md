@@ -21,6 +21,8 @@
 | PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과. 구독 완성본(API-153) 2MB·진행 보고(API-152) 16KB 초과 (v0.50) |
 | PUSH_DEVICE_GONE | 410 | 시험 알림(API-166)을 보냈더니 푸시 서버가 그 기기를 모른다고 함 — 구독을 지웠으니 그 기기에서 다시 켜야 한다 (알림 2단계) |
 | PUSH_FAILED | 502 | 푸시 서버가 받지 않음(네트워크·일시 장애). 구독은 그대로 (알림 2단계) |
+| TELEGRAM_NOT_CONFIGURED | 409 | 관리자가 봇 토큰을 넣지 않아 [연결]을 만들 수 없음 (알림 3단계) |
+| TELEGRAM_FAILED | 502 | 텔레그램 API가 거절(토큰 틀림·보내기 실패). message에 텔레그램의 이유 (알림 3단계) |
 | GOOGLE_NOT_CONNECTED | 409 | 구글 계정 미연결 (클라이언트는 연결 화면으로 유도) |
 | GOOGLE_ERROR | 502 | 구글 API 호출 실패 — 토큰 만료·사용자가 권한 회수·드라이브 장애. message에 사람이 읽을 사유 |
 | ASK_NOT_CONFIGURED | 503 | 서버에 LLM API 키(`ANTHROPIC_API_KEY`)가 없음. 질문 기능만 막히고 나머지는 정상 |
@@ -776,6 +778,24 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-165 — DELETE /notifications/push/devices/{id} · POST /notifications/push/unsubscribe
 설정 화면의 [끊기]는 id로, 브라우저가 구독을 풀 때는 `{ "endpoint" }`로. **200** `{ "ok": true }`. id가 내 것이 아니면 404. 이 기기를 끊을 때 화면은 브라우저 구독도 함께 푼다 — 서버만 지우면 다시 켤 때 "구독은 있는데 등록이 없는" 어중간한 상태가 된다.
+
+#### 종류별 끄기·조용한 시간 (3단계, 2026-11-05)
+USER_SETTINGS에 `notifyPrefs`(JSON `{kind: 0|1}`, null=전부 켬)와 `quietHours`(JSON `{enabled, start:"23:00", end:"06:30"}`, null=없음)가 생겼다 — API-071/072로 객체 그대로 주고받고 서버가 JSON 글자로 저장한다. 종류 열쇠는 `NOTIFICATION_KINDS`(briefing_ready · briefing_missing · upload_done · export_done)만 받는다(400). **끈 종류는 알림함에도 안 쌓인다**(pushNotification이 넣기 전에 거른다). **조용한 시간**은 한국시간 기준이고 자정을 넘는 구간(23:00~06:30)도 된다 — 그 사이 생긴 알림은 알림함엔 그대로 쌓이되 `deferred_push=1`로 푸시·텔레그램을 보류하고, 1분마다(`NOTIFICATION.QUIET_FLUSH_MS`) 조용한 시간이 끝난 사람의 보류분을 **한 통**으로 묶어 보낸다(1건이면 그 제목 그대로, 여럿이면 「조용한 시간 동안 알림 n개 — 첫 제목 외 n-1개」).
+
+#### 텔레그램 (3단계)
+봇은 **앱에 하나**(관리자가 BotFather 토큰을 넣는다 — `app_settings.telegram_bot`에 암호화, 토큰은 절대 응답에 싣지 않는다), 사용자는 저마다 /start 코드로 자기 대화를 잇는다. 서버는 웹훅 대신 **getUpdates 긴 폴링**(20초, `TELEGRAM.POLL_TIMEOUT_S`)을 돈다 — 공개 주소 설정이 필요 없다. 보내는 글은 `제목\n한 줄`뿐, 문서 내용·링크는 없다(폐쇄형). 푸시가 막힌 기기(시크릿 창·옛 브라우저)의 안전망이고 조용한 시간을 똑같이 따른다.
+
+### API-167 — GET /notifications/telegram
+**200** `{ "bot": { "configured": boolean, "username": string | null }, "linked": boolean }`.
+
+### API-168 — PUT · DELETE /notifications/telegram/bot (관리자)
+**Body** `{ "token" }` (모양 `숫자:글자` 검사 → 400). 텔레그램 `getMe`로 확인하고 봇 이름과 함께 저장, 폴링을 (다시) 켠다 → **200** `{ "bot" }`. 거절되면 502 TELEGRAM_FAILED. DELETE는 토큰을 지우고 폴링을 멈춘다.
+
+### API-169 — POST /notifications/telegram/link · /unlink
+[연결] → **200** `{ "code", "url": "https://t.me/<봇>?start=<code>", "expiresAt" }` — 10분(`TELEGRAM.LINK_CODE_TTL_MS`). 사용자가 링크를 열고 "시작"을 누르면 봇이 `/start <code>`를 받아 USER_SETTINGS.telegram_chat_id를 적고 답장한다. 봇이 없으면 409 TELEGRAM_NOT_CONFIGURED. 화면은 링크를 띄운 동안 5초마다 API-167을 다시 읽어 「연결됨」으로 바꾼다. /unlink는 chat id·코드를 지운다.
+
+### API-170 — POST /notifications/telegram/test
+시험 메시지 한 통 → **200** `{ "sent": true }`, 못 보내면 502 TELEGRAM_FAILED.
 
 ### API-166 — POST /notifications/push/devices/{id}/test
 [시험 알림] — 그 기기 한 대로 「시험 알림이에요」를 보내고 결과를 기다린다. **200** `{ "sent": true }` · 푸시 서버가 기기를 모르면 410 PUSH_DEVICE_GONE(구독 삭제) · 그 밖의 실패는 502 PUSH_FAILED.

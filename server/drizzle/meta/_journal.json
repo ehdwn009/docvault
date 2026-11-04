@@ -183,6 +183,13 @@
       "when": 1793808504180,
       "tag": "0025_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1793832003064,
+      "tag": "0026_notify_prefs_telegram",
+      "breakpoints": true
     }
   ]
 }
