@@ -18,6 +18,8 @@ type NewNotification = {
   title: string;
   body?: string | null;
   fileId?: number | null;
+  /** 문서가 아닌 곳(내보내기 내려받기 등)으로 — fileId 대신 */
+  href?: string | null;
   /** 같은 사건의 두 번째 호출은 조용히 무시된다 (user_id + dedupe_key 유일) */
   dedupeKey: string;
 };
@@ -56,8 +58,8 @@ export function isQuietNow(q: QuietHours | null, now = Date.now()): boolean {
 }
 
 /** 밖으로 보내는 통로 둘 — 푸시(기기들)와 텔레그램. 알림함은 이미 쌓였다 */
-function deliver(userId: number, title: string, body: string | null, fileId: number | null, tag: string): void {
-  sendPushToUser(userId, { title, body, url: fileId ? `/f/${fileId}` : '/', tag });
+function deliver(userId: number, title: string, body: string | null, fileId: number | null, tag: string, href: string | null = null): void {
+  sendPushToUser(userId, { title, body, url: href ?? (fileId ? `/f/${fileId}` : '/'), tag });
   void sendTelegram(userId, body ? `${title}\n${body}` : title);
 }
 
@@ -70,12 +72,12 @@ export function pushNotification(n: NewNotification): void {
     const quietNow = isQuietNow(quiet, now);
     const r = db
       .insert(notifications)
-      .values({ userId, kind: n.kind, title: n.title, body: n.body ?? null, fileId: n.fileId ?? null, dedupeKey: n.dedupeKey, deferredPush: quietNow ? 1 : 0, createdAt: now })
+      .values({ userId, kind: n.kind, title: n.title, body: n.body ?? null, fileId: n.fileId ?? null, href: n.href ?? null, dedupeKey: n.dedupeKey, deferredPush: quietNow ? 1 : 0, createdAt: now })
       .onConflictDoNothing()
       .run();
     // 새로 생긴 줄만 밖으로 보낸다 — 중복으로 막힌 사건은 푸시도 가지 않는다 (2단계: 웹 푸시).
     // 조용한 시간이면 보류 표시만 — flushDeferredPushes가 끝난 뒤 한 통으로 묶는다
-    if (r.changes > 0 && !quietNow) deliver(userId, n.title, n.body ?? null, n.fileId ?? null, n.dedupeKey);
+    if (r.changes > 0 && !quietNow) deliver(userId, n.title, n.body ?? null, n.fileId ?? null, n.dedupeKey, n.href ?? null);
   }
 }
 
@@ -108,6 +110,7 @@ export function listNotifications(userId: number) {
       title: notifications.title,
       body: notifications.body,
       fileId: notifications.fileId,
+      href: notifications.href,
       readAt: notifications.readAt,
       createdAt: notifications.createdAt,
     })

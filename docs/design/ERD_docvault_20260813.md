@@ -31,6 +31,7 @@ erDiagram
     FILES ||--o| BRIEFING_RUNS : "성공한 실행의 회차 문서"
     USERS ||--o{ NOTIFICATIONS : "받는다"
     USERS ||--o{ PUSH_SUBSCRIPTIONS : "기기를 등록한다"
+    USERS ||--o{ EXPORT_JOBS : "내보내기를 시킨다"
     FILES ||--o{ NOTIFICATIONS : "누르면 여는 문서"
 
     USERS {
@@ -238,10 +239,23 @@ erDiagram
         text title
         text body "nullable, 한 줄 설명"
         integer file_id FK "nullable — 누르면 열 회차 문서. 문서를 지우면 NULL(SET NULL)"
+        text href "nullable — 문서가 아닌 곳(내보내기 ZIP 내려받기)으로. file_id와 둘 중 하나 (알림 4단계)"
         text dedupe_key "같은 사건 한 번만 — (user_id, dedupe_key) UNIQUE"
         integer read_at "nullable — 읽은 시각"
         integer deferred_push "조용한 시간에 생겨 푸시·텔레그램 보류 중 (알림 3단계)"
         integer created_at
+    }
+
+    EXPORT_JOBS {
+        text id PK "uuid — 내려받기 주소의 열쇠 (알림 4단계 2026-11-05)"
+        integer user_id FK
+        text status "running | done | error"
+        text name "내려받을 때 파일 이름"
+        integer entry_count
+        integer size_bytes "done일 때 ZIP 크기"
+        text message "nullable — 실패 이유"
+        integer created_at
+        integer finished_at "nullable"
     }
 
     APP_SETTINGS {
@@ -280,6 +294,7 @@ erDiagram
 | ASK_THREADS | 문서를 읽다 LLM에게 물어본 대화 하나, 또는 문서 없이 시작한 자유 대화(챗봇, file_id NULL). 어느 문서의 어느 문장에서 시작했는지(quote·context)를 들고 있어, 2판의 카드가 "원 대화"와 "출처"로 쓴다. model은 이 대화의 답변 모델. item_id가 있으면 브리핑 기사 묻기 — context는 서버가 그 회차에서 조립한 "우리가 쓴 글 전체"(v0.48) |
 | CARD_THREADS | 카드 ↔ 대화. 한 대화에서 카드 여럿, 한 카드에 대화 여럿(재구성으로 합쳐질 때). 카드가 참조하는 대화는 30일 정리에서 빠진다 |
 | NOTIFICATIONS | 알림 한 줄 — 사건은 여기에 쌓고, 앱 안 알림함·(나중의) 푸시·메신저는 이 표 위의 배달 통로. `dedupe_key`로 같은 사건(같은 실행의 같은 결과)이 두 번 쌓이지 않는다. 30일 지나면 자동 삭제 (2026-11-04, 알림 1단계) |
+| EXPORT_JOBS | 뒤에서 만드는 내보내기 ZIP 한 건. 파일은 `data/exports/{user_id}/{id}.zip`에, 하루(EXPORT.KEEP_MS) 지나면 파일·행을 지운다. 30개·20MB 이하는 작업을 만들지 않고 바로 흘려보낸다 (알림 4단계) |
 | APP_SETTINGS | 서버 하나에 하나인 설정의 열쇠-값. 지금은 텔레그램 봇(토큰+이름, 암호화) 한 줄 — 계정이 아니라 앱에 속하는 값은 USER_SETTINGS가 아니라 여기 (알림 3단계) |
 | PUSH_SUBSCRIPTIONS | 웹 푸시 구독 — 기기(브라우저)마다 한 줄. endpoint가 곧 기기 주소라 유일. 알림 표에 새 줄이 생기면 주인의 기기 전부로 보내고, 푸시 서버가 404·410을 돌려주면 지운다. VAPID 열쇠는 표가 아니라 `data/vapid.json`에 (알림 2단계 2026-11-04) |
 | BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |

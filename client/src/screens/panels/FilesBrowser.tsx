@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ContextMenu, { type MenuItem } from '../../components/ContextMenu';
 import FileGrid from '../../components/FileGrid';
 import FileName from '../../components/FileName';
+import { formatMB, pendingPercent, type PendingUpload } from '../../lib/uploads';
 import type { TreeActions } from '../../components/FileTree';
 import FolderPicker from '../../components/FolderPicker';
 import Icon, { FILE_TYPE_ICON, FILE_TYPE_LABEL } from '../../components/Icon';
@@ -26,6 +27,8 @@ type Props = {
   folders: TreeFolder[];
   /** 정렬·태그 거르기를 거친 파일 */
   files: TreeFile[];
+  /** 올리는 중인 파일 줄(시안 B) — 그 폴더 목록 맨 위에 진행 막대와 함께 (알림 4단계) */
+  pending: PendingUpload[];
   /** 거르기 전 파일 전체 — 즐겨찾기 수·폴더 안 개수 */
   allFiles: TreeFile[];
   tags: Tag[];
@@ -64,7 +67,7 @@ const ICON_SIZE = 21;
 // SCR-110 (폰 A안, 2026-10-31): 문서 탭 — 큰 제목 + [+]·[⋯], 검색 칸, 묶음 카드(즐겨찾기·공유받음 / 폴더·문서 / 휴지통).
 // 폴더는 펼치지 않고 다음 화면으로 들어간다(아이폰 파일 앱처럼, ‹·뒤로 가기로 나온다). 행에는 단추가 없다 —
 // 누르기=열기, 길게 누르기=메뉴, 옆으로 밀기=빠른 동작. 정렬·보기·태그·선택은 머리의 ⋯ 안에 (사용자 결정 2026-10-31)
-export default function FilesBrowser({ folders, files, allFiles, tags, isAdmin, selectedId, onSelect, onSelectShared, actions, onToggleFavorite, checked, onCheckChange, onBulkDownload, onBulkMove, onBulkDelete, swipe, sortBy, onSortChange, viewMode, onViewModeChange, tagFilter, onTagFilterChange, selectedFolderId, onSelectFolder, onOpenTrash, onSearch, jump = null, rootSignal = 0 }: Props) {
+export default function FilesBrowser({ folders, files, pending, allFiles, tags, isAdmin, selectedId, onSelect, onSelectShared, actions, onToggleFavorite, checked, onCheckChange, onBulkDownload, onBulkMove, onBulkDelete, swipe, sortBy, onSortChange, viewMode, onViewModeChange, tagFilter, onTagFilterChange, selectedFolderId, onSelectFolder, onOpenTrash, onSearch, jump = null, rootSignal = 0 }: Props) {
   const [stack, setStack] = useState<View[]>([{ kind: 'root' }]);
   const cur = stack[stack.length - 1]!;
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -217,6 +220,30 @@ export default function FilesBrowser({ folders, files, allFiles, tags, isAdmin, 
       </SwipeRow>
     );
   };
+  // 올리는 중인 줄 — 진짜 줄과 같은 모양이되 흐리고, 아래에 막대. 실패는 빨간 이유 한 줄
+  const pendingRow = (p: PendingUpload) => (
+    <GroupRow
+      key={`u${p.key}`}
+      icon={<Icon name={p.status === 'error' ? 'info' : 'upload'} size={ICON_SIZE} />}
+      iconClass={p.status === 'error' ? 'text-danger-400' : 'text-accent-400'}
+      title={<span className={p.status === 'error' ? 'text-slate-200' : 'text-slate-400'}>{p.name}</span>}
+      subtitle={
+        p.status === 'error' ? (
+          <span className="text-danger-400">{p.message ?? '올리지 못했어요'}</span>
+        ) : (
+          <span className="block">
+            <span className="mt-1 block h-1 w-full overflow-hidden rounded bg-slate-800">
+              <span className="block h-full rounded bg-accent-500 transition-[width] duration-300" style={{ width: `${pendingPercent(p)}%` }} />
+            </span>
+            <span className="text-slate-500">{p.status === 'waiting' ? '대기 중' : `${formatMB(p.loaded)} / ${formatMB(p.size)}`}</span>
+          </span>
+        )
+      }
+      right={<span className={`text-[11px] ${p.status === 'error' ? 'text-danger-400' : 'text-slate-500'}`}>{p.status === 'error' ? '실패' : p.status === 'waiting' ? '대기' : `${pendingPercent(p)}%`}</span>}
+      wrap
+      as="div"
+    />
+  );
   const folderRow = (folder: TreeFolder) => (
     <SwipeRow key={`d${folder.id}`} {...(selectionMode ? {} : folderSwipe(folder))} surface="panel">
       <GroupRow
@@ -280,6 +307,7 @@ export default function FilesBrowser({ folders, files, allFiles, tags, isAdmin, 
         ) : (
           <Group title={groupTitle}>
             {subFolders.map(folderRow)}
+            {pending.filter((p) => p.folderId === parentId).map(pendingRow)}
             {subFiles.map(fileRow)}
             {subFolders.length === 0 && subFiles.length === 0 && empty(tagFilter !== null ? '이 태그의 문서가 없어요' : '아직 문서가 없어요. [+]로 새 문서를 만들거나 올려 보세요')}
           </Group>

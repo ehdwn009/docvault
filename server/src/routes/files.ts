@@ -1,4 +1,4 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { and, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -23,6 +23,7 @@ import {
 } from '../lib/archive.js';
 import { saveTextContent } from '../lib/content.js';
 import { fail } from '../lib/errors.js';
+import { exportFilePath, getExportJob, shouldInline, startExportJob } from '../lib/exportJobs.js';
 import { pushNotification } from '../lib/notifications.js';
 import {
   ALL_EXTENSIONS,
@@ -100,6 +101,13 @@ function archiveFileName(scope: ArchiveScope, entries: ArchiveEntry[]): string {
   }
   return `docvault-${entries.length}개-${stamp}.zip`;
 }
+
+const exportJobSchema = z.object({
+  fileIds: z.array(z.number().int().positive()).max(MAX_ARCHIVE_ID_PARAMS).optional(),
+  folderIds: z.array(z.number().int().positive()).max(MAX_ARCHIVE_ID_PARAMS).optional(),
+  all: z.boolean().optional(),
+  manifest: z.boolean().optional(),
+});
 
 const saveContentSchema = z.object({
   content: z.string(),
@@ -274,6 +282,51 @@ export const fileRoutes = new Hono<AppEnv>()
     );
     // 스트리밍 — 전체를 메모리에 쌓지 않으므로 Content-Length는 알 수 없다
     return c.body(Readable.toWeb(createArchiveStream(entries, manifest)) as ReadableStream);
+  })
+
+  // API-041: 내보내기 작업 — 작으면 바로 받을 주소를, 크면 뒤에서 만들고 작업 id를 (알림 4단계)
+  .post('/archive/jobs', jsonBody(exportJobSchema), (c) => {
+    const user = c.get('user');
+    const body = c.req.valid('json');
+    const scope: ArchiveScope = { fileIds: body.fileIds ?? [], folderIds: body.folderIds ?? [], all: body.all ?? false };
+    if (!scope.all && scope.fileIds.length === 0 && scope.folderIds.length === 0) {
+      return fail(c, 400, 'VALIDATION_ERROR', '내보낼 대상이 없습니다');
+    }
+    let entries: ArchiveEntry[];
+    try {
+      entries = collectArchiveEntries(user, scope);
+    } catch (err) {
+      if (err instanceof ArchiveTooLargeError) return fail(c, 413, 'PAYLOAD_TOO_LARGE', `한 번에 ${MAX_ARCHIVE_ENTRIES}개까지 내보낼 수 있습니다`);
+      throw err;
+    }
+    if (entries.length === 0) return fail(c, 404, 'NOT_FOUND', '내보낼 파일이 없습니다');
+    if (shouldInline(entries)) {
+      const params = new URLSearchParams();
+      if (scope.fileIds.length) params.set('files', scope.fileIds.join(','));
+      if (scope.folderIds.length) params.set('folders', scope.folderIds.join(','));
+      if (scope.all) params.set('all', '1');
+      if (body.manifest) params.set('manifest', '1');
+      return c.json({ status: 'ready', downloadUrl: `/api/v1/files/archive?${params}` });
+    }
+    const id = startExportJob(user, entries, archiveFileName(scope, entries), body.manifest ?? false);
+    return c.json({ status: 'running', id, entryCount: entries.length }, 202);
+  })
+  .get('/archive/jobs/:id', (c) => {
+    const job = getExportJob(c.get('user').id, c.req.param('id'));
+    if (!job) return fail(c, 404, 'NOT_FOUND', '그 내보내기가 없어요');
+    return c.json({ job: { id: job.id, status: job.status, name: job.name, entryCount: job.entryCount, sizeBytes: job.sizeBytes, message: job.message, createdAt: job.createdAt, finishedAt: job.finishedAt } });
+  })
+  .get('/archive/jobs/:id/download', (c) => {
+    const user = c.get('user');
+    const job = getExportJob(user.id, c.req.param('id'));
+    if (!job || job.status !== 'done') return fail(c, 404, 'NOT_FOUND', '아직 만들어지지 않았거나 지난 내보내기예요');
+    const p = exportFilePath(user.id, job.id);
+    if (!existsSync(p)) return fail(c, 404, 'NOT_FOUND', '하루가 지나 지워진 내보내기예요');
+    c.header('Content-Type', 'application/zip');
+    c.header('Cache-Control', 'no-store');
+    c.header('Content-Length', String(job.sizeBytes));
+    c.header('Content-Disposition', `attachment; filename="docvault-export.zip"; filename*=UTF-8''${encodeURIComponent(job.name)}`);
+    return c.body(Readable.toWeb(createReadStream(p)) as ReadableStream);
   })
 
   // API-038: 원본 다운로드 / 바이너리 스트리밍

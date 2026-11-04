@@ -333,6 +333,8 @@ export const notifications = sqliteTable(
     body: text('body'),
     /** 누르면 열 문서. 회차 문서가 지워지면 NULL — 알림은 남되 열 곳만 없어진다 */
     fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
+    /** 문서가 아닌 곳으로 갈 때의 주소 — 내보내기 ZIP 내려받기 등 (알림 4단계). fileId와 둘 중 하나 */
+    href: text('href'),
     dedupeKey: text('dedupe_key').notNull(),
     readAt: integer('read_at'),
     /** 1 = 조용한 시간에 생겨 푸시·텔레그램을 보류 중 — 시간이 끝나면 한 통으로 묶어 보내고 0으로 (알림 3단계) */
@@ -371,4 +373,21 @@ export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
   updatedAt: integer('updated_at').notNull(),
+});
+
+/** 내보내기 작업 — 큰 ZIP은 요청 안에서 흘려보내지 않고 뒤에서 만들어 data/exports에 두고, 끝나면 알림으로 (알림 4단계 2026-11-05).
+    하루(EXPORT.KEEP_MS) 지나면 파일과 행을 지운다 */
+export const exportJobs = sqliteTable('export_jobs', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['running', 'done', 'error'] }).notNull(),
+  /** 내려받을 때의 파일 이름 */
+  name: text('name').notNull(),
+  entryCount: integer('entry_count').notNull().default(0),
+  sizeBytes: integer('size_bytes').notNull().default(0),
+  message: text('message'),
+  createdAt: integer('created_at').notNull(),
+  finishedAt: integer('finished_at'),
 });

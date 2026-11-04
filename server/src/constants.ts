@@ -48,6 +48,17 @@ export const NOTIFICATION = {
   QUIET_FLUSH_MS: 60 * 1000,
 } as const;
 
+/** 내보내기 작업 (API-040·API-041, 알림 4단계 2026-11-05) */
+export const EXPORT = {
+  /** 이 아래면 요청 안에서 바로 흘려보낸다(지금 방식). 넘으면 뒤에서 만들고 끝나면 알림 */
+  INLINE_MAX_ENTRIES: 30,
+  INLINE_MAX_BYTES: 20 * 1024 * 1024,
+  /** 만든 ZIP 보관 시간 — 지나면 파일·행을 지운다 */
+  KEEP_MS: 24 * 60 * 60 * 1000,
+  /** data/ 아래 폴더 */
+  DIR: 'exports',
+} as const;
+
 /** 알림 종류 — 설정 화면의 켜고 끄기 목록도 이 순서 (알림 3단계) */
 export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] as const;
 

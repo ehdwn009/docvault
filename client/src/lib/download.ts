@@ -1,3 +1,4 @@
+import { api } from './api';
 // 파일 내려받기 진입점 모음 (API-038 단일 파일 / API-040 ZIP 묶음).
 // fetch로 받아 Blob으로 만들지 않고 브라우저에게 주소만 넘긴다 — 그래야 큰 묶음도
 // 메모리에 쌓이지 않고 디스크로 바로 흘러가고, 진행 상황도 브라우저 다운로드 UI가 보여준다.
@@ -28,12 +29,16 @@ type ArchiveScope = {
 };
 
 /** 고른 파일·폴더·전체를 ZIP 하나로 받기 */
-export function downloadArchive(scope: ArchiveScope) {
-  const params = new URLSearchParams();
-  if (scope.fileIds?.length) params.set('files', scope.fileIds.join(','));
-  if (scope.folderIds?.length) params.set('folders', scope.folderIds.join(','));
-  if (scope.all) params.set('all', '1');
-  if (scope.manifest) params.set('manifest', '1');
-  // 이름은 서버가 Content-Disposition으로 정해준다 (폴더 하나면 폴더 이름, 전체면 날짜)
-  startDownload(`/api/v1/files/archive?${params}`);
+/** 내보내기 — 작으면 바로 내려받고('started'), 크면 서버가 뒤에서 만들어 끝나면 알림으로('queued') (API-041, 알림 4단계) */
+export async function downloadArchive(scope: ArchiveScope): Promise<'started' | 'queued'> {
+  const r = await api<{ status: 'ready'; downloadUrl: string } | { status: 'running'; id: string }>('/files/archive/jobs', {
+    method: 'POST',
+    body: JSON.stringify({ fileIds: scope.fileIds ?? [], folderIds: scope.folderIds ?? [], all: !!scope.all, manifest: !!scope.manifest }),
+  });
+  if (r.status === 'ready') {
+    // 이름은 서버가 Content-Disposition으로 정해준다 (폴더 하나면 폴더 이름, 전체면 날짜)
+    startDownload(r.downloadUrl);
+    return 'started';
+  }
+  return 'queued';
 }

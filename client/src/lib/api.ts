@@ -188,6 +188,8 @@ export type Notification = {
   title: string;
   body: string | null;
   fileId: number | null;
+  /** 문서가 아닌 곳으로 — 내보내기 ZIP 내려받기 등. 누르면 그 주소로 내려받는다 */
+  href: string | null;
   readAt: number | null;
   createdAt: number;
 };

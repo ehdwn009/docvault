@@ -37,7 +37,7 @@ import { showChrome, useChromeHidden, useChromeTarget } from '../lib/chromeColla
 import { DEFAULT_USER_SETTINGS } from '../lib/constants';
 import { choiceDialog, confirmDialog, promptDialog } from '../lib/dialog';
 import { runGuarded } from '../lib/guard';
-import { downloadArchive, downloadFile } from '../lib/download';
+import { downloadArchive, downloadFile, startDownload } from '../lib/download';
 import { toast } from '../lib/toast';
 import { BRIEFING_FOLDER_NAME, BRIEFING_READ_EVENT, BRIEFING_SOURCES_FILE_NAME } from '../lib/briefing';
 import BriefingPanel from './panels/BriefingPanel';
@@ -64,6 +64,7 @@ import { formatDateTime } from '../lib/date';
 import { IS_TOUCH, useWindowClass } from '../lib/device';
 import { BottomSlotContext } from '../lib/bottomBar';
 import { useNotifications } from '../lib/useNotifications';
+import type { PendingUpload } from '../lib/uploads';
 import { useVisualViewport } from '../lib/visualViewport';
 
 // home·ai·files·settings = 안 B(v0.54) 레일 네 개. favorites·shared·cards·chat·briefing은 "이전 레이아웃"(classic)에서만 레일에 보인다 (IA — 안 B 결정 1)
@@ -319,6 +320,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 업로드 진행 띠(SCR-113) — 패널이 아니라 작업 공간에 둔다: 탭을 옮겨도 보이고 폰·PC가 같은 띠를 쓴다 (2026-11-04, 시안 A)
   const [upload, setUpload] = useState<UploadState | null>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
+  // 올리는 중인 파일 줄(시안 B) — 목록이 그리고, 끝나면 트리 갱신과 함께 지운다. 실패 줄은 [다시]나 띠 닫기까지 남는다
+  const [pending, setPending] = useState<PendingUpload[]>([]);
   // 알림함(SCR-103) — 종 배지와 목록이 한 훅을 본다. 열려 있는 동안도 주기 새로고침은 계속
   const [notifOpen, setNotifOpen] = useState(false);
   const notif = useNotifications(true);
@@ -960,24 +963,47 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     async (list: File[], folderId: number | null) => {
       const resolved = await resolveConflicts(list, folderId);
       if (resolved === null) return null;
-      let created: TreeFile[] = [];
+      const created: TreeFile[] = [];
+      const failed: { file: File; message: string }[] = [];
       if (resolved.toUpload.length > 0) {
-        const fd = new FormData();
-        for (const f of resolved.toUpload) fd.append('files', f);
-        if (folderId !== null) fd.append('folderId', String(folderId));
-        const names = resolved.toUpload.map((f) => f.name);
-        const total = resolved.toUpload.reduce((n, f) => n + f.size, 0);
+        // 파일마다 요청 하나 — 한 개가 막혀도(크기 초과 등) 나머지는 올라간다. 순서대로 보내 회선을 나누지 않는다 (알림 4단계)
+        const batch = Date.now();
+        const items = resolved.toUpload.map((file, i) => ({ file, key: `${batch}:${i}` }));
+        const names = items.map((it) => it.file.name);
+        const total = items.reduce((n, it) => n + it.file.size, 0);
         const controller = new AbortController();
         uploadAbortRef.current = controller;
-        setUpload({ phase: 'uploading', names, loaded: 0, total, startedAt: Date.now() });
-        created = (
-          await uploadFiles(fd, {
-            signal: controller.signal,
-            onProgress: (loaded, t) => setUpload((u) => (u?.phase === 'uploading' ? { ...u, loaded, total: t || u.total } : u)),
-          })
-        ).files;
+        setPending((list) => [...list.filter((p) => p.status !== 'error'), ...items.map((it) => ({ key: it.key, name: it.file.name, folderId, size: it.file.size, loaded: 0, status: 'waiting' as const }))]);
+        setUpload({ phase: 'uploading', names, loaded: 0, total, startedAt: Date.now(), done: 0, count: items.length });
+        let doneBytes = 0;
+        const patch = (key: string, p: Partial<PendingUpload>) => setPending((list) => list.map((x) => (x.key === key ? { ...x, ...p } : x)));
+        for (const [i, it] of items.entries()) {
+          if (controller.signal.aborted) break;
+          const fd = new FormData();
+          fd.append('files', it.file);
+          if (folderId !== null) fd.append('folderId', String(folderId));
+          patch(it.key, { status: 'uploading' });
+          try {
+            const r = await uploadFiles(fd, {
+              signal: controller.signal,
+              onProgress: (loaded) => {
+                patch(it.key, { loaded });
+                setUpload((u) => (u?.phase === 'uploading' ? { ...u, loaded: doneBytes + loaded, done: i } : u));
+              },
+            });
+            created.push(...r.files);
+            doneBytes += it.file.size;
+            patch(it.key, { status: 'done', loaded: it.file.size });
+            setUpload((u) => (u?.phase === 'uploading' ? { ...u, loaded: doneBytes, done: i + 1 } : u));
+          } catch (e) {
+            if (e instanceof ApiError && e.code === 'ABORTED') throw e;
+            const message = e instanceof ApiError ? e.message : '올리지 못했어요';
+            patch(it.key, { status: 'error', message });
+            failed.push({ file: it.file, message });
+          }
+        }
       }
-      return { created, overwritten: resolved.overwritten, skipped: resolved.skipped };
+      return { created, failed, overwritten: resolved.overwritten, skipped: resolved.skipped };
     },
     [resolveConflicts],
   );
@@ -1001,16 +1027,29 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           return; // 충돌 대화상자에서 취소
         }
         await loadTree();
+        setPending((p) => p.filter((x) => x.status !== 'done')); // 진짜 줄이 생겼으니 유령 줄은 걷는다
         const summary = summarize(r.created.length, r.overwritten, r.skipped);
-        setUpload(summary ? { phase: 'done', summary: `올렸어요 — ${summary}` } : null);
-        if (!summary) toast('업로드한 파일이 없습니다', 'info');
-        if (r.created[0]) void selectFile(r.created[0]);
+        if (r.failed.length > 0) {
+          // 일부 실패: 띠에 빨갛게 — 어느 파일이 왜인지, [다시]는 실패한 것만
+          const failedFiles = r.failed.map((f) => f.file);
+          setUpload({
+            phase: 'error',
+            message: `${r.failed.length}개 못 올렸어요 — ${r.failed[0]!.message}${summary ? ` (${summary})` : ''}`,
+            names: failedFiles.map((f) => f.name),
+            retry: () => void doUpload(failedFiles, folderId),
+          });
+        } else {
+          setUpload(summary ? { phase: 'done', summary: `올렸어요 — ${summary}` } : null);
+          if (!summary) toast('업로드한 파일이 없습니다', 'info');
+          // 다 올라갔을 때만 첫 문서를 연다 — 일부 실패면 목록에 남아 빨간 줄의 이유를 보게
+          if (r.created[0]) void selectFile(r.created[0]);
+        }
       } catch (e) {
+        setPending((p) => p.filter((x) => x.status === 'error'));
         if (e instanceof ApiError && e.code === 'ABORTED') {
-          setUpload({ phase: 'done', summary: '취소했어요' });
+          setUpload({ phase: 'done', summary: '취소했어요 — 이미 올린 파일은 남아 있어요' });
           return;
         }
-        // 띠에 빨갛게 남긴다 — 토스트 한 줄은 지나가 버려서 이유를 못 읽는다. [다시]는 같은 파일로 한 번 더
         setUpload({ phase: 'error', message: e instanceof ApiError ? e.message : '업로드에 실패했습니다', names: list.map((f) => f.name), retry: () => void doUpload(list, folderId) });
       }
     },
@@ -1066,6 +1105,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         let created = 0;
         let overwritten = 0;
         let skipped = 0;
+        let failed = 0;
         for (const [dir, group] of groups) {
           const folderId = dir === '' ? baseId : await ensureFolderPath(dir.split('/'), baseId, cache);
           const r = await uploadCore(group, folderId);
@@ -1073,12 +1113,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           created += r.created.length;
           overwritten += r.overwritten;
           skipped += r.skipped;
+          failed += r.failed.length;
         }
         await loadTree();
+        setPending((p) => p.filter((x) => x.status !== 'done'));
         const summary = summarize(created, overwritten, skipped);
+        if (failed > 0) {
+          setUpload({ phase: 'error', message: `${failed}개 못 올렸어요 — 목록의 빨간 줄에서 이유를 볼 수 있어요${summary ? ` (${summary})` : ''}`, names: [], retry: null });
+          return;
+        }
         setUpload(summary ? { phase: 'done', summary: `폴더째 올렸어요 — ${summary}` } : null);
         if (!summary) toast('업로드한 파일이 없습니다', 'info');
       } catch (e) {
+        setPending((p) => p.filter((x) => x.status === 'error'));
         if (e instanceof ApiError && e.code === 'ABORTED') {
           setUpload({ phase: 'done', summary: '취소했어요 — 이미 올린 파일은 남아 있어요' });
           return;
@@ -1325,7 +1372,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     copyFile: (id) => void guard(() => api(`/files/${id}/copy`, { method: 'POST' })),
     openSplit: (file) => void openSplit(file),
     downloadFile: (file) => downloadFile(file.id, file.name),
-    downloadFolder: (folder) => downloadArchive({ folderIds: [folder.id] }),
+    downloadFolder: (folder) => void exportWithNote({ folderIds: [folder.id] }),
     uploadTo: (folderId) => {
       uploadFolderRef.current = folderId;
       uploadRef.current?.click();
@@ -1498,12 +1545,21 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     const t = window.setTimeout(() => setUpload(null), 2500);
     return () => window.clearTimeout(t);
   }, [upload]);
+  /** 내보내기 — 크면 서버가 뒤에서 만들고 알림으로 온다 (API-041) */
+  const exportWithNote = async (scope: Parameters<typeof downloadArchive>[0]) => {
+    try {
+      if ((await downloadArchive(scope)) === 'queued') toast('양이 많아 뒤에서 만들고 있어요. 끝나면 알림으로 알려 드릴게요', 'info');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : '내보내기를 시작하지 못했어요', 'error');
+    }
+  };
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition';
   /** 알림 한 줄을 누름 — 읽음 처리 뒤 그 사건의 자리로: 회차 문서가 있으면 문서, 없으면(못 만듦·문서 삭제) 브리핑이 있는 곳 */
-  const openNotification = (n: { id: number; fileId: number | null; readAt: number | null }) => {
+  const openNotification = (n: { id: number; fileId: number | null; href: string | null; readAt: number | null }) => {
     if (n.readAt === null) void notif.markRead([n.id]);
     setNotifOpen(false);
-    if (n.fileId !== null) openFileById(n.fileId);
+    if (n.href) startDownload(n.href); // 내보내기 ZIP — 문서가 아니라 내려받기
+    else if (n.fileId !== null) openFileById(n.fileId);
     else if (layout === 'home') openPage('home');
     else openPanel('briefing');
   };
@@ -1685,7 +1741,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
-      {upload && <UploadStrip state={upload} onCancel={() => uploadAbortRef.current?.abort()} onClose={() => setUpload(null)} />}
+      {upload && <UploadStrip state={upload} onCancel={() => uploadAbortRef.current?.abort()} onClose={() => { setUpload(null); setPending((p) => p.filter((x) => x.status !== 'error')); }} />}
       {notifOpen && (
         <NotificationCenter items={notif.items} unread={notif.unread} onClose={() => setNotifOpen(false)} onOpen={openNotification} onReadAll={() => void notif.markRead()} onOpenSettings={() => openSettings({ category: 'notifications' })} />
       )}
@@ -1826,6 +1882,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <FilesBrowser
             folders={sortedFolders}
             files={visibleFiles}
+            pending={pending}
             allFiles={tree.files}
             tags={tags}
             isAdmin={user.role === 'admin'}
@@ -1836,7 +1893,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             onToggleFavorite={toggleFavorite}
             checked={checked}
             onCheckChange={setChecked}
-            onBulkDownload={() => downloadArchive({ fileIds: [...checked] })}
+            onBulkDownload={() => void exportWithNote({ fileIds: [...checked] })}
             onBulkMove={() => setMovePickerOpen(true)}
             onBulkDelete={bulkDelete}
             swipe={fileSwipe}
@@ -1993,7 +2050,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 <span className="font-medium text-sky-300">{checked.size}개 선택</span>
                 <span className="ml-auto flex gap-1">
                   <button
-                    onClick={() => downloadArchive({ fileIds: [...checked] })}
+                    onClick={() => void exportWithNote({ fileIds: [...checked] })}
                     title="고른 파일을 ZIP 하나로 받기"
                     className="min-h-7 rounded border border-slate-700 px-2 text-slate-300 hover:bg-slate-800 touch:min-h-11 touch:px-3"
                   >
@@ -2030,6 +2087,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                 <FileTree
                   folders={sortedFolders}
                   files={visibleFiles}
+                  pending={pending}
                   tags={tags}
                   isAdmin={user.role === 'admin'}
                   selectedId={selected?.id ?? null}

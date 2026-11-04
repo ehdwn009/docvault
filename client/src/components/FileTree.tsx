@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as Reac
 import type { Tag, TreeFile, TreeFolder } from '../lib/api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import FileName from './FileName';
+import { pendingPercent, type PendingUpload } from '../lib/uploads';
 import SwipeRow, { type SwipeConfig } from './SwipeRow';
 import { splitExt } from '../lib/fileName';
 
@@ -56,6 +57,8 @@ export type TreeActions = {
 type Props = {
   folders: TreeFolder[];
   files: TreeFile[];
+  /** 올리는 중인 파일 줄(시안 B) — 그 폴더의 파일들 위에 (알림 4단계) */
+  pending: PendingUpload[];
   tags: Tag[];
   isAdmin: boolean;
   selectedId: number | null;
@@ -90,7 +93,7 @@ function setDragGhost(e: DragEvent, label: string) {
 }
 
 // SCR-110: 파일 트리 — 우클릭 컨텍스트 메뉴, 인라인 이름변경, 드래그앤드롭 이동
-export default function FileTree({ folders, files, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange, selectedFolderId, onSelectFolder, swipe }: Props) {
+export default function FileTree({ folders, files, pending, tags, isAdmin, selectedId, onSelect, actions, checked, onCheckChange, selectedFolderId, onSelectFolder, swipe }: Props) {
   const tagColor = new Map(tags.map((t) => [t.id, t.color]));
   // "접힌 목록"이 아니라 "펼친 목록"으로 들고 있는다 — 빈 집합이 곧 전부 접힘(기본값)이다
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -458,6 +461,24 @@ export default function FileTree({ folders, files, tags, isAdmin, selectedId, on
             </div>
           );
         })}
+        {pending
+          .filter((p) => p.folderId === parentId)
+          .map((p) => (
+            <div key={`u${p.key}`} className="flex items-start gap-1.5 rounded px-2 py-1 text-sm text-slate-500" style={{ paddingLeft: `${8 + depth * 14 + 14}px` }}>
+              <span className="leading-5">{p.status === 'error' ? '⚠️' : '⬆️'}</span>
+              <span className="min-w-0 flex-1">
+                <span className={`block truncate ${p.status === 'error' ? 'text-slate-300' : ''}`}>{p.name}</span>
+                {p.status === 'error' ? (
+                  <span className="block text-[11px] text-danger-400">{p.message ?? '올리지 못했어요'}</span>
+                ) : (
+                  <span className="mt-1 block h-1 w-full overflow-hidden rounded bg-slate-800">
+                    <span className="block h-full rounded bg-accent-500 transition-[width] duration-300" style={{ width: `${pendingPercent(p)}%` }} />
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-[11px]">{p.status === 'error' ? '실패' : p.status === 'waiting' ? '대기' : `${pendingPercent(p)}%`}</span>
+            </div>
+          ))}
         {childFiles.map((file) => {
           const isRenaming = renaming?.kind === 'file' && renaming.id === file.id;
           const isChecked = checked.has(file.id);

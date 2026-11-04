@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { formatMB } from '../lib/uploads';
 import Icon from './Icon';
 
 // 업로드 진행 띠 (SCR-113, 2026-11-04 — 시안 A). 탭 바 바로 위(폰)·오른쪽 아래(PC)에 떠서 어느 탭에 있어도 보인다.
 // 올리는 중: 막대 · 이름 · 올린 양/전체 · 남은 시간 · [취소]. 끝: 한 줄 요약(호출자가 잠시 뒤 지운다). 실패: 빨갛게 남아 이유 + [다시].
 
 export type UploadState =
-  | { phase: 'uploading'; names: string[]; loaded: number; total: number; startedAt: number }
+  | { phase: 'uploading'; names: string[]; loaded: number; total: number; startedAt: number; done: number; count: number }
   | { phase: 'done'; summary: string }
   | { phase: 'error'; message: string; names: string[]; retry: (() => void) | null };
 
@@ -16,9 +17,6 @@ type Props = {
   onClose: () => void;
 };
 
-function formatMB(bytes: number): string {
-  return `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)}MB`;
-}
 
 function namesLabel(names: string[]): string {
   if (names.length === 0) return '';
@@ -55,7 +53,7 @@ export default function UploadStrip({ state, onCancel, onClose }: Props) {
       <div role="status" aria-live="polite" className={`${box} border-slate-700`}>
         <div className="flex items-center gap-2">
           <Icon name="upload" size={16} className="shrink-0 text-accent-400" />
-          <span className="text-sm font-semibold text-slate-100">올리는 중</span>
+          <span className="text-sm font-semibold text-slate-100">올리는 중{state.count > 1 ? ` ${Math.min(state.done + 1, state.count)}/${state.count}` : ''}</span>
           <span className="ml-auto text-xs tabular-nums text-slate-400">{pct}%</span>
           <button onClick={onCancel} className="min-h-8 rounded-md px-2 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 touch:min-h-9">
             취소

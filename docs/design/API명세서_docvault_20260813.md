@@ -227,6 +227,8 @@
 |---|---|---|
 | PAYLOAD_TOO_LARGE | 413 | 파일당 크기 제한 초과 (텍스트 10MB, html 30MB, 바이너리 50MB). html만 넓힌 이유(2026-11-04): 내보내기한 html은 이미지가 base64로 박혀 20MB를 쉽게 넘는데 대개 읽기만 한다. 본문이 DB에 들어가는 비용은 같으므로 md·코드로는 넓히지 않는다 |
 
+**파일별 요청 (알림 4단계, 2026-11-05)**: 클라이언트는 여러 파일을 골라도 **파일마다 요청 하나**를 순서대로 보낸다 — 한 개가 거절돼도(413 등) 나머지는 올라가고, 목록에는 올리는 중인 파일이 줄마다 진행 막대·실패 이유와 함께 보인다(SCR-113 유령 줄). 서버 쪽 "전부 검증 후 저장"은 요청 단위라 그대로다. 일부 실패면 띠가 빨갛게 남고 [다시]는 실패한 파일만 다시 보낸다. 일부 실패일 때는 첫 문서를 자동으로 열지 않는다(폰에서 목록의 빨간 줄이 가려진다).
+
 **큰 HTML 열기 (2026-11-05)**: `HTML_INLINE_MAX_BYTES`(2MB)를 넘는 html은 뷰어가 API-033(/content)을 부르지 않고 **API-035 /raw를 iframe src로 바로** 연다(sandbox, CSP sandbox 헤더 그대로). 23MB를 JSON으로 받아 파싱하고 srcdoc에 다시 넣으면 아이폰이 메모리 한계에서 렌더링을 끊어 반만 보였다 — 원문 스트리밍이면 메모리 1/3. 대가로 목차·찾기·글자 배율·읽던 위치·코드로 보기·편집이 꺼지고 뷰어 머리에 그 사실을 한 줄 적는다.
 
 **진행 표시·완료 알림 (2026-11-04)**: 클라이언트는 XHR 진행 이벤트(올린 바이트/전체)를 작업 공간의 업로드 띠(SCR-113)에 그리고, [취소]는 요청을 끊는다(서버는 끊긴 본문을 버리므로 반쯤 올라간 파일은 생기지 않는다). 서버는 요청 시작부터 본문을 다 받기까지가 `NOTIFICATION.UPLOAD_SLOW_MS`(10초)를 넘고 파일이 하나라도 만들어졌으면 `upload_done` 알림(API-160 kind)을 올린 사람에게 남긴다 — 제목 「올리기가 끝났어요」, 본문 「폴더 › 첫 파일 외 n개 · 23MB」, fileId는 한 개 올렸을 때만. dedupe_key는 `upload:{userId}:{시작 시각}`. 짧은 올리기는 띠의 「올렸어요」 2.5초로 끝나고 알림함에는 쌓이지 않는다.
@@ -756,7 +758,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ## 알림 (API-16x, 2026-11-04 — 1단계)
 
-알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
+알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
 
 ### API-160 — GET /notifications
 내 알림함. **200** `{ "notifications": [{ "id", "kind": "briefing_ready" | "briefing_missing", "title", "body": string | null, "fileId": number | null, "readAt": number | null, "createdAt" }], "unread": 3 }` — 최신순 50개(`NOTIFICATION.LIST_MAX`). `fileId`는 누르면 열 회차 문서(지워졌으면 null → 화면은 브리핑이 있는 곳으로). 종 배지와 목록이 같은 응답을 쓴다.
@@ -796,6 +798,9 @@ USER_SETTINGS에 `notifyPrefs`(JSON `{kind: 0|1}`, null=전부 켬)와 `quietHou
 
 ### API-170 — POST /notifications/telegram/test
 시험 메시지 한 통 → **200** `{ "sent": true }`, 못 보내면 502 TELEGRAM_FAILED.
+
+### API-041 — POST /files/archive/jobs · GET /files/archive/jobs/{id} · GET …/{id}/download (알림 4단계, 2026-11-05)
+**Body** `{ "fileIds"?, "folderIds"?, "all"?, "manifest"? }` (API-040과 같은 범위). 범위를 펼쳐 보고 **30개·20MB 이하**(`EXPORT.INLINE_MAX_*`)면 **200** `{ "status": "ready", "downloadUrl": "/api/v1/files/archive?…" }` — 클라이언트가 그 주소로 바로 내려받는다(지금 방식). 넘으면 **202** `{ "status": "running", "id", "entryCount" }` — 서버가 뒤에서 ZIP을 `data/exports/{userId}/{id}.zip`에 만들고, 끝나면 `export_done` 알림(제목 「내보내기가 끝났어요」, 본문 「이름 · n개 · 48MB · 하루 동안 받을 수 있어요」, **href**=내려받기 주소)을 남긴다. 알림의 href는 fileId 대신 쓰는 "문서가 아닌 곳" 주소 — 알림함에서 누르면 바로 내려받고, 푸시의 url로도 들어간다. GET /jobs/{id}는 `{ "job": { id, status: running|done|error, name, entryCount, sizeBytes, message, createdAt, finishedAt } }`, 내 것이 아니면 404. /download는 done일 때만 ZIP(Content-Length 있음). 하루(`EXPORT.KEEP_MS`) 지나면 파일·행을 지운다(기동 시 + 하루 한 번). 화면: 설정 › 정보와 폴더·선택 내려받기가 모두 이 경로를 쓰고, 큐에 들어가면 「양이 많아 뒤에서 만들고 있어요. 끝나면 알림으로」 토스트.
 
 ### API-166 — POST /notifications/push/devices/{id}/test
 [시험 알림] — 그 기기 한 대로 「시험 알림이에요」를 보내고 결과를 기다린다. **200** `{ "sent": true }` · 푸시 서버가 기기를 모르면 410 PUSH_DEVICE_GONE(구독 삭제) · 그 밖의 실패는 502 PUSH_FAILED.

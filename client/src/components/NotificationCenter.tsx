@@ -71,7 +71,7 @@ function Rows({ items, onOpen }: { items: Notification[]; onOpen: (n: Notificati
                 <span className="text-slate-500">{formatDateTime(n.createdAt)}</span>
               </span>
             }
-            chevron={n.fileId !== null}
+            chevron={n.fileId !== null || n.href !== null}
             onClick={() => onOpen(n)}
             className={unread ? 'bg-accent-500/5' : ''}
           />
