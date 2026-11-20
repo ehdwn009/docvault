@@ -61,8 +61,9 @@ export const files = sqliteTable('files', {
   isShared: integer('is_shared').notNull().default(0),
   sortOrder: integer('sort_order').notNull().default(0),
   /** doc=보통 문서, card=배움 카드(2판), briefing=뉴스 브리핑 회차. 카드는 md 파일이지만 파일 트리에는 안 나오고
-      서랍(SCR-181)에서만 보인다. 브리핑은 본문이 회차 JSON인 code 파일이고 트리에 나온다 — 보관함이 곧 트리 (뉴스 브리핑 설계) */
-  kind: text('kind', { enum: ['doc', 'card', 'briefing'] }).notNull().default('doc'),
+      서랍(SCR-181)에서만 보인다. 브리핑은 본문이 회차 JSON인 code 파일이고 트리에 나온다 — 보관함이 곧 트리 (뉴스 브리핑 설계).
+      trade=수출입 동향의 원문 PDF·해부 문서 — 트리·공유받음·검색에 안 나오고 동향 탭에서만 보인다 (수출입 동향 설계 3단계) */
+  kind: text('kind', { enum: ['doc', 'card', 'briefing', 'trade'] }).notNull().default('doc'),
   /** 휴지통 이동 시각. null이면 정상 파일. 보관 기한이 지나면 서버가 자동 영구 삭제한다 */
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),

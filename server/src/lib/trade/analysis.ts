@@ -9,9 +9,9 @@ import { uniqueFileName } from '../naming.js';
 import { binaryAbsPath } from '../storage.js';
 import { renderTradeHtml } from './document.js';
 import { periodLabel, previousMonth } from './match.js';
-import { notifyAnalysisFailed, notifyAnalysisReady } from './notify.js';
+import { notifyAnalysisFailed, notifyAnalysisReady, notifyPdfReady } from './notify.js';
 import { pdfPageTexts } from './pages.js';
-import { adminIds, archiveOwnerId, ensureFolder } from './store.js';
+import { adminIds, archiveOwnerId, releaseOf, tradeNameTaken } from './store.js';
 import { TradeDataSchema, verifyTradeData, type PageTexts, type VerifyReport } from './verify.js';
 
 // 자동 해부 — 서버가 claude.ai 예약 작업을 켜고(브리핑 구독의 트리거를 그대로 쓴다), trade-report 스킬이 보낸 완성본을
@@ -20,7 +20,6 @@ import { TradeDataSchema, verifyTradeData, type PageTexts, type VerifyReport } f
 type JobRow = typeof tradeJobs.$inferSelect;
 type ReleaseRow = typeof tradeReleases.$inferSelect;
 
-const releaseOf = (period: string) => db.select().from(tradeReleases).where(and(eq(tradeReleases.source, TRADE.SOURCE), eq(tradeReleases.period, period))).get();
 
 export function tradeJobByJobId(jobId: string): JobRow | null {
   return db.select().from(tradeJobs).where(eq(tradeJobs.jobId, jobId)).get() ?? null;
@@ -55,6 +54,7 @@ export async function startAnalysis(period: string, now = Date.now()): Promise<'
   if (!fired.ok) {
     closeJob(job.id, 'error', `예약 작업을 켜지 못했어요 — ${fired.reason}`);
     notifyAnalysisFailed(period, job.jobId, `예약 작업을 켜지 못했어요 — ${fired.reason}`);
+    notifyPdfReady(period);
     console.log(`[trade] ${period} 해부 트리거 실패: ${fired.reason}`);
     return 'failed';
   }
@@ -80,6 +80,8 @@ export function sweepExpiredTradeJobs(now = Date.now()): void {
     const message = j.remoteStartedAt === null ? '예약 작업이 서버를 부르지 않았어요 (예약 작업·네트워크 설정 확인)' : '마감까지 완성본이 오지 않았어요';
     closeJob(j.id, 'missing', message);
     notifyAnalysisFailed(j.period, j.jobId, message);
+    // 해부 없이도 한 번은 알린다 — 원문은 이미 보관함에 있다 (알림은 호마다 한 번, 3단계)
+    notifyPdfReady(j.period);
     console.log(`[trade] ${j.period} 해부 마감 초과 (job ${j.jobId})`);
   }
 }
@@ -132,7 +134,7 @@ export async function tradePages(job: JobRow, doc: 'cur' | 'prev'): Promise<{ do
   return { doc, period, pages };
 }
 
-/** 해부 문서(HTML)를 폴더에 — 같은 호를 다시 받으면 그 문서를 고쳐 쓴다 */
+/** 해부 문서(HTML)를 보관함에(kind='trade') — 같은 호를 다시 받으면 그 문서를 고쳐 쓴다 */
 function saveDocument(release: ReleaseRow, html: string, now: number): number {
   const ownerId = archiveOwnerId();
   if (ownerId === null) throw new JobError(409, 'TRADE_JOB_CLOSED', '활성 관리자 계정이 없어 보관할 곳이 없어요');
@@ -142,10 +144,8 @@ function saveDocument(release: ReleaseRow, html: string, now: number): number {
     db.update(files).set({ contentText: html, sizeBytes: size, updatedAt: now }).where(eq(files.id, existing.id)).run();
     return existing.id;
   }
-  const folderId = ensureFolder(ownerId, now);
-  const taken = (name: string) => !!db.select({ id: files.id }).from(files).where(and(eq(files.ownerId, ownerId), eq(files.folderId, folderId), eq(files.name, name), isNull(files.deletedAt))).get();
-  const name = uniqueFileName(`${periodLabel(release.period)} 수출입 동향 해부.html`, taken);
-  return db.insert(files).values({ ownerId, folderId, name, fileType: 'html', mimeType: 'text/html', sizeBytes: size, contentText: html, createdAt: now, updatedAt: now }).returning().get().id;
+  const name = uniqueFileName(`${periodLabel(release.period)} 수출입 동향 해부.html`, (n) => tradeNameTaken(ownerId, n));
+  return db.insert(files).values({ ownerId, folderId: null, name, fileType: 'html', mimeType: 'text/html', sizeBytes: size, contentText: html, kind: 'trade', createdAt: now, updatedAt: now }).returning().get().id;
 }
 
 export type AcceptResult = { fileId: number | null; checked: number; passed: number; dropped: string[]; already: boolean };

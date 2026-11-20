@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { TradeData } from './verify.js';
 
-// 해부 결과를 한 장짜리 HTML 문서로 — 전용 화면(3단계)이 생기기 전까지 「수출입동향」 폴더에서 이 문서로 본다 (수출입 동향 설계 2단계).
+// 해부 결과를 한 장짜리 HTML 문서로 — 동향 탭의 [해부 보기]가 이 문서를 뷰어로 연다 (수출입 동향 설계 "해부 화면").
 // 화면 틀은 server/assets/trade-template.html 하나 — 스킬이 단독 페이지를 만들 때도 같은 파일을 쓴다
 
 const TEMPLATE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'assets', 'trade-template.html');

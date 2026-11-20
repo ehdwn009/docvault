@@ -10,7 +10,8 @@ import { formatDate, formatDateTime } from '../lib/date';
 import { IS_PC, IS_TOUCH } from '../lib/device';
 import { kstToday, longDate } from '../lib/briefing';
 import { btnClass } from './settings/SettingRow';
-import BriefingPanel from './panels/BriefingPanel';
+import HomeDigest from './HomeDigest';
+import { MeButton } from '../lib/topNav';
 
 /** 이어 읽기에 보여 주는 최근 열람 수 · 최근 대화 수 */
 const RECENT_FILES = 5;
@@ -31,12 +32,13 @@ type Props = {
   unread: number;
   onOpenNotifications: () => void;
   onNewDoc: () => void;
-  onOpenBriefingSettings: () => void;
-  onOpenBriefingSources: () => void;
+  /** 브리핑 탭(SCR-192)·동향 탭(SCR-195)으로 — 홈에는 요약만 둔다 */
+  onOpenFeed: () => void;
+  onOpenTrade: () => void;
 };
 
-// SCR-101: 홈 — 로그인 직후·`/`의 첫 화면. 매일 들어오는 것(브리핑·복습)과 이어 갈 것(문서·대화)이 한 화면에 (IA — 안 B 홈)
-export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, unread, onOpenNotifications, onNewDoc, onOpenBriefingSettings, onOpenBriefingSources }: Props) {
+// SCR-101: 홈 — 로그인 직후·`/`의 첫 화면. 오늘 볼 것(브리핑·수출입 동향 요약)·복습과 이어 갈 것(문서·대화)이 한 화면에 (IA — 안 B 홈, 탭 구조 개정 2026-11-20)
+export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, unread, onOpenNotifications, onNewDoc, onOpenFeed, onOpenTrade }: Props) {
   const isAdmin = user.role === 'admin';
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 브리핑이 있다 (v0.49)
   const briefingOwner = isAdmin ? null : (settings.briefingOwnerId ?? null);
@@ -44,7 +46,6 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
   const [threads, setThreads] = useState<AskThread[] | null>(null);
   const [review, setReview] = useState<ReviewList | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [ownerName, setOwnerName] = useState<string | null>(null);
 
   const loadReview = () => void api<ReviewList>('/cards/review').then(setReview).catch(() => setReview(null));
   useEffect(() => {
@@ -53,12 +54,6 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
     window.addEventListener('dv:cards-changed', loadReview);
     return () => window.removeEventListener('dv:cards-changed', loadReview);
   }, []);
-  // 열람 계정: 누구의 브리핑인지 — 회차 목록 첫 쪽이 ownerName을 들고 온다 (API-135)
-  useEffect(() => {
-    if (!briefingOwner) return;
-    void api<{ ownerName?: string | null }>('/briefing/editions').then((r) => setOwnerName(r.ownerName ?? null)).catch(() => {});
-  }, [briefingOwner]);
-
   const recent = files
     .filter((f) => f.state.lastOpenedAt !== null)
     .sort((a, b) => (b.state.lastOpenedAt ?? 0) - (a.state.lastOpenedAt ?? 0))
@@ -105,6 +100,7 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
           <button onClick={onSearch} className="mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-accent-400 active:opacity-70" aria-label="검색">
             <Icon name="search" size={19} />
           </button>
+          <MeButton />
         </div>
       ) : (
       <div className="flex min-w-0 items-center gap-2 px-4 py-3 pc:px-6">
@@ -121,16 +117,8 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
       <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 pb-10 pc:px-6 touch:pt-2">
         <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] wide:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] touch:gap-6">
           <div className="min-w-0 space-y-8 touch:space-y-6">
-            {hasBriefing && (
-              <section>
-                <h3 className={sectionTitle}>{briefingOwner ? `${ownerName ?? '관리자'}님의 브리핑` : '오늘의 브리핑'}</h3>
-                {/* 패널 SCR-190에 있던 진행 카드·알림 띠·[지금 만들기]·오늘 카드가 그대로 이 섹션으로 — 바닥 한 줄에 다음 예약·비용·지난 브리핑 › */}
-                {/* 폰 A안: 브리핑 섹션도 묶음 카드 한 장 — 안의 회차 카드는 한 단 더 채운 타일(bg-fill) */}
-                <div className="touch:rounded-xl touch:bg-panel touch:px-4 touch:py-3">
-                  <BriefingPanel home readOnly={!isAdmin} onOpenFile={onOpenFileById} onOpenSettings={onOpenBriefingSettings} onOpenSources={onOpenBriefingSources} />
-                </div>
-              </section>
-            )}
+            {/* 오늘 볼 것 — 요약만. 작은 회차 줄로 브리핑을 열던 카드는 브리핑 탭의 큰 카드로 갔다 (사용자 결정 2026-11-20) */}
+            <HomeDigest hasBriefing={hasBriefing} onOpenFileById={onOpenFileById} onOpenFeed={onOpenFeed} onOpenTrade={onOpenTrade} />
             <section>
               <h3 className={sectionTitle}>이어 읽기</h3>
               {recent.length === 0 ? (

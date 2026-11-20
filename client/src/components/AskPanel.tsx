@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { HomeButton, MeButton } from '../lib/topNav';
 import {
   api,
   ApiError,
@@ -625,10 +626,12 @@ export default function AskPanel({ file, page = false, seed, pendingQuote, pendi
     // 폰 A안: 큰 제목 + 원형 [+](새 대화), 그 아래 「대화 ｜ 배움 카드」 탭
     <>
       <div className="flex items-end gap-2 px-4 pb-1 pt-1">
+        <HomeButton />
         <h1 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">AI</h1>
         <button onClick={newThread} className="mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-accent-400 active:opacity-70" aria-label="새 대화">
           <Icon name="plus" size={20} />
         </button>
+        <MeButton />
       </div>
       {listTop}
     </>

@@ -1,6 +1,6 @@
 # data.json 형식 (trade-report)
 
-화면 틀(`server/assets/trade-template.html`)과 서버(API-158)가 읽는 한 파일. 에이전트들은 이것을 조각으로 나눠 `out/`에 쓰고, `npm run trade:job -w server -- build`가 엮어 원문과 대조한다(`server/src/lib/trade/verify.ts` — 서버가 완성본을 받을 때와 같은 함수). 완성 예: `assets/example-data.json`(2026년 10월호, 인용·출처 439개 대조 통과).
+화면 틀(`server/assets/trade-template.html`)과 서버(API-158)가 읽는 한 파일. 에이전트들은 이것을 조각으로 나눠 `out/`에 쓰고, `npm run trade:job -w server -- build`가 엮어 원문과 대조한다(`server/src/lib/trade/verify.ts` — 서버가 완성본을 받을 때와 같은 함수). 완성 예: `assets/example-data.json`(2026년 10월호, 인용·출처·숫자 4칸 443개 대조 통과).
 
 ## 공통 규칙
 
@@ -108,7 +108,9 @@ vsPrev는 1쪽 문장끼리, changes는 문서 전체에서 **헤드라인 말�
 | `progress` | `value`, `total`, `labels[3]`, `caption`, `page`, `note` | 연간 목표까지 거리 |
 | `grid20` | `note` | 품목 수 주장 — 품목 격자와 감소 품목 이유 |
 
-`caption`·`note`의 숫자도 원문에 있거나 underneath의 계산과 같아야 한다(리더가 확인한다 — 자동 대조는 인용과 표만 한다).
+`caption`·`note`의 숫자도 원문에 있거나 underneath의 계산과 같아야 한다(리더가 확인한다 — 자동 대조는 인용과 표, 그리고 `kpis`의 `value`만 한다).
+
+`kpis[].value`의 숫자(예: `1,152.8`)는 **1쪽이나 그 칸의 `claim`이 가리키는 문장의 쪽**에 그대로 있어야 한다(쉼표 무시) — 없으면 build가 그 칸을 뺀다. 동향 탭 큰 카드에 가장 크게 보이는 숫자라서다. `sub`와 `cards[].pair`는 계산값(✎)이 섞일 수 있어 자동 대조하지 않으니, 리더가 원문이나 underneath의 계산과 맞는지 확인한다.
 
 ## 검증 (build와 서버가 같은 규칙)
 

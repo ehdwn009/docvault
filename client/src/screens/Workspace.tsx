@@ -47,6 +47,9 @@ import FavoritesPanel from './panels/FavoritesPanel';
 import FilesBrowser from './panels/FilesBrowser';
 import SettingsPage from './settings/SettingsPage';
 import Home from './Home';
+import FeedPage from './FeedPage';
+import TradePage from './TradePage';
+import { TopNavContext } from '../lib/topNav';
 import AiPage from './AiPage';
 import { getLayout, LAYOUT_EVENT, type AppLayout } from '../lib/layout';
 import ListRow from '../components/ui/ListRow';
@@ -69,9 +72,10 @@ import type { PendingUpload } from '../lib/uploads';
 import { useVisualViewport } from '../lib/visualViewport';
 
 // home·ai·files·settings = 안 B(v0.54) 레일 네 개. favorites·shared·cards·chat·briefing은 "이전 레이아웃"(classic)에서만 레일에 보인다 (IA — 안 B 결정 1)
-type Panel = 'home' | 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'ai' | 'settings';
+// feed(브리핑 탭 SCR-192)·trade(동향 탭 SCR-195) = 탭 구조 개정(v0.69) — 폰 아래 탭은 문서·브리핑·동향·AI, 홈과 나는 머리의 단추로
+type Panel = 'home' | 'files' | 'favorites' | 'shared' | 'cards' | 'chat' | 'briefing' | 'ai' | 'settings' | 'feed' | 'trade';
 /** 사이드 패널이 아니라 본문 전체를 쓰는 것들 (IA — 안 B) */
-const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['home', 'ai', 'settings', 'chat']);
+const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['home', 'ai', 'settings', 'chat', 'feed', 'trade']);
 /** 문서 탭 아래에 묶이는 목록들 */
 const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
 /** 보이는 영역이 이만큼 넘게 줄면 키보드가 올라온 것으로 본다(px) — 주소 막대 변화(수십 px)와 구분 */
@@ -95,6 +99,8 @@ const PANEL_TITLE: Record<Panel, string> = {
   chat: '대화',
   briefing: '뉴스 브리핑',
   settings: '설정',
+  feed: '브리핑',
+  trade: '동향',
 };
 
 /** 공유 트리 항목을 뷰어가 받는 TreeFile 형태로 맞춘다 (내 트리에 없는 파일) */
@@ -239,8 +245,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     // 레일에 없는 패널이 남지 않게 — 즐겨찾기·공유·카드는 문서로, 대화↔AI, 브리핑은 홈으로 (검수 2026-10-31)
     const normalize = (p: Panel, l: AppLayout): Panel =>
       l === 'home'
-        ? p === 'favorites' || p === 'shared' || p === 'cards' ? 'files' : p === 'chat' ? 'ai' : p === 'briefing' ? 'home' : p
-        : p === 'home' ? 'files' : p === 'ai' ? 'chat' : p;
+        ? p === 'favorites' || p === 'shared' || p === 'cards' ? 'files' : p === 'chat' ? 'ai' : p === 'briefing' ? 'feed' : p
+        : p === 'home' ? 'files' : p === 'ai' ? 'chat' : p === 'feed' ? 'briefing' : p;
     const on = () => {
       const l = getLayout();
       setLayoutState(l);
@@ -1537,9 +1543,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   // 레일 아이콘 — components/Icon.tsx 한 벌에서 (앱 전체가 같은 선 굵기)
-  const RAIL_ICONS: Record<Panel, IconName> = { home: 'home', ai: 'sparkle', files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings' };
+  const RAIL_ICONS: Record<Panel, IconName> = { home: 'home', ai: 'sparkle', files: 'files', favorites: 'star', shared: 'users', cards: 'cards', chat: 'chat', briefing: 'news', settings: 'settings', feed: 'news', trade: 'chart' };
   // 터치의 문서 탭 칩 이름 — 아이콘만으로는 뭐가 뭔지 몰라 하나씩 눌러 봤다 (사용성 평가 2026-10-01)
-  const RAIL_SHORT: Record<Panel, string> = { home: '홈', ai: 'AI', files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정' };
+  const RAIL_SHORT: Record<Panel, string> = { home: '홈', ai: 'AI', files: '내 파일', favorites: '즐겨찾기', shared: '공유', cards: '카드', chat: '대화', briefing: '브리핑', settings: '설정', feed: '브리핑', trade: '동향' };
   // "올렸어요" 띠는 읽을 만큼만 보이고 사라진다. 실패 띠는 사람이 닫을 때까지 남는다
   useEffect(() => {
     if (upload?.phase !== 'done') return;
@@ -1561,9 +1567,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     setNotifOpen(false);
     if (n.href) startDownload(n.href); // 내보내기 ZIP — 문서가 아니라 내려받기
     else if (n.fileId !== null) openFileById(n.fileId);
-    // 수출입 동향의 "못 찾았어요"는 열 문서가 없다 — 브리핑 패널로 보내면 엉뚱하다. 알림 본문이 할 일을 말한다
-    else if (n.kind === 'trade_missing' || n.kind === 'trade_ready') return;
-    else if (layout === 'home') openPage('home');
+    // 열 문서가 없는 알림은 그 일의 탭으로 — 수출입 동향은 동향 탭, 브리핑(못 만듦)은 브리핑 탭 (탭 구조 개정)
+    else if (n.kind === 'trade_missing' || n.kind === 'trade_ready') openPage('trade');
+    else if (layout === 'home') openPage(canSeeBriefing ? 'feed' : 'home');
     else openPanel('briefing');
   };
   const bellBadge = notif.unread > 0 && (
@@ -1682,15 +1688,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {(
         (layout === 'home'
           ? [
-              ['home', '홈', 'home'],
+              // 탭 구조 개정(v0.69): 문서·브리핑·동향·AI — 홈과 나는 각 화면 머리의 단추(lib/topNav). 브리핑 칸은 볼 수 있는 계정에만
               ['files', '문서', 'files'],
+              ...(canSeeBriefing ? [['feed', '브리핑', 'news']] : []),
+              ['trade', '동향', 'chart'],
               ['ai', 'AI', 'sparkle'],
-              ['settings', '나', 'settings'],
             ]
           : [
               ['files', '문서', 'files'],
               ['chat', '대화', 'chat'],
               ...(canSeeBriefing ? [['briefing', '브리핑', 'news']] : []),
+              // 이전 레이아웃에도 동향은 둔다 — 원문·해부가 문서 탭에서 빠져서, 이 칸이 없으면 볼 길이 알림뿐이다
+              ['trade', '동향', 'chart'],
               ['settings', '설정', 'settings'],
             ]) as [Panel, string, IconName][]
       ).map(([target, label, icon]) => {
@@ -1733,8 +1742,12 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     </div>
   );
 
+  // 폰의 홈·나 단추 — 아래 탭에서 빠진 두 곳을 각 화면 머리에서 연다. 이전 레이아웃·PC에는 없다(레일이 맡는다)
+  const topNav = IS_TOUCH && layout === 'home' ? { goHome: () => openPage('home'), openMe: () => openSettings() } : null;
+
   return (
     <BottomSlotContext.Provider value={barSlot}>
+    <TopNavContext.Provider value={topNav}>
     <div className="relative flex h-dvh bg-slate-950 text-slate-100">
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
@@ -1760,6 +1773,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <>
             {railButton('home', '홈')}
             {railButton('files', '문서')}
+            {canSeeBriefing && railButton('feed', '브리핑')}
+            {railButton('trade', '동향')}
             {railButton('ai', 'AI')}
           </>
         ) : (
@@ -1771,6 +1786,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             {railButton('chat', '대화')}
             {/* 뉴스 브리핑은 관리자(LLM 요금을 내는 사람)와, 관리자가 고른 열람 계정에게만 (설계 — 원칙, v0.49) */}
             {canSeeBriefing && railButton('briefing', '뉴스 브리핑')}
+            {railButton('trade', '동향')}
           </>
         )}
         <div className="mt-auto h-px w-6 bg-slate-800" aria-hidden="true" />
@@ -2189,10 +2205,32 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               unread={notif.unread}
               onOpenNotifications={() => setNotifOpen(true)}
               onNewDoc={() => actions.createDoc(null)}
-              onOpenBriefingSettings={() => openSettings({ category: 'briefing' })}
-              onOpenBriefingSources={() => {
+              onOpenFeed={() => openPage('feed')}
+              onOpenTrade={() => openPage('trade')}
+            />
+          </div>
+        )}
+        {panel === 'feed' && canSeeBriefing && (
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
+            <FeedPage
+              readOnly={user.role !== 'admin'}
+              onOpenFile={openFileById}
+              onOpenSettings={() => openSettings({ category: 'briefing' })}
+              onOpenSources={() => {
                 closePage();
                 openBriefingSources();
+              }}
+            />
+          </div>
+        )}
+        {panel === 'trade' && (
+          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
+            <TradePage
+              user={user}
+              onOpenFileById={openFileById}
+              onCopy={(id) => {
+                actions.copyFile(id);
+                toast('내 문서에 사본을 만들었어요', 'success');
               }}
             />
           </div>
@@ -2486,6 +2524,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         </div>
       )}
     </div>
+    </TopNavContext.Provider>
     </BottomSlotContext.Provider>
   );
 }

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { TRADE } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { appSettings, files, folders, tradeReleases, users } from '../../db/schema.js';
@@ -8,7 +8,7 @@ import { deleteBinary, saveBinary } from '../storage.js';
 import type { BoardRow } from './match.js';
 import { periodLabel } from './match.js';
 
-// 받은 호를 Loft 문서로 남긴다 — PDF는 「수출입동향」 폴더의 보통 파일, 기록은 trade_releases 한 줄 (수출입 동향 설계 "저장")
+// 받은 호를 Loft 파일로 남긴다 — PDF는 문서 탭에 안 나오는 kind='trade' 파일, 기록은 trade_releases 한 줄 (수출입 동향 설계 "저장"·3단계)
 
 export type SavedRelease = { period: string; fileId: number; title: string };
 
@@ -29,30 +29,43 @@ export function hasRelease(period: string): boolean {
   return !!db.select({ id: tradeReleases.id }).from(tradeReleases).where(and(eq(tradeReleases.source, TRADE.SOURCE), eq(tradeReleases.period, period))).get();
 }
 
+export function releaseOf(period: string) {
+  return db.select().from(tradeReleases).where(and(eq(tradeReleases.source, TRADE.SOURCE), eq(tradeReleases.period, period))).get();
+}
+
 export function releaseCount(): number {
   return db.select({ n: sql<number>`count(*)` }).from(tradeReleases).get()?.n ?? 0;
 }
 
-/** 「수출입동향」 폴더 — 적어 둔 id가 살아 있으면 그것, 아니면 같은 이름의 최상위 폴더, 그것도 없으면 새로.
- *  모든 계정이 읽게 전체 공개(is_shared=1)로 둔다 — 공공누리 제1유형 자료 */
-export function ensureFolder(ownerId: number, now = Date.now()): number {
+/** v0.67~0.68의 「수출입동향」 폴더에 있던 파일을 문서 밖 보관(kind='trade')으로 옮긴다 — 서버가 켜질 때 한 번, 여러 번 돌아도 같은 결과.
+ *  폴더는 비었을 때만 지운다: files.folder_id가 CASCADE라 남은 파일이 있으면 함께 지워진다 (수출입 동향 설계 3단계 "옮기기") */
+export function relocateTradeFiles(now = Date.now()): void {
+  const ids = db
+    .select({ a: tradeReleases.fileId, b: tradeReleases.analysisFileId })
+    .from(tradeReleases)
+    .all()
+    .flatMap((r) => [r.a, r.b])
+    .filter((id): id is number => id !== null);
+  let moved = 0;
+  for (const id of ids) {
+    moved += db.update(files).set({ kind: 'trade', folderId: null, isShared: 0, updatedAt: now }).where(and(eq(files.id, id), ne(files.kind, 'trade'))).run().changes;
+  }
   const saved = Number(db.select({ v: appSettings.value }).from(appSettings).where(eq(appSettings.key, TRADE.FOLDER_SETTING_KEY)).get()?.v);
-  let folder = Number.isInteger(saved) ? db.select().from(folders).where(eq(folders.id, saved)).get() : undefined;
-  folder ??= db.select().from(folders).where(and(eq(folders.ownerId, ownerId), isNull(folders.parentId), eq(folders.name, TRADE.FOLDER_NAME))).get();
-  folder ??= db.insert(folders).values({ ownerId, parentId: null, name: TRADE.FOLDER_NAME, isShared: 1, createdAt: now, updatedAt: now }).returning().get();
-  if (folder.isShared !== 1) db.update(folders).set({ isShared: 1, updatedAt: now }).where(eq(folders.id, folder.id)).run();
-  db.insert(appSettings)
-    .values({ key: TRADE.FOLDER_SETTING_KEY, value: String(folder.id), updatedAt: now })
-    .onConflictDoUpdate({ target: appSettings.key, set: { value: String(folder.id), updatedAt: now } })
-    .run();
-  return folder.id;
+  if (Number.isInteger(saved)) {
+    const left = db.select({ n: sql<number>`count(*)` }).from(files).where(eq(files.folderId, saved)).get()?.n ?? 0;
+    const sub = db.select({ n: sql<number>`count(*)` }).from(folders).where(eq(folders.parentId, saved)).get()?.n ?? 0;
+    if (left === 0 && sub === 0) db.delete(folders).where(and(eq(folders.id, saved), eq(folders.name, TRADE.FOLDER_NAME))).run();
+    db.delete(appSettings).where(eq(appSettings.key, TRADE.FOLDER_SETTING_KEY)).run();
+  }
+  if (moved > 0) console.log(`[trade] 원문·해부 ${moved}개를 문서 밖 보관으로 옮겼어요`);
 }
 
-function nameTaken(ownerId: number, folderId: number, name: string): boolean {
+/** 보관함 안에서 같은 이름이 있는가 — 폴더가 없으므로 주인의 trade 파일끼리만 본다 */
+export function tradeNameTaken(ownerId: number, name: string): boolean {
   return !!db
     .select({ id: files.id })
     .from(files)
-    .where(and(eq(files.ownerId, ownerId), eq(files.folderId, folderId), eq(files.name, name), isNull(files.deletedAt)))
+    .where(and(eq(files.ownerId, ownerId), eq(files.kind, 'trade'), eq(files.name, name), isNull(files.deletedAt)))
     .get();
 }
 
@@ -61,12 +74,12 @@ export function saveRelease(args: { row: BoardRow; period: string; pdfName: stri
   const now = args.now ?? Date.now();
   const ownerId = archiveOwnerId();
   if (ownerId === null) throw new Error('활성 관리자 계정이 없어 보관할 곳이 없어요');
-  const folderId = ensureFolder(ownerId, now);
-  const name = uniqueFileName(`${periodLabel(args.period)} 수출입 동향.pdf`, (n) => nameTaken(ownerId, folderId, n));
+  const name = uniqueFileName(`${periodLabel(args.period)} 수출입 동향.pdf`, (n) => tradeNameTaken(ownerId, n));
   const storagePath = saveBinary(ownerId, args.pdf);
+  // kind='trade' — 문서 트리·공유받음·검색에 안 나오고 동향 탭에서만 보인다. 읽기는 모든 계정(canReadFile)
   const file = db
     .insert(files)
-    .values({ ownerId, folderId, name, fileType: 'pdf', mimeType: 'application/pdf', sizeBytes: args.pdf.length, storagePath, createdAt: now, updatedAt: now })
+    .values({ ownerId, folderId: null, name, fileType: 'pdf', mimeType: 'application/pdf', sizeBytes: args.pdf.length, storagePath, kind: 'trade', createdAt: now, updatedAt: now })
     .returning()
     .get();
   const rec = db

@@ -3,8 +3,8 @@ import { kstParts, kstToMs } from '../briefing/time.js';
 import { startAnalysis, startPendingAnalysis, sweepExpiredTradeJobs } from './analysis.js';
 import { backfill, checkPeriod, exclusive, isBusy } from './collect.js';
 import { periodLabel, previousMonth } from './match.js';
-import { notifyBackfill, notifyMissing, notifyReady } from './notify.js';
-import { hasRelease, releaseCount } from './store.js';
+import { notifyBackfill, notifyMissing, notifyPdfReady } from './notify.js';
+import { hasRelease, relocateTradeFiles, releaseCount } from './store.js';
 
 // 수출입 동향 시계 — 1분마다 한국시간을 보고, 지난달 호가 아직 없으면 확인 창의 시각마다 한 번씩 게시판을 본다 (수출입 동향 설계 "언제 보나").
 // 게시 시각을 모르므로 시각 하나에 걸지 않는다: 1일 11:10·13:00·18:00, 2~10일 매일 10:00. 서버가 그 시각에 꺼져 있었으면 켜진 뒤 첫 틱에 본다
@@ -51,10 +51,11 @@ async function runCheck(slot: Slot, now: number): Promise<void> {
   try {
     const saved = await checkPeriod(slot.period, now);
     if (saved) {
-      notifyReady(saved);
       console.log(`[trade] ${slot.period} 받음 → 파일 ${saved.fileId}`);
-      // 찾는 순간 해부를 시킨다 — 예약 시각을 따로 두지 않으므로 게시 시각과 어긋날 일이 없다 (2단계)
-      await startAnalysis(slot.period);
+      // 찾는 순간 해부를 시킨다 — 예약 시각을 따로 두지 않으므로 게시 시각과 어긋날 일이 없다 (2단계).
+      // 알림은 해부가 저장됐을 때 한 번(3단계) — 해부를 시킬 수 없을 때만 원문 도착으로 지금 알린다(실패는 startAnalysis가 알린다)
+      const started = await startAnalysis(slot.period);
+      if (started === 'no_trigger' || started === 'exists') notifyPdfReady(slot.period);
     } else {
       console.log(`[trade] ${slot.period} 아직 없음`);
       missingNotice(slot.period, Date.now(), null);
@@ -116,6 +117,11 @@ export function tickTrade(now = Date.now()): void {
 }
 
 export function startTradeScheduler(): void {
+  try {
+    relocateTradeFiles();
+  } catch (e) {
+    console.log(`[trade] 보관함 옮기기 오류: ${reasonOf(e)}`);
+  }
   const tick = () => {
     try {
       tickTrade();

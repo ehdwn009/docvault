@@ -6,7 +6,7 @@
 
 - **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50)**: `/briefing/jobs/*` 주소들(API-151~153, v0.59부터 154~156도)은 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
 - **권한 등급**: 공개(로그인 불필요) 없음 — 로그인 화면 외 전 API가 인증 필수. `관리자` 표시 API는 role=admin만 호출 가능.
-- **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가).
+- **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가). 수출입 동향 원문·해부(`kind='trade'`)는 로그인한 모든 계정이 열람한다(v0.69 — 공공누리 자료, 쓰기는 소유자·관리자).
 - **공통 에러 응답**: `{ "code": "ERROR_CODE", "message": "설명" }`
 - **처리 시간 헤더**: 모든 `/api/v1` 응답에 `Server-Timing: app;dur=<ms>` — 서버가 그 요청에 실제로 쓴 시간. 클라이언트의 시작 시간 표(SCR-306)가 회선과 서버를 가르는 데 쓴다. API-021 `/tree`는 앞에 `folders`·`files`·`state`·`tags` 부분 시간을 더 단다. 0.5초(`SLOW_REQUEST_MS`) 넘게 일한 요청은 서버 로그에 `[slow]`로 이 헤더 전체가 찍힌다. 정적 파일은 `/assets/*` 1년 immutable, `index.html` no-cache.
 
@@ -64,7 +64,7 @@
 | API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
-| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드와 브리핑 회차는 빠진다(v0.43 — 회차의 보관함은 브리핑 패널) | 로그인 |
+| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드와 브리핑 회차는 빠진다(v0.43 — 회차의 보관함은 브리핑 패널). 수출입 동향 원문·해부(`kind='trade'`)도 빠진다(v0.69 — 동향 탭 API-171) | 로그인 |
 | API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -92,13 +92,13 @@
 | API-052 | POST | /tags | 태그 생성 | 로그인 |
 | API-053 | DELETE | /tags/{id} | 태그 삭제 (연결 CASCADE) | 로그인 |
 | API-054 | PUT | /files/{id}/tags | 파일의 태그 목록 교체 | 로그인 |
-| API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용) | 로그인 |
+| API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용). 수출입 동향 원문·해부(`kind='trade'`)는 공유 표시가 없어 나오지 않는다(v0.69) | 로그인 |
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
 | API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비·용어 밑줄 termHighlight·질문 때 카드 askWithCards, 0/1) | 로그인 |
 | API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장, 브리핑 읽음 `markRead` | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-075 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
-| API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5). doc이 아닌 결과는 `kind`·`createdAt`을 싣는다 — 브리핑 회차는 화면 이름으로 바꿔 보이고, 조각에서 JSON 열쇠·따옴표를 걷어 낸다 (v0.43) | 로그인 |
+| API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5). doc이 아닌 결과는 `kind`·`createdAt`을 싣는다 — 브리핑 회차는 화면 이름으로 바꿔 보이고, 조각에서 JSON 열쇠·따옴표를 걷어 낸다 (v0.43). 수출입 동향 원문·해부(`kind='trade'`)는 결과에서 뺀다 (v0.69) | 로그인 |
 | API-091 | GET | /google/status | 내 구글 계정 연결 상태 (이메일·연결 시각) | 로그인 |
 | API-092 | POST | /google/connect | 구글 동의 화면 URL 발급 (state 발급) | 로그인 |
 | API-093 | GET | /google/callback | 구글 리디렉트 수신 → 토큰 교환·저장 | 로그인 |
@@ -148,6 +148,7 @@
 | API-156 | GET | /briefing/jobs/{jobId}/materials | 서버가 읽은 재료 — 읽는 중이면 202, 끝나면 기사마다 재료 목록 (v0.59) | **연결 열쇠(Bearer)** |
 | API-157 | GET | /briefing/jobs/{jobId}/trade/pages?doc=cur\|prev | 수출입 동향 해부 일감의 원문 쪽별 텍스트 — 이번 호·전월 호 (v0.68) | **연결 열쇠(Bearer)** |
 | API-158 | POST | /briefing/jobs/{jobId}/trade/result | 수출입 동향 해부 완성본 — 서버가 원문과 다시 대조해 저장·알림 (v0.68) | **연결 열쇠(Bearer)** |
+| API-171 | GET | /trade | 수출입 동향 — 받은 호 목록·최신 호 카드·기다리는 일. 동향 탭(SCR-195)과 홈의 한 줄이 읽는다 (v0.69) | 로그인 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -767,12 +768,23 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 - **API-151 (kind=trade)** `GET /briefing/jobs/{jobId}` → `{ "kind": "trade", "jobId", "skill": "trade-report", "period": "2026-10", "deadline": <unix ms>, "cur": { "period", "title", "dept", "date", "articleUrl" }, "prev": { … } | null, "limits": { "resultMaxBytes", "resendMax" } }`. 두 번 받아도 같다. 처음 받아 간 시각을 `remote_started_at`에 적는다. 닫힌 실행이면 409 `TRADE_JOB_CLOSED`.
 - **API-157** `GET …/trade/pages?doc=cur|prev` → `{ "doc", "period", "pages": ["1쪽 글자", "2쪽 글자", …] }` — 서버가 보관한 PDF를 `pdftotext -layout`으로 뽑은 것(배열 [0]이 1쪽). 세션은 산업통상부 사이트에 접속하지 않는다. `doc`이 틀리면 400, 그 호 PDF가 없으면 404 `TRADE_PAGES_UNAVAILABLE`.
-- **API-158** `POST …/trade/result` — 본문은 해부 `data.json`(형식: `.claude/skills/trade-report/references/schema.md`, 상한 2MB `TRADE.RESULT_MAX_BYTES` → 413). 서버는 ① 모양 검사(zod `TradeDataSchema` — 틀리면 400 `VALIDATION_ERROR`, 메시지 `<경로>: <이유>`; `meta.period`가 실행의 호와 다르면 400) ② **원문 대조**(`lib/trade/verify.ts` — 인용은 그 쪽 텍스트에 글자 그대로, 표의 값은 출처 줄에 그대로; 틀린 목록 항목은 빼고, 1쪽 문장·숫자 표가 틀리거나 뺀 항목이 30%를 넘으면 422 `TRADE_JOB_REJECTED`) ③ 저장 — 해부 JSON은 `trade_releases.analysis_json`, 같은 내용의 HTML 문서(「YYYY년 M월 수출입 동향 해부.html」)는 「수출입동향」 폴더 ④ 모든 활성 계정에 `trade_ready` 알림(「10월 수출입 동향 해부가 나왔어요」, fileId = 해부 문서). **200** `{ "fileId", "checked", "passed", "dropped": [..], "already" }` — 같은 job에 다시 보내면 `already: true`로 같은 답(멱등). 400·422는 실행을 닫지 않는다.
-- 마감(`TRADE.JOB_DEADLINE_MS` 3시간)까지 완성본이 없으면 틱이 `missing`으로 닫고 관리자에게 `trade_missing`(「해부를 만들지 못했어요」). 호마다 자동 시도는 한 번.
+- **API-158** `POST …/trade/result` — 본문은 해부 `data.json`(형식: `.claude/skills/trade-report/references/schema.md`, 상한 2MB `TRADE.RESULT_MAX_BYTES` → 413). 서버는 ① 모양 검사(zod `TradeDataSchema` — 틀리면 400 `VALIDATION_ERROR`, 메시지 `<경로>: <이유>`; `meta.period`가 실행의 호와 다르면 400) ② **원문 대조**(`lib/trade/verify.ts` — 인용은 그 쪽 텍스트에 글자 그대로, 표의 값은 출처 줄에 그대로, 숫자 4칸 `meta.kpis`의 큰 값은 1쪽이나 근거 쪽에 그대로(v0.69); 틀린 목록 항목은 빼고, 1쪽 문장·숫자 표가 틀리거나 뺀 항목이 30%를 넘으면 422 `TRADE_JOB_REJECTED`) ③ 저장 — 해부 JSON은 `trade_releases.analysis_json`, 같은 내용의 HTML 문서(「YYYY년 M월 수출입 동향 해부.html」)는 문서 탭 밖 `kind='trade'` 파일로(v0.68에는 「수출입동향」 폴더의 보통 문서) ④ 모든 활성 계정에 `trade_ready` 알림(「10월 수출입 동향이 나왔어요」 — v0.68에는 「…해부가 나왔어요」, fileId = 해부 문서). **200** `{ "fileId", "checked", "passed", "dropped": [..], "already" }` — 같은 job에 다시 보내면 `already: true`로 같은 답(멱등). 400·422는 실행을 닫지 않는다.
+- 마감(`TRADE.JOB_DEADLINE_MS` 3시간)까지 완성본이 없으면 틱이 `missing`으로 닫고 관리자에게 `trade_missing`(「해부를 만들지 못했어요」). v0.69부터는 이때 모든 활성 계정에 원문 도착 알림(`trade_ready`, 「…올라왔어요」)도 함께 간다 — 해부가 없어도 한 번은 알리려고. 호마다 자동 시도는 한 번.
+
+### API-171 — GET /trade (v0.69)
+
+설계: [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md) "3단계". 모든 로그인 계정.
+
+**200** `{ "releases": [{ "period": "2026-10", "label": "2026년 10월", "publishedDate": "2026-11-01", "pdfFileId": 12 | null, "analysisFileId": 14 | null, "read": false }], "latest": { …같은 칸, "card": { "kpis": [{ "label": "수출", "value": "1,152.8억 달러", "sub": [["▲93.7%", "up"]] }], "headline": "수출 2개월 연속 1,100억 달러 상회" | null, "pair": "9월보다는 ▼4.8% …" | null, "counts": { "claims": 16, "links": 16, "changes": 12, "nih": 17, "pages": 36 } } | null } | null, "pending": { "period": "2026-11", "label": "2026년 11월", "state": "waiting" | "analyzing" | "failed", "checks": ["11:10", "13:00", "18:00"], "laterCheck": "10:00", "message": "…" | null } | null }`
+
+- `releases`는 최신순. 파일 id는 사람이 지웠으면 null. `read`는 이 계정이 해부(없으면 원문)를 연 적이 있는가.
+- `latest.card`는 해부 문서가 있을 때만(휴지통에 넣었으면 null) — 해부 JSON(`trade_releases.analysis_json`)에서 뽑는다. `kpis`는 `meta.kpis` 앞 4개이고 `sub`는 `[글자, 색]` 쌍의 목록(색은 `up` 증가 · `down` 감소 · `muted` 그 밖), `headline`은 해부의 첫 주장 카드(`meta.cards`의 첫 항목)가 가리키는 1쪽 원문 문장, `pair`는 그 카드의 "같이 봐야 할 신호". `counts`는 해부에 든 개수 — `claims` 1쪽 문장 · `links` 쪽 넘는 연결 · `changes` 지난달과 달라진 것 · `nih` 헤드라인이 말하지 않는 것 · `pages` 원문 쪽수.
+- `pending`: `waiting`은 그 달 1~10일 확인 창 안인데 지난달 호가 아직 없을 때, `analyzing`은 해부 실행이 돌고 있을 때, `failed`는 가장 최근 호의 해부 실행이 실패·마감 초과이고 해부가 없을 때(관리자에게만, `message`에 이유 — 다른 상태에서는 null). `checks`는 1일의 확인 시각들, `laterCheck`는 2~10일의 확인 시각(한국시간) — `waiting` 띠의 안내문에 쓴다.
+- 원문·해부 파일은 `kind='trade'`라 문서 트리(API-021)·공유받음(API-061)·검색(API-081)에 나오지 않는다. 읽기는 모든 로그인 계정(파일 열람 API-032·033·038이 쓰는 공용 권한 규칙 `canReadFile`에 `kind='trade'` 추가), 복사(API-037)하면 내 보통 문서가 된다.
 
 ## 알림 (API-16x, 2026-11-04 — 1단계)
 
-알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). 수출입 동향(2026-11-20, 설계 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md))은 사건 둘을 더한다 — **도착**(`trade_ready`: 서버가 산업통상부 게시판에서 새 호 PDF를 받아 「수출입동향」 폴더에 넣음, 모든 활성 계정에게, fileId=그 PDF, 처음 소급은 12통 대신 한 통)과 **못 찾음**(`trade_missing`: 1일 18:00·4일 10:00 확인에도 없거나 받기 실패, 관리자에게). 받기까지는 새 API가 없다 — 서버의 1분 틱이 혼자 한다. v0.68부터는 해부 도착도 `trade_ready`(dedupe `trade:{period}:analysis`), 해부 실패도 `trade_missing`(dedupe `trade:{period}:analysis:{jobId}`)으로 알린다(API-158). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
+알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). 수출입 동향(2026-11-20, 설계 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md))은 사건 둘을 더한다 — **도착**(`trade_ready`: 서버가 산업통상부 게시판에서 새 호 PDF를 받음(v0.67~0.68에는 「수출입동향」 폴더에, v0.69부터 문서 탭 밖 보관), 모든 활성 계정에게, fileId=그 PDF, 처음 소급은 12통 대신 한 통)과 **못 찾음**(`trade_missing`: 1일 18:00·4일 10:00 확인에도 없거나 받기 실패, 관리자에게). 받기까지는 새 API가 없다 — 서버의 1분 틱이 혼자 한다. v0.68부터는 해부 도착도 `trade_ready`(dedupe `trade:{period}:analysis`), 해부 실패도 `trade_missing`(dedupe `trade:{period}:analysis:{jobId}`)으로 알린다(API-158). **v0.69부터 알림은 한 번** — 새 호를 받으면 바로 알리지 않고 해부가 저장됐을 때 알리며, 해부를 시키지 못했거나 실패했을 때만 원문 도착(`trade:{period}:ready`)으로 대신 알린다. [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
 
 ### API-160 — GET /notifications
 내 알림함. **200** `{ "notifications": [{ "id", "kind": "briefing_ready" | "briefing_missing", "title", "body": string | null, "fileId": number | null, "readAt": number | null, "createdAt" }], "unread": 3 }` — 최신순 50개(`NOTIFICATION.LIST_MAX`). `fileId`는 누르면 열 회차 문서(지워졌으면 null → 화면은 브리핑이 있는 곳으로). 종 배지와 목록이 같은 응답을 쓴다.

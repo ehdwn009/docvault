@@ -5,6 +5,7 @@ import FileName from '../../components/FileName';
 import { formatMB, pendingPercent, type PendingUpload } from '../../lib/uploads';
 import type { TreeActions } from '../../components/FileTree';
 import FolderPicker from '../../components/FolderPicker';
+import { HomeButton, MeButton } from '../../lib/topNav';
 import Icon, { FILE_TYPE_ICON, FILE_TYPE_LABEL } from '../../components/Icon';
 import SwipeRow, { type SwipeConfig } from '../../components/SwipeRow';
 import Group from '../../components/ui/Group';
@@ -352,6 +353,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
         </button>
       )}
       <div className="flex items-end gap-2 px-4 pb-2 pt-1">
+        {cur.kind === 'root' && <HomeButton />}
         <h1 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">{title}</h1>
         {mine && (
           <div className="flex gap-2 pb-1">
@@ -363,6 +365,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
             </button>
           </div>
         )}
+        {cur.kind === 'root' && <MeButton />}
       </div>
       {cur.kind === 'root' && (
         <button onClick={onSearch} className="mx-4 mb-1 flex min-h-10 items-center gap-2 rounded-[10px] bg-fill px-3 text-[15px] text-slate-500" aria-label="검색">

@@ -18,6 +18,7 @@ import { askRoutes, purgeExpiredThreads } from './routes/ask.js';
 import { briefingRoutes } from './routes/briefing.js';
 import { briefingJobRoutes } from './routes/briefingJobs.js';
 import { tradeJobRoutes } from './routes/tradeJobs.js';
+import { tradeRoutes } from './routes/trade.js';
 import { recoverStaleRuns } from './lib/briefing/run.js';
 import { startScheduler } from './lib/briefing/schedule.js';
 import { startTradeScheduler } from './lib/trade/schedule.js';
@@ -124,6 +125,7 @@ api.route('/notifications', notificationRoutes);
 api.route('/search', searchRoutes);
 api.route('/shared', sharedRoutes);
 api.route('/tags', tagRoutes);
+api.route('/trade', tradeRoutes);
 
 app.route('/api/v1', api);
 // PWA 공유 시트 수신. deny by default의 유일한 예외 — 매니페스트 share_target이 고정 주소를

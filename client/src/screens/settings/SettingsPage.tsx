@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { HomeButton } from '../../lib/topNav';
 import Icon, { type IconName } from '../../components/Icon';
 import Group from '../../components/ui/Group';
 import GroupRow, { type Tint } from '../../components/ui/GroupRow';
@@ -242,6 +243,7 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
       return (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-end gap-2 px-4 pb-2 pt-1">
+            <HomeButton />
             <h2 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">나</h2>
             <span className="mb-2 text-xs text-slate-500">{user.displayName ?? user.username} · {isAdmin ? '관리자' : '일반'}</span>
           </div>
@@ -273,6 +275,7 @@ export default function SettingsPage({ user, settings, onChange, target, onShowC
       <div className={`flex shrink-0 flex-col border-r border-slate-800 ${IS_TOUCH ? 'w-[300px]' : 'w-60'}`}>
         {IS_TOUCH ? (
           <div className="flex items-end gap-2 px-4 pb-2 pt-1">
+            <HomeButton />
             <h2 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">나</h2>
             <span className="mb-2 truncate text-xs text-slate-500">{user.displayName ?? user.username} · {isAdmin ? '관리자' : '일반'}</span>
           </div>

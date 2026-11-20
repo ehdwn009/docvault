@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { HomeButton, MeButton } from '../lib/topNav';
 import AskPanel from '../components/AskPanel';
 import type { TreeFile } from '../lib/api';
 import { IS_PC, IS_TOUCH } from '../lib/device';
@@ -95,7 +96,9 @@ export default function AiPage({ initialThreadId, onOpenFile, onCardDeleted, onC
           <aside className={`flex min-h-0 flex-col ${twoColumn ? 'w-72 shrink-0 border-r border-slate-800' : 'w-full'}`}>
             {IS_TOUCH && (
               <div className="flex items-end gap-2 px-4 pb-1 pt-1">
+                <HomeButton />
                 <h1 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">AI</h1>
+                <MeButton />
               </div>
             )}
             {tabs}

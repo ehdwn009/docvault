@@ -70,6 +70,12 @@ class Checker {
     return q.length > 0 && (this.text[doc][page - 1] ?? '').includes(q);
   }
 
+  /** 숫자 하나가 이번 호의 그 쪽에 그대로 있는가 — 쉼표 유무는 무시한다 */
+  hasNumber(page: number, token: string): boolean {
+    const text = this.text.cur[page - 1] ?? '';
+    return text.includes(token) || text.replace(/,/g, '').includes(token.replace(/,/g, ''));
+  }
+
   /** 인용 하나 — 전월 호인지는 객체의 doc, 없으면 경로에 prev가 있는지로 */
   quote(node: { page: unknown; quote: string; doc?: unknown }, path: string[]): boolean {
     const doc = node.doc === 'prev' || node.doc === 'cur' ? node.doc : path.includes('prev') ? 'prev' : 'cur';
@@ -132,6 +138,24 @@ function pruneRefs(d: TradeData): void {
   meta.kpis = meta.kpis.filter((k) => claimIds.has(k.claim));
 }
 
+/** 숫자 4칸(meta.kpis)의 큰 값 — 그 안의 숫자가 1쪽이나 그 칸이 가리키는 문장의 쪽에 그대로 있어야 한다.
+ *  동향 탭 큰 카드에 가장 크게 보이는 숫자라, 없으면 그 칸만 뺀다. 작은 글씨(sub)는 계산값(✎)이 섞여 있어 보지 않는다 */
+function checkKpis(data: TradeData, ck: Checker): void {
+  const pageOf = new Map(data.claims.map((c) => [c.id, c.claim.page]));
+  const kpis = data.meta.kpis as (Record<string, unknown> & { claim: string })[];
+  data.meta.kpis = kpis.filter((k) => {
+    const nums = typeof k.value === 'string' ? (k.value.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) : [];
+    const pages = [1, pageOf.get(k.claim)].filter((p): p is number => typeof p === 'number');
+    ck.report.checked++;
+    if (nums.length > 0 && nums.every((n) => pages.some((p) => ck.hasNumber(p, n)))) {
+      ck.report.passed++;
+      return true;
+    }
+    ck.report.dropped.push(`meta/kpis${labelOf(k)} — 값의 숫자가 1쪽·근거 쪽에 없음`);
+    return false;
+  });
+}
+
 /**
  * 대조하고, 틀린 항목을 걷어 낸 data를 돌려준다. report.fatal이 비어 있지 않으면 저장하지 않는다(고쳐 다시).
  * 입력을 고치지 않는다 — 깊은 복사본 위에서 일한다
@@ -187,6 +211,7 @@ export function verifyTradeData(input: TradeData, pages: PageTexts): { data: Tra
   data.series = series as TradeData['series'];
   data.itemSeries = itemSeries;
 
+  checkKpis(data, ck);
   pruneRefs(data);
   if (data.claims.length === 0) report.fatal.push('claims가 비었음');
   if (report.checked > 0 && report.dropped.length / report.checked > TRADE.DROP_REJECT_RATIO) {

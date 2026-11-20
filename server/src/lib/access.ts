@@ -11,7 +11,7 @@ type FileAccess = {
   isShared: number;
   folderId?: number | null;
   deletedAt?: number | null;
-  /** 브리핑 열람 계정 판정에만 쓴다 — 빠져 있으면 그 규칙은 적용되지 않는다(막는 쪽으로 틀린다) */
+  /** 브리핑 열람 계정·수출입 동향(trade) 판정에 쓴다 — 빠져 있으면 그 규칙은 적용되지 않는다(막는 쪽으로 틀린다) */
   kind?: string;
 };
 
@@ -45,6 +45,8 @@ export function isEffectivelyShared(file: { isShared: number; folderId?: number 
  *  휴지통의 파일은 누구에게도 일반 접근을 허용하지 않는다 — 복원·영구삭제 전용 라우트만 예외 */
 export function canReadFile(user: SessionUser, file: FileAccess): boolean {
   if (file.deletedAt != null) return false;
+  // 수출입 동향 원문·해부(kind='trade')는 모든 로그인 계정이 읽는다 — 공공누리 자료, 전체 공개 폴더가 하던 일을 종류가 대신한다 (수출입 동향 설계 3단계)
+  if (file.kind === 'trade') return true;
   return file.ownerId === user.id || user.role === 'admin' || isEffectivelyShared(file) || isBriefingReader(user, file);
 }
 

@@ -32,6 +32,8 @@ type Props = {
   onOpenSources: () => void;
   /** 홈(SCR-101)의 "오늘의 브리핑" 섹션으로 그린다 — ⚙ 메뉴 없이, 지난 브리핑은 「지난 브리핑 ›」로 펼친다 (IA — 안 B) */
   home?: boolean;
+  /** 브리핑 탭(SCR-192) — 오늘 회차를 큰 카드와 큰 단추로 그린다. 홈의 작은 줄로 여는 것이 불편했다 (사용자 결정 2026-11-20) */
+  big?: boolean;
 };
 
 /** API-135 — ownerName은 남의 회차를 보는 열람 계정에게만 온다 */
@@ -84,7 +86,7 @@ function stateText(e: EditionSummary): { text: string; cls: string } {
 // SCR-190: 뉴스 브리핑 패널 (v0.43 개편) — 회차의 보관함. 만들기·진행 → 오늘 회차 → 지난 브리핑(날짜별) → 자동·비용.
 // 실행 중에만 2초마다 상태를 다시 읽는다. 패널을 닫았다 열어도 같은 상태가 보인다(서버 실행 기록이 원천).
 // 열람 계정(readOnly)은 상태(API-131)를 읽지 않는다 — 관리자 전용이라 403이고, 보여 줄 것도 회차 목록뿐이다 (v0.49)
-export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources, home = false }: Props) {
+export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources, home = false, big = false }: Props) {
   const [pastOpen, setPastOpen] = useState(!home);
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [page, setPage] = useState<EditionPage | null>(null);
@@ -246,7 +248,7 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             <h3 className="text-sm font-bold text-slate-200">오늘</h3>
             <span className="text-xs text-slate-500">{longDate(today)}</span>
           </div>
-          <div className="space-y-1.5">
+          <div className={big ? 'space-y-3' : 'space-y-1.5'}>
             {admin && nextAutoToday && admin.nextAutoAt !== null && (
               <div className="flex min-h-14 items-center gap-2.5 rounded-xl border border-slate-800 px-3 py-2 touch:border-0 touch:bg-fill">
                 <SlotChip label={slotShort(admin.nextAutoSlot ?? 'adhoc', admin.nextAutoLabel)} />
@@ -264,6 +266,27 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
             {page && todays.length === 0 && !nextAutoToday && <p className="text-xs text-slate-600">{readOnly ? '오늘 브리핑이 아직 없어요.' : '오늘 만든 브리핑이 아직 없어요.'}</p>}
             {todays.map((e, i) => {
               const st = stateText(e);
+              if (big) {
+                // 큰 카드 — 회차 칩·이름·건수·읽음 상태 + 화면 폭의 단추 하나. 첫 회차(가장 최근)만 강조 테두리와 채운 단추
+                return (
+                  <div key={e.fileId} className={`rounded-2xl border bg-panel p-4 pc:bg-slate-900/60 ${i === 0 ? 'border-sky-800' : 'border-slate-800 touch:border-transparent'}`}>
+                    <div className="flex items-center gap-2.5">
+                      <SlotChip label={slotShort(e.slot, e.label)} accent={i === 0} />
+                      <span className="min-w-0 flex-1 truncate text-[17px] font-bold text-slate-100">{slotName(e.slot, e.label)}</span>
+                      <span className={`shrink-0 text-xs font-semibold ${st.cls}`}>{st.text}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {e.itemCount}건{e.leadCount > 0 ? ` · 핵심 ${e.leadCount}` : ''}{e.leadCount > 0 && e.state !== 'unread' ? ` · 핵심 ${e.leadRead}개 읽음` : ''}
+                    </p>
+                    <button
+                      onClick={() => onOpenFile(e.fileId)}
+                      className={`mt-3 h-12 w-full rounded-xl text-[15px] font-semibold transition active:opacity-80 ${i === 0 ? 'bg-sky-600 text-white hover:bg-sky-500' : 'border border-slate-700 text-slate-200 hover:bg-slate-800'}`}
+                    >
+                      {e.state === 'unread' ? '읽기' : e.state === 'done' ? '다시 보기' : '이어서 읽기'}
+                    </button>
+                  </div>
+                );
+              }
               return (
                 <button
                   key={e.fileId}
@@ -439,10 +462,10 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
       )}
 
       <div className={`space-y-6 ${home ? '' : 'px-4'} ${readOnly && !home ? 'pt-4' : ''}`}>
-        {/* 홈에서는 오늘 회차가 먼저(읽을 것이 먼저), 패널에서는 경고·진행·만들기가 먼저 */}
-        {home && todayBlockEl}
+        {/* 홈·브리핑 탭(big)에서는 오늘 회차가 먼저(읽을 것이 먼저), 패널에서는 경고·진행·만들기가 먼저 */}
+        {(home || big) && todayBlockEl}
         {adminBlockEl}
-        {!home && todayBlockEl}
+        {!home && !big && todayBlockEl}
 
         {home && readOnly && pastDays.length > 0 && (
           <button onClick={() => setPastOpen((v) => !v)} className="text-xs text-slate-500 hover:text-slate-300">{pastOpen ? '지난 브리핑 접기' : '지난 브리핑 ›'}</button>
