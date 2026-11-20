@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from '../components/Icon';
+import MiniBars, { periodName } from '../components/MiniBars';
 import Group from '../components/ui/Group';
 import GroupRow from '../components/ui/GroupRow';
 import { api, ApiError, type TradePending, type TradeRelease, type TradeView, type User } from '../lib/api';
@@ -80,7 +81,9 @@ export default function TradePage({ user, onOpenFileById, activeFileId = null, a
   };
 
   const latest = view?.latest ?? null;
-  const past = (view?.releases ?? []).slice(1);
+  const trend = latest?.card?.trend ?? null;
+  // 지난 호 목록 — 추이 표(달마다)에 이미 나오는 달은 뺀다. 그보다 오래된 호만 따로 남는다
+  const past = (view?.releases ?? []).slice(1).filter((r) => !trend?.periods.includes(r.period));
   // 넓은 화면 — 탭에 들어오면 최신 호(정리본이 있으면 정리본, 없으면 원문)가 읽는 칸에 열려 있다
   const autoPick = autoOpen && latest ? (latest.analysisFileId ?? latest.pdfFileId) : null;
   const openRef = useRef(onOpenFileById);
@@ -157,6 +160,13 @@ export default function TradePage({ user, onOpenFileById, activeFileId = null, a
               ) : (
                 <p className="mt-3 text-sm text-slate-400">이 호는 정리본이 아직 없어요. 원문 PDF로 볼 수 있어요.</p>
               )}
+              {latest.card?.trend && (
+                // 최근 달들의 수출액 — 막대는 값만 보여 준다. 그 달의 호를 여는 것과 같은 숫자의 표는 아래 「달마다」
+                <div className="mt-3 rounded-xl bg-fill px-3 py-2.5 pc:bg-slate-800/70">
+                  <p className="mb-1 text-[11.5px] text-slate-500">수출액 · 최근 {latest.card.trend.exp.length}개월</p>
+                  <MiniBars values={latest.card.trend.exp} periods={latest.card.trend.periods} unit="억 달러" name="수출액" />
+                </div>
+              )}
               <div className="mt-3 flex flex-col gap-2">
                 {latest.analysisFileId !== null &&
                   (latest.analysisFileId === activeFileId ? (
@@ -207,9 +217,54 @@ export default function TradePage({ user, onOpenFileById, activeFileId = null, a
           )}
           {view && !latest && !view.pending && <p className="text-sm text-slate-500">아직 받은 수출입 동향이 없어요. 매달 1일에 알아서 가져와요.</p>}
 
+          {trend && (
+            // 달마다 — 그래프와 같은 숫자의 표. 받은 호가 있는 달은 누르면 옆(폰은 위)에 열린다
+            <section>
+              <h3 className={sectionTitle}>달마다 · 억 달러</h3>
+              <div className="overflow-hidden rounded-xl bg-panel pc:border pc:border-slate-800 pc:bg-transparent">
+                <table className="w-full text-[13px] tabular-nums">
+                  <thead>
+                    <tr className="text-[11.5px] text-slate-500">
+                      <th scope="col" className="py-2 pl-3 text-left font-medium">달</th>
+                      <th scope="col" className="px-2 py-2 text-right font-medium">수출</th>
+                      <th scope="col" className="px-2 py-2 text-right font-medium">수입</th>
+                      <th scope="col" className="py-2 pl-2 pr-3 text-right font-medium">무역수지</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trend.periods
+                      .map((period, i) => ({ period, i, r: view?.releases.find((x) => x.period === period) }))
+                      .reverse()
+                      .map(({ period, i, r }) => {
+                        const open = r ? isOpen(r) : false;
+                        const cell = `border-t border-slate-800 py-2 ${open ? 'font-semibold text-accent-300' : r ? 'text-slate-200' : 'text-slate-500'}`;
+                        return (
+                          <tr key={period} onClick={r ? () => openBest(r) : undefined} className={r ? 'cursor-pointer active:bg-slate-800/40 pc:hover:bg-slate-800/30' : ''} aria-current={open ? 'true' : undefined}>
+                            <th scope="row" className={`${cell} pl-3 text-left font-normal`}>
+                              {r ? (
+                                // 키보드로도 고를 수 있게 달 이름이 단추다 — 줄 전체를 눌러도 같다
+                                <button type="button" onClick={(e) => (e.stopPropagation(), openBest(r))} className="text-left">
+                                  {periodName(period)}
+                                </button>
+                              ) : (
+                                periodName(period)
+                              )}
+                            </th>
+                            <td className={`${cell} px-2 text-right`}>{trend.exp[i]!.toLocaleString('ko-KR')}</td>
+                            <td className={`${cell} px-2 text-right`}>{trend.imp[i]!.toLocaleString('ko-KR')}</td>
+                            <td className={`${cell} pl-2 pr-3 text-right`}>{`${trend.bal[i]! > 0 ? '+' : ''}${trend.bal[i]!.toLocaleString('ko-KR')}`}</td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-1.5 text-xs text-slate-500 touch:px-4">밝은 줄은 받아 둔 호예요. 누르면 열려요. 숫자는 {latest ? `${latest.label}호` : ''}에 실린 값이고 억 달러 아래는 반올림했습니다.</p>
+            </section>
+          )}
           {past.length > 0 && (
             <section>
-              <h3 className={sectionTitle}>지난 호</h3>
+              <h3 className={sectionTitle}>{trend ? '그 밖의 지난 호' : '지난 호'}</h3>
               {IS_TOUCH ? (
                 <Group>
                   {past.map((r) => (

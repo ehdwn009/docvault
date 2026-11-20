@@ -440,7 +440,13 @@ export function cardToTreeFile(c: CardSummary): TreeFile {
 
 // ---- 수출입 동향 (API-171, 동향 탭 SCR-195) ----
 /** 최신 호 큰 카드 — 정리본의 숫자 칸과 결론 줄. format 1은 v0.68~0.70에 만든 해부(다시 만들기 전까지 남는다) */
-export type TradeCard = { format: 1 | 2; kpis: { label: string; value: string; lines: string[] }[]; points: string[] };
+export type TradeCard = { format: 1 | 2; kpis: { label: string; value: string; lines: string[] }[]; points: string[]; trend: TradeTrend | null; movers: TradeMover[] };
+/** 최근 달들의 수출·수입·무역수지(억 달러). periods는 각 칸의 달(YYYY-MM), 마지막이 이 호 */
+export type TradeTrend = { periods: string[]; exp: number[]; imp: number[]; bal: number[] };
+/** 작년 같은 달보다 가장 크게 움직인 품목 — 금액(억 달러)과 증감률(%) */
+export type TradeMover = { name: string; amt: number; yoy: number };
+/** API-145 — 회차의 핵심 제목 */
+export type EditionHeadline = { id: string; title: string; section: string; category: string };
 export type TradeRelease = { period: string; label: string; publishedDate: string; pdfFileId: number | null; analysisFileId: number | null; read: boolean };
 export type TradePending = { period: string; label: string; state: 'waiting' | 'analyzing' | 'failed'; checks: string[]; laterCheck: string; message: string | null };
 export type TradeView = { releases: TradeRelease[]; latest: (TradeRelease & { card: TradeCard | null }) | null; pending: TradePending | null };

@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
-import { BRIEFING } from '../../constants.js';
+import { BRIEFING, HOME } from '../../constants.js';
 import { db } from '../../db/index.js';
 import { briefingRuns, files, userFileState } from '../../db/schema.js';
 import { leadIdsOf, slotLabel, type Edition, type Slot } from './edition.js';
@@ -115,6 +115,32 @@ export function editionNav(ownerId: number, userId: number, fileId: number) {
       .reverse()
       .map((r) => ({ fileId: r.fileId, slot: r.slot, label: slotLabel(r.slot, r.createdAt, r.label) })),
   };
+}
+
+/** API-145 — 이 회차의 오늘의 핵심 제목들(홈의 미리보기 칸). 이 사용자가 볼 수 있는 회차가 아니면 null.
+ *  핵심은 회차 화면과 같게 섹션에서 다시 계산한다(leadIdsOf) — 저장된 lead는 옛 규칙으로 적힌 회차가 있어 쓰지 않는다 */
+export function editionHeadlines(ownerId: number, fileId: number): { id: string; title: string; section: string; category: string }[] | null {
+  const file = db
+    .select({ contentText: files.contentText })
+    .from(files)
+    .where(and(eq(files.id, fileId), eq(files.ownerId, ownerId), eq(files.kind, 'briefing'), isNull(files.deletedAt)))
+    .get();
+  if (!file) return null;
+  let ed: Partial<Edition> = {};
+  try {
+    ed = JSON.parse(file.contentText ?? '') as Edition;
+  } catch {
+    return [];
+  }
+  const sections = ed.sections ?? [];
+  const where = new Map<string, { title: string; section: string; category: string }>();
+  for (const s of sections) for (const c of s.categories) for (const sub of c.subs) for (const it of sub.items) where.set(it.id, { title: it.title, section: s.section, category: c.name });
+  return leadIdsOf(sections)
+    .flatMap((id) => {
+      const it = where.get(id);
+      return it ? [{ id, ...it }] : [];
+    })
+    .slice(0, HOME.HEADLINES);
 }
 
 export function clampDays(raw: string | undefined): number {

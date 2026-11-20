@@ -612,3 +612,17 @@ export const BRIEFING = {
   /** API-155(선별 답) 본문 상한 — 기사 400건 × related 100개의 번호라도 수백 KB */
   SUB_READ_MAX_BYTES: 1024 * 1024,
 } as const;
+
+/** 홈의 미리보기 칸(넓은 화면, IA — 홈 미리보기 v0.74)이 받는 양 */
+export const HOME = {
+  /** 오늘 브리핑 카드에 보일 핵심 제목 수 */
+  HEADLINES: 4,
+  /** 「이어 읽기」 첫 줄을 한 번에 물을 수 있는 문서 수 */
+  EXCERPT_MAX_IDS: 8,
+  /** 첫 줄 미리보기의 글자 수 */
+  EXCERPT_CHARS: 140,
+  /** 첫 줄을 뽑으려고 읽는 본문 앞부분 — 10MB짜리 본문을 통째로 메모리에 올리지 않는다 */
+  EXCERPT_SCAN_CHARS: 6000,
+  /** 수출입 동향 카드의 "크게 움직인 품목" 수 */
+  TRADE_MOVERS: 3,
+} as const;

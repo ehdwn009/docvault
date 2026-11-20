@@ -10,6 +10,7 @@ import { formatDate, formatDateTime } from '../lib/date';
 import { IS_PC, IS_TOUCH } from '../lib/device';
 import { kstToday, longDate } from '../lib/briefing';
 import { btnClass } from './settings/SettingRow';
+import HomeBoard from './HomeBoard';
 import HomeDigest from './HomeDigest';
 import { MeButton, TopNavContext } from '../lib/topNav';
 
@@ -35,10 +36,12 @@ type Props = {
   /** 브리핑 탭(SCR-192)·동향 탭(SCR-195)으로 — 홈에는 요약만 둔다 */
   onOpenFeed: () => void;
   onOpenTrade: () => void;
+  /** 넓은 화면(PC, 펼친 접는 폰, 태블릿) — 줄 목록 대신 내용을 미리 보여 주는 칸들로 그린다 (IA — 홈 미리보기 v0.74) */
+  wide?: boolean;
 };
 
 // SCR-101: 홈 — 로그인 직후·`/`의 첫 화면. 오늘 볼 것(브리핑·수출입 동향 요약)·복습과 이어 갈 것(문서·대화)이 한 화면에 (IA — 안 B 홈, 탭 구조 개정 2026-11-20)
-export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, unread, onOpenNotifications, onNewDoc, onOpenFeed, onOpenTrade }: Props) {
+export default function Home({ user, settings, files, onOpenFile, onOpenFileById, onOpenThread, onOpenCards, onOpenPanel, onSearch, unread, onOpenNotifications, onNewDoc, onOpenFeed, onOpenTrade, wide = false }: Props) {
   const isAdmin = user.role === 'admin';
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 브리핑이 있다 (v0.49)
   const briefingOwner = isAdmin ? null : (settings.briefingOwnerId ?? null);
@@ -82,6 +85,59 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
     </div>
   );
 
+  const reviewSection =
+    review && review.total > 0 && (
+              // SCR-186 복습 띠 — 0장이어도 카드 입구로 남긴다 (폰 감사 2026-10-31)
+              <section className="flex items-center gap-2 rounded-xl border border-card-900 bg-card-950/40 px-3 py-2.5 text-sm touch:min-h-12 touch:border-0 touch:bg-panel touch:px-4">
+                {review.due.length > 0 ? (
+                  <span className="text-slate-200">오늘 복습 <b className="text-card-300">{review.due.length}장</b>{review.tomorrow > 0 ? ` · 내일 ${review.tomorrow}장` : ''}</span>
+                ) : (
+                  <button onClick={onOpenCards} className="text-left text-slate-400 hover:text-slate-200">오늘 복습 없음 · 카드 {review.total}장 ›</button>
+                )}
+                {review.due.length > 0 && (
+                  <button onClick={() => setReviewOpen(true)} className="ml-auto min-h-9 rounded-md bg-card-600 px-3 font-medium text-white hover:bg-card-500 touch:min-h-11">
+                    시작
+                  </button>
+                )}
+              </section>
+            );
+  const chatSection = (
+            <section>
+              <div className={`flex items-center ${IS_TOUCH ? 'mb-1.5 px-4' : 'mb-2'}`}>
+                <h3 className={`flex-1 ${IS_TOUCH ? 'text-xs font-medium tracking-wide text-slate-500' : 'text-sm font-bold text-slate-200'}`}>최근 대화</h3>
+                <button onClick={() => onOpenThread(null)} className={IS_TOUCH ? 'text-xs text-accent-400' : `${btnClass} min-h-8 text-xs`}>+ 새 대화</button>
+              </div>
+              {threads && threads.length === 0 && <p className="text-xs text-slate-500 touch:px-4">아직 대화가 없어요. 무엇이든 물어보세요.</p>}
+              {threads && threads.length > 0 && IS_TOUCH && (
+                <Group>
+                  {threads.slice(0, RECENT_THREADS).map((t) => (
+                    <GroupRow
+                      key={t.id}
+                      icon={<Icon name={t.fileId !== null || t.fileName ? 'doc' : 'chat'} size={21} />}
+                      title={cleanTitle(t.title)}
+                      subtitle={`${formatDate(t.updatedAt)} · ${t.fileId !== null || t.fileName ? (t.fileName ?? '문서') : '자유 대화'}`}
+                      onClick={() => onOpenThread(t.id)}
+                    />
+                  ))}
+                </Group>
+              )}
+              {threads && threads.length > 0 && !IS_TOUCH && (
+                <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
+                  {threads.slice(0, RECENT_THREADS).map((t) => (
+                    <button key={t.id} onClick={() => onOpenThread(t.id)} className="block w-full px-3 py-2 text-left transition hover:bg-slate-900">
+                      <span className="block truncate text-sm text-slate-200">{cleanTitle(t.title)}</span>
+                      <span className="flex min-w-0 items-center gap-1 text-[11px] text-slate-500">
+                        <span className="shrink-0">{formatDate(t.updatedAt)} ·</span>
+                        <Icon name={t.fileId !== null || t.fileName ? 'doc' : 'chat'} size={11} className="shrink-0" />
+                        <span className="truncate">{t.fileId !== null || t.fileName ? (t.fileName ?? '문서') : '자유 대화'}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {IS_TOUCH ? (
@@ -122,7 +178,21 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
       )}
       {/* overflow-x-hidden·min-w-0: 긴 파일 이름이나 한 줄 글이 칸을 밀어 폰에서 가로 스크롤이 생기지 않게 (사용자 보고 2026-10-31) */}
       <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 pb-10 pc:px-6 touch:pt-2">
-        <div className="grid max-w-5xl grid-cols-1 gap-8 pc:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] wide:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] touch:gap-6">
+        {wide ? (
+          <HomeBoard
+            hasBriefing={hasBriefing}
+            recent={recent}
+            favorites={files.filter((f) => f.state.isFavorite === 1).sort((x, y) => x.name.localeCompare(y.name, 'ko'))}
+            onOpenFile={onOpenFile}
+            onOpenFileById={onOpenFileById}
+            onOpenFeed={onOpenFeed}
+            onOpenTrade={onOpenTrade}
+            review={reviewSection}
+            chats={chatSection}
+            start={startButtons}
+          />
+        ) : (
+        <div className="grid max-w-5xl grid-cols-1 gap-8 touch:gap-6">
           <div className="min-w-0 space-y-8 touch:space-y-6">
             {/* 오늘 볼 것 — 요약만. 작은 회차 줄로 브리핑을 열던 카드는 브리핑 탭의 큰 카드로 갔다 (사용자 결정 2026-11-20) */}
             <HomeDigest hasBriefing={hasBriefing} onOpenFileById={onOpenFileById} onOpenFeed={onOpenFeed} onOpenTrade={onOpenTrade} />
@@ -153,57 +223,11 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
             </section>
           </div>
           <div className="min-w-0 space-y-8 touch:space-y-6">
-            {review && review.total > 0 && (
-              // SCR-186 복습 띠 — 0장이어도 카드 입구로 남긴다 (폰 감사 2026-10-31)
-              <section className="flex items-center gap-2 rounded-xl border border-card-900 bg-card-950/40 px-3 py-2.5 text-sm touch:min-h-12 touch:border-0 touch:bg-panel touch:px-4">
-                {review.due.length > 0 ? (
-                  <span className="text-slate-200">오늘 복습 <b className="text-card-300">{review.due.length}장</b>{review.tomorrow > 0 ? ` · 내일 ${review.tomorrow}장` : ''}</span>
-                ) : (
-                  <button onClick={onOpenCards} className="text-left text-slate-400 hover:text-slate-200">오늘 복습 없음 · 카드 {review.total}장 ›</button>
-                )}
-                {review.due.length > 0 && (
-                  <button onClick={() => setReviewOpen(true)} className="ml-auto min-h-9 rounded-md bg-card-600 px-3 font-medium text-white hover:bg-card-500 touch:min-h-11">
-                    시작
-                  </button>
-                )}
-              </section>
-            )}
-            <section>
-              <div className={`flex items-center ${IS_TOUCH ? 'mb-1.5 px-4' : 'mb-2'}`}>
-                <h3 className={`flex-1 ${IS_TOUCH ? 'text-xs font-medium tracking-wide text-slate-500' : 'text-sm font-bold text-slate-200'}`}>최근 대화</h3>
-                <button onClick={() => onOpenThread(null)} className={IS_TOUCH ? 'text-xs text-accent-400' : `${btnClass} min-h-8 text-xs`}>+ 새 대화</button>
-              </div>
-              {threads && threads.length === 0 && <p className="text-xs text-slate-500 touch:px-4">아직 대화가 없어요. 무엇이든 물어보세요.</p>}
-              {threads && threads.length > 0 && IS_TOUCH && (
-                <Group>
-                  {threads.slice(0, RECENT_THREADS).map((t) => (
-                    <GroupRow
-                      key={t.id}
-                      icon={<Icon name={t.fileId !== null || t.fileName ? 'doc' : 'chat'} size={21} />}
-                      title={cleanTitle(t.title)}
-                      subtitle={`${formatDate(t.updatedAt)} · ${t.fileId !== null || t.fileName ? (t.fileName ?? '문서') : '자유 대화'}`}
-                      onClick={() => onOpenThread(t.id)}
-                    />
-                  ))}
-                </Group>
-              )}
-              {threads && threads.length > 0 && !IS_TOUCH && (
-                <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
-                  {threads.slice(0, RECENT_THREADS).map((t) => (
-                    <button key={t.id} onClick={() => onOpenThread(t.id)} className="block w-full px-3 py-2 text-left transition hover:bg-slate-900">
-                      <span className="block truncate text-sm text-slate-200">{cleanTitle(t.title)}</span>
-                      <span className="flex min-w-0 items-center gap-1 text-[11px] text-slate-500">
-                        <span className="shrink-0">{formatDate(t.updatedAt)} ·</span>
-                        <Icon name={t.fileId !== null || t.fileName ? 'doc' : 'chat'} size={11} className="shrink-0" />
-                        <span className="truncate">{t.fileId !== null || t.fileName ? (t.fileName ?? '문서') : '자유 대화'}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
+            {reviewSection}
+            {chatSection}
           </div>
         </div>
+        )}
       </div>
       {reviewOpen && review && (
         <ReviewDialog

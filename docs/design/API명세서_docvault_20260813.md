@@ -82,6 +82,7 @@
 | API-036 | DELETE | /files/{id} | 파일 삭제 → 휴지통 이동 (soft delete, 2026-08-15) | 로그인 |
 | API-037 | POST | /files/{id}/copy | 파일 복사 | 로그인 |
 | API-038 | GET | /files/{id}/raw | 원본 다운로드 / 바이너리 스트리밍 | 로그인 |
+| API-048 | GET | /files/excerpts?ids= | 문서들의 첫 줄 미리보기 — 홈의 「이어 읽기」가 읽는다 (v0.74) | 로그인 |
 | API-039 | PUT | /files/{id}/share | 파일 공유 토글 | 관리자 |
 | API-040 | GET | /files/archive | 선택·폴더·전체를 ZIP 하나로 내보내기 (스트리밍, 2026-08-15) | 로그인 |
 | API-044 | GET | /files/trash | 휴지통 목록 (내 파일) | 로그인 |
@@ -136,6 +137,7 @@
 | API-135 | GET | /briefing/editions | 회차 목록 (최신순, 읽음 상태 포함) — 패널의 오늘·지난 브리핑 (v0.43). 열람 계정은 함께 보는 관리자의 회차 + `ownerName` (v0.49) | 관리자, 열람 계정 |
 | API-137 | POST | /briefing/runs/{id}/cancel | 도는 실행 중지 — 진행 카드의 [중지] (2026-10-02) | 관리자 |
 | API-136 | GET | /briefing/editions/{fileId}/nav | 이 회차의 이전·다음 회차와 같은 날 회차들 — 회차 화면의 ‹ ›·회차 칩 (v0.43) | 관리자, 열람 계정 |
+| API-145 | GET | /briefing/editions/{fileId}/headlines | 그 회차의 핵심 제목들 — 홈의 「오늘 브리핑」 카드가 읽는다 (v0.74) | 관리자, 열람 계정 |
 | API-138 | GET | /briefing/editions/{fileId}/items/{itemId}/reader | 브리핑 기사 앱 안 원문 보기 — 기사 id만 받아 그때 받아 문단으로 (v0.45) | 관리자, 설정으로 켠 경우 |
 | API-139 | GET | /briefing/readers | 열람 계정 후보 — 일반 계정 전부와 지금 내 브리핑을 함께 보는지 (v0.49) | 관리자 |
 | API-140 | PUT | /briefing/readers/{userId} | 열람 계정 켜기/끄기 `{ on }` — 그 계정의 briefing_owner_id를 나로 두거나 지운다 (v0.49) | 관리자 |
@@ -151,7 +153,7 @@
 | API-156 | GET | /briefing/jobs/{jobId}/materials | 서버가 읽은 재료 — 읽는 중이면 202, 끝나면 기사마다 재료 목록 (v0.59) | **연결 열쇠(Bearer)** |
 | API-157 | GET | /briefing/jobs/{jobId}/trade/pages?doc=cur\|prev | 수출입 동향 정리본 일감의 원문 쪽별 텍스트 — 이번 호·전월 호 (v0.68) | **연결 열쇠(Bearer)** |
 | API-158 | POST | /briefing/jobs/{jobId}/trade/result | 수출입 동향 정리본 완성본(v0.71부터 format 2, v0.70까지 해부) — 서버가 원문과 다시 대조해 저장·알림 (v0.68) | **연결 열쇠(Bearer)** |
-| API-171 | GET | /trade | 수출입 동향 — 받은 호 목록·최신 호 카드·기다리는 일. 동향 탭(SCR-195)과 홈의 한 줄이 읽는다 (v0.69) | 로그인 |
+| API-171 | GET | /trade | 수출입 동향 — 받은 호 목록·최신 호 카드·기다리는 일. 동향 탭(SCR-195)과 홈이 읽는다 (v0.69. v0.74: 카드에 최근 13개월 숫자와 크게 움직인 품목) | 로그인 |
 | API-172 | POST | /trade/{period}/analysis | 그 호의 정리본을 다시 만들게 시킨다(예약 작업을 켠다). 동향 탭의 [정리본 다시 만들기] (v0.71) | 관리자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
@@ -264,6 +266,18 @@
 | content | string | 본문 텍스트 |
 | updatedAt | number | 마지막 수정 (unix ms) |
 | readonly | boolean | 공유 열람 등 수정 불가 여부 (편집 버튼 표시 제어) |
+
+---
+
+## API-048: 첫 줄 미리보기 (v0.74)
+
+`GET /files/excerpts?ids=18,21` — 홈의 「이어 읽기」(넓은 화면, IA "홈 미리보기와 동향 추이")가 문서를 열지 않고 첫 줄을 보여 주려고 읽는다. `ids`는 파일 번호를 쉼표로 이어 1~8개(`HOME.EXCERPT_MAX_IDS`) — 비었거나 숫자가 아니거나 8개를 넘으면 400 VALIDATION_ERROR.
+
+**200** `{ "excerpts": [{ "id": 18, "text": "금리를 올리면 그 나라 돈으로 받는 이자가 늘어나 …" }, { "id": 21, "text": "" }] }`
+
+- 결과의 순서는 정해져 있지 않다(요청한 순서가 아닐 수 있다) — `id`로 짝을 맞춘다. 같은 번호를 두 번 보내면 결과에는 한 번만 나온다(8개 상한은 보낸 개수로 센다 — 같은 번호 아홉 개도 400이다).
+- `text`는 본문 앞부분(6,000자, `HOME.EXCERPT_SCAN_CHARS`)에서 꾸밈 기호를 걷어 낸 글자를 140자(`HOME.EXCERPT_CHARS`)까지 — 넘으면 끝에 "…". 마크다운은 맨 위 제목 줄·머리말·코드 블록·기호를, HTML은 태그와 `<script>`·`<style>`·`<head>`를 뺀다. 바이너리(PDF·이미지)나 앞부분에 글자가 없는 문서는 빈 문자열.
+- 없는 파일, 휴지통의 파일, 읽을 권한이 없는 파일은 오류 없이 결과에서 빠진다(목록에 섞인 하나 때문에 전부 실패하지 않게). 권한은 다른 파일 읽기와 같은 공용 규칙(`canReadFile`).
 
 ---
 
@@ -611,7 +625,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ## API-131 ~ API-140: 뉴스 브리핑
 
-설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md). 관리자 전용이 기본(다른 계정은 403 FORBIDDEN). **예외는 열람 계정(v0.49)** — 관리자가 API-140으로 고른 일반 계정은 API-135·136 두 GET만 쓸 수 있고, 그때 "회차의 주인"은 자기 USER_SETTINGS.briefing_owner_id의 관리자다. 회차는 files의 문서(`kind='briefing'`, 본문 = 회차 JSON)라 열기·삭제·태그·즐겨찾기·검색은 파일 API를 그대로 쓴다 — 열람 계정의 열기·읽음(API-073/075)·묻기(API-102)도 파일 접근 규칙(`canReadFile`: kind=briefing이고 파일 주인이 내 briefing_owner_id면 읽기 허용)으로 열린다. 쓰기는 소유자·관리자만 그대로. 여기는 **만드는 일**과 열람 계정 관리만.
+설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md). 관리자 전용이 기본(다른 계정은 403 FORBIDDEN). **예외는 열람 계정(v0.49)** — 관리자가 API-140으로 고른 일반 계정은 API-135·136·145 세 GET만 쓸 수 있고(145는 v0.74), 그때 "회차의 주인"은 자기 USER_SETTINGS.briefing_owner_id의 관리자다. 회차는 files의 문서(`kind='briefing'`, 본문 = 회차 JSON)라 열기·삭제·태그·즐겨찾기·검색은 파일 API를 그대로 쓴다 — 열람 계정의 열기·읽음(API-073/075)·묻기(API-102)도 파일 접근 규칙(`canReadFile`: kind=briefing이고 파일 주인이 내 briefing_owner_id면 읽기 허용)으로 열린다. 쓰기는 소유자·관리자만 그대로. 여기는 **만드는 일**과 열람 계정 관리만.
 
 실행(run) 객체 — 아래 응답들에 공통으로 쓰인다:
 ```json
@@ -690,6 +704,11 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 
 ### API-136 — GET /briefing/editions/{fileId}/nav (v0.43)
 **200** `{ "prevId": number | null, "nextId": number | null, "sameDay": [ { "fileId", "slot", "label" } ] }` — 생성 순서로 바로 앞·뒤 회차와, 같은 날(한국시간) 회차들(이른 순). 회차 문서가 아니면 404.
+
+### API-145 — GET /briefing/editions/{fileId}/headlines (v0.74)
+홈의 「오늘 브리핑」 카드(넓은 화면, IA "홈 미리보기와 동향 추이")가 읽는다. 번호는 145지만 구독 생성 방식(API-141~)이 아니라 회차를 읽는 API라 여기 둔다. 관리자와 열람 계정이 쓴다(위 머리말의 세 GET 가운데 하나).
+
+**200** `{ "items": [{ "id": "kr.econ.rate.003", "title": "…", "section": "국내" | "세계", "category": "경제" }] }` — 그 회차의 오늘의 핵심 기사 제목을 앞에서부터 최대 4개(`HOME.HEADLINES`), 국내가 앞이다. 핵심은 회차 화면과 같은 규칙으로 회차의 기사들에서 다시 고른다(회차에 저장된 `lead`는 옛 규칙으로 적힌 것이 있어 쓰지 않는다). 내가 볼 수 있는 회차가 아니거나(관리자는 자기 회차, 열람 계정은 함께 보는 관리자의 회차만) 휴지통에 있으면 404 NOT_FOUND, `fileId`가 숫자가 아니면 400 VALIDATION_ERROR(열람 계정은 그 전에 가드에서 403 FORBIDDEN — 열람 계정에게 열린 경로는 숫자 id 꼴뿐이다). 회차 본문을 읽지 못하면 빈 배열.
 
 ### API-138 — GET /briefing/editions/{fileId}/items/{itemId}/reader (v0.45)
 앱 안 원문 보기. **200** `{ "title", "byline": string | null, "source", "url", "paragraphs": string[] }` — 그 기사의 `readUrl`(회차를 만들 때 본문 받기에 성공한 언론사 주소)을 그때 받아 Readability로 문단만 뽑아 돌려준다(최대 80문단).
@@ -775,14 +794,15 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 - **API-158** `POST …/trade/result` — 본문은 정리본 `data.json`(**v0.71부터 format 2** — 형식: `.claude/skills/trade-report/references/schema.md`, 상한 2MB `TRADE.RESULT_MAX_BYTES` → 413. 아래 ②는 v0.68~0.70의 해부 형식 규칙이고, format 2의 대조 규칙은 수출입동향 설계 4단계 "정리본의 대조"에 있다 — 근거 인용·계산식 검산·문장 속 숫자·표 줄. 응답 모양과 상태 코드는 같다. v0.71에서는 아래 ③의 문서 이름이 「YYYY년 M월 수출입 동향 정리.html」이고, ④의 알림은 그 호에 저장된 것이 이미 있었다면 — 다시 만들기 — 관리자에게만 「…정리를 다시 만들었어요」로 간다). 서버는 ① 모양 검사(zod `TradeDataSchema` — 틀리면 400 `VALIDATION_ERROR`, 메시지 `<경로>: <이유>`; `meta.period`가 실행의 호와 다르면 400) ② **원문 대조**(`lib/trade/verify.ts` — 인용은 그 쪽 텍스트에 글자 그대로, 표의 값은 출처 줄에 그대로, 숫자 4칸 `meta.kpis`의 큰 값은 1쪽이나 근거 쪽에 그대로(v0.69); 틀린 목록 항목은 빼고, 1쪽 문장·숫자 표가 틀리거나 뺀 항목이 30%를 넘으면 422 `TRADE_JOB_REJECTED`) ③ 저장 — 해부 JSON은 `trade_releases.analysis_json`, 같은 내용의 HTML 문서(「YYYY년 M월 수출입 동향 해부.html」)는 문서 탭 밖 `kind='trade'` 파일로(v0.68에는 「수출입동향」 폴더의 보통 문서) ④ 모든 활성 계정에 `trade_ready` 알림(「10월 수출입 동향이 나왔어요」 — v0.68에는 「…해부가 나왔어요」, fileId = 해부 문서). **200** `{ "fileId", "checked", "passed", "dropped": [..], "already" }` — 같은 job에 다시 보내면 `already: true`로 같은 답(멱등). 400·422는 실행을 닫지 않는다.
 - 마감(`TRADE.JOB_DEADLINE_MS` 3시간)까지 완성본이 없으면 틱이 `missing`으로 닫고 관리자에게 `trade_missing`(「해부를 만들지 못했어요」 — v0.71부터 「…정리를 만들지 못했어요」). v0.69부터는 이때 모든 활성 계정에 원문 도착 알림(`trade_ready`, 「…올라왔어요」)도 함께 간다 — 해부가 없어도 한 번은 알리려고(v0.71: 그 호에 저장된 것이 이미 있으면 — 다시 만들다 실패한 경우 — 보내지 않는다). 호마다 자동 시도는 한 번.
 
-### API-171 — GET /trade (v0.69, 카드 모양은 v0.71)
+### API-171 — GET /trade (v0.69, 카드 모양은 v0.71, 추이·품목은 v0.74)
 
 설계: [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md) "3단계"·"4단계". 모든 로그인 계정.
 
-**200** `{ "releases": [{ "period": "2026-10", "label": "2026년 10월", "publishedDate": "2026-11-01", "pdfFileId": 12 | null, "analysisFileId": 14 | null, "read": false }], "latest": { …같은 칸, "card": { "format": 2, "kpis": [{ "label": "수출", "value": "1,152.8억 달러", "lines": ["작년보다 ▲93.7%", "9월보다 ▼4.8%"] }], "points": ["수출액이 역대 두 번째로 큰 달입니다.", "늘어난 수출의 73%가 반도체입니다.", "▲93.7%는 깎아서 읽어야 합니다."] } | null } | null, "pending": { "period": "2026-11", "label": "2026년 11월", "state": "waiting" | "analyzing" | "failed", "checks": ["11:10", "13:00", "18:00"], "laterCheck": "10:00", "message": "…" | null } | null }`
+**200** `{ "releases": [{ "period": "2026-10", "label": "2026년 10월", "publishedDate": "2026-11-01", "pdfFileId": 12 | null, "analysisFileId": 14 | null, "read": false }], "latest": { …같은 칸, "card": { "format": 2, "kpis": [{ "label": "수출", "value": "1,152.8억 달러", "lines": ["작년보다 ▲93.7%", "9월보다 ▼4.8%"] }], "points": ["수출액이 역대 두 번째로 큰 달입니다.", "늘어난 수출의 73%가 반도체입니다.", "▲93.7%는 깎아서 읽어야 합니다."], "trend": { "periods": ["2025-10", …, "2026-10"], "exp": [595, …, 1153], "imp": [535, …, 728], "bal": [60, …, 425] } | null, "movers": [{ "name": "컴퓨터", "amt": 58.5, "yoy": 496.6 }] } | null } | null, "pending": { "period": "2026-11", "label": "2026년 11월", "state": "waiting" | "analyzing" | "failed", "checks": ["11:10", "13:00", "18:00"], "laterCheck": "10:00", "message": "…" | null } | null }`
 
 - `releases`는 최신순. 파일 id는 사람이 지웠으면 null. `read`는 이 계정이 정리본(없으면 원문)을 연 적이 있는가.
 - `latest.card`는 정리본 문서가 있을 때만(휴지통에 넣었으면 null) — 저장된 자료(`trade_releases.analysis_json`)에서 뽑는다. `kpis`는 맨 위 숫자 칸(최대 4개 — 이름, 값과 단위, 아래 두 줄), `points`는 결론 줄들의 첫 문장. `format`은 2가 정리본, 1이 v0.68~0.70에 저장된 해부(그때는 `kpis`의 `lines`가 한 줄이고 `points`가 헤드라인 문장과 "같이 봐야 할 신호")다.
+- `latest.card.trend`(v0.74)는 정리본에 실린 최근 달들(보통 13개월)의 수출(`exp`)·수입(`imp`)·무역수지(`bal`) 배열 — 억 달러, 억 아래는 반올림한 값이라 화면 숫자 칸의 "1,152.8억 달러"와 끝자리가 다를 수 있다. 정리본의 그래프와 같은 숫자(대조를 통과한 원문 표 줄)다. `periods`는 배열의 자리마다의 달(YYYY-MM, 오래된 달부터, 마지막이 이 호). null이 되는 경우: 해부(format 1)일 때, 세 배열 가운데 하나라도 정리본에 없거나 빈 값이 섞였을 때, 세 배열의 길이가 서로 다를 때, 정리본의 달(`meta.period`)이 YYYY-MM 모양이 아닐 때 — 그러면 화면은 그래프와 「달마다」 표를 그리지 않는다. `movers`는 작년 같은 달 대비 증감률의 절댓값이 큰 품목 순으로 최대 3개(`HOME.TRADE_MOVERS`) — `amt`는 억 달러, `yoy`는 %(감소는 음수). 해부이거나 품목 표가 없으면 빈 배열.
 - `pending`: `waiting`은 그 달 1~10일 확인 창 안인데 지난달 호가 아직 없을 때, `analyzing`은 정리본 실행이 돌고 있을 때, `failed`는 가장 최근 호의 실행이 실패·마감 초과이고 정리본이 없을 때(관리자에게만, `message`에 이유 — 다른 상태에서는 null). `checks`는 1일의 확인 시각들, `laterCheck`는 2~10일의 확인 시각(한국시간) — `waiting` 띠의 안내문에 쓴다.
 - 원문·정리본 파일은 `kind='trade'`라 문서 트리(API-021)·공유받음(API-061)·검색(API-081)에 나오지 않는다. 읽기는 모든 로그인 계정(파일 열람 API-032·033·038이 쓰는 공용 권한 규칙 `canReadFile`에 `kind='trade'` 추가), 복사(API-037)하면 내 보통 문서가 된다.
 

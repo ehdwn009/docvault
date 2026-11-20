@@ -2426,6 +2426,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               onNewDoc={() => actions.createDoc(null)}
               onOpenFeed={() => openPage('feed')}
               onOpenTrade={() => openPage('trade')}
+              wide={!narrow}
             />
           </div>
         )}

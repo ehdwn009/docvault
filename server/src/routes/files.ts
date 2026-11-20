@@ -1,10 +1,11 @@
 import { createReadStream, existsSync } from 'node:fs';
 import { Readable } from 'node:stream';
-import { and, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
   DEFAULT_FILE_STATE,
+  HOME,
   MAX_ARCHIVE_ENTRIES,
   MAX_ARCHIVE_ID_PARAMS,
   MAX_VERSIONS_PER_FILE,
@@ -23,6 +24,7 @@ import {
 } from '../lib/archive.js';
 import { saveTextContent } from '../lib/content.js';
 import { fail } from '../lib/errors.js';
+import { excerptOf } from '../lib/excerpt.js';
 import { exportFilePath, getExportJob, shouldInline, startExportJob } from '../lib/exportJobs.js';
 import { pushNotification } from '../lib/notifications.js';
 import {
@@ -244,6 +246,30 @@ export const fileRoutes = new Hono<AppEnv>()
       deleteBinary(row.storagePath);
     }
     return c.json({ ok: true, purged: rows.length });
+  })
+
+  // API-048: 첫 줄 미리보기 — 홈 「이어 읽기」가 문서를 열지 않고도 무슨 글인지 보여 준다 (v0.74).
+  // /:id 계열보다 먼저 등록한다. 없거나 읽을 수 없는 파일은 조용히 뺀다 — 목록에 섞인 문서 하나 때문에 전부 실패하지 않게
+  .get('/excerpts', (c) => {
+    const user = c.get('user');
+    const ids = parseIdList(c.req.query('ids'), HOME.EXCERPT_MAX_IDS);
+    if (ids === null || ids.length === 0) return fail(c, 400, 'VALIDATION_ERROR', `ids: 파일 번호를 쉼표로 이어 1~${HOME.EXCERPT_MAX_IDS}개`);
+    const rows = db
+      .select({
+        id: files.id,
+        ownerId: files.ownerId,
+        folderId: files.folderId,
+        isShared: files.isShared,
+        kind: files.kind,
+        deletedAt: files.deletedAt,
+        fileType: files.fileType,
+        // 본문 전체가 아니라 앞부분만 읽는다 — 큰 문서를 통째로 올리지 않게
+        head: sql<string | null>`substr(${files.contentText}, 1, ${HOME.EXCERPT_SCAN_CHARS})`,
+      })
+      .from(files)
+      .where(inArray(files.id, ids))
+      .all();
+    return c.json({ excerpts: rows.filter((f) => canReadFile(user, f)).map((f) => ({ id: f.id, text: excerptOf(f.fileType, f.head) })) });
   })
 
   // API-040: 선택·폴더·전체를 ZIP 하나로 내보내기.

@@ -4,6 +4,8 @@ node_modules/
 # build output
 client/dist/
 server/dist/
+# 타입체크가 남기는 캐시 — 빌드할 때마다 생긴다
+*.tsbuildinfo
 
 # persistent data (SQLite + binary files) — backup unit, never committed
 data/

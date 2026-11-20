@@ -21,7 +21,7 @@ import {
   startRun,
   toRunDto,
 } from '../lib/briefing/run.js';
-import { clampDays, editionNav, listEditions } from '../lib/briefing/editions.js';
+import { clampDays, editionNav, listEditions, editionHeadlines } from '../lib/briefing/editions.js';
 import { labelOf, nextAuto, readSchedule, scheduleSchema, timerOf, type AutoSchedule, type AutoSlot } from '../lib/briefing/autoSchedule.js';
 import { briefingOwnerOf, listReaderCandidates, setReader } from '../lib/briefing/readers.js';
 import {
@@ -48,16 +48,16 @@ import { jsonBody, parseId } from '../lib/validate.js';
 import type { AppEnv } from '../types.js';
 
 // API-131~140 뉴스 브리핑 — 관리자 전용(LLM 요금을 내는 사람). 회차 문서 자체는 파일 API가 다룬다.
-// 예외는 열람 계정(v0.49)이 쓰는 회차 목록·이동 두 GET뿐이다.
+// 예외는 열람 계정(v0.49)이 쓰는 회차 목록·이동·핵심 제목 세 GET뿐이다 — 모두 열람 계정이 이미 열 수 있는 회차의 내용만 준다.
 // 설계: docs/design/뉴스브리핑_docvault_20261001.md
 
 /** 이 라우트 묶음 안에서만 쓰는 변수 — 지금 보는 회차의 주인(관리자 본인, 또는 열람 계정이 함께 보는 관리자) */
 type BriefingEnv = { Variables: AppEnv['Variables'] & { briefingOwnerId: number } };
 
-/** 열람 계정에게 열린 길 — 회차 목록(API-135)과 이전·다음(API-136). 그 밖은 전부 관리자 전용 */
-const READER_PATH = /\/briefing\/editions(?:\/\d+\/nav)?$/;
+/** 열람 계정에게 열린 길 — 회차 목록(API-135), 이전·다음(API-136), 핵심 제목(API-145 — 홈의 미리보기 칸). 그 밖은 전부 관리자 전용 */
+const READER_PATH = /\/briefing\/editions(?:\/\d+\/(?:nav|headlines))?$/;
 
-// 기본은 거절, 예외를 명시한다 (CLAUDE.md 보안) — 열람 계정은 GET 두 개만, 그때 보는 회차의 주인을 실어 준다
+// 기본은 거절, 예외를 명시한다 (CLAUDE.md 보안) — 열람 계정은 GET 세 개만, 그때 보는 회차의 주인을 실어 준다
 const briefingGuard = createMiddleware<BriefingEnv>(async (c, next) => {
   const user = c.get('user');
   if (user.role === 'admin') {
@@ -234,6 +234,15 @@ export const briefingRoutes = new Hono<BriefingEnv>()
     const nav = editionNav(c.get('briefingOwnerId'), c.get('user').id, fileId);
     if (!nav) return fail(c, 404, 'NOT_FOUND', '회차가 없습니다');
     return c.json(nav);
+  })
+
+  // API-145: 이 회차의 핵심 제목들 — 홈의 미리보기 칸이 읽는다 (v0.74)
+  .get('/editions/:fileId/headlines', (c) => {
+    const fileId = parseId(c.req.param('fileId'));
+    if (fileId === null) return fail(c, 400, 'VALIDATION_ERROR', 'fileId: 올바르지 않은 값');
+    const items = editionHeadlines(c.get('briefingOwnerId'), fileId);
+    if (!items) return fail(c, 404, 'NOT_FOUND', '회차가 없습니다');
+    return c.json({ items });
   })
 
   // API-139: 열람 계정 후보 — 일반 계정 전부와 지금 켜져 있는지 (v0.49)
