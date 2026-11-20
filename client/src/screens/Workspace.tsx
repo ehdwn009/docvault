@@ -82,6 +82,10 @@ const PAGE_PANELS: ReadonlySet<Panel> = new Set<Panel>(['home', 'ai', 'settings'
 const DOC_PANELS: Panel[] = ['files', 'favorites', 'shared', 'cards'];
 /** 보이는 영역이 이만큼 넘게 줄면 키보드가 올라온 것으로 본다(px) — 주소 막대 변화(수십 px)와 구분 */
 const KEYBOARD_MIN_PX = 120;
+/** 넓은 터치 화면의 세로 레일 폭(px) — index.css의 --rail-w로도 넘겨 목록 열·아래 바가 같은 값을 본다 */
+const TOUCH_RAIL_W = 64;
+/** 넓은 터치 화면의 목록 열 폭(px) — 문서 목록(wide:w-[300px])·대화 목록(AskPanel)과 같은 값 */
+const TOUCH_LIST_W = 300;
 /** 글자를 받는 요소에 커서가 있는가 — 키보드가 떠 있을 조건 */
 function isEditableFocused(): boolean {
   const a = document.activeElement;
@@ -246,6 +250,16 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const [layout, setLayoutState] = useState<AppLayout>(getLayout);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  // 넓은 터치 화면(펼친 접는 폰·태블릿)은 아래 탭 대신 PC처럼 왼쪽 세로 레일을 쓴다 — 아래 바에는 열린 화면의 도구만 남고,
+  // 도구가 없으면 바도 없다(목록·홈이 화면 끝까지 내려온다). 이전 레이아웃은 탭 구성이 달라 아래 탭 그대로 (사용자 결정 2026-11-20, 시안 A안)
+  const railMode = IS_TOUCH && !narrow && layout === 'home';
+  // 작업 공간 밖(body)에 뜨는 것(올리기 진행 띠)도 레일을 비킬 수 있게 레일 폭을 :root에도 적는다
+  useEffect(() => {
+    document.documentElement.style.setProperty('--touch-rail-w', railMode ? `${TOUCH_RAIL_W}px` : '0px');
+    return () => {
+      document.documentElement.style.removeProperty('--touch-rail-w');
+    };
+  }, [railMode]);
   useEffect(() => {
     // 레일에 없는 패널이 남지 않게 — 즐겨찾기·공유·카드는 문서로, 대화↔AI, 브리핑은 홈으로 (검수 2026-10-31)
     const normalize = (p: Panel, l: AppLayout): Panel =>
@@ -414,6 +428,17 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       });
     }
   };
+  // 펼친 채 연 읽는 칸은 기록에 층이 없다 — 접어서 좁아지면(또는 좁은 화면에서 읽는 칸이 열린 탭으로 들어오면) 그때 층을 쌓아
+  // 뒤로 가기가 그 탭의 목록으로 돌아가게 한다
+  const readingChannel = panel === 'feed' || panel === 'trade' ? (channelDoc[panel] ? panel : null) : null;
+  useEffect(() => {
+    if (!narrow || !readingChannel || channelLayerRef.current) return;
+    const ch = readingChannel;
+    channelLayerRef.current = pushLayer(() => {
+      channelLayerRef.current = null;
+      setChannelDoc((prev) => ({ ...prev, [ch]: null }));
+    });
+  }, [narrow, readingChannel]);
   /** 파일을 번호로 연다 — 종류에 따라 갈 곳이 다르다: 회차는 브리핑 탭, 수출입 동향은 동향 탭, 나머지는 문서 탭.
    *  이전 레이아웃에는 브리핑 탭이 없어 회차는 전처럼 문서로 연다 */
   const channelOf = (f: TreeFile): 'feed' | 'trade' | null =>
@@ -1708,6 +1733,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         onBackToList={narrow ? () => closeChannelDoc(ch) : undefined}
         askTwoColumn={!narrow}
         onEditModeChange={IS_TOUCH ? setEditing : undefined}
+        // 펼친 폰: 목록 열을 접어 읽는 칸을 넓힌다(세로로 쥐면 읽는 칸이 폰보다 좁다)
+        onToggleSidebar={IS_TOUCH && !narrow ? () => setPanelCollapsed((v) => !v) : undefined}
+        sidebarCollapsed={panelCollapsed}
       />
     );
   };
@@ -1761,6 +1789,23 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     </button>
   );
 
+  const touchRailClass = 'flex h-[52px] w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10.5px] active:bg-slate-800/50';
+  /** 넓은 터치 화면의 레일 단추 — 아래 탭과 같은 동작(같은 칸을 다시 누르면 그 칸의 뿌리로). 홈은 "장소"라 다시 눌러도 그대로 */
+  const touchRailButton = (target: Panel, label: string, icon: IconName, active: boolean) => (
+    <button
+      onClick={() => {
+        if (target === 'home') {
+          if (panel !== 'home') openPage('home');
+        } else pressTab(target);
+      }}
+      aria-current={active ? 'page' : undefined}
+      className={`${touchRailClass} ${active ? 'bg-slate-800/70 font-semibold text-accent-400' : 'text-slate-500'}`}
+    >
+      <Icon name={icon} size={22} />
+      {label}
+    </button>
+  );
+
   /** 터치 첫 화면의 큰 버튼들 — 문서를 다 닫았을 때 어디로든 갈 수 있게 */
   const openPanel = (p: Panel) => {
     setPanel(p);
@@ -1810,21 +1855,27 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   // 그러려면 탭 화면 층이 z-index로 자기만의 쌓임 맥락을 만들면 안 된다 — 바(z-30)와 뷰어의 시트(z-40)가 같은 맥락에서 겨뤄야 문서 탭과 같은 순서가 된다.
   // 대신 밑에 깔린 문서 칸은 보이지 않게 해서(내리지는 않는다) 그 헤더(z-20)가 비치지 않게 한다
   const channelReading = IS_TOUCH && (panel === 'feed' || panel === 'trade') && channelDoc[panel] !== null;
+  /** 본문이 아래 바 높이만큼 바닥을 비워야 하나 — 문서(뷰어)는 바가 본문 위에 얹히므로 비우지 않는다 */
+  const barLifts = railMode ? tabBarVisible && barSlotUsed && PAGE_PANELS.has(panel) && !channelReading : tabBarVisible && !docOwnsBar;
+  /** 레일이 있을 때 아래 도구 바의 왼쪽 끝 — 그 화면의 목록 열만큼 비켜 읽는 칸·대화 본문 밑에만 놓는다 */
+  const railBarOffset =
+    panel === 'feed' || panel === 'trade' ? (panelCollapsed ? '0px' : 'var(--channel-list-w)') : panel === 'ai' ? `${TOUCH_LIST_W}px` : PAGE_PANELS.has(panel) || panelCollapsed ? '0px' : `${TOUCH_LIST_W}px`;
   const channelLayerClass = channelReading
     ? 'absolute inset-0 flex flex-col bg-slate-950'
     : 'absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]';
   const tabBar = (
     <nav
       ref={tabBarRef}
-      aria-label="주 메뉴"
+      aria-label={railMode ? '열린 화면의 도구' : '주 메뉴'}
       aria-hidden={chromeHidden}
       // 불투명 + 위 테두리 — 밝은 테마에서 본문이 비쳐 보였다 (사용자 보고 2026-10-31)
-      className={`fixed left-[var(--sa-left)] right-[var(--sa-pad-right)] z-30 flex items-stretch border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
-        tabBarVisible ? '' : 'hidden'
-      } ${chromeHidden ? 'pointer-events-none' : ''}`}
-      style={barTop !== null ? { top: barTop, bottom: 'auto' } : { bottom: 0 }}
+      // 레일이 있으면: 탭은 레일에 있으니 바에는 도구만 — 도구를 쓰는 화면이 있을 때만, 그 화면(읽는 칸·대화 본문) 밑에만 놓는다
+      className={`fixed right-[var(--sa-pad-right)] z-30 flex items-stretch border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
+        railMode ? 'border-l' : 'left-[var(--sa-left)]'
+      } ${tabBarVisible && (!railMode || barSlotUsed) ? '' : 'hidden'} ${chromeHidden ? 'pointer-events-none' : ''}`}
+      style={{ ...(barTop !== null ? { top: barTop, bottom: 'auto' } : { bottom: 0 }), ...(railMode ? { left: `calc(var(--sa-left) + var(--rail-w) + ${railBarOffset})` } : {}) }}
     >
-      <div className={`flex ${narrow ? 'flex-1' : `${panel === 'feed' || panel === 'trade' ? CHANNEL_LIST_WIDTH : 'w-[300px]'} shrink-0 border-r border-hair`} ${narrow && barSlotUsed ? 'hidden' : ''}`}>
+      <div className={`flex ${narrow ? 'flex-1' : `${panel === 'feed' || panel === 'trade' ? CHANNEL_LIST_WIDTH : 'w-[300px]'} shrink-0 border-r border-hair`} ${railMode || (narrow && barSlotUsed) ? 'hidden' : ''}`}>
       {(
         (layout === 'home'
           ? [
@@ -1883,25 +1934,47 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
 
   // 폰의 홈·나 단추 — 아래 탭에서 빠진 두 곳을 각 화면 머리에서 연다. 이전 레이아웃·PC에는 없다(레일이 맡는다)
-  const topNav = IS_TOUCH && layout === 'home' ? { goHome: () => openPage('home'), openMe: () => openSettings() } : null;
+  const topNav = IS_TOUCH && layout === 'home' && !railMode ? { goHome: () => openPage('home'), openMe: () => openSettings() } : null;
 
   return (
     <BottomSlotContext.Provider value={barSlot}>
     <TopNavContext.Provider value={topNav}>
     {/* 가장자리 여백(상태 표시·노치·옆 띠)은 바깥 껍데기가 한 번에 비운다. 안쪽 relative가 absolute 층들의 기준이라, 층이 상태 표시 밑으로 들어가지 않는다 */}
-    <div className="h-dvh bg-slate-950 pl-[var(--sa-left)] pr-[var(--sa-pad-right)] pt-[var(--sa-pad-top)]">
+    <div className="dv-shell h-dvh bg-slate-950 pl-[var(--sa-left)] pr-[var(--sa-pad-right)] pt-[var(--sa-pad-top)]" style={railMode ? ({ '--rail-w': `${TOUCH_RAIL_W}px` } as React.CSSProperties) : undefined}>
     <div className="relative flex h-full text-slate-100">
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
       <div
-        className={`z-[25] flex shrink-0 bg-slate-950 narrow:absolute narrow:inset-0 touch:pb-[var(--tab-bar-h)] ${
-          !PAGE_PANELS.has(panel) && (touchList || !narrow) ? '' : 'touch:hidden'
+        // 레일이 있는 넓은 터치 화면: 레일은 페이지(홈·AI·나) 위에서도 보여야 하고, 아래 바가 목록 밑에 없으니 바닥도 비우지 않는다
+        className={`z-[25] flex shrink-0 bg-slate-950 narrow:absolute narrow:inset-0 ${railMode ? '' : 'touch:pb-[var(--tab-bar-h)]'} ${
+          railMode || (!PAGE_PANELS.has(panel) && (touchList || !narrow)) ? '' : 'touch:hidden'
         } ${immersive ? 'hidden' : ''}`}
       >
       {/* 아이콘 레일 — PC의 전역 내비게이션 (IA). 위는 "내 것"(파일·카드·대화), 아래는 "앱 운영"(설정·관리자·로그아웃). 터치는 탭 바가 대신한다 */}
       {upload && <UploadStrip state={upload} onCancel={() => uploadAbortRef.current?.abort()} onClose={() => { setUpload(null); setPending((p) => p.filter((x) => x.status !== 'error')); }} />}
       {notifOpen && (
         <NotificationCenter items={notif.items} unread={notif.unread} onClose={() => setNotifOpen(false)} onOpen={openNotification} onReadAll={() => void notif.markRead()} onOpenSettings={() => openSettings({ category: 'notifications' })} />
+      )}
+      {railMode && (
+        // 넓은 터치 화면의 세로 레일 — 아래 탭과 같은 칸(문서·브리핑·동향·AI)에, 머리 단추로 올려 두었던 홈·나와 알림·검색을 한 줄로
+        <nav aria-label="주 메뉴" className="flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 pb-[max(env(safe-area-inset-bottom),8px)] pt-2" style={{ width: TOUCH_RAIL_W }}>
+          {touchRailButton('home', '홈', 'home', panel === 'home')}
+          {touchRailButton('files', '문서', 'files', tabTarget(panel) === 'files')}
+          {canSeeBriefing && touchRailButton('feed', '브리핑', 'news', panel === 'feed')}
+          {touchRailButton('trade', '동향', 'chart', panel === 'trade')}
+          {touchRailButton('ai', 'AI', 'sparkle', panel === 'ai')}
+          <div className="mt-auto h-px w-8 shrink-0 bg-slate-800" aria-hidden="true" />
+          <button onClick={() => setNotifOpen((v) => !v)} aria-label={notif.unread > 0 ? `알림 ${notif.unread}개` : '알림'} className={`relative ${touchRailClass} text-slate-500`}>
+            <Icon name="bell" size={22} />
+            알림
+            {bellBadge}
+          </button>
+          <button onClick={() => setPaletteOpen(true)} className={`${touchRailClass} text-slate-500`}>
+            <Icon name="search" size={22} />
+            검색
+          </button>
+          {touchRailButton('settings', '나', 'user', panel === 'settings')}
+        </nav>
       )}
       <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-slate-800 py-3 touch:hidden">
         {/* 검색 — Ctrl+K만으로는 폰·태블릿에서 들어갈 길이 없었다 (사용성 평가 2026-10-01). 안 B에서는 아래 "도구" 묶음으로 */}
@@ -2073,6 +2146,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
             onSearch={() => setPaletteOpen(true)}
             jump={filesJump}
             rootSignal={filesRootSignal}
+            tree={!narrow}
+            onCollapse={!narrow ? () => setPanelCollapsed(true) : undefined}
           />
         )}
         {panel === 'files' && !phoneFiles && (
@@ -2312,7 +2387,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {/* OS 드롭 업로드는 window 전역 핸들러가 받는다 — 트리 폴더 위 드롭만 개별 처리 */}
       {/* 터치: 하단 탭 바 자리를 비운다 — 뷰어 도구막대·분할 칸이 탭 바 밑에 깔리지 않게. 탭 바가 숨는 몰입·편집·대화 본문에서는 비우지 않는다 */}
       {/* 문서가 바의 슬롯을 쓸 때(읽는 중)는 여백 없이 바가 본문 위에 얹힌다 — 바가 스크롤로 숨으면 빈 띠만 남았다 (사용자 보고 2026-10-31). 본문의 touch:pb-24가 마지막 줄을 지킨다 */}
-      <main className={`relative flex min-w-0 flex-1 flex-col ${tabBarVisible && !docOwnsBar ? 'pb-[var(--tab-bar-h)]' : ''}`} style={{ '--page-bottom': tabBarVisible ? 'var(--tab-bar-h)' : '0px' } as React.CSSProperties}>
+      {/* 레일이 있으면 바는 도구를 쓰는 화면이 있을 때만 있다 — 페이지(대화 본문)가 쓸 때만 그 높이를 비운다 */}
+      <main className={`relative flex min-w-0 flex-1 flex-col ${barLifts ? 'pb-[var(--tab-bar-h)]' : ''}`} style={{ '--page-bottom': (railMode ? barLifts : tabBarVisible) ? 'var(--tab-bar-h)' : '0px' } as React.CSSProperties}>
         {/* 설정·대화 페이지는 본문을 덮는다 — 열린 문서·편집 중인 초안을 내리지 않으려고 숨기지 않고 위에 얹는다 (SCR-140 개정·SCR-188).
             z-[45]: 뷰어 크롬(z-20)·질문 패널 오버레이(z-30)·브리핑 기사 시트(z-40)보다 위, 확인창·팔레트·토스트(z-50)보다 아래.
             터치는 탭 바 자리(bottom)를 비워 탭 바가 보인다 */}
@@ -2357,7 +2433,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <div className={channelLayerClass}>
             <ChannelSplit
               narrow={narrow}
-              underBar={channelReading}
+              underBar={channelReading && !railMode}
+              collapsed={IS_TOUCH && !narrow && panelCollapsed}
               empty="왼쪽에서 회차를 고르면 여기에 열립니다"
               reader={channelReader('feed')}
               list={
@@ -2380,7 +2457,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           <div className={channelLayerClass}>
             <ChannelSplit
               narrow={narrow}
-              underBar={channelReading}
+              underBar={channelReading && !railMode}
+              collapsed={IS_TOUCH && !narrow && panelCollapsed}
               empty="왼쪽에서 호를 고르면 여기에 열립니다"
               reader={channelReader('trade')}
               list={

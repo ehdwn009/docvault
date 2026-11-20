@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import { useLongPress } from '../../lib/longPress';
 import Icon from '../Icon';
 
@@ -35,11 +35,13 @@ type Props = {
   /** 눌리지 않는 행(값만 보여 주는 줄) */
   as?: 'button' | 'div';
   className?: string;
+  /** 왼쪽으로 들여 쓸 px — 그 자리에서 펼치는 폴더 트리의 깊이 (넓은 터치 화면의 문서 목록) */
+  indent?: number;
 };
 
 // 묶음 카드(Group)의 한 행 — 아이콘 · 제목/둘째 줄 · 오른쪽 값 · ›. 터치 44px 이상.
 // 행 안에 "…" 단추를 두지 않는다: 누르기=열기, 길게 누르기=메뉴, 옆으로 밀기=빠른 동작 (폰 A안 규칙)
-export default function GroupRow({ icon, tint, iconClass = 'text-slate-400', title, subtitle, right, chevron = false, selected = false, danger = false, onClick, onContextMenu, onLongPress, wrap = false, as, className = '' }: Props) {
+export default function GroupRow({ icon, tint, iconClass = 'text-slate-400', title, subtitle, right, chevron = false, selected = false, danger = false, onClick, onContextMenu, onLongPress, wrap = false, as, className = '', indent = 0 }: Props) {
   const lp = useLongPress(onLongPress);
   const Tag = as ?? (onClick ? 'button' : 'div');
   const hasIcon = icon !== undefined;
@@ -52,6 +54,8 @@ export default function GroupRow({ icon, tint, iconClass = 'text-slate-400', tit
       }}
       onContextMenu={onContextMenu}
       {...lp.handlers}
+      // 들여 쓴 만큼 행 사이 선도 같이 들인다(--row-inset은 index.css의 .dv-group이 읽는다)
+      style={indent > 0 ? ({ paddingLeft: 16 + indent, '--row-inset': `${(hasIcon ? 58 : 16) + indent}px` } as CSSProperties) : undefined}
       className={`dv-row relative flex min-h-11 w-full items-center gap-3 px-4 py-2 text-left transition select-none touch-callout-none ${
         hasIcon ? '[--row-inset:58px]' : '[--row-inset:16px]'
       } ${selected ? 'bg-slate-800/60' : onClick ? 'active:bg-slate-800/40 pc:hover:bg-slate-800/30' : ''} ${danger ? 'text-danger-400' : 'text-slate-100'} ${className}`}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import Icon, { FILE_TYPE_ICON } from '../components/Icon';
 import Group from '../components/ui/Group';
 import GroupRow from '../components/ui/GroupRow';
@@ -11,7 +11,7 @@ import { IS_PC, IS_TOUCH } from '../lib/device';
 import { kstToday, longDate } from '../lib/briefing';
 import { btnClass } from './settings/SettingRow';
 import HomeDigest from './HomeDigest';
-import { MeButton } from '../lib/topNav';
+import { MeButton, TopNavContext } from '../lib/topNav';
 
 /** 이어 읽기에 보여 주는 최근 열람 수 · 최근 대화 수 */
 const RECENT_FILES = 5;
@@ -59,6 +59,8 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
     .sort((a, b) => (b.state.lastOpenedAt ?? 0) - (a.state.lastOpenedAt ?? 0))
     .slice(0, RECENT_FILES);
 
+  // 머리 단추 문맥(lib/topNav)이 있으면 레일이 없는 폰 — 종과 돋보기를 머리에 둔다
+  const headTools = useContext(TopNavContext) !== null;
   // 아래 "오늘의 브리핑"과 같은 기준(한국 시각) — 자정 전후에 둘이 다른 날짜가 되지 않게
   const dateChip = longDate(kstToday());
   // 폰 A안: 섹션 이름은 묶음 카드 위 작은 이름, 목록은 카드 한 장 (PC는 그대로)
@@ -89,6 +91,9 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
             <h2 className="truncate text-[30px] font-bold leading-tight tracking-tight">홈</h2>
           </div>
           <span className="mb-2 text-xs text-slate-500">{dateChip}</span>
+          {/* 넓은 터치 화면은 왼쪽 레일에 종·돋보기·나가 있다 — 머리에는 두지 않는다 */}
+          {headTools && (
+          <>
           <button onClick={onOpenNotifications} className="relative mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-slate-200 active:opacity-70" aria-label={unread > 0 ? `알림 ${unread}개` : '알림'}>
             <Icon name="bell" size={19} />
             {unread > 0 && (
@@ -100,6 +105,8 @@ export default function Home({ user, settings, files, onOpenFile, onOpenFileById
           <button onClick={onSearch} className="mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-accent-400 active:opacity-70" aria-label="검색">
             <Icon name="search" size={19} />
           </button>
+          </>
+          )}
           <MeButton />
         </div>
       ) : (

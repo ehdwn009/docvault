@@ -262,3 +262,25 @@ mark.dv-source { background: rgb(250 204 21 / 0.5); color: inherit; }
 
 /* 문서 속 내 카드 용어 — 점선 밑줄. 배경은 안 칠한다 (형광펜은 출처 전용) */
 ::highlight(dv-term) { text-decoration: underline dotted rgb(20 184 166 / 0.9); }
+
+/* ── 워크스페이스 껍데기의 폭 변수 (IA — 넓은 터치 화면의 세로 레일, v0.73) ──────────
+   --rail-w: 왼쪽 세로 레일의 폭. PC는 48px(w-12), 펼친 폰처럼 넓은 터치 화면은 Workspace가 인라인으로 64px, 그 밖(접은 폰)은 0.
+   --main-w: 레일을 뺀 본문 폭. --channel-list-w: 브리핑·동향 탭의 목록 열 너비 — 본문 폭의 42%(300~400px),
+   창이 1228px 이상이면 읽는 칸에 880px(회차 화면이 두 칸이 되는 폭, BriefingView WIDE_MIN_PX)를 먼저 내주고 남는 폭(300~400px).
+   한 곳에서 정하는 이유: 목록 열(ChannelSplit)과 아래 도구 바의 왼쪽 끝(Workspace)이 같은 값을 써야 세로 선이 이어진다.
+   변수를 :root가 아니라 껍데기에 두는 이유: --rail-w를 인라인으로 덮어쓴 그 요소에서 계산돼야 한다 */
+.dv-shell {
+  --rail-w: 0px;
+  --main-w: calc(100vw - var(--sa-left) - var(--sa-pad-right) - var(--rail-w));
+  --channel-list-w: min(400px, max(300px, calc(var(--main-w) * 0.42)));
+}
+@media (hover: hover) and (pointer: fine) {
+  .dv-shell {
+    --rail-w: 48px;
+  }
+}
+@media (min-width: 1228px) {
+  .dv-shell {
+    --channel-list-w: clamp(300px, calc(var(--main-w) - 880px), 400px);
+  }
+}

@@ -11,16 +11,16 @@ type Props = {
   empty: string;
   /** 읽는 칸이 아래 바 밑까지 깔려 있다(터치에서 읽는 중) — 넓은 화면의 목록 열은 바에 가리지 않게 바닥을 비운다 */
   underBar?: boolean;
+  /** 넓은 화면에서 목록 열을 접는다(읽는 칸이 있을 때만) — 펼친 폰을 세로로 쥐면 읽는 칸이 좁아서 */
+  collapsed?: boolean;
 };
 
-/** 넓은 화면의 목록 열 너비 — 아래 바의 탭 칸(Workspace)도 이 값을 써서 세로 선이 이어진다.
- *  기본은 폭의 42%(300~400px). 창이 1228px 이상이면 읽는 칸에 880px를 먼저 내준다 — 회차 화면이 두 칸(목록 + 기사)이 되는 폭이라서
- *  (BriefingView WIDE_MIN_PX). 1228 = PC 레일 48 + 목록 최소 300 + 880. 1280px 화면에서 회차가 한 칸으로 줄지 않게 */
-export const CHANNEL_LIST_WIDTH = 'w-[min(400px,max(300px,42%))] min-[1228px]:w-[clamp(300px,calc(100%-880px),400px)]';
+/** 넓은 화면의 목록 열 너비 — 값은 index.css의 .dv-shell(--channel-list-w)이 정한다. 아래 바(Workspace)도 같은 변수를 쓴다 */
+export const CHANNEL_LIST_WIDTH = 'w-[var(--channel-list-w)]';
 
 // 브리핑·동향 탭의 뼈대 — 넓으면 "왼쪽 목록 | 오른쪽 읽는 칸", 좁으면 읽는 칸이 목록 위에 열린다.
 // 회차·정리본이 문서 탭으로 넘어가 열리던 것을 그 탭 안에서 열리게 한다 (IA — 탭 안의 읽는 칸 2026-11-20)
-export default function ChannelSplit({ list, reader, narrow, empty, underBar = false }: Props) {
+export default function ChannelSplit({ list, reader, narrow, empty, underBar = false, collapsed = false }: Props) {
   if (narrow) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -33,7 +33,8 @@ export default function ChannelSplit({ list, reader, narrow, empty, underBar = f
   }
   return (
     <div className="flex min-h-0 flex-1">
-      <div className={`flex min-h-0 ${CHANNEL_LIST_WIDTH} shrink-0 flex-col border-r border-slate-800 ${underBar ? 'pb-[var(--tab-bar-h)]' : ''}`}>{list}</div>
+      {/* 접어도 지우지 않는다 — 펼쳤을 때 스크롤 자리와 불러온 내용이 그대로 */}
+      <div className={`${collapsed && reader ? 'hidden' : 'flex'} min-h-0 ${CHANNEL_LIST_WIDTH} shrink-0 flex-col border-r border-slate-800 ${underBar ? 'pb-[var(--tab-bar-h)]' : ''}`}>{list}</div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {reader ?? <p className="m-auto px-6 text-center text-sm text-slate-600">{empty}</p>}
       </div>

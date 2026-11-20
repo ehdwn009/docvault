@@ -133,7 +133,8 @@ export default function TradePage({ user, onOpenFileById, activeFileId = null, a
                           <p className="text-[11.5px] text-slate-500">{k.label}</p>
                           <p className="truncate text-[15px] font-bold tabular-nums">{k.value}</p>
                           {k.lines.map((line) => (
-                            <p key={line} className="truncate text-xs text-slate-400">{line}</p>
+                            // 좁은 목록 열(펼친 폰의 세로 레일 옆)에서 "+365.0억 달러"가 잘리지 않게 줄을 바꾼다
+                            <p key={line} className="text-xs leading-snug text-slate-400">{line}</p>
                           ))}
                         </div>
                       ))}

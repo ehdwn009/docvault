@@ -42,9 +42,10 @@ export default function UploadStrip({ state, onCancel, onClose }: Props) {
     return () => window.clearInterval(t);
   }, [state.phase]);
 
+  // 왼쪽은 넓은 터치 화면의 세로 레일만큼 비킨다(--touch-rail-w는 Workspace가 :root에 적는다 — 레일이 없으면 0)
   // body에 포털로, z-50: 작업 공간 안에서 그리면 조상 층에 갇혀 홈·설정 페이지(z-45) 아래로 숨었다 — 알림함과 같은 처방
   const box =
-    'fixed z-50 w-[calc(100%-24px)] max-w-sm rounded-xl border bg-panel px-3.5 py-2.5 shadow-xl left-3 bottom-[calc(var(--tab-bar-h)+12px)] pc:left-auto pc:right-4 pc:bottom-4';
+    'fixed z-50 w-[calc(100%-24px)] max-w-sm rounded-xl border bg-panel px-3.5 py-2.5 shadow-xl left-[calc(var(--touch-rail-w,0px)+12px)] bottom-[calc(var(--tab-bar-h)+12px)] pc:left-auto pc:right-4 pc:bottom-4';
 
   if (state.phase === 'uploading') {
     const pct = state.total > 0 ? Math.min(100, Math.round((state.loaded / state.total) * 100)) : 0;

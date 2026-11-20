@@ -61,19 +61,55 @@ type Props = {
   jump?: { to: 'shared' | 'favorites'; n: number } | null;
   /** 값이 바뀌면 뿌리(내 파일 맨 위)로 — 탭 재탭 */
   rootSignal?: number;
+  /** 넓은 터치 화면의 사이드바 — 폴더를 다음 화면으로 들어가지 않고 그 자리에서 펴고 접는다 (사용자 결정 2026-11-20). 격자 보기에서는 쓰지 않는다 */
+  tree?: boolean;
+  /** 사이드바 접기 단추 — 있으면 머리에 그린다 (넓은 터치 화면) */
+  onCollapse?: () => void;
 };
+
+/** 펼쳐 둔 폴더 기억(기기별) — 사이드바를 접었다 펴거나 앱을 다시 켜도 그대로 */
+const TREE_OPEN_KEY = 'dv_tree_open';
+/** 트리 한 단계의 들여쓰기(px) */
+const TREE_INDENT = 18;
+function readOpenFolders(): Set<number> {
+  try {
+    const v = JSON.parse(localStorage.getItem(TREE_OPEN_KEY) ?? '[]') as unknown;
+    return new Set(Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : []);
+  } catch {
+    return new Set();
+  }
+}
 
 const ICON_SIZE = 21;
 
 // SCR-110 (폰 A안, 2026-10-31): 문서 탭 — 큰 제목 + [+]·[⋯], 검색 칸, 묶음 카드(즐겨찾기·공유받음 / 폴더·문서 / 휴지통).
 // 폴더는 펼치지 않고 다음 화면으로 들어간다(아이폰 파일 앱처럼, ‹·뒤로 가기로 나온다). 행에는 단추가 없다 —
 // 누르기=열기, 길게 누르기=메뉴, 옆으로 밀기=빠른 동작. 정렬·보기·태그·선택은 머리의 ⋯ 안에 (사용자 결정 2026-10-31)
-export default function FilesBrowser({ folders, files, pending, allFiles, tags, isAdmin, selectedId, onSelect, onSelectShared, actions, onToggleFavorite, checked, onCheckChange, onBulkDownload, onBulkMove, onBulkDelete, swipe, sortBy, onSortChange, viewMode, onViewModeChange, tagFilter, onTagFilterChange, selectedFolderId, onSelectFolder, onOpenTrash, onSearch, jump = null, rootSignal = 0 }: Props) {
+export default function FilesBrowser({ folders, files, pending, allFiles, tags, isAdmin, selectedId, onSelect, onSelectShared, actions, onToggleFavorite, checked, onCheckChange, onBulkDownload, onBulkMove, onBulkDelete, swipe, sortBy, onSortChange, viewMode, onViewModeChange, tagFilter, onTagFilterChange, selectedFolderId, onSelectFolder, onOpenTrash, onSearch, jump = null, rootSignal = 0, tree = false, onCollapse }: Props) {
   const [stack, setStack] = useState<View[]>([{ kind: 'root' }]);
   const cur = stack[stack.length - 1]!;
   const [menu, setMenu] = useState<Menu | null>(null);
   const [movePick, setMovePick] = useState<TreeFile | null>(null);
   const [shared, setShared] = useState<{ folders: SharedFolder[]; files: SharedFile[] } | null>(null);
+  /** 트리로 그리는 중 — 격자 보기는 한 폴더씩 보는 화면이라 트리로 그리지 않는다 */
+  const asTree = tree && viewMode === 'list';
+  const [openFolders, setOpenFolders] = useState<Set<number>>(readOpenFolders);
+  const setOpen = (next: Set<number>) => {
+    setOpenFolders(next);
+    try {
+      localStorage.setItem(TREE_OPEN_KEY, JSON.stringify([...next]));
+    } catch {
+      /* 저장이 막혀도 이번에는 펼친다 */
+    }
+  };
+  const toggleFolder = (id: number) => {
+    const next = new Set(openFolders);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setOpen(next);
+    // [+]의 대상 = 마지막으로 펼친 폴더. 접으면 한 칸 위(맨 위 폴더를 접었으면 폴더 밖)로 돌아간다
+    onSelectFolder(next.has(id) ? id : (folders.find((f) => f.id === id)?.parentId ?? null));
+  };
 
   // ── 화면 쌓기 — 한 칸 들어갈 때마다 기록에 층 하나. ‹는 그 층을 스스로 닫고, 뒤로 가기는 층 쪽에서 닫는다 ──
   const layers = useRef<(() => void)[]>([]);
@@ -102,10 +138,17 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
   useEffect(() => {
     if (cur.kind === 'root' || cur.kind === 'folder') onSelectFolder(curFolderId);
   }, [cur.kind, curFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 밖에서 폴더를 골랐다(속성창 › 위치) — 그 폴더로 들어간다
+  // 밖에서 폴더를 골랐다(속성창 › 위치) — 그 폴더로 들어간다. 트리에서는 들어가는 대신 그 폴더까지 펼친다
   useEffect(() => {
     if (selectedFolderId === null || selectedFolderId === curFolderId) return;
     if (!folders.some((f) => f.id === selectedFolderId)) return;
+    if (asTree) {
+      const next = new Set(openFolders);
+      const before = next.size;
+      for (let f = folders.find((x) => x.id === selectedFolderId); f && f.parentId !== null; f = folders.find((x) => x.id === f!.parentId)) next.add(f.parentId);
+      if (next.size !== before) setOpen(next);
+      return;
+    }
     toRoot();
     push({ kind: 'folder', id: selectedFolderId });
   }, [selectedFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -182,10 +225,25 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
       { label: '새 폴더', icon: 'folderPlus', onAction: () => actions.createFolder(folder.id) },
     ],
   });
-  const plusMenu = (): MenuItem[] => [
-    { label: '새 문서', icon: 'docPlus', action: () => actions.createDoc(curFolderId) },
-    { label: '파일 올리기', icon: 'upload', action: () => actions.uploadTo(curFolderId) },
-    { label: '새 폴더', icon: 'folderPlus', action: () => actions.createFolder(curFolderId) },
+  // 트리에서는 "지금 보는 폴더"가 없다 — 마지막으로 누른 폴더가 대상이고, 어디에 생기는지 메뉴 제목으로 알려 준다
+  const plusTarget = asTree && cur.kind === 'root' ? (folderById.get(selectedFolderId ?? -1)?.id ?? null) : curFolderId;
+  const plusMenu = (target: number | null = plusTarget): MenuItem[] => [
+    { label: '새 문서', icon: 'docPlus', action: () => actions.createDoc(target) },
+    { label: '파일 올리기', icon: 'upload', action: () => actions.uploadTo(target) },
+    { label: '새 폴더', icon: 'folderPlus', action: () => actions.createFolder(target) },
+    // 트리에서 폴더가 대상일 때 — 폴더를 접지 않고도 폴더 밖(맨 위)에 만들 수 있게
+    ...(asTree && target !== null
+      ? [
+          {
+            label: '폴더 밖(맨 위)에 만들기',
+            action: () => {
+              onSelectFolder(null);
+              // 지금 메뉴가 닫힌 뒤에 맨 위용 메뉴를 다시 연다
+              window.setTimeout(() => openSheet(plusMenu(null), '맨 위에'), 0);
+            },
+          },
+        ]
+      : []),
   ];
   const moreMenu = (): MenuItem[] => [
     ...(files.length > 0 ? [{ label: selectionMode ? '선택 끝내기' : '선택', icon: 'select' as const, action: () => onCheckChange(selectionMode ? new Set() : new Set([files[0]!.id])) }] : []),
@@ -203,7 +261,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
   const openSheet = (items: MenuItem[], title?: string) => setMenu({ x: 0, y: 0, items, title });
 
   // ── 행들 ──
-  const fileRow = (file: TreeFile) => {
+  const fileRow = (file: TreeFile, depth = 0) => {
     const isChecked = checked.has(file.id);
     const dots = file.tags.map((id) => <span key={id} className="h-2 w-2 rounded-full" style={{ background: tagColor.get(id) ?? '#71717a' }} />);
     return (
@@ -215,6 +273,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
           right={dots.length > 0 ? <span className="flex items-center gap-1">{dots}</span> : undefined}
           selected={isChecked || file.id === selectedId}
           wrap
+          indent={depth * TREE_INDENT}
           onClick={() => (selectionMode ? toggleCheck(file.id) : onSelect(file))}
           onLongPress={() => openSheet(fileMenu(file), file.name)}
         />
@@ -222,7 +281,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
     );
   };
   // 올리는 중인 줄 — 진짜 줄과 같은 모양이되 흐리고, 아래에 막대. 실패는 빨간 이유 한 줄
-  const pendingRow = (p: PendingUpload) => (
+  const pendingRow = (p: PendingUpload, depth = 0) => (
     <GroupRow
       key={`u${p.key}`}
       icon={<Icon name={p.status === 'error' ? 'info' : 'upload'} size={ICON_SIZE} />}
@@ -243,21 +302,58 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
       right={<span className={`text-[11px] ${p.status === 'error' ? 'text-danger-400' : 'text-slate-500'}`}>{p.status === 'error' ? '실패' : p.status === 'waiting' ? '대기' : `${pendingPercent(p)}%`}</span>}
       wrap
       as="div"
+      indent={depth * TREE_INDENT}
     />
   );
-  const folderRow = (folder: TreeFolder) => (
-    <SwipeRow key={`d${folder.id}`} {...(selectionMode ? {} : folderSwipe(folder))} surface="panel">
-      <GroupRow
-        icon={<Icon name="folder" size={ICON_SIZE} />}
-        iconClass="text-accent-400"
-        title={folder.name}
-        right={<span>{countIn(folder.id) || ''}</span>}
-        chevron
-        onClick={() => push({ kind: 'folder', id: folder.id })}
-        onLongPress={() => openSheet(folderMenu(folder), folder.name)}
-      />
-    </SwipeRow>
-  );
+  const folderRow = (folder: TreeFolder, depth = 0) => {
+    const isOpen = asTree && openFolders.has(folder.id);
+    return (
+      <SwipeRow key={`d${folder.id}`} {...(selectionMode ? {} : folderSwipe(folder))} surface="panel">
+        <GroupRow
+          icon={<Icon name="folder" size={ICON_SIZE} />}
+          iconClass="text-accent-400"
+          title={folder.name}
+          // 트리: ›가 펼치면 아래를 본다. 드릴다운: ›는 "다음 화면으로"
+          right={
+            asTree ? (
+              <span className="flex items-center gap-2">
+                {countIn(folder.id) || ''}
+                <Icon name="chevron" size={16} className={`-mr-1 text-slate-600 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+              </span>
+            ) : (
+              <span>{countIn(folder.id) || ''}</span>
+            )
+          }
+          chevron={!asTree}
+          selected={asTree && folder.id === selectedFolderId}
+          indent={depth * TREE_INDENT}
+          onClick={() => (asTree ? toggleFolder(folder.id) : push({ kind: 'folder', id: folder.id }))}
+          onLongPress={() => openSheet(folderMenu(folder), folder.name)}
+        />
+      </SwipeRow>
+    );
+  };
+  /** 트리 한 단계 — 폴더(펼쳐져 있으면 그 안까지), 올리는 중인 줄, 파일 순 */
+  const treeLevel = (parentId: number | null, depth: number): React.ReactNode[] => [
+    ...folders
+      .filter((f) => f.parentId === parentId)
+      .flatMap((f) => {
+        if (!openFolders.has(f.id)) return [folderRow(f, depth)];
+        const inner = treeLevel(f.id, depth + 1);
+        return [
+          folderRow(f, depth),
+          ...(inner.length > 0
+            ? inner
+            : [
+                <p key={`e${f.id}`} className="dv-row py-2.5 text-xs text-slate-600" style={{ paddingLeft: 16 + (depth + 1) * TREE_INDENT }}>
+                  비어 있어요
+                </p>,
+              ]),
+        ];
+      }),
+    ...pending.filter((p) => p.folderId === parentId).map((p) => pendingRow(p, depth)),
+    ...files.filter((f) => f.folderId === parentId).map((f) => fileRow(f, depth)),
+  ];
   const sharedFolderRow = (folder: SharedFolder) => (
     <GroupRow key={`s${folder.id}`} icon={<Icon name="folder" size={ICON_SIZE} />} iconClass="text-accent-400" title={folder.name} subtitle={folder.ownerName} chevron onClick={() => push({ kind: 'shared', folderId: folder.id })} />
   );
@@ -301,15 +397,21 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
         {viewMode === 'grid' ? (
           <Group title={groupTitle}>
             <div className="px-2 pt-2">
-              {subFolders.map(folderRow)}
+              {subFolders.map((f) => folderRow(f))}
               <FileGrid files={subFiles} folders={folders} selectedId={selectedId} onSelect={onSelect} />
             </div>
           </Group>
         ) : (
           <Group title={groupTitle}>
-            {subFolders.map(folderRow)}
-            {pending.filter((p) => p.folderId === parentId).map(pendingRow)}
-            {subFiles.map(fileRow)}
+            {asTree ? (
+              treeLevel(parentId, 0)
+            ) : (
+              <>
+                {subFolders.map((f) => folderRow(f))}
+                {pending.filter((p) => p.folderId === parentId).map((p) => pendingRow(p))}
+                {subFiles.map((f) => fileRow(f))}
+              </>
+            )}
             {subFolders.length === 0 && subFiles.length === 0 && empty(tagFilter !== null ? '이 태그의 문서가 없어요' : '아직 문서가 없어요. [+]로 새 문서를 만들거나 올려 보세요')}
           </Group>
         )}
@@ -323,7 +425,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
   } else if (cur.kind === 'favorites') {
     title = '즐겨찾기';
     backLabel = '문서';
-    body = <Group>{favorites.length === 0 ? empty('즐겨찾기가 없어요. 문서를 길게 누르거나 뷰어 위의 ★로 더해 보세요') : favorites.map(fileRow)}</Group>;
+    body = <Group>{favorites.length === 0 ? empty('즐겨찾기가 없어요. 문서를 길게 누르거나 뷰어 위의 ★로 더해 보세요') : favorites.map((f) => fileRow(f))}</Group>;
   } else {
     const parentId = cur.folderId;
     const prev = stack[stack.length - 2];
@@ -357,7 +459,7 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
         <h1 className="min-w-0 flex-1 truncate text-[30px] font-bold leading-tight tracking-tight">{title}</h1>
         {mine && (
           <div className="flex gap-2 pb-1">
-            <button onClick={() => openSheet(plusMenu())} className={circle} aria-label="새로 만들기">
+            <button onClick={() => openSheet(plusMenu(), plusTarget !== null && asTree ? `「${folderById.get(plusTarget)?.name ?? ''}」 안에` : undefined)} className={circle} aria-label="새로 만들기">
               <Icon name="plus" size={20} />
             </button>
             <button onClick={() => openSheet(moreMenu())} className={circle} aria-label="정렬·보기·선택">
@@ -366,6 +468,11 @@ export default function FilesBrowser({ folders, files, pending, allFiles, tags, 
           </div>
         )}
         {cur.kind === 'root' && <MeButton />}
+        {onCollapse && (
+          <button onClick={onCollapse} className={`${circle} mb-1`} aria-label="목록 접기">
+            <Icon name="sidebar" size={19} />
+          </button>
+        )}
       </div>
       {cur.kind === 'root' && (
         <button onClick={onSearch} className="mx-4 mb-1 flex min-h-10 items-center gap-2 rounded-[10px] bg-fill px-3 text-[15px] text-slate-500" aria-label="검색">
