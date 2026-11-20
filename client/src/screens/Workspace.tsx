@@ -66,7 +66,9 @@ import Viewer from './Viewer';
 import { keepExt, splitExt } from '../lib/fileName';
 import { formatDateTime } from '../lib/date';
 import { IS_TOUCH, useWindowClass } from '../lib/device';
+import ChannelSplit, { CHANNEL_LIST_WIDTH } from '../components/ChannelSplit';
 import { BottomSlotContext } from '../lib/bottomBar';
+import { pushLayer } from '../lib/layers';
 import { useNotifications } from '../lib/useNotifications';
 import type { PendingUpload } from '../lib/uploads';
 import { useVisualViewport } from '../lib/visualViewport';
@@ -236,11 +238,14 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }, [keyboardOpen, wc]);
   const narrow = IS_TOUCH && wc === 'narrow';
   const selectedRef = useRef<TreeFile | null>(null);
+  const canSeeBriefingRef = useRef(false);
   selectedRef.current = selected;
   /** 마지막으로 처리한 주소 — 주소가 그대로인 popstate(층 닫기)를 거르기 위해 */
   const lastPathRef = useRef(location.pathname);
   // 레이아웃(홈 중심 / 이전) — 설정의 스위치가 바꾸면 이벤트로 따라간다
   const [layout, setLayoutState] = useState<AppLayout>(getLayout);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   useEffect(() => {
     // 레일에 없는 패널이 남지 않게 — 즐겨찾기·공유·카드는 문서로, 대화↔AI, 브리핑은 홈으로 (검수 2026-10-31)
     const normalize = (p: Panel, l: AppLayout): Panel =>
@@ -383,15 +388,72 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
 
   const maxPanes = isWide ? 4 : 2;
 
-  // ---- 뉴스 브리핑 (SCR-190·147) — 회차는 평범한 파일이라 여는 길도 파일과 같다 ----
-  const openFileById = (id: number) =>
-    void resolveFile(id).then((f) => (f ? void selectFile(f) : toast('파일을 찾지 못했어요', 'error')));
+  // ---- 브리핑·동향 탭의 읽는 칸 — 회차와 수출입 동향 정리본·원문은 문서 탭이 아니라 그 탭 안에서 열린다 (IA — 탭 안의 읽는 칸 2026-11-20) ----
+  const [channelDoc, setChannelDoc] = useState<{ feed: TreeFile | null; trade: TreeFile | null }>({ feed: null, trade: null });
+  // 읽는 칸을 닫거나 다른 것으로 바꾸면 접힌 크롬(아래 바)을 되살린다 — 목록에는 스크롤로 되살려 줄 뷰어가 없다
+  useEffect(() => {
+    if (IS_TOUCH) showChrome();
+  }, [channelDoc.feed?.id, channelDoc.trade?.id]);
+  const channelDocRef = useRef(channelDoc);
+  channelDocRef.current = channelDoc;
+  /** 접은 폰에서 읽는 칸은 "열린 층" — 뒤로 가기가 그 탭의 목록으로 돌아가게 기록에 쌓는다 */
+  const channelLayerRef = useRef<(() => void) | null>(null);
+  const closeChannelDoc = useCallback((ch: 'feed' | 'trade') => {
+    setChannelDoc((prev) => ({ ...prev, [ch]: null }));
+    const dismiss = channelLayerRef.current;
+    channelLayerRef.current = null;
+    dismiss?.();
+  }, []);
+  const openInChannel = (ch: 'feed' | 'trade', f: TreeFile) => {
+    setChannelDoc((prev) => ({ ...prev, [ch]: f }));
+    if (panelRef.current !== ch) openPage(ch);
+    if (narrow && !channelLayerRef.current) {
+      channelLayerRef.current = pushLayer(() => {
+        channelLayerRef.current = null;
+        setChannelDoc((prev) => ({ ...prev, [ch]: null }));
+      });
+    }
+  };
+  /** 파일을 번호로 연다 — 종류에 따라 갈 곳이 다르다: 회차는 브리핑 탭, 수출입 동향은 동향 탭, 나머지는 문서 탭.
+   *  이전 레이아웃에는 브리핑 탭이 없어 회차는 전처럼 문서로 연다 */
+  const channelOf = (f: TreeFile): 'feed' | 'trade' | null =>
+    f.kind === 'trade' ? 'trade' : f.kind === 'briefing' && layoutRef.current === 'home' && canSeeBriefingRef.current ? 'feed' : null;
+  const openByKind = (f: TreeFile) => {
+    const ch = channelOf(f);
+    if (ch) openInChannel(ch, f);
+    else void selectFile(f);
+  };
+  // 한 번 만들어 두고 쓰는 처리기(뒤로 가기, 카드 출처, 푸시 쪽지)는 이 ref로 부른다 — 접고 편 뒤의 화면 폭과 지금 탭을 보게
+  const openByKindRef = useRef(openByKind);
+  openByKindRef.current = openByKind;
+  const openFileById = (id: number) => void resolveFile(id).then((f) => (f ? openByKind(f) : toast('파일을 찾지 못했어요', 'error')));
+  const openFileByIdRef = useRef(openFileById);
+  openFileByIdRef.current = openFileById;
+  // 앱이 이미 켜져 있을 때 푸시 알림을 누르면 서비스 워커가 "이 주소를 열어 달라"는 쪽지를 보낸다(창을 직접 옮기지 못하는 기기 — public/sw.js)
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; url?: string } | null;
+      if (!d || d.type !== 'dv:open' || typeof d.url !== 'string') return;
+      let path = '';
+      try {
+        path = new URL(d.url, location.origin).pathname; // 워커는 전체 주소로 보낼 수도 있다
+      } catch {
+        return;
+      }
+      const id = fileIdFromPath(path);
+      if (id !== null) openFileByIdRef.current(id);
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, []);
   /** 내 파일 최상위의 "뉴스 브리핑" 폴더 — 이름으로 찾는다(서버도 이름으로 찾는다) */
   const briefingFolderId = () => treeRef.current.folders.find((f) => f.parentId === null && f.name === BRIEFING_FOLDER_NAME)?.id ?? null;
   /** 회차 화면의 ‹ ›·회차 칩 — 보던 회차의 탭 자리를 새 회차로 바꾼다. 넘길 때마다 탭이 쌓이지 않게 */
   const swapBriefing = (fromId: number, toId: number) =>
     void resolveFile(toId).then((f) => {
       if (!f) return toast('회차를 찾지 못했어요', 'error');
+      // 브리핑 탭의 읽는 칸에서 넘긴 것이면 그 칸만 바꾼다
+      if (channelDocRef.current.feed?.id === fromId) return setChannelDoc((prev) => ({ ...prev, feed: f }));
       setTabs((prev) => (prev.some((t) => t.id === f.id) ? prev : prev.map((t) => (t.id === fromId ? f : t))));
       void selectFile(f);
     });
@@ -496,7 +558,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           return;
         }
         setQuoteJump(thread.quote ? { fileId: target.id, quote: thread.quote } : null);
-        await selectFile(target);
+        openByKindRef.current(target); // 출처가 회차면 브리핑 탭의 읽는 칸으로
       } catch (e) {
         toast(e instanceof ApiError ? e.message : '출처를 열지 못했습니다', 'error');
       }
@@ -760,10 +822,18 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         const ids = [...new Set([...(saved?.tabs ?? []), ...(id !== null ? [id] : [])])];
         const found = (await Promise.all(ids.map((x) => resolveFile(x)))).filter((f): f is TreeFile => f !== null);
         const byId = new Map(found.map((f) => [f.id, f]));
-        const linked = id !== null ? byId.get(id) : undefined;
+        const target = id !== null ? byId.get(id) : undefined;
+        // 주소가 회차·수출입 동향을 가리키면(푸시 알림으로 들어온 경우) 문서 칸에 펴지 않고 그 탭의 읽는 칸으로 보낸다
+        const channel = target && channelOf(target) !== null ? target : null;
+        const linked = channel ? undefined : target;
+        // v0.71까지 문서 탭에 열어 두었던 회차·수출입 동향도 탭·칸 목록에서 뺀다 — 이제 그 탭의 읽는 칸에서만 연다
+        for (const f of found.filter((x) => channelOf(x) !== null)) {
+          found.splice(found.indexOf(f), 1);
+          byId.delete(f.id);
+        }
         // 홈 구조에서는 지난번 보던 문서를 다시 펼치지 않는다 — 앱을 켜면 홈이 먼저(사용자 결정 2026-11-01 "들어가면 왜 계속 이전에 봤던 게 나오냐").
         // 주소가 문서를 가리킬 때(새로고침·링크)만 그 문서 하나. 열어 둔 탭 목록은 그대로 기억한다(탭 바에서 다시 연다)
-        if (getLayout() === 'home') return { tabs: found, panes: linked ? [linked] : [], active: 0 };
+        if (getLayout() === 'home') return { tabs: found, panes: linked ? [linked] : [], active: 0, channel };
         let paneList = (saved?.panes ?? []).map((x) => byId.get(x)).filter((f): f is TreeFile => !!f);
         let active = Math.min(saved?.active ?? 0, Math.max(0, paneList.length - 1));
         // 주소가 가리키는 문서가 우선 — 이미 칸에 있으면 그 칸을, 없으면 활성 칸 자리에 둔다
@@ -773,9 +843,19 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           else if (paneList.length === 0) paneList = [linked];
           else paneList = paneList.map((f, i) => (i === active ? linked : f));
         }
-        return { tabs: found, panes: paneList, active };
+        return { tabs: found, panes: paneList, active, channel };
       }, []);
       restoredRef.current = true;
+      const openLinkedChannel = () => {
+        const f = restore.channel;
+        const ch = f ? channelOf(f) : null;
+        if (!f || !ch) return;
+        // 주소는 `/`로 — 읽는 칸은 주소에 남기지 않는다(뒤로 가기가 그 탭의 목록으로 돌아가는 층이다)
+        // #a=기사 같은 꼬리는 살린다 — 회차 화면이 뜬 뒤 그 기사를 연다
+        if (fileIdFromPath(location.pathname) === f.id) history.replaceState(null, '', `/${location.hash}`);
+        lastPathRef.current = location.pathname;
+        openInChannel(ch, f);
+      };
       if (restore.panes.length > 0) {
         // 주소를 되살린 문서에 맞춘다 — 홈 화면 앱은 다시 켜면 '/'에서 시작해, 화면은 문서인데 주소는 "문서 없음"이었다.
         // 그 상태에서 뒤로가기(브리핑 시트의 [목록] 등)를 쓰면 아래 popstate가 '/'를 보고 문서를 전부 닫았다 (2026-10-19)
@@ -788,8 +868,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         docOriginRef.current = getLayout() === 'home' ? 'home' : 'files'; // 되살린 문서의 ‹는 홈으로
         setPanel((p) => (p === 'home' ? 'files' : p)); // 문서가 열리면 홈은 본문에서 비켜난다 — 그새 연 설정·AI는 그대로 (IA — 안 B 홈)
         if (saved?.ratio) setSplitRatio(saved.ratio);
+        openLinkedChannel();
         return; // 문서 본문까지 받은 뒤 뷰어가 finishBoot를 부른다
       }
+      openLinkedChannel();
       finishBoot();
     })();
     void timed('설정 (/me/settings)', () => api<{ settings: UserSettings }>('/me/settings'), ['/me/settings'])
@@ -879,7 +961,15 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
         }
         setPanes([]);
         if (getLayout() === 'home') setPanel('home'); // `/`의 첫 화면은 홈 (IA — 안 B 홈)
-      } else void resolveFile(id).then((f) => f && void selectFile(f, { pushUrl: false }));
+      } else
+        void resolveFile(id).then((f) => {
+          if (!f) return;
+          if (channelOf(f) === null) return void selectFile(f, { pushUrl: false });
+          // 예전 기록(`/f/{회차}`)에 닿았다 — 문서로 펴지 않고 그 탭의 읽는 칸으로, 주소는 `/`로 고쳐 둔다
+          history.replaceState(null, '', `/${location.hash}`);
+          lastPathRef.current = location.pathname;
+          openByKindRef.current(f);
+        });
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
@@ -1579,6 +1669,48 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   );
   // 열람 계정(일반 사용자)은 관리자가 설정에서 골라 준 경우에만 — 그 사실은 /me/settings의 briefingOwnerId로 온다 (v0.49)
   const canSeeBriefing = user.role === 'admin' || (settings.briefingOwnerId ?? null) !== null;
+  canSeeBriefingRef.current = canSeeBriefing;
+  /** 브리핑·동향 탭의 읽는 칸 — 문서 탭의 뷰어와 같은 뷰어를 그 탭 안에 놓는다(AI 질문·목차·글자 크기 그대로) */
+  const channelReader = (ch: 'feed' | 'trade') => {
+    const f = channelDoc[ch];
+    if (!f) return null;
+    return (
+      <Viewer
+        key={f.id}
+        file={f}
+        settings={settings}
+        immersive={immersive}
+        onToggleImmersive={() => setImmersive((v) => !v)}
+        onContentSaved={() => void loadTree()}
+        onStateChanged={() => void loadTree()}
+        onToggleFavorite={toggleFavorite}
+        onDirtyChange={(d) => {
+          if (d) dirtyMapRef.current.set(f.id, true);
+          else dirtyMapRef.current.delete(f.id);
+        }}
+        isActive
+        onOpenLink={(path, split) => openByPath(f, path, split)}
+        onOpenFile={(target) => void selectFile(target)}
+        onSwapBriefing={(toId) => swapBriefing(f.id, toId)}
+        onOpenSource={(tid) => void openSource(tid)}
+        onOpenCard={(title) => void openCardByTitle(title)}
+        onShowProperties={() => setPropsTarget({ kind: 'file', file: f })}
+        onTrash={
+          f.kind === 'briefing'
+            ? () => {
+                actions.deleteFile(f.id);
+                closeChannelDoc(ch);
+              }
+            : undefined
+        }
+        terms={terms}
+        jumpQuote={quoteJump?.fileId === f.id ? quoteJump.quote : undefined}
+        onBackToList={narrow ? () => closeChannelDoc(ch) : undefined}
+        askTwoColumn={!narrow}
+        onEditModeChange={IS_TOUCH ? setEditing : undefined}
+      />
+    );
+  };
   /** 본문 전체 페이지(설정·대화) 열기 — 닫을 때 돌아갈 패널을 기억한다 */
   const openPage = (p: Panel) => {
     if (!PAGE_PANELS.has(panel)) panelBeforePage.current = panel;
@@ -1641,6 +1773,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     if (PAGE_PANELS.has(target)) {
       // 같은 탭을 다시 누르면 그 탭의 뿌리(목록)로 — 닫는 게 아니다 (폰 감사 2026-10-31)
       if (panel === target) {
+        if (target === 'feed' || target === 'trade') closeChannelDoc(target);
         if (target === 'ai') setAiListSignal((n) => n + 1);
         if (target === 'settings') setSettingsRootSignal((n) => n + 1);
         return;
@@ -1673,6 +1806,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   const barSlotUsed = barSlotOwners > 0;
   /** 바의 슬롯을 문서(뷰어)가 쓰는 중 — 페이지(홈·AI·나)가 아닐 때 슬롯이 차 있으면 뷰어다 */
   const docOwnsBar = barSlotUsed && !PAGE_PANELS.has(panel);
+  // 브리핑·동향 탭에서 읽는 중(터치) — 읽는 칸도 문서 탭의 뷰어처럼 바 밑까지 깔리고 바가 그 위에 얹혀야 한다(스크롤로 바가 숨어도 빈 띠가 안 남게).
+  // 그러려면 탭 화면 층이 z-index로 자기만의 쌓임 맥락을 만들면 안 된다 — 바(z-30)와 뷰어의 시트(z-40)가 같은 맥락에서 겨뤄야 문서 탭과 같은 순서가 된다.
+  // 대신 밑에 깔린 문서 칸은 보이지 않게 해서(내리지는 않는다) 그 헤더(z-20)가 비치지 않게 한다
+  const channelReading = IS_TOUCH && (panel === 'feed' || panel === 'trade') && channelDoc[panel] !== null;
+  const channelLayerClass = channelReading
+    ? 'absolute inset-0 flex flex-col bg-slate-950'
+    : 'absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]';
   const tabBar = (
     <nav
       ref={tabBarRef}
@@ -1684,7 +1824,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
       style={barTop !== null ? { top: barTop, bottom: 'auto' } : { bottom: 0 }}
     >
-      <div className={`flex ${narrow ? 'flex-1' : 'w-[300px] shrink-0 border-r border-hair'} ${narrow && barSlotUsed ? 'hidden' : ''}`}>
+      <div className={`flex ${narrow ? 'flex-1' : `${panel === 'feed' || panel === 'trade' ? CHANNEL_LIST_WIDTH : 'w-[300px]'} shrink-0 border-r border-hair`} ${narrow && barSlotUsed ? 'hidden' : ''}`}>
       {(
         (layout === 'home'
           ? [
@@ -2182,7 +2322,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               user={user}
               settings={settings}
               files={tree.files}
-              onOpenFile={(f) => void selectFile(f)}
+              // 홈의 "최근 문서"에 회차가 섞여 있어도 브리핑 탭에서 열리게 — 문서 탭의 목록·검색에서 고른 것만 문서로 연다
+              onOpenFile={openByKind}
               onOpenFileById={openFileById}
               onOpenThread={(id) => {
                 setAiThreadId(id);
@@ -2213,27 +2354,47 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </div>
         )}
         {panel === 'feed' && canSeeBriefing && (
-          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
-            <FeedPage
-              readOnly={user.role !== 'admin'}
-              onOpenFile={openFileById}
-              onOpenSettings={() => openSettings({ category: 'briefing' })}
-              onOpenSources={() => {
-                closePage();
-                openBriefingSources();
-              }}
+          <div className={channelLayerClass}>
+            <ChannelSplit
+              narrow={narrow}
+              underBar={channelReading}
+              empty="왼쪽에서 회차를 고르면 여기에 열립니다"
+              reader={channelReader('feed')}
+              list={
+                <FeedPage
+                  readOnly={user.role !== 'admin'}
+                  onOpenFile={openFileById}
+                  autoOpen={!narrow && channelDoc.feed === null}
+                  activeFileId={channelDoc.feed?.id ?? null}
+                  onOpenSettings={() => openSettings({ category: 'briefing' })}
+                  onOpenSources={() => {
+                    closePage();
+                    openBriefingSources();
+                  }}
+                />
+              }
             />
           </div>
         )}
         {panel === 'trade' && (
-          <div className="absolute inset-0 z-[45] flex flex-col bg-slate-950 touch:bottom-[var(--page-bottom)]">
-            <TradePage
-              user={user}
-              onOpenFileById={openFileById}
-              onCopy={(id) => {
-                actions.copyFile(id);
-                toast('내 문서에 사본을 만들었어요', 'success');
-              }}
+          <div className={channelLayerClass}>
+            <ChannelSplit
+              narrow={narrow}
+              underBar={channelReading}
+              empty="왼쪽에서 호를 고르면 여기에 열립니다"
+              reader={channelReader('trade')}
+              list={
+                <TradePage
+                  user={user}
+                  onOpenFileById={openFileById}
+                  activeFileId={channelDoc.trade?.id ?? null}
+                  autoOpen={!narrow && channelDoc.trade === null}
+                  onCopy={(id) => {
+                    actions.copyFile(id);
+                    toast('내 문서에 사본을 만들었어요', 'success');
+                  }}
+                />
+              }
             />
           </div>
         )}
@@ -2316,7 +2477,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           />
         )}
         {panes.length > 0 ? (
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className={`relative flex min-h-0 flex-1 flex-col ${channelReading ? 'invisible' : ''}`}>
           <SplitLayout
             panes={panes}
             activeIdx={activeIdx}
@@ -2445,7 +2606,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       {paletteOpen && (
         <CommandPalette
           files={tree.files}
-          onPick={(f) => void selectFile(f)}
+          // 검색에 걸린 회차도 브리핑 탭에서 연다 — 어디서 고르든 회차는 한 곳에서 읽는다
+          onPick={openByKind}
           onClose={() => setPaletteOpen(false)}
         />
       )}

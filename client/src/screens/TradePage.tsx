@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '../components/Icon';
 import Group from '../components/ui/Group';
 import GroupRow from '../components/ui/GroupRow';
@@ -9,6 +9,10 @@ import { HomeButton, MeButton } from '../lib/topNav';
 type Props = {
   user: User;
   onOpenFileById: (id: number) => void;
+  /** 읽는 칸에 열려 있는 파일 — 그 줄을 표시한다 */
+  activeFileId?: number | null;
+  /** 넓은 화면에서 읽는 칸이 비어 있으면 최신 호를 알아서 연다 */
+  autoOpen?: boolean;
   /** 내 문서로 복사(API-037) — 사본은 문서 탭의 보통 문서가 된다 */
   onCopy: (id: number) => void;
 };
@@ -43,7 +47,7 @@ function PendingBanner({ p }: { p: TradePending }) {
 }
 
 // SCR-195: 동향 탭 — 수출입 동향의 최신 호 큰 카드와 지난 호. 원문 PDF와 정리본은 문서 탭에 나오지 않고 여기서만 보인다 (수출입 동향 설계 3·4단계)
-export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
+export default function TradePage({ user, onOpenFileById, activeFileId = null, autoOpen = false, onCopy }: Props) {
   const [view, setView] = useState<TradeView | null>(null);
   const [failed, setFailed] = useState(false);
   const [rerun, setRerun] = useState<{ busy: boolean; note: string | null }>({ busy: false, note: null });
@@ -77,6 +81,15 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
 
   const latest = view?.latest ?? null;
   const past = (view?.releases ?? []).slice(1);
+  // 넓은 화면 — 탭에 들어오면 최신 호(정리본이 있으면 정리본, 없으면 원문)가 읽는 칸에 열려 있다
+  const autoPick = autoOpen && latest ? (latest.analysisFileId ?? latest.pdfFileId) : null;
+  const openRef = useRef(onOpenFileById);
+  openRef.current = onOpenFileById;
+  useEffect(() => {
+    if (autoPick !== null) openRef.current(autoPick);
+  }, [autoPick]);
+  /** 옆 읽는 칸에 이 호(정리본이든 원문이든)가 열려 있나 */
+  const isOpen = (r: TradeRelease) => activeFileId !== null && (r.analysisFileId === activeFileId || r.pdfFileId === activeFileId);
   const openBest = (r: TradeRelease) => {
     const id = r.analysisFileId ?? r.pdfFileId;
     if (id !== null) onOpenFileById(id);
@@ -144,17 +157,30 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
                 <p className="mt-3 text-sm text-slate-400">이 호는 정리본이 아직 없어요. 원문 PDF로 볼 수 있어요.</p>
               )}
               <div className="mt-3 flex flex-col gap-2">
-                {latest.analysisFileId !== null && (
-                  <button onClick={() => onOpenFileById(latest.analysisFileId!)} className="h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 active:opacity-80">
-                    정리 보기
-                  </button>
-                )}
+                {latest.analysisFileId !== null &&
+                  (latest.analysisFileId === activeFileId ? (
+                    // 옆 읽는 칸에 열려 있다 — 단추 대신 표시만 (넓은 화면)
+                    <p aria-current="true" className="grid h-12 w-full place-items-center rounded-xl border border-accent-500/60 text-[15px] font-semibold text-accent-300">
+                      정리 보는 중
+                    </p>
+                  ) : (
+                    <button onClick={() => onOpenFileById(latest.analysisFileId!)} className="h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 active:opacity-80">
+                      정리 보기
+                    </button>
+                  ))}
                 {latest.pdfFileId !== null && (
                   <button
                     onClick={() => onOpenFileById(latest.pdfFileId!)}
-                    className={latest.analysisFileId !== null ? 'h-11 w-full rounded-xl border border-slate-700 text-sm text-slate-200 transition hover:bg-slate-800' : 'h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 active:opacity-80'}
+                    aria-current={latest.pdfFileId === activeFileId ? 'true' : undefined}
+                    className={
+                      latest.pdfFileId === activeFileId
+                        ? 'h-11 w-full rounded-xl border border-accent-500/60 text-sm font-semibold text-accent-300'
+                        : latest.analysisFileId !== null
+                          ? 'h-11 w-full rounded-xl border border-slate-700 text-sm text-slate-200 transition hover:bg-slate-800'
+                          : 'h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 active:opacity-80'
+                    }
                   >
-                    원문 PDF 보기
+                    {latest.pdfFileId === activeFileId ? '원문 PDF 보는 중' : '원문 PDF 보기'}
                   </button>
                 )}
               </div>
@@ -191,7 +217,7 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
                       icon={<Icon name="chart" size={21} />}
                       tint={r.analysisFileId !== null ? 'accent' : undefined}
                       title={r.label}
-                      subtitle={`${monthDay(r.publishedDate)} 발표 · ${r.analysisFileId !== null ? '정리본 · 원문' : '원문'}`}
+                      subtitle={`${monthDay(r.publishedDate)} 발표 · ${isOpen(r) ? '보는 중' : r.analysisFileId !== null ? '정리본 · 원문' : '원문'}`}
                       chevron
                       onClick={() => openBest(r)}
                     />
@@ -201,7 +227,7 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
                 <div className="divide-y divide-slate-800 rounded-xl border border-slate-800">
                   {past.map((r) => (
                     <div key={r.period} className="flex min-h-12 items-center gap-3 px-3 py-2">
-                      <button onClick={() => openBest(r)} className="min-w-0 flex-1 truncate text-left text-sm text-slate-200 hover:text-accent-300">
+                      <button onClick={() => openBest(r)} className={`min-w-0 flex-1 truncate text-left text-sm hover:text-accent-300 ${isOpen(r) ? 'font-semibold text-accent-300' : 'text-slate-200'}`}>
                         {r.label}
                       </button>
                       <span className="shrink-0 text-xs text-slate-500">{monthDay(r.publishedDate)} 발표</span>

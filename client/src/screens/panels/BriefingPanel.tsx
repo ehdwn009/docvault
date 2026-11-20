@@ -34,6 +34,10 @@ type Props = {
   home?: boolean;
   /** 브리핑 탭(SCR-192) — 오늘 회차를 큰 카드와 큰 단추로 그린다. 홈의 작은 줄로 여는 것이 불편했다 (사용자 결정 2026-11-20) */
   big?: boolean;
+  /** 넓은 화면의 브리핑 탭에서 읽는 칸이 비어 있을 때 — 볼 회차를 알아서 연다 */
+  autoOpen?: boolean;
+  /** 옆 읽는 칸에 열려 있는 회차 — 목록에서 "읽는 중"으로 표시한다 (넓은 화면) */
+  activeFileId?: number | null;
 };
 
 /** API-135 — ownerName은 남의 회차를 보는 열람 계정에게만 온다 */
@@ -86,7 +90,7 @@ function stateText(e: EditionSummary): { text: string; cls: string } {
 // SCR-190: 뉴스 브리핑 패널 (v0.43 개편) — 회차의 보관함. 만들기·진행 → 오늘 회차 → 지난 브리핑(날짜별) → 자동·비용.
 // 실행 중에만 2초마다 상태를 다시 읽는다. 패널을 닫았다 열어도 같은 상태가 보인다(서버 실행 기록이 원천).
 // 열람 계정(readOnly)은 상태(API-131)를 읽지 않는다 — 관리자 전용이라 403이고, 보여 줄 것도 회차 목록뿐이다 (v0.49)
-export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources, home = false, big = false }: Props) {
+export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSettings, onOpenSources, home = false, big = false, autoOpen = false, activeFileId = null }: Props) {
   const [pastOpen, setPastOpen] = useState(!home);
   const [status, setStatus] = useState<BriefingStatus | null>(null);
   const [page, setPage] = useState<EditionPage | null>(null);
@@ -223,6 +227,17 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
     setRuns(r?.runs ?? []);
   }
 
+  // 넓은 화면의 브리핑 탭 — 읽는 칸이 비어 있으면 오늘 회차 중 덜 읽은 것(없으면 가장 최근 회차)을 연다. 탭에 들어온 것이 곧 읽으러 온 것이다.
+  // (아래의 이른 반환보다 앞에 둔다 — 훅은 매번 같은 순서로 불려야 한다)
+  const autoPick = (() => {
+    if (!autoOpen || !page) return null;
+    const mine = page.editions.filter((e) => e.editionDate === kstToday());
+    return (mine.find((e) => e.state !== 'done') ?? mine[0] ?? page.editions[0])?.fileId ?? null;
+  })();
+  useEffect(() => {
+    if (autoPick !== null) openRef.current(autoPick);
+  }, [autoPick]);
+
   // 관리자만 상태를 기다린다 — 열람 계정은 회차 목록이 오는 대로 그린다
   const admin = readOnly ? null : status;
   if (!readOnly && !admin) return <p className={`${home ? '' : 'px-4'} py-4 text-sm text-slate-600`}>불러오는 중…</p>;
@@ -278,12 +293,19 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
                     <p className="mt-1 text-xs text-slate-500">
                       {e.itemCount}건{e.leadCount > 0 ? ` · 핵심 ${e.leadCount}` : ''}{e.leadCount > 0 && e.state !== 'unread' ? ` · 핵심 ${e.leadRead}개 읽음` : ''}
                     </p>
-                    <button
-                      onClick={() => onOpenFile(e.fileId)}
-                      className={`mt-3 h-12 w-full rounded-xl text-[15px] font-semibold transition active:opacity-80 ${i === 0 ? 'bg-sky-600 text-white hover:bg-sky-500' : 'border border-slate-700 text-slate-200 hover:bg-slate-800'}`}
-                    >
-                      {e.state === 'unread' ? '읽기' : e.state === 'done' ? '다시 보기' : '이어서 읽기'}
-                    </button>
+                    {e.fileId === activeFileId ? (
+                      // 옆 읽는 칸에 열려 있는 회차 — 단추 대신 표시만 (넓은 화면)
+                      <p aria-current="true" className="mt-3 grid h-12 w-full place-items-center rounded-xl border border-accent-500/60 text-[15px] font-semibold text-accent-300">
+                        읽는 중
+                      </p>
+                    ) : (
+                      <button
+                        onClick={() => onOpenFile(e.fileId)}
+                        className={`mt-3 h-12 w-full rounded-xl text-[15px] font-semibold transition active:opacity-80 ${i === 0 ? 'bg-sky-600 text-white hover:bg-sky-500' : 'border border-slate-700 text-slate-200 hover:bg-slate-800'}`}
+                      >
+                        {e.state === 'unread' ? '읽기' : e.state === 'done' ? '다시 보기' : '이어서 읽기'}
+                      </button>
+                    )}
                   </div>
                 );
               }
@@ -402,9 +424,10 @@ export default function BriefingPanel({ readOnly = false, onOpenFile, onOpenSett
                         key={e.fileId}
                         onClick={() => onOpenFile(e.fileId)}
                         title={`${slotName(e.slot, e.label)} · ${e.itemCount}건`}
+                        aria-current={e.fileId === activeFileId ? 'true' : undefined}
                         className={`h-[30px] rounded-lg px-2.5 text-xs transition ${
                           e.state === 'done' ? 'bg-slate-900 text-slate-500 hover:text-slate-300' : 'bg-sky-950/60 font-semibold text-sky-300 hover:bg-sky-900/60'
-                        }`}
+                        } ${e.fileId === activeFileId ? 'ring-1 ring-accent-400' : ''}`}
                       >
                         {e.slot === 'adhoc' ? kstTime(e.createdAt, false) : slotShort(e.slot, e.label)}
                       </button>
