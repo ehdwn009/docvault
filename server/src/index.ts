@@ -19,6 +19,7 @@ import { briefingRoutes } from './routes/briefing.js';
 import { briefingJobRoutes } from './routes/briefingJobs.js';
 import { recoverStaleRuns } from './lib/briefing/run.js';
 import { startScheduler } from './lib/briefing/schedule.js';
+import { startTradeScheduler } from './lib/trade/schedule.js';
 import { cardRoutes } from './routes/cards.js';
 import { shareTargetRoutes } from './routes/share-target.js';
 import { authRoutes } from './routes/auth.js';
@@ -52,6 +53,8 @@ startTelegramPolling();
 recoverStaleRuns();
 // 자동 생성 시계 — 켜 둔 관리자가 없으면 1분마다 한 번 확인만 하고 끝난다
 startScheduler();
+// 수출입 동향 — 매달 1~10일 확인 창에서만 게시판을 본다. 처음 켜질 때는 최근 12개월 소급 (수출입 동향 설계 1단계)
+startTradeScheduler();
 
 const app = new Hono();
 

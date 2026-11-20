@@ -176,7 +176,7 @@ export type FileContent = {
 };
 
 /** 알림 종류 — 서버 constants NOTIFICATION_KINDS와 같은 순서 */
-export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] as const;
+export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'upload_done', 'export_done'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotifyPrefs = Partial<Record<NotificationKind, 0 | 1>>;
 export type QuietHours = { enabled: 0 | 1; start: string; end: string };

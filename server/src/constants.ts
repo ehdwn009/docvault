@@ -60,7 +60,42 @@ export const EXPORT = {
 } as const;
 
 /** 알림 종류 — 설정 화면의 켜고 끄기 목록도 이 순서 (알림 3단계) */
-export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] as const;
+export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'upload_done', 'export_done'] as const;
+
+/** 산업통상부 「월간 수출입 동향」 자동 수집 (수출입 동향 설계 2026-11-20, 1단계) */
+export const TRADE = {
+  /** trade_releases.source — 나중의 ICT 동향·관세청 잠정치가 같은 표에 다른 값으로 들어온다 */
+  SOURCE: 'motir_monthly',
+  ORIGIN: 'https://www.motir.go.kr',
+  /** 보도자료 게시판. 부처 개편으로 도메인·게시판 id가 바뀌면 여기만 고친다 (motie → motir 이력) */
+  BOARD_PATH: '/kor/article/ATCL3f49a5a8c',
+  /** "수출입 동향"으로 찾으면 붙여 쓴 「수출입동향」(2026년 8월호)이 빠진다 — 넓게 받고 서버에서 거른다 */
+  SEARCH_KEYWORD: '수출입',
+  /** 개인정보 없는 일반 이름 */
+  USER_AGENT: 'Loft-archive/1 (+private document archive)',
+  FETCH_TIMEOUT_MS: 30_000,
+  /** 목록·상세 HTML 한 쪽 상한 (실측 110KB) */
+  PAGE_MAX_BYTES: 3 * 1024 * 1024,
+  /** PDF 상한 — 실측 최대 2.44MB(2026년 6월호)라 브리핑 본문 상한 2MB는 못 쓴다 */
+  PDF_MAX_BYTES: 30 * 1024 * 1024,
+  /** 소급처럼 여러 번 연달아 부를 때 요청 사이 간격 — 사이트 예의 */
+  REQUEST_GAP_MS: 3_000,
+  FOLDER_NAME: '수출입동향',
+  /** app_settings 열쇠 — 「수출입동향」 폴더 id */
+  FOLDER_SETTING_KEY: 'trade_folder_id',
+  /** 1일 확인 시각(한국시간). 보도는 11:00이지만 게시판에 오르는 시각은 모른다 — 시각 하나에 걸지 않고 창을 둔다 */
+  DAY1_CHECKS: ['11:10', '13:00', '18:00'],
+  /** 2일부터 LAST_DAY까지 매일 이 시각에 다시 본다 */
+  LATER_CHECK: '10:00',
+  LAST_DAY: 10,
+  /** 이날 LATER_CHECK에도 없으면 "직접 확인해 주세요" 알림 (1일 마지막 확인 때는 "아직 안 올라왔어요") */
+  GIVE_UP_NOTICE_DAY: 4,
+  /** 처음 켜질 때(표가 비어 있을 때) 채우는 달 수 */
+  BACKFILL_MONTHS: 12,
+  /** 소급 때 목록을 넘겨 보는 최대 쪽 수 (한 쪽 10줄) */
+  BACKFILL_MAX_PAGES: 30,
+  TICK_MS: 60_000,
+} as const;
 
 /** 텔레그램 봇 통로 (API-167~170, 알림 3단계 2026-11-05) */
 export const TELEGRAM = {

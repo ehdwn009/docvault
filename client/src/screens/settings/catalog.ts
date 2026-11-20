@@ -66,6 +66,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { category: 'notifications', item: 'thisDevice', title: '이 기기에서 푸시 받기', desc: '앱을 닫아도 이 기기에 알림이 뜹니다' },
   { category: 'notifications', item: 'devices', title: '푸시 받는 기기', desc: '켜 둔 기기 목록 · 시험 알림 · 끊기' },
   { category: 'notifications', item: 'briefing_ready', title: '브리핑이 나왔을 때', desc: '종류별 켜고 끄기' },
+  { category: 'notifications', item: 'trade_ready', title: '수출입 동향이 올라왔을 때', desc: '종류별 켜고 끄기' },
   { category: 'notifications', item: 'upload_done', title: '오래 걸린 올리기가 끝났을 때', desc: '종류별 켜고 끄기' },
   { category: 'notifications', item: 'export_done', title: '내보내기가 끝났을 때', desc: '종류별 켜고 끄기' },
   { category: 'notifications', item: 'quiet', title: '조용한 시간', desc: '밤에는 푸시·텔레그램을 보내지 않고 아침에 한 통으로' },

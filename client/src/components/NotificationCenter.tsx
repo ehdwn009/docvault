@@ -25,6 +25,8 @@ type Props = {
 const KIND_ICON: Record<Notification['kind'], { icon: IconName; tint: 'accent' | 'warn' | 'good' }> = {
   briefing_ready: { icon: 'news', tint: 'accent' },
   briefing_missing: { icon: 'info', tint: 'warn' },
+  trade_ready: { icon: 'chart', tint: 'accent' },
+  trade_missing: { icon: 'info', tint: 'warn' },
   upload_done: { icon: 'upload', tint: 'good' },
   export_done: { icon: 'download', tint: 'good' },
 };

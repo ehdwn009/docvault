@@ -24,6 +24,8 @@ const SUPPORT_DESC: Record<PushSupport, string> = {
 const KIND_LABEL: Record<NotificationKind, { title: string; desc: string }> = {
   briefing_ready: { title: '브리핑이 나왔을 때', desc: '자동·구독 회차가 만들어지면' },
   briefing_missing: { title: '브리핑을 만들지 못했을 때', desc: '마감까지 완성본이 안 오거나 자동 실행이 실패하면 (관리자)' },
+  trade_ready: { title: '수출입 동향이 올라왔을 때', desc: '매달 1일 산업통상부 발표를 수출입동향 폴더에 담으면' },
+  trade_missing: { title: '수출입 동향을 못 찾았을 때', desc: '1일 저녁·4일에도 게시판에 없거나 받지 못하면 (관리자)' },
   upload_done: { title: '오래 걸린 올리기가 끝났을 때', desc: '10초 넘게 걸린 올리기만' },
   export_done: { title: '내보내기가 끝났을 때', desc: 'ZIP이 만들어져 받을 수 있게 되면' },
 };
@@ -218,7 +220,7 @@ export default function NotificationSettings({ user, settings, onChange }: Props
       />
 
       {/* 받을 알림 — 끄면 알림함에도 안 쌓인다 */}
-      {NOTIFICATION_KINDS.filter((k) => k !== 'briefing_missing' || user.role === 'admin').map((kind) => (
+      {NOTIFICATION_KINDS.filter((k) => (k !== 'briefing_missing' && k !== 'trade_missing') || user.role === 'admin').map((kind) => (
         <SettingRow key={kind} id={rowId('notifications', kind)} title={KIND_LABEL[kind].title} desc={KIND_LABEL[kind].desc}>
           <Switch checked={prefs[kind] !== 0} onChange={(v) => setKind(kind, v)} label={KIND_LABEL[kind].title} />
         </SettingRow>

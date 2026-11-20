@@ -327,8 +327,9 @@ export const notifications = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패, upload_done = 오래 걸린 올리기가 끝남, export_done = 내보내기 작업이 끝남 (4단계). 목록은 constants NOTIFICATION_KINDS */
-    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'upload_done', 'export_done'] }).notNull(),
+    /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패, upload_done = 오래 걸린 올리기가 끝남, export_done = 내보내기 작업이 끝남 (4단계),
+        trade_ready = 수출입 동향 새 호 도착, trade_missing = 확인 창 안에 못 찾음·받기 실패 (2026-11-20). 목록은 constants NOTIFICATION_KINDS */
+    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'upload_done', 'export_done'] }).notNull(),
     title: text('title').notNull(),
     body: text('body'),
     /** 누르면 열 문서. 회차 문서가 지워지면 NULL — 알림은 남되 열 곳만 없어진다 */
@@ -391,3 +392,28 @@ export const exportJobs = sqliteTable('export_jobs', {
   createdAt: integer('created_at').notNull(),
   finishedAt: integer('finished_at'),
 });
+
+/** 산업통상부 「월간 수출입 동향」 받은 호 한 줄 — 내용은 files의 PDF에 있고, 이 표는 "언제 어느 글에서 받았나"의 기록 (수출입 동향 설계 2026-11-20).
+    (source, period) 유일 — 같은 달을 두 번 받지 않는다. PDF를 사람이 지워도(file_id NULL) 기록은 남아 다시 받지 않는다 */
+export const tradeReleases = sqliteTable(
+  'trade_releases',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    source: text('source').notNull(),
+    /** 'YYYY-MM' — 보도자료가 다루는 달 (게시는 그다음 달 1일) */
+    period: text('period').notNull(),
+    articleId: text('article_id').notNull(),
+    title: text('title').notNull(),
+    dept: text('dept'),
+    /** 'YYYY-MM-DD' 게시판 등록일(한국 날짜) — 시각이 아니라 달력 날짜라 글자로 둔다 */
+    publishedDate: text('published_date').notNull(),
+    fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
+    pdfName: text('pdf_name').notNull(),
+    /** 응답에 ETag·Last-Modified가 없어 같은 파일인지는 해시로 본다 */
+    pdfSha256: text('pdf_sha256').notNull(),
+    pdfBytes: integer('pdf_bytes').notNull(),
+    foundBy: text('found_by', { enum: ['schedule', 'backfill'] }).notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('trade_releases_source_period').on(t.source, t.period)],
+);

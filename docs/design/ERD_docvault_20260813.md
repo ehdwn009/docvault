@@ -33,6 +33,7 @@ erDiagram
     USERS ||--o{ PUSH_SUBSCRIPTIONS : "기기를 등록한다"
     USERS ||--o{ EXPORT_JOBS : "내보내기를 시킨다"
     FILES ||--o{ NOTIFICATIONS : "누르면 여는 문서"
+    FILES ||--o| TRADE_RELEASES : "받아 둔 원문 PDF"
 
     USERS {
         integer id PK
@@ -235,7 +236,7 @@ erDiagram
     NOTIFICATIONS {
         integer id PK
         integer user_id FK "받는 사람"
-        text kind "briefing_ready | briefing_missing | upload_done (2026-11-04)"
+        text kind "briefing_ready | briefing_missing | upload_done | export_done | trade_ready | trade_missing (2026-11-20)"
         text title
         text body "nullable, 한 줄 설명"
         integer file_id FK "nullable — 누르면 열 회차 문서. 문서를 지우면 NULL(SET NULL)"
@@ -262,6 +263,22 @@ erDiagram
         text key PK "telegram_bot 등 — 계정이 아니라 앱에 속하는 값 (알림 3단계 2026-11-05)"
         text value "필요하면 암호화한 JSON"
         integer updated_at
+    }
+
+    TRADE_RELEASES {
+        integer id PK
+        text source "motir_monthly — 나중의 ICT·관세청 잠정치가 같은 표에 (2026-11-20)"
+        text period "YYYY-MM — 그 보도자료가 다루는 달. (source, period) UNIQUE"
+        text article_id "게시판 글 번호"
+        text title "게시판 제목 그대로"
+        text dept "담당 부서 (수출입과)"
+        text published_date "YYYY-MM-DD 게시판 등록일 (한국 날짜)"
+        integer file_id FK "nullable — 받아 둔 PDF. 문서를 지우면 NULL(SET NULL)"
+        text pdf_name "첨부 원래 이름"
+        text pdf_sha256 "같은 파일인지 — 응답에 ETag가 없다"
+        integer pdf_bytes
+        text found_by "schedule | backfill"
+        integer created_at
     }
 
     PUSH_SUBSCRIPTIONS {
@@ -296,6 +313,7 @@ erDiagram
 | NOTIFICATIONS | 알림 한 줄 — 사건은 여기에 쌓고, 앱 안 알림함·(나중의) 푸시·메신저는 이 표 위의 배달 통로. `dedupe_key`로 같은 사건(같은 실행의 같은 결과)이 두 번 쌓이지 않는다. 30일 지나면 자동 삭제 (2026-11-04, 알림 1단계) |
 | EXPORT_JOBS | 뒤에서 만드는 내보내기 ZIP 한 건. 파일은 `data/exports/{user_id}/{id}.zip`에, 하루(EXPORT.KEEP_MS) 지나면 파일·행을 지운다. 30개·20MB 이하는 작업을 만들지 않고 바로 흘려보낸다 (알림 4단계) |
 | APP_SETTINGS | 서버 하나에 하나인 설정의 열쇠-값. 지금은 텔레그램 봇(토큰+이름, 암호화) 한 줄 — 계정이 아니라 앱에 속하는 값은 USER_SETTINGS가 아니라 여기 (알림 3단계) |
+| TRADE_RELEASES | 산업통상부 「월간 수출입 동향」 한 호 — 언제 어느 글에서 받았고 어느 PDF 문서로 남겼는지. 내용 자체는 FILES의 PDF에 있다 (수출입 동향 1단계 2026-11-20) |
 | PUSH_SUBSCRIPTIONS | 웹 푸시 구독 — 기기(브라우저)마다 한 줄. endpoint가 곧 기기 주소라 유일. 알림 표에 새 줄이 생기면 주인의 기기 전부로 보내고, 푸시 서버가 404·410을 돌려주면 지운다. VAPID 열쇠는 표가 아니라 `data/vapid.json`에 (알림 2단계 2026-11-04) |
 | BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
@@ -325,6 +343,11 @@ erDiagram
   - BACKUP_SETTINGS의 run_by는 업로드에 쓸 구글 계정입니다. 관리자 계정이어야 하고, 그 관리자가 연결을 해제하면 백업은 자동으로 꺼집니다(토큰 없이 켜져 있으면 매일 조용히 실패합니다).
 - **질문 대화 (2026-09-18, 배움 카드 1판)**: ASK_THREADS.file_id는 **SET NULL**이다 — 문서를 지워도 대화는 남는다(설계 흐름 D: 카드는 문서보다 오래 산다). 대화는 저장 버튼 없이 자동 보관되고, updated_at이 30일 지나면 서버가 정리한다(휴지통과 같은 주기). 2판부터 카드가 참조하는 대화는 정리 대상에서 뺀다. context 컬럼은 "LLM에 무엇을 보냈나"의 기록이기도 하다 — 문서 전체가 아니라 이 컬럼의 내용만 나간다. 소유자 삭제 시 CASCADE.
 - **배움 카드 (2026-09-18, v0.26)**: 카드는 FILES의 md 행이다(`kind='card'`). 별도 테이블을 만들지 않은 이유 — 편집·버전·태그·검색·공유·백업이 전부 FILES에 걸려 있어, 카드를 따로 두면 그 모든 기능을 다시 만들어야 한다. 대신 `kind`로 **파일 트리에서만 뺀다**(문서와 섞이면 구분이 안 된다). 카드의 머리말(한 줄·별칭·종류·주제·태그·연결·출처)은 컬럼이 아니라 **본문 맨 위의 frontmatter**에 있다 — 사람이 편집기에서 고칠 수 있어야 하고, 목록은 수백 장까지 매번 파싱해도 싸다. 제목은 파일 이름이다(두 군데 두지 않는다). CARD_THREADS는 카드가 어느 대화에서 왔는지 — 대화 정리 예외와 "원 대화 보기"의 근거.
+- **수출입 동향 (2026-11-20)**: 설계 전문은 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md).
+  - 받은 호 하나가 TRADE_RELEASES 한 줄이고, 원문 PDF는 FILES의 보통 PDF 행이다(`kind='doc'`) — 첫 관리자 소유의 최상위 폴더 「수출입동향」(`folders.is_shared=1`)에 쌓여 모든 계정이 읽는다. 폴더 id는 APP_SETTINGS의 `trade_folder_id`에 적고, 폴더가 지워졌으면 다시 만든다.
+  - (source, period) UNIQUE — 같은 달을 두 번 받지 않는다. 정정본은 따로 받지 않는다(다음 달 호의 13개월 표가 고친 값을 싣는다).
+  - file_id는 SET NULL — 사람이 PDF를 지워도 "이 달은 받았다"는 기록은 남아 다시 받지 않는다. 다시 받고 싶으면 그 줄을 지운다.
+  - 알림: 도착(`trade_ready`)은 모든 활성 계정에, 못 찾음(`trade_missing`)은 관리자에게. dedupe_key는 `trade:{period}:ready`·`trade:{period}:missing:d1|d4`·`trade:backfill`.
 - **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
   - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다. v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
   - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·영향 판단이 이상함·해설이 이상함(v0.48)·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).

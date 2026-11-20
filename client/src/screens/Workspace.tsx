@@ -25,6 +25,7 @@ import {
   type AskThread,
   type CardSummary,
   type Changelog,
+  type NotificationKind,
   type SharedFile,
   type Tag,
   type Tree,
@@ -1555,11 +1556,13 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   };
   const railClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition';
   /** 알림 한 줄을 누름 — 읽음 처리 뒤 그 사건의 자리로: 회차 문서가 있으면 문서, 없으면(못 만듦·문서 삭제) 브리핑이 있는 곳 */
-  const openNotification = (n: { id: number; fileId: number | null; href: string | null; readAt: number | null }) => {
+  const openNotification = (n: { id: number; kind: NotificationKind; fileId: number | null; href: string | null; readAt: number | null }) => {
     if (n.readAt === null) void notif.markRead([n.id]);
     setNotifOpen(false);
     if (n.href) startDownload(n.href); // 내보내기 ZIP — 문서가 아니라 내려받기
     else if (n.fileId !== null) openFileById(n.fileId);
+    // 수출입 동향의 "못 찾았어요"는 열 문서가 없다 — 브리핑 패널로 보내면 엉뚱하다. 알림 본문이 할 일을 말한다
+    else if (n.kind === 'trade_missing' || n.kind === 'trade_ready') return;
     else if (layout === 'home') openPage('home');
     else openPanel('briefing');
   };
