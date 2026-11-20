@@ -62,7 +62,7 @@ export const files = sqliteTable('files', {
   sortOrder: integer('sort_order').notNull().default(0),
   /** doc=보통 문서, card=배움 카드(2판), briefing=뉴스 브리핑 회차. 카드는 md 파일이지만 파일 트리에는 안 나오고
       서랍(SCR-181)에서만 보인다. 브리핑은 본문이 회차 JSON인 code 파일이고 트리에 나온다 — 보관함이 곧 트리 (뉴스 브리핑 설계).
-      trade=수출입 동향의 원문 PDF·해부 문서 — 트리·공유받음·검색에 안 나오고 동향 탭에서만 보인다 (수출입 동향 설계 3단계) */
+      trade=수출입 동향의 원문 PDF·정리본 문서 — 트리·공유받음·검색에 안 나오고 동향 탭에서만 보인다 (수출입 동향 설계 3단계) */
   kind: text('kind', { enum: ['doc', 'card', 'briefing', 'trade'] }).notNull().default('doc'),
   /** 휴지통 이동 시각. null이면 정상 파일. 보관 기한이 지나면 서버가 자동 영구 삭제한다 */
   deletedAt: integer('deleted_at'),
@@ -414,7 +414,7 @@ export const tradeReleases = sqliteTable(
     pdfSha256: text('pdf_sha256').notNull(),
     pdfBytes: integer('pdf_bytes').notNull(),
     foundBy: text('found_by', { enum: ['schedule', 'backfill'] }).notNull(),
-    /** 해부 결과(화면이 읽는 data.json) — 서버의 원문 대조를 통과한 것만. 없으면 NULL (2단계 2026-11-20) */
+    /** 정리본 결과(화면이 읽는 data.json) — 서버의 원문 대조를 통과한 것만. 없으면 NULL (2단계 2026-11-20) */
     analysisJson: text('analysis_json'),
     /** 같은 내용을 담은 한 장짜리 HTML 문서 — 전용 화면이 생기기 전까지의 화면. 문서를 지우면 NULL */
     analysisFileId: integer('analysis_file_id').references(() => files.id, { onDelete: 'set null' }),
@@ -424,7 +424,7 @@ export const tradeReleases = sqliteTable(
   (t) => [uniqueIndex('trade_releases_source_period').on(t.source, t.period)],
 );
 
-/** 해부를 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록 (수출입 동향 설계 2단계).
+/** 정리본을 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록 (수출입 동향 설계 2단계).
     호마다 자동 시도는 한 번이라, 이 표에 그 호의 줄이 있으면 다시 켜지 않는다 */
 export const tradeJobs = sqliteTable(
   'trade_jobs',

@@ -52,8 +52,8 @@ async function runCheck(slot: Slot, now: number): Promise<void> {
     const saved = await checkPeriod(slot.period, now);
     if (saved) {
       console.log(`[trade] ${slot.period} 받음 → 파일 ${saved.fileId}`);
-      // 찾는 순간 해부를 시킨다 — 예약 시각을 따로 두지 않으므로 게시 시각과 어긋날 일이 없다 (2단계).
-      // 알림은 해부가 저장됐을 때 한 번(3단계) — 해부를 시킬 수 없을 때만 원문 도착으로 지금 알린다(실패는 startAnalysis가 알린다)
+      // 찾는 순간 정리본을 시킨다 — 예약 시각을 따로 두지 않으므로 게시 시각과 어긋날 일이 없다 (2단계).
+      // 알림은 정리본이 저장됐을 때 한 번(3단계) — 정리본을 시킬 수 없을 때만 원문 도착으로 지금 알린다(실패는 startAnalysis가 알린다)
       const started = await startAnalysis(slot.period);
       if (started === 'no_trigger' || started === 'exists') notifyPdfReady(slot.period);
     } else {
@@ -84,7 +84,7 @@ async function runBackfill(now: number): Promise<void> {
   }
 }
 
-/** 해부 쪽 일 — 마감 지난 실행 닫기, 가장 최근 호에 해부가 없으면 한 번 켜기. 게시판 확인과 따로 돈다(서로 기다리지 않는다) */
+/** 정리본 쪽 일 — 마감 지난 실행 닫기, 가장 최근 호에 정리본이 없으면 한 번 켜기. 게시판 확인과 따로 돈다(서로 기다리지 않는다) */
 let analysisBusy = false;
 function tickAnalysis(now: number): void {
   sweepExpiredTradeJobs(now);
@@ -92,7 +92,7 @@ function tickAnalysis(now: number): void {
   if (analysisBusy || isBusy()) return;
   analysisBusy = true;
   startPendingAnalysis(now)
-    .catch((e: unknown) => console.log(`[trade] 해부 시작 오류: ${reasonOf(e)}`))
+    .catch((e: unknown) => console.log(`[trade] 정리본 시작 오류: ${reasonOf(e)}`))
     .finally(() => {
       analysisBusy = false;
     });

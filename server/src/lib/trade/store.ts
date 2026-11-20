@@ -57,7 +57,7 @@ export function relocateTradeFiles(now = Date.now()): void {
     if (left === 0 && sub === 0) db.delete(folders).where(and(eq(folders.id, saved), eq(folders.name, TRADE.FOLDER_NAME))).run();
     db.delete(appSettings).where(eq(appSettings.key, TRADE.FOLDER_SETTING_KEY)).run();
   }
-  if (moved > 0) console.log(`[trade] 원문·해부 ${moved}개를 문서 밖 보관으로 옮겼어요`);
+  if (moved > 0) console.log(`[trade] 원문·정리본 ${moved}개를 문서 밖 보관으로 옮겼어요`);
 }
 
 /** 보관함 안에서 같은 이름이 있는가 — 폴더가 없으므로 주인의 trade 파일끼리만 본다 */

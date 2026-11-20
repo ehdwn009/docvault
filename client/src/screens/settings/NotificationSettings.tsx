@@ -24,7 +24,7 @@ const SUPPORT_DESC: Record<PushSupport, string> = {
 const KIND_LABEL: Record<NotificationKind, { title: string; desc: string }> = {
   briefing_ready: { title: '브리핑이 나왔을 때', desc: '자동·구독 회차가 만들어지면' },
   briefing_missing: { title: '브리핑을 만들지 못했을 때', desc: '마감까지 완성본이 안 오거나 자동 실행이 실패하면 (관리자)' },
-  trade_ready: { title: '수출입 동향이 올라왔을 때', desc: '매달 1일 산업통상부 발표를 받아 해부까지 끝나면 (해부를 못 만들면 원문이 올라왔을 때)' },
+  trade_ready: { title: '수출입 동향이 올라왔을 때', desc: '매달 1일 산업통상부 발표를 받아 정리본까지 끝나면 (정리본을 못 만들면 원문이 올라왔을 때)' },
   trade_missing: { title: '수출입 동향을 못 찾았을 때', desc: '1일 저녁·4일에도 게시판에 없거나 받지 못하면 (관리자)' },
   upload_done: { title: '오래 걸린 올리기가 끝났을 때', desc: '10초 넘게 걸린 올리기만' },
   export_done: { title: '내보내기가 끝났을 때', desc: 'ZIP이 만들어져 받을 수 있게 되면' },

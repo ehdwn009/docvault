@@ -112,7 +112,7 @@ api.get('/changelog', (c) => {
 api.route('/admin', adminRoutes);
 api.route('/ask', askRoutes);
 // 구독 연결 열쇠(Bearer)로만 들어오는 세 주소 — /briefing보다 먼저. 뒤에 두면 briefingRoutes의 가드가 쿠키 user를 요구해 터진다 (v0.50)
-// 수출입 동향 해부 일감도 같은 접두어 — 먼저 등록해 제 일감만 받고 나머지는 브리핑 쪽으로 넘긴다 (수출입 동향 설계 2단계)
+// 수출입 동향 정리본 일감도 같은 접두어 — 먼저 등록해 제 일감만 받고 나머지는 브리핑 쪽으로 넘긴다 (수출입 동향 설계 2단계)
 api.route('/briefing/jobs', tradeJobRoutes);
 api.route('/briefing/jobs', briefingJobRoutes);
 api.route('/briefing', briefingRoutes);

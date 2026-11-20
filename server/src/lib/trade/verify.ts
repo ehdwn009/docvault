@@ -1,228 +1,444 @@
 import { z } from 'zod';
 import { TRADE } from '../../constants.js';
 
-// 해부 결과(data.json)를 원문 쪽 텍스트와 대조한다 — 서버가 완성본을 받을 때와 스킬이 보내기 전에 같은 함수를 쓴다 (수출입 동향 설계 2단계 "서버의 대조").
-// 원칙: AI는 숫자를 새로 만들지 않는다. 인용은 그 쪽에 글자 그대로 있어야 하고, 표의 값은 출처 줄에 그대로 있어야 한다
+// 정리본(data.json, format 2)을 원문 쪽 텍스트와 대조한다 — 서버가 완성본을 받을 때와 스킬이 보내기 전에 같은 함수를 쓴다
+// (수출입 동향 설계 4단계 "정리본의 대조"). 화면에는 근거를 보이지 않지만 대조는 뒤에서 그대로 한다:
+//  ① 근거(facts)의 인용은 그 쪽에 글자 그대로 있어야 한다  ② 계산식은 다시 계산해 본다
+//  ③ 문장에 나온 숫자는 그 문장이 가리킨 근거 안에 있어야 한다  ④ 표·그래프의 숫자는 세션이 준 값이 아니라 대조를 통과한 표 줄에서 서버가 만든다
 
 export type PageTexts = { cur: string[]; prev: string[] | null };
 export type VerifyReport = { checked: number; passed: number; dropped: string[]; fatal: string[] };
 
-const QuoteSchema = z.object({ page: z.number().int().positive(), quote: z.string().min(1).max(TRADE.QUOTE_MAX_CHARS), doc: z.enum(['cur', 'prev']).optional() }).passthrough();
-const Obj = z.object({}).passthrough();
-const withId = z.object({ id: z.string().min(1).max(40) }).passthrough();
+const Quote = z.object({ page: z.number().int().positive(), quote: z.string().min(1).max(TRADE.QUOTE_MAX_CHARS), doc: z.enum(['cur', 'prev']).optional() });
+const Calc = z.object({ calc: z.string().min(3).max(300), uses: z.array(z.string()).max(12).default([]) });
+const Fact = z.union([Quote, Calc]);
+const ids = z.array(z.string().max(40)).max(30).default([]);
+const Text = z.string().min(1).max(TRADE.REPORT_TEXT_MAX_CHARS);
+const Lead = z.object({ lead: z.string().min(1).max(80), text: Text, facts: ids });
 
-/** 모양 검사는 느슨하게 — 화면이 읽는 칸의 존재와 인용의 모양만. 내용의 진위는 아래 대조가 본다 */
-export const TradeDataSchema = z
-  .object({
-    meta: z
-      .object({
-        period: z.string().regex(/^\d{4}-\d{2}$/),
-        label: z.string().min(1).max(40),
-        month: z.string().min(1).max(10),
-        prevMonth: z.string().min(1).max(10),
-        cards: z.array(z.object({ id: z.string() }).passthrough()).max(8),
-        kpis: z.array(z.object({ claim: z.string() }).passthrough()).max(6),
-        viz: z.record(z.array(Obj)).default({}),
-      })
-      .passthrough(),
-    claims: z.array(withId.extend({ short: z.string().min(1).max(80), claim: QuoteSchema, evidence: z.array(QuoteSchema).default([]), underneath: z.array(Obj).default([]) })).min(1).max(40),
-    vsPrev: z.array(withId).default([]),
-    items20: z.array(z.object({ name: z.string(), amt: z.number(), yoy: z.number() }).passthrough()).max(40).default([]),
-    items20_summary: Obj.default({}),
-    regions: z.array(z.object({ name: z.string(), amt: z.number(), yoy: z.number() }).passthrough()).max(20).default([]),
-    nih: z.array(withId).default([]),
-    links: z.array(withId.extend({ from: QuoteSchema, to: QuoteSchema })).default([]),
-    changes: z.array(withId).default([]),
-    topics: z.array(withId.extend({ name: z.string(), mentions: z.array(QuoteSchema).default([]) })).default([]),
-    pages: z.array(z.object({ page: z.number().int().positive(), title: z.string() }).passthrough()).default([]),
-    series: z.object({ months: z.array(z.string()).default([]) }).passthrough().default({ months: [] }),
-    itemSeries: z.record(z.array(z.number().nullable())).default({}),
-    tableRows: z.record(z.object({ source: QuoteSchema, values: z.array(z.number().nullable()).min(1).max(40) })).default({}),
-  })
-  .passthrough();
+const Block = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('p'), text: Text, facts: ids }),
+  z.object({ type: z.literal('sub'), text: Text, facts: ids }),
+  z.object({ type: z.literal('bullets'), items: z.array(Lead).min(1).max(8) }),
+  z.object({ type: z.literal('table'), columns: z.array(z.string().max(30)).min(2).max(5), rows: z.array(z.array(z.string().max(80)).min(2).max(5)).min(1).max(12), facts: ids }),
+  z.object({ type: z.literal('months'), series: z.array(z.enum(['exp', 'imp', 'bal', 'daily'])).min(1).max(2) }),
+  z.object({ type: z.literal('contrib'), items: z.array(z.string().max(20)).min(2).max(10), labels: z.record(z.string().max(30)).default({}), total: z.number().positive(), facts: ids }),
+  z.object({ type: z.literal('items'), top: z.number().int().min(3).max(20).default(8) }),
+  z.object({ type: z.literal('regions') }),
+]);
+
+const Note = z.object({ text: z.string().min(1).max(80), facts: ids });
+
+/** 모양 검사 — 화면 틀이 읽는 칸과 근거의 모양. 내용의 진위는 아래 대조가 본다 */
+export const TradeDataSchema = z.object({
+  format: z.literal(2),
+  meta: z
+    .object({
+      period: z.string().regex(/^\d{4}-\d{2}$/),
+      label: z.string().min(1).max(40),
+      month: z.string().min(1).max(10),
+      prevMonth: z.string().min(1).max(10),
+      published: z.string().max(60).optional(),
+      sourceTitle: z.string().max(120).optional(),
+      generator: z.string().max(80).optional(),
+    })
+    .passthrough(),
+  tiles: z.array(z.object({ label: z.string().min(1).max(20), value: z.string().min(1).max(20), unit: z.string().max(12).default(''), lines: z.array(z.string().max(40)).max(2).default([]), facts: ids })).min(2).max(4),
+  takeaways: z.array(Lead).min(2).max(4),
+  sections: z.array(z.object({ id: z.string().min(1).max(30), kicker: z.string().min(1).max(30), title: z.string().min(1).max(80), facts: ids, blocks: z.array(Block).min(1).max(12) })).min(3).max(10),
+  footnote: z.string().max(600).default(''),
+  facts: z.record(Fact),
+  notes: z.object({ items: z.record(Note).default({}), regions: z.record(Note).default({}) }).default({ items: {}, regions: {} }),
+  series: z.object({ months: z.array(z.string().max(10)).default([]) }).passthrough().default({ months: [] }),
+  tableRows: z.record(z.object({ source: Quote, values: z.array(z.number().nullable()).min(1).max(40) })).default({}),
+  // 아래 둘은 서버가 표 줄에서 만든다 — 세션이 보내도 버리고 다시 만든다
+  items: z.array(z.unknown()).optional(),
+  regions: z.array(z.unknown()).optional(),
+});
 
 export type TradeData = z.infer<typeof TradeDataSchema>;
+export type ItemRow = { name: string; amt: number; yoy: number | null; mom: number | null; prevYoy: number | null; increase: number; note: string };
+export type RegionRow = { name: string; amt: number; yoy: number | null; balance: number | null; note: string };
 
 const norm = (s: string) => s.replace(/\s+/g, '');
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isQuote = (v: Record<string, unknown>): v is Record<string, unknown> & { page: unknown; quote: string } => 'page' in v && typeof v.quote === 'string';
+const NUM = /\d[\d,]*(?:\.\d+)?/g;
+const toNum = (t: string) => Number(t.replace(/,/g, ''));
+const decimals = (t: string) => (t.includes('.') ? t.length - t.indexOf('.') - 1 : 0);
 
-/** 이 열쇠의 인용이 틀리면 열쇠만 지우고 부모는 살린다 — 품목의 해설(why)이 틀려도 품목 숫자 칸은 남긴다 */
-const OPTIONAL_HOLDERS = new Set(['why']);
+/** 문장에서 "근거가 있어야 하는 숫자"만 고른다 — 날짜·순서·작은 개수는 뺀다(독자 검수가 본다).
+ *  소수점·천 단위 쉼표가 있거나 100 이상이거나, 단위(%·배·억·조·달러·원·톤·만)가 붙은 수가 대상이다 */
+export function numbersToBack(text: string): { token: string; value: number; dec: number; dir: 1 | -1 | 0 }[] {
+  const out: { token: string; value: number; dec: number; dir: 1 | -1 | 0 }[] = [];
+  for (const m of text.matchAll(NUM)) {
+    const token = m[0].replace(/,$/, '');
+    const start = m.index ?? 0;
+    const before = text.slice(Math.max(0, start - 3), start);
+    const after = text.slice(start + token.length, start + token.length + 4);
+    if (/^(월|년|분기|번째|위|차|쪽|호|시|분의|~|∼)/.test(after) || /(분의\s?|~|∼|’|')$/.test(before)) continue;
+    if (/^일/.test(after) && /월\s?$/.test(before)) continue;
+    const value = toNum(token);
+    const marked = token.includes('.') || token.includes(',') || value >= 100;
+    if (!marked && !/^\s?(%|％|배|억|조|달러|원|톤|만)/.test(after)) continue;
+    out.push({ token, value, dec: decimals(token), dir: /▲\s?$/.test(before) ? 1 : /▼\s?$/.test(before) ? -1 : 0 });
+  }
+  return out;
+}
 
-function labelOf(v: unknown): string {
-  if (!isRecord(v)) return '';
-  for (const k of ['id', 'title', 'label', 'name', 'what']) if (typeof v[k] === 'string') return ` (${v[k] as string})`;
-  return '';
+/** 문장의 수 t(소수 d자리)가 근거의 수 c와 같은가 — 반올림 차이와 백만↔억 단위 차이(÷100)까지 같은 것으로 본다 */
+function sameNumber(t: number, d: number, c: number): boolean {
+  const tol = 0.5 * 10 ** -d + 1e-9;
+  const a = Math.abs(c);
+  if (Math.abs(a - t) <= tol) return true;
+  // 단위 환산은 백만 달러 줄에서 온 큰 정수에만 — 작은 수까지 받으면 7%가 727.8과도 맞아 버린다
+  return a >= 1000 && Number.isInteger(a) && Math.abs(a / 100 - t) <= tol;
+}
+
+/** 근거 인용에서 "값"만 뽑는다 — 날짜·연도·순위·제품 규격(16Gb)·기간(1~25일)은 값이 아니다. 원문이 △·-로 표시한 감소는 음수로 */
+function quoteNumbers(quote: string): number[] {
+  const out: number[] = [];
+  for (const m of quote.matchAll(NUM)) {
+    const start = m.index ?? 0;
+    const token = m[0].replace(/,$/, '');
+    const before = quote.slice(Math.max(0, start - 2), start);
+    const after = quote.slice(start + token.length, start + token.length + 3);
+    if (/[’‘'`]$/.test(before) || /^(월|년|위|분기|쪽|Gb|GB|G\b|~|∼|일)/.test(after) || /[~∼]$/.test(before)) continue;
+    out.push(/[△▵\-−]$/.test(before) ? -toNum(token) : toNum(token));
+  }
+  return out;
+}
+
+// ---- 계산식 "(115,276 ÷ 121,050 − 1) × 100 = −4.8" — 왼쪽을 다시 계산해 오른쪽과 견준다 ----
+
+type Tok = { k: 'n'; v: number } | { k: 'o'; v: string };
+
+function lex(expr: string): Tok[] | null {
+  const out: Tok[] = [];
+  const s = expr.replace(/\s+/g, '').replace(/[−–△▵]/g, '-').replace(/[×xX]/g, '*').replace(/÷/g, '/');
+  let i = 0;
+  while (i < s.length) {
+    const m = /^\d[\d,]*(?:\.\d+)?/.exec(s.slice(i));
+    if (m) {
+      out.push({ k: 'n', v: toNum(m[0]) });
+      i += m[0].length;
+    } else if ('+-*/^()'.includes(s[i] ?? '')) {
+      out.push({ k: 'o', v: s[i] as string });
+      i++;
+    } else return null;
+  }
+  return out;
+}
+
+/** 사칙연산과 거듭제곱(^ — 한 달 평균 증가율 같은 복리 계산)만. 식을 코드로 실행하지 않고 직접 풀어 계산한다 */
+function evaluate(toks: Tok[]): number | null {
+  let pos = 0;
+  const peek = () => toks[pos];
+  const isOp = (v: string) => peek()?.k === 'o' && peek()?.v === v;
+  const factor = (): number => {
+    const t = toks[pos++];
+    if (!t) throw new Error('식이 끝났다');
+    if (t.k === 'n') return t.v;
+    if (t.v === '-') return -factor();
+    if (t.v === '(') {
+      const v = sum();
+      if (!isOp(')')) throw new Error('괄호');
+      pos++;
+      return v;
+    }
+    throw new Error('연산자');
+  };
+  const power = (): number => {
+    const base = factor();
+    if (!isOp('^')) return base;
+    pos++;
+    return base ** power();
+  };
+  const term = (): number => {
+    let v = power();
+    while (isOp('*') || isOp('/')) {
+      const op = toks[pos++]?.v;
+      const r = power();
+      v = op === '*' ? v * r : v / r;
+    }
+    return v;
+  };
+  const sum = (): number => {
+    let v = term();
+    while (isOp('+') || isOp('-')) {
+      const op = toks[pos++]?.v;
+      const r = term();
+      v = op === '+' ? v + r : v - r;
+    }
+    return v;
+  };
+  try {
+    const v = sum();
+    return pos === toks.length && Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 단위를 맞추거나 비율을 낼 때 쓰는 수 — 근거 없이 식에 써도 된다 */
+const FREE_CONSTANTS = new Set([1, 10, 12, 100, 1000]);
+
+/** sure: 계산 결과라 부호를 믿을 수 있다(인용은 원문이 감소를 글로만 적었을 수 있어 음수 표시만 믿는다) */
+type FactNums = { ok: boolean; nums: number[]; sure: boolean; all: number[] };
+
+function checkCalc(calc: string, usable: number[]): { ok: true; value: number } | { ok: false; why: string } {
+  const eq = calc.lastIndexOf('=');
+  if (eq < 0) return { ok: false, why: '"식 = 값" 모양이 아님' };
+  const toks = lex(calc.slice(0, eq));
+  const rhs = /[-−–△▵]?\s?\d[\d,]*(?:\.\d+)?/.exec(calc.slice(eq + 1));
+  if (!toks || !rhs) return { ok: false, why: '식을 읽을 수 없음(숫자와 + − × ÷ ^ 괄호만)' };
+  const value = evaluate(toks);
+  if (value === null) return { ok: false, why: '식을 계산할 수 없음' };
+  const rt = rhs[0].replace(/^[-−–△▵]\s?/, '');
+  const d = decimals(rt);
+  // 공식 발표가 더 잔 단위로 계산해 끝자리가 1 다를 수 있다 — 그만큼은 받는다
+  if (Math.abs(Math.abs(value) - toNum(rt)) > 10 ** -d + 1e-9) return { ok: false, why: `다시 계산하면 ${Number(value.toFixed(d + 1))}` };
+  // 부호도 맞아야 한다 — 감소를 +로 적어 두면 읽는 쪽이 방향을 잘못 안다(0으로 반올림되는 값은 봐준다)
+  if (Math.abs(value) > 10 ** -d && value < 0 !== /^[-−–△▵]/.test(rhs[0])) return { ok: false, why: `다시 계산하면 ${Number(value.toFixed(d + 1))} — 부호가 다름` };
+  const lhs = toks.filter((t): t is { k: 'n'; v: number } => t.k === 'n').map((t) => t.v);
+  const stray = lhs.find((n) => !FREE_CONSTANTS.has(n) && !usable.some((c) => sameNumber(n, decimals(String(n)), c)));
+  if (stray !== undefined) return { ok: false, why: `식의 ${stray}이(가) uses의 근거에 없음` };
+  return { ok: true, value };
 }
 
 class Checker {
   private readonly text: Record<'cur' | 'prev', string[]>;
   readonly report: VerifyReport = { checked: 0, passed: 0, dropped: [], fatal: [] };
+  private readonly facts = new Map<string, FactNums>();
 
   constructor(pages: PageTexts) {
     this.text = { cur: pages.cur.map(norm), prev: (pages.prev ?? []).map(norm) };
   }
 
-  has(doc: 'cur' | 'prev', page: unknown, quote: string): boolean {
-    if (typeof page !== 'number' || !Number.isInteger(page) || page < 1) return false;
+  has(doc: 'cur' | 'prev', page: number, quote: string): boolean {
     const q = norm(quote);
     return q.length > 0 && (this.text[doc][page - 1] ?? '').includes(q);
   }
 
-  /** 숫자 하나가 이번 호의 그 쪽에 그대로 있는가 — 쉼표 유무는 무시한다 */
-  hasNumber(page: number, token: string): boolean {
-    const text = this.text.cur[page - 1] ?? '';
-    return text.includes(token) || text.replace(/,/g, '').includes(token.replace(/,/g, ''));
-  }
-
-  /** 인용 하나 — 전월 호인지는 객체의 doc, 없으면 경로에 prev가 있는지로 */
-  quote(node: { page: unknown; quote: string; doc?: unknown }, path: string[]): boolean {
-    const doc = node.doc === 'prev' || node.doc === 'cur' ? node.doc : path.includes('prev') ? 'prev' : 'cur';
-    this.report.checked++;
-    const ok = this.has(doc, node.page, node.quote);
-    if (ok) this.report.passed++;
-    return ok;
-  }
-
-  /** 나무를 훑는다. false = 이 노드는 틀렸다(가장 가까운 목록 항목이 통째로 빠진다) */
-  walk(node: unknown, path: string[]): boolean {
-    if (Array.isArray(node)) {
-      const keep: unknown[] = [];
-      node.forEach((v, i) => {
-        if (this.walk(v, [...path, String(i)])) keep.push(v);
-        else this.report.dropped.push(`${path.join('/')}/${i}${labelOf(v)}`);
-      });
-      node.length = 0;
-      node.push(...keep);
-      return true;
+  /** 근거를 먼저 가른다 — 인용, 그다음 계산식(계산식이 다른 계산식을 쓸 수 있어 더 풀리는 것이 없을 때까지 돈다) */
+  loadFacts(facts: TradeData['facts']): void {
+    const calcs: [string, z.infer<typeof Calc>][] = [];
+    for (const [id, f] of Object.entries(facts)) {
+      if ('calc' in f) {
+        calcs.push([id, f]);
+        continue;
+      }
+      this.report.checked++;
+      const ok = this.has(f.doc ?? 'cur', f.page, f.quote);
+      if (ok) this.report.passed++;
+      else this.report.dropped.push(`facts/${id} — ${f.page}쪽에 그 글이 없음`);
+      // all: 계산식의 재료로는 인용의 모든 숫자를 쓸 수 있다("10월22일"의 22처럼 날짜 꼴로 적힌 일수가 있다) — 식은 어차피 다시 계산한다
+      this.facts.set(id, { ok, nums: ok ? quoteNumbers(f.quote) : [], sure: false, all: ok ? [...f.quote.matchAll(NUM)].map((m) => toNum(m[0])) : [] });
     }
-    if (!isRecord(node)) return true;
-    if (isQuote(node) && !this.quote(node, path)) return false;
-    for (const [k, v] of Object.entries(node)) {
-      if (!isRecord(v) && !Array.isArray(v)) continue;
-      if (this.walk(v, [...path, k])) continue;
-      if (!OPTIONAL_HOLDERS.has(k)) return false;
-      delete node[k];
-      this.report.dropped.push([...path, k].join('/'));
+    let pending = calcs;
+    for (let round = 0; round < 6 && pending.length; round++) {
+      const next: typeof pending = [];
+      for (const [id, f] of pending) {
+        if (f.uses.some((u) => !this.facts.has(u) && calcs.some(([c]) => c === u))) {
+          next.push([id, f]);
+          continue;
+        }
+        this.report.checked++;
+        const r = checkCalc(f.calc, f.uses.flatMap((u) => this.facts.get(u)?.all ?? []));
+        if (r.ok) this.report.passed++;
+        else this.report.dropped.push(`facts/${id} — ${r.why}`);
+        this.facts.set(id, r.ok ? { ok: true, nums: [r.value], sure: true, all: [r.value] } : { ok: false, nums: [], sure: true, all: [] });
+      }
+      pending = next;
     }
-    return true;
+    for (const [id] of pending) this.report.dropped.push(`facts/${id} — 서로 물고 도는 계산식`);
+  }
+
+  /** 문장 하나 — 근거가 있어야 하는 숫자가 전부 그 문장의 근거 안에 있는가. 없으면 무엇이 비었는지 돌려준다 */
+  missing(texts: string[], factIds: string[]): string | null {
+    const nums = factIds.flatMap((id) => {
+      const f = this.facts.get(id);
+      return f ? f.nums.map((c) => ({ c, sure: f.sure })) : [];
+    });
+    for (const text of texts) {
+      for (const n of numbersToBack(text)) {
+        this.report.checked++;
+        const same = nums.filter((x) => sameNumber(n.value, n.dec, x.c));
+        // 방향도 본다 — ▲인데 근거가 감소(음수)뿐이거나, ▼인데 계산 결과가 증가뿐이면 틀린 것이다
+        const ok = same.some((x) => (n.dir === 1 ? x.c >= 0 : n.dir === -1 ? x.c <= 0 || !x.sure : true));
+        if (ok) this.report.passed++;
+        else return same.length ? `숫자 ${n.token}의 방향(▲▼)이 근거와 다름` : `숫자 ${n.token}의 근거가 없음`;
+      }
+    }
+    return null;
   }
 }
 
-/** 값이 출처 줄에 그대로 있는가 — 쉼표는 무시, 음수는 원문의 △·- 표기 둘 다 받는다 */
-function valueInLine(v: number, flat: string): boolean {
-  const abs = String(Math.abs(v));
-  if (v < 0) return flat.includes(`△${abs}`) || flat.includes(`-${abs}`) || flat.includes(`▵${abs}`);
-  return flat.includes(abs);
+/** 표 줄의 숫자들을 순서대로 — 쉼표는 무시, 원문의 △·-·▵는 음수 */
+function lineNumbers(quote: string): number[] {
+  return [...quote.matchAll(/([△▵\-−]?)\s?(\d[\d,]*(?:\.\d+)?)/g)].map((m) => (m[1] ? -1 : 1) * toNum(m[2] ?? '0'));
 }
 
-function pruneRefs(d: TradeData): void {
-  const ids = (xs: { id?: unknown }[]) => new Set(xs.map((x) => x.id));
-  const links = ids(d.links);
-  const changes = ids(d.changes);
-  const vs = ids(d.vsPrev);
-  const nih = ids(d.nih);
-  const only = (v: unknown, set: Set<unknown>) => (Array.isArray(v) ? v.filter((x) => set.has(x)) : []);
-  for (const c of d.claims as Record<string, unknown>[]) {
-    c.related_links = only(c.related_links, links);
-    c.related_changes = only(c.related_changes, changes);
-    c.prev = only(c.prev, vs);
-    if ('nih' in c) c.nih = only(c.nih, nih);
-  }
-  for (const n of d.nih as Record<string, unknown>[]) n.related = Array.isArray(n.related) ? n.related.filter((x) => links.has(x) || changes.has(x)) : [];
-  const claimIds = ids(d.claims);
-  const meta = d.meta as Record<string, unknown> & { cards: { id: string }[]; kpis: { claim: string }[] };
-  meta.headlineCompare = only(meta.headlineCompare, vs);
-  meta.cards = meta.cards.filter((c) => claimIds.has(c.id));
-  meta.kpis = meta.kpis.filter((k) => claimIds.has(k.claim));
+/** 값들이 인용한 줄의 끝부분과 순서까지 같은가 — 줄 머리의 이름·연간 합계는 앞에 남아도 된다. 틀리면 어긋난 자리를 알려 준다 */
+function tailMismatch(values: (number | null)[], quote: string): string | null {
+  const line = lineNumbers(quote);
+  if (values.length > line.length) return `값이 ${values.length}개인데 인용한 줄의 숫자는 ${line.length}개`;
+  const tail = line.slice(line.length - values.length);
+  const i = values.findIndex((v, k) => v !== null && v !== tail[k]);
+  return i < 0 ? null : `${i + 1}번째 값 ${String(values[i])}이 인용한 줄의 그 자리(${String(tail[i])})와 다름 — 값은 줄의 끝에서부터 순서대로여야 한다`;
 }
 
-/** 숫자 4칸(meta.kpis)의 큰 값 — 그 안의 숫자가 1쪽이나 그 칸이 가리키는 문장의 쪽에 그대로 있어야 한다.
- *  동향 탭 큰 카드에 가장 크게 보이는 숫자라, 없으면 그 칸만 뺀다. 작은 글씨(sub)는 계산값(✎)이 섞여 있어 보지 않는다 */
-function checkKpis(data: TradeData, ck: Checker): void {
-  const pageOf = new Map(data.claims.map((c) => [c.id, c.claim.page]));
-  const kpis = data.meta.kpis as (Record<string, unknown> & { claim: string })[];
-  data.meta.kpis = kpis.filter((k) => {
-    const nums = typeof k.value === 'string' ? (k.value.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) : [];
-    const pages = [1, pageOf.get(k.claim)].filter((p): p is number => typeof p === 'number');
-    ck.report.checked++;
-    if (nums.length > 0 && nums.every((n) => pages.some((p) => ck.hasNumber(p, n)))) {
-      ck.report.passed++;
-      return true;
-    }
-    ck.report.dropped.push(`meta/kpis${labelOf(k)} — 값의 숫자가 1쪽·근거 쪽에 없음`);
-    return false;
-  });
-}
+const r1 = (v: number) => Math.round(v * 10) / 10;
+const last = <T>(a: T[], back = 0): T | null => a[a.length - 1 - back] ?? null;
 
 /**
- * 대조하고, 틀린 항목을 걷어 낸 data를 돌려준다. report.fatal이 비어 있지 않으면 저장하지 않는다(고쳐 다시).
+ * 대조하고, 틀린 것을 걷어 낸 data를 돌려준다. report.fatal이 비어 있지 않으면 저장하지 않는다(고쳐 다시).
  * 입력을 고치지 않는다 — 깊은 복사본 위에서 일한다
  */
 export function verifyTradeData(input: TradeData, pages: PageTexts): { data: TradeData; report: VerifyReport } {
   const data = structuredClone(input);
   const ck = new Checker(pages);
   const { report } = ck;
+  ck.loadFacts(data.facts);
 
-  // 1쪽 문장 — 주장 자체나 근거가 틀리면 조용히 빼지 않고 거절한다(헤드라인이 하나 사라진 화면은 틀린 화면이다)
-  for (const c of data.claims as (Record<string, unknown> & { id: string; underneath: Record<string, unknown>[] })[]) {
-    const under = c.underneath;
-    c.underneath = [];
-    if (!ck.walk(c, ['claims', c.id])) report.fatal.push(`claims/${c.id}: 1쪽 문장(claim)이나 그 안의 인용이 원문에 없음`);
-    // 풀어보기 — 인용이 있거나, "원문 숫자로 계산" + 식이 있어야 한다
-    c.underneath = under.filter((u) => {
-      const where = `claims/${c.id}/underneath${labelOf(u)}`;
-      if (typeof u.quote === 'string') {
-        if (ck.quote(u as { page: unknown; quote: string; doc?: unknown }, [])) return true;
-        report.dropped.push(where);
-        return false;
-      }
-      if (u.basis === '원문 숫자로 계산' && typeof u.calc === 'string' && u.calc.trim() !== '') return true;
-      report.dropped.push(`${where} — 인용도 계산식도 없음`);
-      return false;
-    });
+  // 맨 위의 숫자 칸과 결론은 조용히 빼지 않고 거절한다 — 하나가 사라진 머리는 틀린 머리다
+  for (const t of data.tiles) {
+    const why = ck.missing([t.value, ...t.lines], t.facts);
+    if (why) report.fatal.push(`tiles (${t.label}): ${why}`);
   }
-  for (const key of ['items20', 'regions', 'nih', 'vsPrev', 'changes', 'topics', 'links'] as const) ck.walk(data[key], [key]);
-  data.topics = data.topics.filter((t) => t.mentions.length > 0);
+  data.takeaways.forEach((t, i) => {
+    const why = ck.missing([t.lead, t.text], t.facts);
+    if (why) report.fatal.push(`takeaways/${i + 1}: ${why}`);
+  });
 
   // 숫자 표 — 출처 줄이 원문에 있고, 값 하나하나가 그 줄에 있어야 한다
+  const rows = new Map<string, (number | null)[]>();
   for (const [key, row] of Object.entries(data.tableRows)) {
     report.checked++;
-    if (!ck.has('cur', row.source.page, row.source.quote)) {
+    if (!ck.has(row.source.doc ?? 'cur', row.source.page, row.source.quote)) {
       report.fatal.push(`tableRows/${key}: 출처 줄이 ${row.source.page}쪽에 없음`);
       continue;
     }
-    const flat = norm(row.source.quote).replace(/,/g, '');
-    const missing = row.values.filter((v): v is number => v !== null && !valueInLine(v, flat));
-    if (missing.length) {
-      report.fatal.push(`tableRows/${key}: 값 ${missing.slice(0, 3).join(', ')}이 출처 줄에 없음`);
+    const months = data.series.months.length;
+    const bad = months > 0 && row.values.length !== months ? `값이 ${row.values.length}개 — 달 이름(series.months)은 ${months}개` : tailMismatch(row.values, row.source.quote);
+    if (bad) {
+      report.fatal.push(`tableRows/${key}: ${bad}`);
       continue;
     }
     report.passed++;
+    rows.set(key, row.values);
   }
-  // 화면의 추이는 세션이 준 series를 쓰지 않고 대조를 통과한 줄에서 만든다 — 표와 그림이 어긋날 수 없게
+  // 화면의 추이·품목 표·지역 표는 세션이 준 숫자를 쓰지 않고 대조를 통과한 줄에서 만든다 — 표와 글이 어긋날 수 없게
   const series: Record<string, unknown> = { months: data.series.months };
-  const itemSeries: Record<string, (number | null)[]> = {};
-  for (const [key, row] of Object.entries(data.tableRows)) {
-    if (key.startsWith('item:')) itemSeries[key.slice(5)] = row.values;
-    else series[key] = row.values;
-  }
+  for (const k of ['exp', 'imp', 'bal', 'daily']) if (rows.has(k)) series[k] = rows.get(k);
   data.series = series as TradeData['series'];
-  data.itemSeries = itemSeries;
 
-  checkKpis(data, ck);
-  pruneRefs(data);
-  if (data.claims.length === 0) report.fatal.push('claims가 비었음');
-  if (report.checked > 0 && report.dropped.length / report.checked > TRADE.DROP_REJECT_RATIO) {
-    report.fatal.push(`인용 ${report.checked}개 중 ${report.dropped.length}개가 원문과 맞지 않음 (${Math.round(TRADE.DROP_REJECT_RATIO * 100)}% 초과)`);
+  const items: ItemRow[] = [];
+  const regions: RegionRow[] = [];
+  for (const [key, vals] of rows) {
+    const [kind, name] = key.split(':');
+    if (!name || (kind !== 'item' && kind !== 'region')) continue;
+    const cur = last(vals);
+    if (cur === null) continue;
+    const yoys = rows.get(`${kind}yoy:${name}`) ?? [];
+    const first = vals[0] ?? null;
+    const prev = last(vals, 1);
+    // 금액은 백만 달러 줄 → 억 달러. 증감률은 원문의 증감률 줄(나눠서 만들면 공식 값과 끝자리가 달라진다)
+    if (kind === 'item') {
+      const note = data.notes.items[name];
+      const noteWhy = note ? ck.missing([note.text], note.facts) : null;
+      if (noteWhy) report.dropped.push(`notes/items/${name} — ${noteWhy}`);
+      items.push({ name, amt: r1(cur / 100), yoy: last(yoys), prevYoy: last(yoys, 1), mom: prev ? r1((cur / prev - 1) * 100) : null, increase: first !== null && vals.length === 13 ? r1((cur - first) / 100) : 0, note: note && !noteWhy ? note.text : '' });
+    } else {
+      const note = data.notes.regions[name];
+      const noteWhy = note ? ck.missing([note.text], note.facts) : null;
+      if (noteWhy) report.dropped.push(`notes/regions/${name} — ${noteWhy}`);
+      regions.push({ name, amt: r1(cur / 100), yoy: last(yoys), balance: last(rows.get(`regionbal:${name}`) ?? []), note: note && !noteWhy ? note.text : '' });
+    }
   }
-  (data.meta as Record<string, unknown>).quotesChecked = report.passed;
+  for (const n of Object.keys(data.notes.items)) if (!rows.has(`item:${n}`)) report.dropped.push(`notes/items/${n} — 그 이름의 표 줄(item:${n})이 없음`);
+  for (const n of Object.keys(data.notes.regions)) if (!rows.has(`region:${n}`)) report.dropped.push(`notes/regions/${n} — 그 이름의 표 줄(region:${n})이 없음`);
+  items.sort((a, b) => b.amt - a.amt);
+  regions.sort((a, b) => b.amt - a.amt);
+  data.items = items;
+  data.regions = regions;
+
+  // 본문 — 문장·표·그림 하나씩. 틀린 것만 빼고, 다 빠진 절은 절째 뺀다
+  data.sections = data.sections.filter((s) => {
+    const at = `sections/${s.id}`;
+    const titleWhy = ck.missing([s.title], s.facts);
+    if (titleWhy) report.fatal.push(`${at} 제목: ${titleWhy}`);
+    s.blocks = s.blocks.filter((b, i) => {
+      const where = `${at}/${i + 1}(${b.type})`;
+      let why: string | null = null;
+      if (b.type === 'p' || b.type === 'sub') why = ck.missing([b.text], b.facts);
+      else if (b.type === 'table') why = ck.missing(b.rows.flat(), b.facts);
+      else if (b.type === 'bullets') {
+        b.items = b.items.filter((it, j) => {
+          const w = ck.missing([it.lead, it.text], it.facts);
+          if (w) report.dropped.push(`${where}/${j + 1} (${it.lead}) — ${w}`);
+          return !w;
+        });
+        if (b.items.length === 0) why = '항목이 모두 빠짐';
+      } else if (b.type === 'months') why = b.series.every((k) => rows.has(k)) ? null : '그릴 표 줄이 없음';
+      else if (b.type === 'contrib') {
+        b.items = b.items.filter((n) => items.some((it) => it.name === n && it.increase !== 0));
+        why = ck.missing([b.total.toFixed(1), ...Object.values(b.labels)], b.facts) ?? (b.items.length < 2 ? '그릴 품목이 없음' : null);
+      } else if (b.type === 'items') why = items.length ? null : '품목 표 줄이 없음';
+      else if (b.type === 'regions') why = regions.length ? null : '지역 표 줄이 없음';
+      if (why) report.dropped.push(`${where} — ${why}`);
+      return !why;
+    });
+    if (s.blocks.length === 0) report.dropped.push(`${at} — 내용이 모두 빠져 절을 뺌`);
+    return s.blocks.length > 0;
+  });
+
+  if (data.sections.length < 3) report.fatal.push('남은 절이 3개 미만');
+  if (report.checked > 0 && report.dropped.length / report.checked > TRADE.DROP_REJECT_RATIO) {
+    report.fatal.push(`대조 ${report.checked}개 중 ${report.dropped.length}개가 맞지 않음 (${Math.round(TRADE.DROP_REJECT_RATIO * 100)}% 초과)`);
+  }
+  (data.meta as Record<string, unknown>).checked = report.passed;
   return { data, report };
 }
 
 export function reportLines(r: VerifyReport): string[] {
-  const lines = [`인용·출처 대조 ${r.passed}/${r.checked} 통과`, `뺀 항목 ${r.dropped.length}개`, ...r.dropped.map((d) => `  - ${d}`)];
+  const lines = [`원문 대조 ${r.passed}/${r.checked} 통과`, `뺀 것 ${r.dropped.length}개`, ...r.dropped.map((d) => `  - ${d}`)];
   if (r.fatal.length) lines.push('고쳐야 받습니다:', ...r.fatal.map((f) => `  ! ${f}`));
   return lines;
+}
+
+const SERIES_NAME: Record<string, string> = { exp: '수출액', imp: '수입액', bal: '무역수지', daily: '하루 평균 수출' };
+const REGION_NAME: Record<string, string> = { 'EU(27)': 'EU', CIS: '러시아 등 CIS' };
+
+/** 독자 검수용 — 화면에 보이는 글자만 순서대로, 화면과 같은 표기로. 근거·쪽 번호는 넣지 않는다(독자는 원문 없이 이것만 읽는다) */
+export function plainText(data: TradeData): string {
+  const plain = (t: string) => t.replace(/\*\*/g, '');
+  const out: string[] = [`${data.meta.label} 수출입 정리`, ''];
+  for (const t of data.tiles) out.push(`[${t.label}] ${t.value}${t.unit} — ${t.lines.join(' / ')}`);
+  out.push('');
+  data.takeaways.forEach((t, i) => out.push(`${i + 1}. ${t.lead} ${plain(t.text)}`));
+  const items = (data.items ?? []) as ItemRow[];
+  const regions = (data.regions ?? []) as RegionRow[];
+  const f1 = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const pct = (v: number | null) => (v === null ? '–' : `${v > 0 ? '▲' : v < 0 ? '▼' : ''}${f1(Math.abs(v))}%`);
+  const signed = (v: number | null) => (v === null ? '–' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('en-US')}`);
+  for (const s of data.sections) {
+    out.push('', `## ${s.kicker} — ${s.title}`);
+    for (const b of s.blocks) {
+      if (b.type === 'p' || b.type === 'sub') out.push(plain(b.text));
+      else if (b.type === 'bullets') for (const it of b.items) out.push(`- ${it.lead}: ${plain(it.text)}`);
+      else if (b.type === 'table') out.push(b.columns.join(' | '), ...b.rows.map((r) => r.join(' | ')));
+      else if (b.type === 'months') {
+        const months = data.series.months;
+        const series = data.series as Record<string, unknown>;
+        out.push(`(막대 그래프와 표: 최근 ${months.length}개월 ${b.series.map((k) => SERIES_NAME[k]).join(', ')}, 억 달러)`);
+        out.push(['월', ...Object.keys(SERIES_NAME).filter((k) => Array.isArray(series[k])).map((k) => SERIES_NAME[k])].join(' | '));
+        months.forEach((m, i) => out.push([m, ...Object.keys(SERIES_NAME).filter((k) => Array.isArray(series[k])).map((k) => String((series[k] as (number | null)[])[i] ?? '–'))].join(' | ')));
+      } else if (b.type === 'contrib') {
+        const listed = b.items.map((n) => ({ n, v: items.find((i) => i.name === n)?.increase ?? 0 }));
+        out.push(`(막대 그래프: 늘어난 수출 ${f1(b.total)}억 달러는 어디서 왔나 — 작년 같은 달보다 늘어난 금액, 억 달러)`, ...listed.map((x) => `  ${b.labels[x.n] ?? x.n} ${signed(x.v)}`), `  그 밖의 품목 합계 ${signed(Math.round((b.total - listed.reduce((a, x) => a + x.v, 0)) * 10) / 10)}`);
+      } else if (b.type === 'items') out.push(`품목 | 수출액(억 달러) | 작년 ${data.meta.month}보다 | 한 달 전(${data.meta.prevMonth})보다 | 한마디`, ...items.map((i) => `${i.name} | ${f1(i.amt)} | ${pct(i.yoy)} | ${pct(i.mom)} | ${i.note}`));
+      else if (b.type === 'regions') out.push(`지역 | 수출액(억 달러) | 작년 ${data.meta.month}보다 | ${data.meta.month} 무역수지(억 달러) | 한마디`, ...regions.map((r) => `${REGION_NAME[r.name] ?? r.name} | ${f1(r.amt)} | ${pct(r.yoy)} | ${signed(r.balance)} | ${r.note}`));
+    }
+  }
+  if (data.footnote) out.push('', `자료: ${data.meta.sourceTitle ?? '산업통상부 수출입 동향'}. ${data.footnote}`);
+  return out.join('\n') + '\n';
 }

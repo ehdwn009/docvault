@@ -34,7 +34,7 @@ erDiagram
     USERS ||--o{ EXPORT_JOBS : "내보내기를 시킨다"
     FILES ||--o{ NOTIFICATIONS : "누르면 여는 문서"
     FILES ||--o| TRADE_RELEASES : "받아 둔 원문 PDF"
-    FILES ||--o| TRADE_RELEASES : "해부 문서 (analysis_file_id)"
+    FILES ||--o| TRADE_RELEASES : "정리본 문서 (analysis_file_id)"
     USERS ||--o{ TRADE_JOBS : "트리거를 빌려준다"
 
     USERS {
@@ -71,7 +71,7 @@ erDiagram
         text storage_path "바이너리만, 텍스트는 null"
         integer is_shared "0|1"
         integer sort_order
-        text kind "doc|card|briefing|trade — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 안 나오고 브리핑 패널에서만, v0.43 — v0.69부터 브리핑 탭), trade는 수출입 동향 원문·해부(트리·공유받음·검색에 안 나오고 동향 탭에서만, v0.69)"
+        text kind "doc|card|briefing|trade — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 안 나오고 브리핑 패널에서만, v0.43 — v0.69부터 브리핑 탭), trade는 수출입 동향 원문·정리본(트리·공유받음·검색에 안 나오고 동향 탭에서만, v0.69)"
         integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15). 목록용 커버링 인덱스 files_owner_kind_idx — 비고 참조"
         integer created_at
         integer updated_at
@@ -280,7 +280,7 @@ erDiagram
         text pdf_sha256 "같은 파일인지 — 응답에 ETag가 없다"
         integer pdf_bytes
         text found_by "schedule | backfill"
-        text analysis_json "nullable — 원문 대조를 통과한 해부 결과(화면이 읽는 data.json) (2단계 v0.68)"
+        text analysis_json "nullable — 원문 대조를 통과한 정리본 자료(화면이 읽는 data.json — v0.68~0.70은 해부 형식, v0.71부터 format 2) (2단계 v0.68)"
         integer analysis_file_id FK "nullable — 같은 내용의 HTML 문서. 문서를 지우면 NULL(SET NULL)"
         integer analysis_at "nullable"
         integer created_at
@@ -289,7 +289,7 @@ erDiagram
     TRADE_JOBS {
         integer id PK
         text job_id UK "uuid — 예약 작업이 가진 유일한 식별자 (2단계 v0.68)"
-        text period "YYYY-MM — 해부할 호"
+        text period "YYYY-MM — 정리본을 만들 호"
         integer owner_id FK "트리거를 빌려준 관리자 = 연결 열쇠의 주인"
         text status "running | ok | missing | error"
         text message "nullable — 실패 이유"
@@ -333,7 +333,7 @@ erDiagram
 | EXPORT_JOBS | 뒤에서 만드는 내보내기 ZIP 한 건. 파일은 `data/exports/{user_id}/{id}.zip`에, 하루(EXPORT.KEEP_MS) 지나면 파일·행을 지운다. 30개·20MB 이하는 작업을 만들지 않고 바로 흘려보낸다 (알림 4단계) |
 | APP_SETTINGS | 서버 하나에 하나인 설정의 열쇠-값. 지금은 텔레그램 봇(토큰+이름, 암호화) 한 줄 — 계정이 아니라 앱에 속하는 값은 USER_SETTINGS가 아니라 여기 (알림 3단계) |
 | TRADE_RELEASES | 산업통상부 「월간 수출입 동향」 한 호 — 언제 어느 글에서 받았고 어느 PDF 문서로 남겼는지. 내용 자체는 FILES의 PDF에 있다 (수출입 동향 1단계 2026-11-20) |
-| TRADE_JOBS | 수출입 동향 해부를 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록. 해부 내용은 TRADE_RELEASES.analysis_json과 FILES의 HTML 문서에 있다 (2단계 v0.68) |
+| TRADE_JOBS | 수출입 동향 정리본(v0.70까지 해부)을 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록. 그 내용은 TRADE_RELEASES.analysis_json과 FILES의 HTML 문서에 있다 (2단계 v0.68) |
 | PUSH_SUBSCRIPTIONS | 웹 푸시 구독 — 기기(브라우저)마다 한 줄. endpoint가 곧 기기 주소라 유일. 알림 표에 새 줄이 생기면 주인의 기기 전부로 보내고, 푸시 서버가 404·410을 돌려주면 지운다. VAPID 열쇠는 표가 아니라 `data/vapid.json`에 (알림 2단계 2026-11-04) |
 | BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
@@ -369,6 +369,7 @@ erDiagram
   - file_id는 SET NULL — 사람이 PDF를 지워도 "이 달은 받았다"는 기록은 남아 다시 받지 않는다. 다시 받고 싶으면 그 줄을 지운다.
   - 알림: 도착(`trade_ready`)은 모든 활성 계정에, 못 찾음(`trade_missing`)은 관리자에게. dedupe_key는 `trade:{period}:ready`·`trade:{period}:missing:d1|d4`·`trade:backfill`. v0.69부터 원문 도착(`:ready`)은 해부를 시킬 수 없거나 못 만들었을 때만 간다 — 보통은 아래 해부 도착(`:analysis`) 한 번이다.
   - **해부 (2단계, v0.68)**: 새 호를 받으면 TRADE_JOBS에 한 줄을 만들고 브리핑 구독의 예약 작업을 켠다(USER_SETTINGS.briefing_trigger_enc를 가진 관리자의 트리거 — 그 관리자가 owner_id). 호마다 자동 시도는 한 번이라 그 period의 줄이 하나라도 있으면(성공·실패 무관) 다시 켜지 않는다. 사용자 삭제 시 CASCADE. 완성본이 원문 대조를 통과하면 TRADE_RELEASES.analysis_json에 해부 JSON, analysis_file_id에 같은 내용의 HTML 문서(`kind='trade'`의 html 파일 — v0.68에는 「수출입동향」 폴더의 `kind='doc'`)를 적는다 — 같은 호를 다시 받으면 그 문서를 고쳐 쓰고, 사람이 문서를 지웠으면(SET NULL) 새로 만든다. 마감(deadline_at)이 지난 running은 틱이 missing으로 닫는다. 알림 dedupe_key는 `trade:{period}:analysis`(도착)·`trade:{period}:analysis:{job_id}`(실패).
+  - **정리본 (4단계, v0.71)**: 표는 그대로다. analysis_json에 담기는 자료의 형식만 해부에서 정리본(format 2)으로 바뀌고 문서 이름이 「…정리.html」이 된다. 관리자의 [정리본 다시 만들기](API-172)는 그 period에 TRADE_JOBS 줄을 하나 더 만든다 — "호마다 한 번"은 자동 시도에만 해당하고, running인 줄이 있으면 새로 만들지 않는다. 그 호에 저장된 것이 이미 있었다면 다시 만든 실행의 도착 알림은 dedupe_key `trade:{period}:analysis:{job_id}:ok`로 관리자에게만 가고, 못 만든 호에 처음 생기는 것이면 `trade:{period}:analysis`로 모든 계정에 간다.
 - **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
   - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다(v0.69의 새 레이아웃에서는 그 패널이 브리핑 탭 SCR-192 안에 들어간다). v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
   - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·영향 판단이 이상함·해설이 이상함(v0.48)·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).

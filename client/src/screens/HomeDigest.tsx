@@ -59,10 +59,10 @@ export default function HomeDigest({ hasBriefing, onOpenFileById, onOpenFeed, on
     const l = trade.latest;
     const month = (label: string) => label.split(' ')[1];
     if (p && p.state !== 'failed') {
-      rows.push({ key: 't-p', icon: 'chart', title: `${month(p.label)} 수출입 동향`, subtitle: p.state === 'waiting' ? '곧 올라와요 · 올라오면 알림이 와요' : '원문 도착 · 해부하는 중', state: p.state === 'waiting' ? '예정' : '만드는 중', stateCls: 'text-slate-500', on: onOpenTrade });
+      rows.push({ key: 't-p', icon: 'chart', title: `${month(p.label)} 수출입 동향`, subtitle: p.state === 'waiting' ? '곧 올라와요 · 올라오면 알림이 와요' : '원문 도착 · 정리하는 중', state: p.state === 'waiting' ? '예정' : '만드는 중', stateCls: 'text-slate-500', on: onOpenTrade });
     } else if (l && !l.read) {
       const k = l.card?.kpis[0];
-      rows.push({ key: 't-l', icon: 'chart', title: `${month(l.label)} 수출입 동향`, subtitle: k ? `${k.label} ${k.value} ${k.sub[0]?.[0] ?? ''}`.trim() : l.analysisFileId !== null ? '해부가 나왔어요' : '원문 PDF가 올라왔어요', state: '안 읽음', stateCls: 'text-red-400', on: onOpenTrade });
+      rows.push({ key: 't-l', icon: 'chart', title: `${month(l.label)} 수출입 동향`, subtitle: k ? `${k.label} ${k.value} · ${k.lines[0] ?? ''}`.replace(/ · $/, '') : l.analysisFileId !== null ? '정리본이 나왔어요' : '원문 PDF가 올라왔어요', state: '안 읽음', stateCls: 'text-red-400', on: onOpenTrade });
     }
   }
   if (rows.length === 0) return null;

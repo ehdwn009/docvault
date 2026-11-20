@@ -14,7 +14,7 @@ import { pdfPageTexts } from './pages.js';
 import { adminIds, archiveOwnerId, releaseOf, tradeNameTaken } from './store.js';
 import { TradeDataSchema, verifyTradeData, type PageTexts, type VerifyReport } from './verify.js';
 
-// 자동 해부 — 서버가 claude.ai 예약 작업을 켜고(브리핑 구독의 트리거를 그대로 쓴다), trade-report 스킬이 보낸 완성본을
+// 자동 정리본 — 서버가 claude.ai 예약 작업을 켜고(브리핑 구독의 트리거를 그대로 쓴다), trade-report 스킬이 보낸 완성본을
 // 원문과 다시 대조해 저장한다 (수출입 동향 설계 2단계). 이 경로에서 서버는 AI를 부르지 않는다
 
 type JobRow = typeof tradeJobs.$inferSelect;
@@ -36,11 +36,13 @@ function triggerOwner(): number | null {
   return adminIds().find((id) => triggerSet(id)) ?? null;
 }
 
-/** 해부를 시킨다 — 호마다 자동 시도는 한 번. 트리거가 없으면 줄을 남기지 않는다(나중에 넣으면 그때 켜지게) */
-export async function startAnalysis(period: string, now = Date.now()): Promise<'fired' | 'exists' | 'no_trigger' | 'no_release' | 'failed'> {
+/** 정리본을 시킨다 — 호마다 자동 시도는 한 번. 트리거가 없으면 줄을 남기지 않는다(나중에 넣으면 그때 켜지게).
+ *  rerun은 관리자가 [다시 만들기]를 누른 경우(API-172) — 이미 있어도 새 실행을 만들고, 원문 도착 알림은 다시 보내지 않는다 */
+export async function startAnalysis(period: string, now = Date.now(), rerun = false): Promise<'fired' | 'exists' | 'no_trigger' | 'no_release' | 'failed' | 'running'> {
   const release = releaseOf(period);
   if (!release || release.fileId === null) return 'no_release';
-  if (release.analysisJson !== null || db.select({ id: tradeJobs.id }).from(tradeJobs).where(eq(tradeJobs.period, period)).get()) return 'exists';
+  if (db.select({ id: tradeJobs.id }).from(tradeJobs).where(and(eq(tradeJobs.period, period), eq(tradeJobs.status, 'running'))).get()) return rerun ? 'running' : 'exists';
+  if (!rerun && (release.analysisJson !== null || db.select({ id: tradeJobs.id }).from(tradeJobs).where(eq(tradeJobs.period, period)).get())) return 'exists';
   const ownerId = triggerOwner();
   if (ownerId === null) return 'no_trigger';
   const job = db
@@ -50,25 +52,26 @@ export async function startAnalysis(period: string, now = Date.now()): Promise<'
     .get();
   // 예약 작업의 지시문은 "BRIEFING_JOB_ID로 briefing-subscription 스킬을 실행해"다 — 그 스킬이 지시서의 kind: "trade"를 보고 trade-report로 넘긴다.
   // 이 글은 예약 작업에 "신뢰하지 않는 데이터"로 들어가므로 id만 읽힌다
-  const fired = await fireTrigger(ownerId, `BRIEFING_JOB_ID=${job.jobId} — docvault ${periodLabel(period)} 수출입 동향 해부 차례입니다. 지시서의 kind가 trade이면 trade-report 스킬을 실전 모드로 실행하세요.`);
+  const fired = await fireTrigger(ownerId, `BRIEFING_JOB_ID=${job.jobId} — docvault ${periodLabel(period)} 수출입 동향 정리본 차례입니다. 지시서의 kind가 trade이면 trade-report 스킬을 실전 모드로 실행하세요.`);
   if (!fired.ok) {
     closeJob(job.id, 'error', `예약 작업을 켜지 못했어요 — ${fired.reason}`);
     notifyAnalysisFailed(period, job.jobId, `예약 작업을 켜지 못했어요 — ${fired.reason}`);
-    notifyPdfReady(period);
-    console.log(`[trade] ${period} 해부 트리거 실패: ${fired.reason}`);
+    // 원문 도착 알림은 그 호에 저장된 것이 없을 때만 — 마감 초과 때와 같은 규칙(이미 알린 호면 같은 열쇠라 다시 가지 않는다)
+    if (release.analysisJson === null) notifyPdfReady(period);
+    console.log(`[trade] ${period} 정리본 트리거 실패: ${fired.reason}`);
     return 'failed';
   }
-  console.log(`[trade] ${period} 해부 예약 작업을 켰어요 (job ${job.jobId})`);
+  console.log(`[trade] ${period} 정리본 예약 작업을 켰어요 (job ${job.jobId})`);
   return 'fired';
 }
 
-/** 기동 뒤·매 틱 — 가장 최근 호에 해부가 없고 시도한 적도 없으면 켠다(처음 배포, 서버가 꺼져 있던 1일) */
+/** 기동 뒤·매 틱 — 가장 최근 호에 정리본이 없고 시도한 적도 없으면 켠다(처음 배포, 서버가 꺼져 있던 1일) */
 export async function startPendingAnalysis(now = Date.now()): Promise<void> {
   const latest = db.select({ period: tradeReleases.period }).from(tradeReleases).where(and(eq(tradeReleases.source, TRADE.SOURCE), isNull(tradeReleases.analysisJson))).orderBy(desc(tradeReleases.period)).limit(1).get();
   const newest = db.select({ period: tradeReleases.period }).from(tradeReleases).where(eq(tradeReleases.source, TRADE.SOURCE)).orderBy(desc(tradeReleases.period)).limit(1).get();
   // 소급으로 들어온 옛 호까지 거슬러 올라가며 켜지 않는다 — 가장 최근 호만
   if (!latest || !newest || latest.period !== newest.period) return;
-  // 그리고 지난달 호이거나(이미 발표됨) 그 전달 호일 때만(이번 달 발표가 아직 안 올라온 1일 오전) — 몇 달 묵은 호를 뒤늦게 해부하지 않는다
+  // 그리고 지난달 호이거나(이미 발표됨) 그 전달 호일 때만(이번 달 발표가 아직 안 올라온 1일 오전) — 몇 달 묵은 호를 뒤늦게 정리본하지 않는다
   const target = previousMonth(kstParts(now).month);
   if (latest.period !== target && latest.period !== previousMonth(target)) return;
   await startAnalysis(latest.period, now);
@@ -80,9 +83,9 @@ export function sweepExpiredTradeJobs(now = Date.now()): void {
     const message = j.remoteStartedAt === null ? '예약 작업이 서버를 부르지 않았어요 (예약 작업·네트워크 설정 확인)' : '마감까지 완성본이 오지 않았어요';
     closeJob(j.id, 'missing', message);
     notifyAnalysisFailed(j.period, j.jobId, message);
-    // 해부 없이도 한 번은 알린다 — 원문은 이미 보관함에 있다 (알림은 호마다 한 번, 3단계)
-    notifyPdfReady(j.period);
-    console.log(`[trade] ${j.period} 해부 마감 초과 (job ${j.jobId})`);
+    // 정리본 없이도 한 번은 알린다 — 원문은 이미 보관함에 있다 (알림은 호마다 한 번, 3단계). 다시 만들기가 실패한 것이면 이미 알린 호라 보내지 않는다
+    if (releaseOf(j.period)?.analysisJson == null) notifyPdfReady(j.period);
+    console.log(`[trade] ${j.period} 정리본 마감 초과 (job ${j.jobId})`);
   }
 }
 
@@ -134,17 +137,19 @@ export async function tradePages(job: JobRow, doc: 'cur' | 'prev'): Promise<{ do
   return { doc, period, pages };
 }
 
-/** 해부 문서(HTML)를 보관함에(kind='trade') — 같은 호를 다시 받으면 그 문서를 고쳐 쓴다 */
+/** 정리본 문서(HTML)를 보관함에(kind='trade') — 같은 호를 다시 받으면 그 문서를 고쳐 쓴다(이름도 새 이름으로) */
 function saveDocument(release: ReleaseRow, html: string, now: number): number {
   const ownerId = archiveOwnerId();
   if (ownerId === null) throw new JobError(409, 'TRADE_JOB_CLOSED', '활성 관리자 계정이 없어 보관할 곳이 없어요');
   const size = Buffer.byteLength(html, 'utf8');
   const existing = release.analysisFileId === null ? undefined : db.select({ id: files.id, deletedAt: files.deletedAt }).from(files).where(eq(files.id, release.analysisFileId)).get();
   if (existing && existing.deletedAt === null) {
-    db.update(files).set({ contentText: html, sizeBytes: size, updatedAt: now }).where(eq(files.id, existing.id)).run();
+    // v0.68~0.70의 「…해부.html」을 고쳐 쓸 때 이름도 「…정리.html」로 바꾼다 — 내용과 이름이 어긋나지 않게
+    const name = `${periodLabel(release.period)} 수출입 동향 정리.html`;
+    db.update(files).set({ contentText: html, sizeBytes: size, updatedAt: now, ...(tradeNameTaken(ownerId, name) ? {} : { name }) }).where(eq(files.id, existing.id)).run();
     return existing.id;
   }
-  const name = uniqueFileName(`${periodLabel(release.period)} 수출입 동향 해부.html`, (n) => tradeNameTaken(ownerId, n));
+  const name = uniqueFileName(`${periodLabel(release.period)} 수출입 동향 정리.html`, (n) => tradeNameTaken(ownerId, n));
   return db.insert(files).values({ ownerId, folderId: null, name, fileType: 'html', mimeType: 'text/html', sizeBytes: size, contentText: html, kind: 'trade', createdAt: now, updatedAt: now }).returning().get().id;
 }
 
@@ -174,7 +179,8 @@ export async function acceptTradeResult(job: JobRow, body: unknown, now = Date.n
   const fileId = saveDocument(release, renderTradeHtml(data), now);
   db.update(tradeReleases).set({ analysisJson: JSON.stringify(data), analysisFileId: fileId, analysisAt: now }).where(eq(tradeReleases.id, release.id)).run();
   closeJob(job.id, 'ok', null, report);
-  notifyAnalysisReady({ period: job.period, fileId, claims: data.claims.length, links: data.links.length, passed: report.passed });
-  console.log(`[trade] ${job.period} 해부 저장 — 인용 ${report.passed}/${report.checked}, 뺀 항목 ${report.dropped.length} → 파일 ${fileId}`);
+  // 이 호에 정리본이 이미 있었다면 다시 만들기다 — 처음 만든 것만 모두에게 알린다
+  notifyAnalysisReady({ period: job.period, fileId, headline: data.takeaways[0]?.lead ?? '정리 완료', passed: report.passed, rerunJobId: release.analysisJson !== null ? job.jobId : null });
+  console.log(`[trade] ${job.period} 정리본 저장 — 대조 ${report.passed}/${report.checked}, 뺀 것 ${report.dropped.length} → 파일 ${fileId}`);
   return { fileId, checked: report.checked, passed: report.passed, dropped: report.dropped, already: false };
 }

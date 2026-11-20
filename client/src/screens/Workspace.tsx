@@ -1698,7 +1698,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
               ['files', '문서', 'files'],
               ['chat', '대화', 'chat'],
               ...(canSeeBriefing ? [['briefing', '브리핑', 'news']] : []),
-              // 이전 레이아웃에도 동향은 둔다 — 원문·해부가 문서 탭에서 빠져서, 이 칸이 없으면 볼 길이 알림뿐이다
+              // 이전 레이아웃에도 동향은 둔다 — 원문·정리본이 문서 탭에서 빠져서, 이 칸이 없으면 볼 길이 알림뿐이다
               ['trade', '동향', 'chart'],
               ['settings', '설정', 'settings'],
             ]) as [Panel, string, IconName][]

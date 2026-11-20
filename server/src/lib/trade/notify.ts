@@ -6,7 +6,7 @@ import { activeUserIds, adminIds, releaseOf, type SavedRelease } from './store.j
 
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 
-/** 원문 도착 — v0.69부터는 해부를 시키지 못했거나 해부가 실패했을 때만 부른다(알림은 호마다 한 번, 해부 도착이 먼저다) */
+/** 원문 도착 — v0.69부터는 정리본을 시키지 못했거나 정리본이 실패했을 때만 부른다(알림은 호마다 한 번, 정리본 도착이 먼저다) */
 export function notifyPdfReady(period: string): void {
   const r = releaseOf(period);
   if (!r || r.fileId === null) return;
@@ -41,24 +41,26 @@ export function notifyMissing(args: { dedupeKey: string; title: string; body: st
   pushNotification({ userIds: adminIds(), kind: 'trade_missing', title: args.title, body: args.body, dedupeKey: args.dedupeKey });
 }
 
-/** 해부 도착 — 한 호의 알림은 이것 하나다(누르면 해부 문서). 원문은 동향 탭에서 함께 열린다 */
-export function notifyAnalysisReady(a: { period: string; fileId: number; claims: number; links: number; passed: number }): void {
+/** 정리본 도착 — 한 호의 알림은 이것 하나다(누르면 정리본). 원문은 동향 탭에서 함께 열린다.
+ *  관리자가 [다시 만들기]로 만든 것은 그 일을 시킨 관리자들에게만 알린다(모두에게 두 번 알리지 않는다) */
+export function notifyAnalysisReady(a: { period: string; fileId: number; headline: string; passed: number; rerunJobId: string | null }): void {
+  const month = periodLabel(a.period).split(' ')[1];
   pushNotification({
-    userIds: activeUserIds(),
+    userIds: a.rerunJobId ? adminIds() : activeUserIds(),
     kind: 'trade_ready',
-    title: `${periodLabel(a.period).split(' ')[1]} 수출입 동향이 나왔어요`,
-    body: `해부 완료 · 1쪽 문장 ${a.claims}개 · 쪽 넘는 연결 ${a.links}개 · 인용 ${a.passed}개 원문 대조`,
+    title: a.rerunJobId ? `${month} 수출입 동향 정리를 다시 만들었어요` : `${month} 수출입 동향이 나왔어요`,
+    body: `${a.headline} · 숫자 ${a.passed}곳 원문 대조`,
     fileId: a.fileId,
-    dedupeKey: `trade:${a.period}:analysis`,
+    dedupeKey: a.rerunJobId ? `trade:${a.period}:analysis:${a.rerunJobId}:ok` : `trade:${a.period}:analysis`,
   });
 }
 
-/** 해부 실패 — 원문 PDF는 이미 받아 뒀다(동향 탭). 할 수 있는 일이 있는 관리자에게만 */
+/** 정리본 실패 — 원문 PDF는 이미 받아 뒀다(동향 탭). 할 수 있는 일이 있는 관리자에게만 */
 export function notifyAnalysisFailed(period: string, jobId: string, reason: string): void {
   pushNotification({
     userIds: adminIds(),
     kind: 'trade_missing',
-    title: `${periodLabel(period).split(' ')[1]} 수출입 동향 해부를 만들지 못했어요`,
+    title: `${periodLabel(period).split(' ')[1]} 수출입 동향 정리를 만들지 못했어요`,
     body: `${reason} · 원문 PDF는 동향 탭에 있어요`,
     dedupeKey: `trade:${period}:analysis:${jobId}`,
   });

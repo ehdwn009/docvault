@@ -45,7 +45,7 @@ export type TreeFile = {
   name: string;
   fileType: FileType;
   /** card = 배움 카드 (서랍에서만 보임, 뷰어는 머리말을 표로 그린다), briefing = 뉴스 브리핑 회차 (전용 뷰어),
-      trade = 수출입 동향 원문·해부 (문서 목록에 안 나오고 동향 탭에서만 — 보통 PDF·HTML 뷰어로 연다). 없으면 doc */
+      trade = 수출입 동향 원문·정리본 (문서 목록에 안 나오고 동향 탭에서만 — 보통 PDF·HTML 뷰어로 연다). 없으면 doc */
   kind?: 'doc' | 'card' | 'briefing' | 'trade';
   sizeBytes: number;
   isShared: number;
@@ -439,13 +439,8 @@ export function cardToTreeFile(c: CardSummary): TreeFile {
 }
 
 // ---- 수출입 동향 (API-171, 동향 탭 SCR-195) ----
-export type TradeTone = 'up' | 'down' | 'muted';
-export type TradeCard = {
-  kpis: { label: string; value: string; sub: [string, TradeTone][] }[];
-  headline: string | null;
-  pair: string | null;
-  counts: { claims: number; links: number; changes: number; nih: number; pages: number };
-};
+/** 최신 호 큰 카드 — 정리본의 숫자 칸과 결론 줄. format 1은 v0.68~0.70에 만든 해부(다시 만들기 전까지 남는다) */
+export type TradeCard = { format: 1 | 2; kpis: { label: string; value: string; lines: string[] }[]; points: string[] };
 export type TradeRelease = { period: string; label: string; publishedDate: string; pdfFileId: number | null; analysisFileId: number | null; read: boolean };
 export type TradePending = { period: string; label: string; state: 'waiting' | 'analyzing' | 'failed'; checks: string[]; laterCheck: string; message: string | null };
 export type TradeView = { releases: TradeRelease[]; latest: (TradeRelease & { card: TradeCard | null }) | null; pending: TradePending | null };

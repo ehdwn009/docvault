@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pdfPageTexts } from '../lib/trade/pages.js';
-import { reportLines, TradeDataSchema, verifyTradeData, type PageTexts } from '../lib/trade/verify.js';
+import { renderTradeHtml } from '../lib/trade/document.js';
+import { plainText, reportLines, TradeDataSchema, verifyTradeData, type PageTexts } from '../lib/trade/verify.js';
 
 // trade-report 스킬의 기계적인 일 — 쪽 텍스트·대조·서버와 주고받기. 대조는 서버가 완성본을 받을 때와 **같은 함수**다(lib/trade/verify.ts).
 // 사용: npm run trade:job -w server -- <명령> …
 //   pages <W>            W/cur.pdf·prev.pdf → W/pages/{cur,prev}/NN.txt, all.txt   (수동 모드, pdftotext 필요)
 //   pull <jobId> <W>     서버에서 지시서·쪽 텍스트를 받는다                          (자동 모드, DOCVAULT_URL)
-//   build <W>            W/out/*.json을 엮어 원문과 대조 → W/data.json, verify-report.txt
+//   build <W>            W/out/report.json + tables.json을 원문과 대조 → W/data.json, verify-report.txt, report.txt(독자용 글), page.html(완성 화면)
 //   send <jobId> <W>     W/data.json을 서버에 보낸다                               (자동 모드)
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -64,7 +65,7 @@ async function pull(jobId: string, work: string): Promise<void> {
   fs.writeFileSync(path.join(work, 'instruction.json'), JSON.stringify(ins, null, 2));
   for (const doc of ['cur', 'prev'] as const) {
     if (doc === 'prev' && !ins.prev) {
-      console.log('전월 호 없음 — 전월 비교(vsPrev·changes)는 비워 둡니다');
+      console.log('전월 호 없음 — 지난달과의 비교는 이번 호 표에 실린 값으로만 씁니다');
       continue;
     }
     const r = await getJson<{ pages: string[] }>(`${url}/trade/pages?doc=${doc}`, headers);
@@ -97,25 +98,9 @@ function build(work: string): void {
   const cur = readPages(work, 'cur');
   if (!cur) throw new Error('pages/cur가 없습니다 — 먼저 pages(수동) 또는 pull(자동)');
   const pages: PageTexts = { cur, prev: readPages(work, 'prev') };
-  const h = readOut(work, 'headline');
-  const l = readOut(work, 'links');
-  const ch = readOut(work, 'changes', { changes: [], vsPrev: [] });
+  // 리더가 쓴 정리본(out/report.json)에 숫자 표 줄(out/tables.json)을 합친다 — 형식은 references/schema.md
   const tb = readOut(work, 'tables', { series: { months: [] }, rows: {} });
-  const assembled = {
-    meta: readOut(work, 'meta'),
-    claims: h.claims,
-    vsPrev: ch.vsPrev ?? [],
-    items20: h.items20 ?? [],
-    items20_summary: h.items20_summary ?? {},
-    regions: h.regions ?? [],
-    nih: h.nih ?? [],
-    links: l.links ?? [],
-    changes: ch.changes ?? [],
-    topics: l.topics ?? [],
-    pages: l.pages ?? [],
-    series: tb.series ?? { months: [] },
-    tableRows: tb.rows ?? {},
-  };
+  const assembled = { ...readOut(work, 'report'), series: tb.series ?? { months: [] }, tableRows: tb.rows ?? {} };
   const parsed = TradeDataSchema.safeParse(assembled);
   if (!parsed.success) {
     const lines = parsed.error.issues.slice(0, 20).map((i) => `  ! ${i.path.join('.') || '(본문)'}: ${i.message}`);
@@ -129,7 +114,10 @@ function build(work: string): void {
   console.log(lines.join('\n'));
   if (report.fatal.length) process.exit(1);
   fs.writeFileSync(path.join(work, 'data.json'), JSON.stringify(data));
-  console.log(`→ ${path.join(work, 'data.json')}`);
+  // 독자 검수가 읽을 글(근거 없이 화면에 보이는 것만)과, 눈으로 확인할 완성 화면
+  fs.writeFileSync(path.join(work, 'report.txt'), plainText(data));
+  fs.writeFileSync(path.join(work, 'page.html'), renderTradeHtml(data));
+  console.log(`→ ${path.join(work, 'data.json')} · report.txt · page.html`);
 }
 
 async function main(): Promise<void> {
@@ -139,7 +127,7 @@ async function main(): Promise<void> {
       const pdf = path.join(a, `${doc}.pdf`);
       if (!fs.existsSync(pdf)) {
         if (doc === 'cur') throw new Error(`${pdf}가 없습니다 — 먼저 npm run trade:fetch`);
-        console.log('prev.pdf 없음 — 전월 비교(vsPrev·changes)는 비워 둡니다');
+        console.log('prev.pdf 없음 — 지난달과의 비교는 이번 호 표에 실린 값으로만 씁니다');
         continue;
       }
       const pages = await pdfPageTexts(pdf);

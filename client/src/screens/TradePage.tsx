@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Icon from '../components/Icon';
 import Group from '../components/ui/Group';
 import GroupRow from '../components/ui/GroupRow';
-import { api, type TradePending, type TradeRelease, type TradeTone, type TradeView, type User } from '../lib/api';
+import { api, ApiError, type TradePending, type TradeRelease, type TradeView, type User } from '../lib/api';
 import { IS_TOUCH } from '../lib/device';
 import { HomeButton, MeButton } from '../lib/topNav';
 
@@ -13,28 +13,26 @@ type Props = {
   onCopy: (id: number) => void;
 };
 
-const TONE: Record<TradeTone, string> = { up: 'text-accent-400', down: 'text-warn-400', muted: 'text-slate-500' };
-
 /** 'YYYY-MM-DD' → '11월 1일' */
 function monthDay(date: string): string {
   const [, m, d] = date.split('-').map(Number);
   return `${m}월 ${d}일`;
 }
 
-/** 기다리는 일 띠 — 오늘 발표 예정 / 해부하는 중 / 해부를 못 만듦(관리자에게만 온다) */
+/** 기다리는 일 띠 — 곧 올라와요 / 정리하는 중 / 정리본을 못 만듦(관리자에게만 온다) */
 function PendingBanner({ p }: { p: TradePending }) {
   const month = p.label.split(' ')[1];
   if (p.state === 'failed') {
     return (
       <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 px-3.5 py-3 text-sm">
-        <p className="font-semibold text-amber-200">{month}호 해부를 만들지 못했어요</p>
+        <p className="font-semibold text-amber-200">{month}호 정리본을 만들지 못했어요</p>
         <p className="mt-0.5 text-xs text-slate-400">{p.message ?? '이유를 알 수 없어요'} · 원문 PDF는 아래에서 볼 수 있어요</p>
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-sky-800 bg-sky-950/40 px-3.5 py-3 text-sm">
-      <p className="font-semibold text-sky-200">{p.state === 'waiting' ? `${month}호 · 곧 올라와요` : `${month}호 도착 · 해부하는 중`}</p>
+      <p className="font-semibold text-sky-200">{p.state === 'waiting' ? `${month}호 · 곧 올라와요` : `${month}호 도착 · 정리하는 중`}</p>
       <p className="mt-0.5 text-xs text-slate-400">
         {p.state === 'waiting'
           ? `산업통상부가 매달 1일 11시에 발표해요. 1일 ${p.checks.join(' · ')}, 그 뒤로는 매일 ${p.laterCheck}에 게시판을 확인하고, 올라오면 알림이 와요.`
@@ -44,10 +42,11 @@ function PendingBanner({ p }: { p: TradePending }) {
   );
 }
 
-// SCR-195: 동향 탭 — 수출입 동향의 최신 호 큰 카드와 지난 호. 원문 PDF와 해부는 문서 탭에 나오지 않고 여기서만 보인다 (수출입 동향 설계 3단계)
+// SCR-195: 동향 탭 — 수출입 동향의 최신 호 큰 카드와 지난 호. 원문 PDF와 정리본은 문서 탭에 나오지 않고 여기서만 보인다 (수출입 동향 설계 3·4단계)
 export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
   const [view, setView] = useState<TradeView | null>(null);
   const [failed, setFailed] = useState(false);
+  const [rerun, setRerun] = useState<{ busy: boolean; note: string | null }>({ busy: false, note: null });
 
   useEffect(() => {
     let alive = true;
@@ -64,6 +63,17 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
+
+  /** 관리자: 이 호의 정리본을 다시 만들게 시킨다(API-172) — 예약 작업을 켜는 일이라 끝나면 알림으로 온다 */
+  const remake = (period: string) => {
+    setRerun({ busy: true, note: null });
+    void api('/trade/' + period + '/analysis', { method: 'POST' })
+      .then(() => {
+        setRerun({ busy: false, note: '다시 만들기 시작했어요. 끝나면 알림이 와요(길면 세 시간). 그동안은 지금 것이 그대로 보여요' });
+        return api<TradeView>('/trade').then(setView);
+      })
+      .catch((e: unknown) => setRerun({ busy: false, note: e instanceof ApiError ? e.message : '시작하지 못했어요' }));
+  };
 
   const latest = view?.latest ?? null;
   const past = (view?.releases ?? []).slice(1);
@@ -109,33 +119,34 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
                         <div key={k.label} className="min-w-0 rounded-xl bg-fill px-3 py-2 pc:bg-slate-800/70">
                           <p className="text-[11.5px] text-slate-500">{k.label}</p>
                           <p className="truncate text-[15px] font-bold tabular-nums">{k.value}</p>
-                          <p className="truncate text-xs">
-                            {k.sub.map(([text, tone], i) => (
-                              <span key={i} className={TONE[tone]}>{text}</span>
-                            ))}
-                          </p>
+                          {k.lines.map((line) => (
+                            <p key={line} className="truncate text-xs text-slate-400">{line}</p>
+                          ))}
                         </div>
                       ))}
                     </div>
                   )}
-                  {latest.card.headline && <p className="mt-3 text-sm font-semibold">“{latest.card.headline}”</p>}
-                  {latest.card.pair && (
-                    <div className="mt-2 border-t border-dashed border-slate-700 pt-2">
-                      <p className="text-[11.5px] font-semibold text-warn-400">같이 봐야 할 신호</p>
-                      <p className="text-[13.5px] text-slate-300">{latest.card.pair}</p>
-                    </div>
+                  {latest.card.points.length > 0 && (
+                    <ol className="mt-3 space-y-1.5">
+                      {latest.card.points.map((point, i) => (
+                        <li key={point} className="flex gap-2 text-sm">
+                          <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-fill text-[11px] font-semibold text-slate-300 pc:bg-slate-800">{i + 1}</span>
+                          <span className="min-w-0 font-medium text-slate-200">{point}</span>
+                        </li>
+                      ))}
+                    </ol>
                   )}
-                  <p className="mt-2 text-xs text-slate-500">
-                    1쪽 문장 {latest.card.counts.claims}개 해부 · 쪽 넘는 연결 {latest.card.counts.links} · 지난달과 달라진 것 {latest.card.counts.changes} · 헤드라인이 말하지 않는 것 {latest.card.counts.nih}
-                  </p>
+                  {latest.card.format === 1 && user.role === 'admin' && (
+                    <p className="mt-2 text-xs text-slate-500">예전 형식(해부)으로 만든 호예요. 아래 「정리본 다시 만들기」를 누르면 새 정리본으로 바뀝니다.</p>
+                  )}
                 </>
               ) : (
-                <p className="mt-3 text-sm text-slate-400">이 호는 해부가 아직 없어요. 원문 PDF로 볼 수 있어요.</p>
+                <p className="mt-3 text-sm text-slate-400">이 호는 정리본이 아직 없어요. 원문 PDF로 볼 수 있어요.</p>
               )}
               <div className="mt-3 flex flex-col gap-2">
                 {latest.analysisFileId !== null && (
                   <button onClick={() => onOpenFileById(latest.analysisFileId!)} className="h-12 w-full rounded-xl bg-sky-600 text-[15px] font-semibold text-white transition hover:bg-sky-500 active:opacity-80">
-                    해부 보기
+                    정리 보기
                   </button>
                 )}
                 {latest.pdfFileId !== null && (
@@ -150,12 +161,21 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
               <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                 <span>내 문서로 복사:</span>
                 {latest.analysisFileId !== null && (
-                  <button onClick={() => onCopy(latest.analysisFileId!)} className="underline underline-offset-2 hover:text-slate-300">해부</button>
+                  <button onClick={() => onCopy(latest.analysisFileId!)} className="underline underline-offset-2 hover:text-slate-300">정리본</button>
                 )}
                 {latest.pdfFileId !== null && (
                   <button onClick={() => onCopy(latest.pdfFileId!)} className="underline underline-offset-2 hover:text-slate-300">원문 PDF</button>
                 )}
               </p>
+              {/* 다시 만들기 — 예약 작업(구독 사용량)을 쓰는 일이라 관리자에게만. 도는 중에는 위의 띠가 대신 보인다 */}
+              {user.role === 'admin' && latest.pdfFileId !== null && view?.pending?.state !== 'analyzing' && (
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <button onClick={() => remake(latest.period)} disabled={rerun.busy} className="underline underline-offset-2 hover:text-slate-300 disabled:opacity-50">
+                    정리본 다시 만들기
+                  </button>
+                  {rerun.note && <span role="status" className="text-accent-400">{rerun.note}</span>}
+                </p>
+              )}
             </section>
           )}
           {view && !latest && !view.pending && <p className="text-sm text-slate-500">아직 받은 수출입 동향이 없어요. 매달 1일에 알아서 가져와요.</p>}
@@ -171,7 +191,7 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
                       icon={<Icon name="chart" size={21} />}
                       tint={r.analysisFileId !== null ? 'accent' : undefined}
                       title={r.label}
-                      subtitle={`${monthDay(r.publishedDate)} 발표 · ${r.analysisFileId !== null ? '해부 · 원문' : '원문'}`}
+                      subtitle={`${monthDay(r.publishedDate)} 발표 · ${r.analysisFileId !== null ? '정리본 · 원문' : '원문'}`}
                       chevron
                       onClick={() => openBest(r)}
                     />
@@ -187,7 +207,7 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
                       <span className="shrink-0 text-xs text-slate-500">{monthDay(r.publishedDate)} 발표</span>
                       {r.analysisFileId !== null && (
                         <button onClick={() => onOpenFileById(r.analysisFileId!)} className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
-                          해부
+                          정리본
                         </button>
                       )}
                       {r.pdfFileId !== null && (
@@ -203,8 +223,8 @@ export default function TradePage({ user, onOpenFileById, onCopy }: Props) {
           )}
           {view && (
             <p className="text-xs text-slate-500 touch:px-4">
-              여기 있는 원문과 해부는 문서 탭에 나오지 않아요. 문서처럼 다루고 싶으면 위의 「내 문서로 복사」로 사본을 만들 수 있어요.
-              {user.role === 'admin' ? ' 새 호는 매달 1일에 알아서 가져오고, 해부는 브리핑 구독의 예약 작업이 만들어요.' : ''}
+              여기 있는 원문과 정리본은 문서 탭에 나오지 않아요. 문서처럼 다루고 싶으면 위의 「내 문서로 복사」로 사본을 만들 수 있어요.
+              {user.role === 'admin' ? ' 새 호는 매달 1일에 알아서 가져오고, 정리본은 브리핑 구독의 예약 작업이 만들어요.' : ''}
               <br />출처: 산업통상부 보도자료 (공공누리 제1유형)
             </p>
           )}
