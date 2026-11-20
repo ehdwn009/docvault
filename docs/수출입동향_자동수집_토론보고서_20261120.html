@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<title>수출입동향 자동 수집 토론</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 한 칸 읽기 문서. 결론 → 확인한 사실 → 네 입장 → 쟁점과 결정 → 실측 → 합의 로드맵 → 화면 시안 → 정해 주실 것 → 위험 → 부록 */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eceef3; --fg: #14171c; --muted: #596270; --line: #dadfe6;
+  --accent: #0369a1; --accent-soft: #e3f1fa; --major: #c9741c; --core: #cf2f2f; --ok: #1d8556; --ok-soft: #e4f3ea; --bar: #0284c7;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+    --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327; --bar: #38bdf8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101216; --surface: #191c22; --sunk: #22262e; --fg: #e6e8ec; --muted: #9ba3af; --line: #2e333c;
+  --accent: #7dd3fc; --accent-soft: #15303f; --major: #eb9c4c; --core: #f06262; --ok: #45bb84; --ok-soft: #173327; --bar: #38bdf8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15.5px; line-height: 1.7; overflow-wrap: anywhere; }
+.wrap { max-width: 900px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 72px; display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3, h4 { text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 14px; }
+section > h2 { font-size: 23px; letter-spacing: -0.01em; padding-top: 6px; }
+section > h3 { font-size: 17px; margin-top: 6px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.hero { display: flex; flex-direction: column; gap: 12px; }
+.hero h1 { font-size: clamp(26px, 4.2vw, 36px); letter-spacing: -0.02em; }
+.hero .lead { font-size: 17px; max-width: 72ch; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 0 14px 14px 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.verdict .tag { display: inline-block; background: var(--ok-soft); color: var(--ok); font-weight: 700; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; width: fit-content; max-width: 100%; }
+.verdict ul, section ul, section ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.ask { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14.5px; min-width: 0; }
+.card h3 { font-size: 15.5px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .pos { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.card ul { padding-left: 18px; gap: 3px; }
+.tbl-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+thead th { font-size: 12px; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tbody th { white-space: nowrap; font-weight: 600; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+td.fin { background: var(--ok-soft); font-weight: 500; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.no { color: var(--core); font-weight: 600; } .cond { color: var(--major); font-weight: 600; } .yes { color: var(--ok); font-weight: 600; }
+
+/* 비용 막대: 단계별 비중을 한 줄로 */
+.bars { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.bar-row { display: grid; grid-template-columns: 9.5em 1fr 4.5em; gap: 10px; align-items: center; font-size: 13.5px; }
+.bar-row .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-row .track { background: var(--sunk); border-radius: 6px; height: 14px; overflow: hidden; }
+.bar-row .fill { background: var(--bar); height: 100%; border-radius: 6px; }
+.bar-row .fill.lite { background: var(--major); }
+.bar-row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+.bars .cap { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 480px) { .bar-row { grid-template-columns: 7em 1fr 4em; } }
+
+.road { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; min-width: 0; }
+.step h3 { font-size: 15.5px; }
+.step .cost { font-family: var(--f-mono); font-size: 12.5px; color: var(--accent); }
+.step ul { padding-left: 18px; gap: 4px; }
+.step.stop { border-color: var(--core); }
+.step.stop h3 { color: var(--core); }
+.decide { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.decide h3 { font-size: 16px; }
+.decide .opt { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+.decide .opt > div { background: var(--sunk); border-radius: 10px; padding: 9px 12px; min-width: 0; }
+.decide .opt b { display: block; margin-bottom: 2px; }
+.decide .rec { font-size: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.decide .rec b { color: var(--ok); }
+@media (max-width: 560px) { .decide .opt { grid-template-columns: 1fr; } }
+code { font-family: var(--f-mono); font-size: 0.9em; background: var(--sunk); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+pre { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; background: var(--sunk); border-radius: 12px; padding: 14px 16px; overflow-x: auto; margin: 0; white-space: pre; }
+pre.doc { white-space: pre-wrap; font-family: var(--f-body); font-size: 14px; line-height: 1.65; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; }
+details summary { cursor: pointer; font-weight: 600; padding: 12px 0; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+details summary::after { content: "펼치기"; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+details[open] summary::after { content: "접기"; }
+details > *:not(summary) { margin-bottom: 14px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+/* 한글 제목이 낱자 중간에서 끊기지 않게 */
+h1, h2, h3, .verdict .tag { word-break: keep-all; }
+/* 흐름 띠: 1단계 파이프라인을 칸으로 */
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.flow .node { flex: 1 1 140px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; display: flex; flex-direction: column; gap: 3px; }
+.flow .node b { font-size: 14px; }
+.flow .node .who { font-family: var(--f-mono); font-size: 11.5px; color: var(--accent); }
+.flow .node.llm .who { color: var(--major); }
+.tag-s { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.tag-s.hi { background: color-mix(in srgb, var(--core) 16%, transparent); color: var(--core); }
+.tag-s.mid { background: color-mix(in srgb, var(--major) 18%, transparent); color: var(--major); }
+.tag-s.lo { background: var(--ok-soft); color: var(--ok); }
+.wf-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.wf-pair figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wf-pair figcaption { font-size: 13px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">docvault(Loft) · 수출입 동향 · 에이전트 토론 · 2026-11-20</p>
+    <h1>매달 1일, 수출입 동향이 알아서 들어오게</h1>
+    <p class="lead">사용자 질문: "산업통상부 사이트에서 매번 수출입동향을 자동으로 가져오고, 가져온 자료를 어떻게 정리해서 보여주면 좋을지 에이전트들과 의논해 와라." 수집·데이터·화면 담당 세 명이 1라운드 안을 내고, 비판 담당이 2라운드에서 검토해 합의안을 만들었습니다. 수치는 모두 오늘 컨테이너에서 사이트에 직접 접속해 받은 파일로 확인한 값입니다.</p>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <span class="tag">결론: 가져오기는 쉽고, 어려운 건 숫자다. 숫자는 코드가, 글은 AI가 쓴다 (4/4)</span>
+      <ul>
+        <li><b>자동으로 가져오는 건 확실히 됩니다.</b> 로그인 없이 목록, 상세, 첨부 PDF가 모두 받아집니다. 2015년 12월부터 2026년 10월까지 <b>131개월이 빈틈 없이</b> 같은 게시판에 있고, 제목 판정 규칙으로 131건을 모두 정확히 골라냈습니다.</li>
+        <li><b>RSS가 아니라 목록 검색으로 확인합니다.</b> RSS는 10건, 약 3일치뿐이라 1일 글이 금방 밀려납니다. 「수출입 동향」으로 검색하면 띄어쓰기 없이 올라온 8월호 「수출입동향」이 빠지므로, "수출입"으로 넓게 검색한 뒤 서버가 걸러냅니다.</li>
+        <li><b>숫자는 PDF 뒤쪽 붙임 표에서 코드로 뽑습니다.</b> 기존 수출입 대시보드 스킬의 파서로 최근 월간호 11개를 돌려 보니, <b>11개 모두</b>에서 13개월치 수출·수입·수지와 품목·지역 추이가 빠짐없이 나왔고 수지 검산(수출 − 수입)도 다 맞았습니다. 연간호(1월 1일자)만 형식이 달라 깨집니다.</li>
+        <li><b>AI에게 숫자를 만들게 하지 않습니다.</b> 서버 검산은 합계가 안 맞는 건 잡지만, 품목 줄을 바꿔 적거나 달을 한 칸 밀어 적은 실수는 못 잡습니다. AI는 "왜 늘었나" 같은 해설만 쓰고, 그 해설에 원문에 없는 숫자가 있으면 지웁니다. 지금 브리핑에 있는 <code>verify.ts</code>를 그대로 씁니다.</li>
+        <li><b>Loft에서는 세 겹으로 봅니다.</b> 홈 카드는 입구, 월 화면은 시간 축(13개월 추이·품목·지역·지난달과 달라진 것), 원문 PDF는 근거입니다. 1단계는 <b>알림 + 원문 PDF 폴더</b>만으로 작게 시작합니다.</li>
+        <li><b>하지 않습니다.</b> RSS에만 기대기, 구형 HWP 변환(1건 138초 + AGPL 라이선스), 1997~2015년 소급(대부분 HWP이고 2016년에 일괄 이관됨), Claude 예약 작업(구독)으로 매달 대시보드 만들기(1단계부터 예약 작업이 필요해지고 다크모드도 안 맞음), 표 3개짜리 데이터 창고(한 달 1건에는 과잉).</li>
+      </ul>
+    </div>
+    <p class="ask">정해 주실 것은 <a href="#decide">맨 아래 5가지</a>입니다. 가장 중요한 건 1번 "숫자를 어디까지 볼지"이고, 추천은 <b>2단계(홈 카드 + 간단한 월 화면)까지</b>입니다.</p>
+  </section>
+
+  <section>
+    <h2>먼저 확인한 사이트 구조</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>항목</th><th>확인한 내용</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><th>게시판</th><td>보도자료 게시판 <code>ATCL3f49a5a8c</code>. 목록은 <code>?searchKeyword=수출입&amp;startDtD=…</code>로 검색되고 날짜 필터도 동작</td><td>한 번 요청으로 이번 달 후보를 모두 받을 수 있음</td></tr>
+          <tr><th>RSS</th><td><code>/kor/article/ATCL3f49a5a8c/rss</code>(POST), 최근 10건(약 3일치), 첨부·부서 정보 없음</td><td>보조로만 사용</td></tr>
+          <tr><th>발표 시점</th><td>매월 1일 11:00 보도(일요일이어도 1일). 담당은 수출입과</td><td>1일 오전부터 확인하면 됨</td></tr>
+          <tr><th>제목 흔들림</th><td>「2026년 8월 수출입동향」(붙여 씀). 같은 달 「정보통신산업(ICT) 수출입 동향」, 「전략물자 수출입고시」도 검색에 걸림</td><td>포함·제외 단어와 날짜 보조 규칙이 필요</td></tr>
+          <tr><th>첨부</th><td>최근 13개월 모두 PDF 있음(13/13). 원본은 HWPX 5개월, 구형 HWP 8개월로 달마다 들쭉날쭉. 첨부 순서도 달마다 다름</td><td>PDF만 믿고, 확장자로 구분</td></tr>
+          <tr><th>파일명 "_수정"</th><td>13개 중 9개가 처음 올릴 때부터 붙어 있음</td><td>정정 신호가 아님</td></tr>
+          <tr><th>캐시 정보</th><td>다운로드 응답에 ETag·Last-Modified 없음</td><td>바뀌었는지는 sha256으로 비교</td></tr>
+          <tr><th>과거 자료</th><td>목록 60쪽 전부 확인: 2015-12~2026-10 정규 게시 131개월, 빈틈·중복 0. 1997~2015년 글은 게시일이 2016-12-09로 일괄 이관, 대부분 HWP</td><td>2016년 이후는 소급 가능</td></tr>
+          <tr><th>이용 조건</th><td>공공누리 1유형(출처표시). robots.txt가 <code>/kor/article</code>, <code>/attach/down</code> 허용</td><td>앱에 올리고 열람 계정에 공유해도 됨. 출처 줄은 반드시</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>네 담당의 입장</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>수집 담당 <span class="pos">1라운드</span></h3>
+        <p><b>혼합형.</b> 서버가 감지·다운로드·핵심 숫자를 맡고, Claude 예약 작업이 표 정리와 해설을 쓴 뒤 서버가 검산합니다.</p>
+        <ul>
+          <li>1일 11:05부터 30분 간격, 2~3일 2시간 간격으로 확인. 3일 18시까지 없으면 알림</li>
+          <li>HWPX는 표 103개가 셀 경계까지 깔끔하게 나옴. PDF는 "일반/기계"처럼 깨짐</li>
+          <li>PDF 1쪽 정규식은 헤드라인 12/13, 품목·지역 표는 4/13</li>
+          <li>게시 후 1·3·7일에 첨부를 다시 확인해 정정본 감지</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>데이터 담당 <span class="pos">1라운드</span></h3>
+        <p><b>월별 JSON 원장 + 긴 형식 색인.</b> 발표 1건을 한 줄로 쌓고, 숫자 한 칸씩 펼친 표는 다시 만들 수 있는 색인으로 둡니다.</p>
+        <ul>
+          <li>표 3개: releases · series · observations(연 3만 줄)</li>
+          <li>9월호와 10월호에서 겹치는 396칸 중 <b>103칸(26%)이 정정됨</b>. 1월 값까지 거슬러 고쳐짐</li>
+          <li>참고2 표 하나로 2024.1~당월 34개월 총계를 소급할 수 있음. 참고1은 그래프 이미지라 불가</li>
+          <li>단위는 백만 달러로 통일, △는 음수로</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>화면 담당 <span class="pos">1라운드</span></h3>
+        <p><b>홈 카드(입구) + 월별 HTML 대시보드(상세)</b>로 시작하고, 나중에 전용 화면을 좁게 얹습니다.</p>
+        <ul>
+          <li>브리핑처럼 <code>files.kind</code> + 전용 뷰어로 만들면 탭·분할·권한 검사가 그대로 따라옴</li>
+          <li>HTML 문서는 iframe 격리라 앱 데이터를 못 부름. 스킬 HTML은 다크모드 대응이 없음</li>
+          <li>해설: 증감률은 "작년 같은 달" 대비, 일평균 수출, 기저효과, △ 표기</li>
+          <li>품목표의 "역대순위"는 "역대 10월 중" 순위라 월 역대 순위와 구분해야 함</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>비판 담당 <span class="pos">2라운드</span></h3>
+        <p><b>숫자 경로를 하나로, 1단계는 정말 작게.</b></p>
+        <ul>
+          <li>수집안이 1쪽 정규식에서 출발한 건 잘못. 붙임 표 파서가 이미 11/11 성공 <span class="tag-s hi">상</span></li>
+          <li>표 3개는 한 달 1건에는 과잉. 발표 1건 JSON 안에 이미 13개월이 들어 있음 <span class="tag-s hi">상</span></li>
+          <li>"스킬 HTML로 1단계"는 1단계부터 예약 작업이 필요해지는 모순 <span class="tag-s hi">상</span></li>
+          <li>정정 1%를 넘는 칸은 한 호에 3~5칸뿐이라 그것만 보여 주면 됨 <span class="tag-s mid">중</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>쟁점과 결정</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>쟁점</th><th>수집</th><th>데이터</th><th>화면</th><th>결정</th></tr></thead>
+        <tbody>
+          <tr><th>감지 방법</th><td>목록 검색, 30분 간격</td><td>—</td><td>—</td><td class="fin">목록 검색. 확인 시각은 1일 11:10 · 13:00 · 18:00, 2~4일은 매일 10:00. 분기를 줄여 코드를 단순하게</td></tr>
+          <tr><th>숫자를 누가 만드나</th><td>정규식 + HWPX + Claude</td><td>파서(미정)</td><td>스킬 HTML(Claude)</td><td class="fin"><b>서버의 결정적 파서 하나.</b> 스킬의 붙임 표 로직을 TypeScript로 옮김. 1쪽 정규식은 검산 전용. HWPX와 AI는 저장되는 숫자를 만들지 않음</td></tr>
+          <tr><th>담는 그릇</th><td><code>trade_reports</code></td><td>표 3개</td><td><code>kind='trade'</code> 파일</td><td class="fin">월 데이터는 <code>files.kind='trade'</code> 행의 JSON 본문(브리핑 선례). 수집 상태만 <code>trade_releases</code> 한 표에(글 ID, 상태, PDF·월 파일 ID, sha256)</td></tr>
+          <tr><th>정정 처리</th><td>1·3·7일 재확인</td><td>발표마다 쌓고 최신을 현재로</td><td>없음</td><td class="fin">매 호 JSON은 그대로 두고, 각 달의 "현재 값"은 그 달을 실은 가장 최근 호 값. 화면에는 총계 정정은 항상, 품목·지역은 1%를 넘는 것만. 재확인 일정은 없앰(다음 달 호가 어차피 고친 값을 실어 옴)</td></tr>
+          <tr><th>해설(왜?)</th><td>Claude 예약 작업</td><td>—</td><td>스킬 HTML</td><td class="fin">3단계에 서버가 API를 1회 호출하고, <code>verify.ts</code>로 원문에 없는 숫자가 든 문장을 탈락시킴. 예약 작업은 쓰지 않음</td></tr>
+          <tr><th>연간호(1월 1일)</th><td>별도 패턴</td><td>—</td><td>—</td><td class="fin">PDF 보관과 알림만. 12월 숫자는 다음 달 1월호의 13개월 표가 채움(1월호 파싱 정상 확인)</td></tr>
+          <tr><th>소급</th><td>131개월 가능</td><td>1년치 권장</td><td>참고2로 34개월</td><td class="fin">기본은 최근 12개월(요청 약 30회). 2016년 이후 전체는 4단계에서 필요할 때만</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>실측: 무엇이 얼마나 잘 뽑히나</h2>
+    <div class="bars">
+      <div class="bar-row"><span class="lbl">붙임 표 파서</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="val">11/11</span></div>
+      <div class="bar-row"><span class="lbl">1쪽 헤드라인 숫자</span><span class="track"><span class="fill" style="width:92%"></span></span><span class="val">12/13</span></div>
+      <div class="bar-row"><span class="lbl">제목 판정</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="val">131/131</span></div>
+      <div class="bar-row"><span class="lbl">HWPX가 있는 달</span><span class="track"><span class="fill lite" style="width:38%"></span></span><span class="val">5/13</span></div>
+      <div class="bar-row"><span class="lbl">1쪽 품목·지역 표</span><span class="track"><span class="fill lite" style="width:31%"></span></span><span class="val">4/13</span></div>
+      <div class="bar-row"><span class="lbl">1쪽 누적 줄</span><span class="track"><span class="fill lite" style="width:1%"></span></span><span class="val">0/10</span></div>
+      <p class="cap">붙임 표 파서: 2024년 10월호~2026년 10월호 중 월간호 11개. 13개월 수출·수입·수지, 품목 13개월 추이(15대 시절 15개, 2025년 5월호부터 20개), 지역 8~9개. 수지 = 수출 − 수입(±1) 11/11 일치. 연간호 1건은 연간 합계가 월 칸에 섞여 제외했습니다. 1쪽 표는 2026년 6월호 이전에는 아예 없어서 성공률이 낮습니다.</p>
+    </div>
+    <h3>정정은 얼마나 자주 일어나나</h3>
+    <ul>
+      <li>9월호와 10월호에서 겹치는 12개월 396칸 중 <b>약 100칸이 바뀜</b>(8→9월호도 비슷). 예: 9월 수출 1,209.4억 → 1,210.5억 달러, 반도체 8월 46,653 → 46,651(백만 달러)</li>
+      <li>그러나 <b>1%를 넘는 변동은 한 호에 3~5칸</b>뿐입니다. 예: 석유제품 7월 +5.65%, 전기기기 7월 −4.18%</li>
+      <li>2025년 값은 바뀌지 않았습니다. PDF의 "연간 확정 시('27.2월)까지 정정 가능" 문구와 맞습니다.</li>
+      <li>같은 보도자료 안에서도 같은 숫자가 1,153 / 1,152.8 / 115,276처럼 정밀도를 달리해 3~4번 나옵니다. 1쪽 정수와 표의 소수를 맞춰 보면 57개 중 4개가 반올림으로 어긋나므로, 검산 허용오차는 ±0.5입니다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>합의 로드맵</h2>
+    <div class="flow">
+      <div class="node"><span class="who">서버 · 1분 스케줄러</span><b>목록 확인</b>1일 11:10 · 13:00 · 18:00 + 2~4일 10:00</div>
+      <div class="node"><span class="who">서버</span><b>제목 판정</b>NFKC 정규화 → 포함 <code>수출입\s*동향</code> → 제외어 → 연월 = 게시월의 전월</div>
+      <div class="node"><span class="who">서버</span><b>PDF 받기·보관</b>「수출입동향」 폴더, sha256, 출처 줄</div>
+      <div class="node"><span class="who">서버 · 2단계</span><b>숫자 추출·검산</b>붙임 표 파서 + 수지 항등식 + 헤드라인 ±0.5</div>
+      <div class="node llm"><span class="who">AI 1회 · 3단계</span><b>해설</b>"왜?" 한두 줄, 근거 없는 숫자는 탈락</div>
+      <div class="node"><span class="who">알림</span><b>도착 알림</b>알림함 · 푸시 · 텔레그램</div>
+    </div>
+    <div class="road">
+      <div class="step">
+        <h3>1단계 · 도착과 보관</h3>
+        <span class="cost">작업량 작음 · 숫자·Docker 변경·AI 없음</span>
+        <p><b>얻는 것:</b> 매달 1일 「10월 수출입 동향이 올라왔어요」 알림이 오고, 「수출입동향」 폴더에 원문 PDF가 쌓여 앱 안 PDF 뷰어로 바로 읽습니다.</p>
+        <ul>
+          <li>기존 1분 스케줄러에 점검 단계 추가</li>
+          <li>목록 파싱 + 제목 판정 + PDF 받기(전용 크기 상수, 6월호가 2.44MB라 브리핑의 2MB 상한을 넘음)</li>
+          <li><code>trade_releases</code> 표(ERD 동시 갱신), 알림 종류 <code>trade_ready</code></li>
+          <li>못 찾거나 받기가 실패하면 관리자에게 알림</li>
+          <li>(선택) 최근 12개월 PDF 소급</li>
+        </ul>
+      </div>
+      <div class="step">
+        <h3>2단계 · 숫자 한 장</h3>
+        <span class="cost">작업량 중간 · 추천 목표 지점</span>
+        <p><b>얻는 것:</b> 홈 카드(수출·수입·수지·증감률, 13개월 막대, 1위 품목)와 월 화면(‹ › 이동, 품목·지역 표, 고쳐진 숫자), 용어 풀이 ⓘ. 알림에 숫자 한 줄이 붙습니다.</p>
+        <ul>
+          <li>Docker 이미지에 <code>poppler-utils</code>(pdftotext) 추가. 파이썬은 넣지 않음</li>
+          <li>스킬 파서의 붙임 표 로직을 TypeScript로 이식(핵심 칸만)</li>
+          <li>검산: 수지 항등식, 품목 합 &lt; 총액, 1쪽 헤드라인 ±0.5, 전 호 대비 1% 넘는 정정 목록</li>
+          <li><code>kind='trade'</code> 뷰어(목표 400줄 이내, 다크모드 기본)</li>
+          <li>검산이 실패하면 "숫자 확인 필요" 표시를 달고 원문은 그대로 게시</li>
+        </ul>
+      </div>
+      <div class="step">
+        <h3>3단계 · 해설과 질문</h3>
+        <span class="cost">작업량 중간 · 회당 API 1회</span>
+        <p><b>얻는 것:</b> 「지난달과 달라진 것」(증감 방향이 뒤집힌 품목), "왜?" 한두 줄(추석 이동, 기저효과), 그 달 자료로 AI에게 묻기.</p>
+        <ul>
+          <li>방향 전환 탐지는 코드로. 예: 자동차 ▼5.5% → ▲18.1%, 선박 ▲29.9% → ▼43.6%</li>
+          <li>서버 <code>ai.ts</code>로 해설 1회 호출, <code>verify.ts</code>로 숫자 대조</li>
+          <li>AI에게 묻기의 문맥에 월 JSON + PDF 본문 연결</li>
+        </ul>
+      </div>
+      <div class="step">
+        <h3>4단계 · 긴 시계열 (필요할 때만)</h3>
+        <span class="cost">작업량 큼</span>
+        <p><b>얻는 것:</b> 10년 추이, 관세청 10·20일 잠정치와 ICT 수출입 동향 합류.</p>
+        <ul>
+          <li>2015-12 이후 소급(옛 양식과 호환되는지 먼저 확인)</li>
+          <li>숫자 한 칸 = 한 줄인 색인 표(데이터 담당의 <code>trade_observations</code>)는 이때 도입</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted">어느 단계든 CHANGELOG, ERD, 학습자료(프로젝트 지도·용어집·6부)를 같은 작업에서 갱신해야 하므로, 실제 작업량은 위 추정의 약 1.5배로 잡는 게 안전합니다.</p>
+  </section>
+
+  <section>
+    <h2>화면 시안 (폰 기준)</h2>
+    <div class="wf-pair">
+      <figure>
+<pre>┌ 홈 ───────────────────────
+│ 오늘의 브리핑 …
+├───────────────────────────
+│ 이달의 수출입 · 오늘 도착 ●
+│ 10월 수출 1,153억$ ▲93.7%
+│ 흑자 425억 · 역대 2위
+│ ▁▂▃▃▅▅▆▆▆█▇   자세히 ›
+└───────────────────────────</pre>
+        <figcaption>2단계 홈 카드. 도착 후 7일은 크게, 그 뒤엔 한 줄로 줄어듭니다.</figcaption>
+      </figure>
+      <figure>
+<pre>┌───────────────────────────
+│ ‹   2026년 10월 수출입   ›
+│ 11월 1일 발표 · 산업통상부
+├───────────────────────────
+│ 수출   1,153억 달러 ▲93.7%
+│ 수입     728억 달러 ▲36.0%
+│ 무역수지 +425억 흑자     ⓘ
+│ 역대 2위 (1위 9월 1,211)
+│ 20대 품목 중 18개 증가
+├───────────────────────────
+│ [한눈에][품목][지역][추이]
+│ 수출액 13개월 ▁▂▃▃▅▅▆▆█▇
+│ ─ 지난달과 달라진 것 ─
+│ · 자동차 ▼5.5→▲18.1 추석 ⓘ
+│ · 선박 ▲29.9→▼43.6 기저 ⓘ
+│ ─ 고쳐진 숫자 (1% 이상) ─
+│ · 석유제품 7월 +5.7%
+│ [원문 PDF 36쪽 ›]
+│ 출처: 산업통상부 보도자료
+└───────────────────────────</pre>
+        <figcaption>2~3단계 월 화면. "지난달과 달라진 것"과 해설은 3단계에서 붙습니다.</figcaption>
+      </figure>
+    </div>
+    <h3>ⓘ 용어 풀이 (비개발자 눈높이)</h3>
+    <ul>
+      <li><b>증감률</b>: <b>작년 같은 달</b>과 비교한 값입니다. 지난달과 비교한 게 아니라는 점을 처음 보는 사람이 가장 자주 헷갈립니다.</li>
+      <li><b>무역수지</b>: 수출 − 수입입니다. 1,153 − 728 = 425. 플러스면 흑자입니다.</li>
+      <li><b>일평균 수출</b>: 수출액을 일한 날 수로 나눈 값입니다. 올해는 추석이 9월로 옮겨 가 10월에 일한 날이 22일(작년 20일)이었습니다. 그래서 총액 증가율 93.7%보다 일평균 증가율 76%가 실제 체력에 가깝습니다.</li>
+      <li><b>기저효과</b>: 비교 대상인 작년 같은 달이 유난히 커서 올해 증감률이 작아 보이는 현상입니다. 선박 ▼43.6%는 작년 10월 해양플랜트 한 건(24.7억 달러) 때문입니다.</li>
+      <li><b>△ 표기</b>: 원문에서 감소를 뜻합니다. 앱에서는 ▼와 "감소"로 바꿔 보여 줍니다.</li>
+    </ul>
+    <h3>알림 문구</h3>
+    <ul>
+      <li>1단계: 「10월 수출입 동향이 올라왔어요」 / 「원문 PDF를 Loft에 담아 두었습니다」</li>
+      <li>2단계: 「10월 수출입 동향이 도착했어요」 / 「수출 1,153억 달러(+93.7%) · 흑자 425억 · 역대 2위」</li>
+      <li>실패(관리자만): 「10월 수출입 동향을 아직 못 가져왔어요. 3일째 게시판에 글이 없습니다」</li>
+      <li>텔레그램은 지금 약속대로 제목과 한 줄만 보냅니다.</li>
+    </ul>
+  </section>
+
+  <section id="decide">
+    <h2>정해 주실 것</h2>
+    <div class="decide">
+      <h3>1. 숫자를 어디까지 볼까요?</h3>
+      <div class="opt">
+        <div><b>(a) PDF와 알림만</b>1단계에서 끝. 작고 튼튼합니다.</div>
+        <div><b>(b) 홈 카드 + 간단한 월 화면</b>2단계까지. 13개월 추이와 품목·지역 표.</div>
+      </div>
+      <p class="rec"><b>추천: (b).</b> 다만 (a)로 먼저 배포해 한 달 써 본 뒤 2단계로 가도 됩니다. 전용 화면 풀버전(탭 5개, 품목 24개월 시트)은 그 뒤에 판단합니다.</p>
+    </div>
+    <div class="decide">
+      <h3>2. "왜 늘었나" 해설은 누가 쓸까요?</h3>
+      <div class="opt">
+        <div><b>(a) 없음</b>원문 PDF 링크만 둡니다. 비용 0.</div>
+        <div><b>(b) 서버가 API 1회 호출</b>숫자 대조로 근거 없는 문장을 탈락시킵니다.</div>
+      </div>
+      <p class="rec"><b>추천: (a)로 시작해 3단계에서 (b).</b> Claude 예약 작업(구독)은 한 달 1건에 쓰기엔 운영 부담(시험 단계 기능, 실패 시 재실행)이 큽니다.</p>
+    </div>
+    <div class="decide">
+      <h3>3. 과거 자료는 얼마나 채울까요?</h3>
+      <div class="opt">
+        <div><b>최근 12개월</b>요청 약 30회. 2단계 그래프가 첫날부터 채워집니다.</div>
+        <div><b>2015-12 이후 전체</b>131개월. 옛 양식 호환 확인이 먼저 필요합니다.</div>
+      </div>
+      <p class="rec"><b>추천: 최근 12개월.</b> 1997~2015년은 HWP 위주라 하지 않습니다.</p>
+    </div>
+    <div class="decide">
+      <h3>4. 열람 계정에도 보여 줄까요?</h3>
+      <div class="opt">
+        <div><b>공유 폴더</b>공공누리 1유형이라 문제없습니다. 출처 줄은 반드시 답니다.</div>
+        <div><b>관리자 전용</b>나만 봅니다.</div>
+      </div>
+      <p class="rec"><b>추천: 공유 폴더.</b></p>
+    </div>
+    <div class="decide">
+      <h3>5. 기존 수출입 대시보드 스킬은 어떻게 할까요?</h3>
+      <div class="opt">
+        <div><b>심층판으로 남기기</b>앱 자동화와 별개로, 원할 때 손으로 돌려 HTML 보고서를 만듭니다.</div>
+        <div><b>폐기</b>앱 화면만 씁니다.</div>
+      </div>
+      <p class="rec"><b>추천: 남기기.</b> 스킬의 파서는 2단계에서 TypeScript로 옮겨 앱에서도 씁니다.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>위험과 운영</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>위험</th><th>대응</th></tr></thead>
+        <tbody>
+          <tr><th>사이트 개편·게시판 ID 변경</th><td>부처명이 이미 한 번 바뀜(motie → motir). 주소는 <code>constants.ts</code> 한 곳에 둡니다. 목록이 200인데 글이 0개이거나 404면 "게시판 모양이 바뀜" 알림. 파서가 깨져도 1단계(알림 + 원문)는 살아 있게 단계를 분리합니다.</td></tr>
+          <tr><th>양식 변경</th><td>15대 → 20대 품목 개편이 이미 한 번 있었고, 파서는 위치가 아니라 이름으로 찾아서 흡수했습니다. 검산이 실패하면 숫자에 "확인 필요"를 표시합니다.</td></tr>
+          <tr><th>1GB 램 서버</th><td>pdftotext는 잠깐 돌고 끝나는 프로그램이라 부담이 작고, 이미지는 수십 MB 늘 것으로 봅니다(추측, 미측정). 2단계에서만 넣습니다.</td></tr>
+          <tr><th>사이트 부담</th><td>평소 월 10여 회 요청. 소급할 때는 요청 사이를 2~5초 띄우고, User-Agent에는 개인정보 없이 일반 이름을 씁니다.</td></tr>
+          <tr><th>브리핑과 시간 엇갈림</th><td>아침 브리핑(06:30)은 발표(11:00)보다 이르므로 1일 아침 브리핑에는 넣을 수 없습니다. 2일 브리핑에 한 줄 넣는 건 가능합니다(추후 선택).</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <details>
+    <summary>부록: 데이터 담당이 정리한 고정 칸과 자유 칸</summary>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>고정 칸 (매달 같은 표)</th><th>자유 칸 (달마다 다른 글)</th></tr></thead>
+        <tbody>
+          <tr><td>당월 수출·수입·수지·증감률, 일평균</td><td>헤드라인 3줄</td></tr>
+          <tr><td>1~N월 누적</td><td>역대 순위(전 기간 / 같은 달 두 종류)</td></tr>
+          <tr><td>13개월 수출·수입·일평균, 물량·지수, 원화 환산</td><td>품목별 해설 문단</td></tr>
+          <tr><td>20대 품목 13개월 + 전년 연간·비중</td><td>품목별 최근 6개월 추이 문장</td></tr>
+          <tr><td>지역 수출·수입 13개월, 국가별 수지</td><td>시황 숫자(메모리 고정가, 두바이유)</td></tr>
+          <tr><td>에너지 4종 수입, 원유 단가·물량</td><td>특이 요인(추석 이동, 조업일수, 기저효과)</td></tr>
+          <tr><td>참고2 연도별 실적(2024.1~당월 월별)</td><td>장관 코멘트, 연속 기록</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">지역은 표마다 묶음이 다릅니다(1쪽은 9대 지역에 인도 포함·베트남 없음, 추이 표는 베트남 포함 10개). 같은 지역 칸이라도 품목은 1~25일 기준이고 합계는 월 전체 기준이라, 기간을 함께 저장해야 섞이지 않습니다.</p>
+  </details>
+
+  <details>
+    <summary>부록: 실험에 쓴 파일 (세션 임시 폴더, 곧 지워질 수 있음)</summary>
+    <ul>
+      <li>목록 전체(597행): <code>scratchpad/collect/list_all.tsv</code></li>
+      <li>HWPX 표 덤프: <code>scratchpad/collect/oct_hwpx_tables.txt</code></li>
+      <li>파서 검증 결과(11+1개 호): <code>scratchpad/review/*.json</code></li>
+      <li>정정 비교 스크립트: <code>scratchpad/data/diff_sep_oct.py</code></li>
+      <li>와이어프레임 전체: <code>scratchpad/ui/wireframes.md</code></li>
+    </ul>
+  </details>
+
+  <footer>
+    출처: 산업통상부 보도자료 「2026년 10월 수출입 동향」 등(공공누리 1유형). 참여: 수집 · 데이터 · 화면 담당(1라운드), 비판 담당(2라운드), 종합 정리. 저장소 코드는 아직 바꾸지 않았습니다.
+  </footer>
+</div>
+</body>
+</html>
