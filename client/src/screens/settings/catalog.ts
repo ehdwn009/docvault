@@ -93,6 +93,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { category: 'ai', item: 'all', title: 'AI 사용량', desc: '누가 얼마나 물어봤나, 추정 비용', admin: true },
   { category: 'perf', item: 'all', title: '성능', desc: '앱 시작 시간 측정', admin: true },
   { category: 'about', item: 'version', title: '버전', desc: 'Loft 버전과 업데이트 기록' },
+  { category: 'about', item: 'screen', title: '화면 정보', desc: '기기가 앱에 내준 화면 크기와 가장자리 여백' },
   { category: 'about', item: 'nameStory', title: '이름 이야기', desc: 'docvault가 왜 Loft가 됐고, 아이콘은 왜 사다리인지' },
   { category: 'about', item: 'export', title: '내보내기', desc: '내 파일 전부를 ZIP 하나로 받습니다' },
 ];

@@ -1,0 +1,29 @@
+{
+  "name": "Loft 시험",
+  "short_name": "Loft 시험",
+  "description": "화면 가장자리 시험용 입구 — 상태 표시 아래까지 화면을 씁니다",
+  "start_url": "/edge",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

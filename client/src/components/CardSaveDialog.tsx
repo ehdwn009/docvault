@@ -129,7 +129,7 @@ export default function CardSaveDialog({ threadId, messageId, messageIds, isPc, 
       <div className="fixed inset-0 z-40 bg-black/60" onClick={busy ? undefined : onClose} />
       <div
         className={`fixed z-50 flex flex-col overflow-hidden bg-slate-950 text-slate-100 ${
-          isPc ? 'left-1/2 top-1/2 h-[min(760px,92vh)] w-[min(1080px,94vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700 shadow-2xl' : 'inset-0'
+          isPc ? 'left-1/2 top-1/2 h-[min(760px,92vh)] w-[min(1080px,94vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700 shadow-2xl' : 'inset-0 safe-full'
         }`}
       >
         <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">

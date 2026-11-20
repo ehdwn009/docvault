@@ -201,6 +201,35 @@ body,
 #root {
   height: 100%;
 }
+/* 기기가 알려 주는 가장자리 여백(노치·상태 표시·옆 띠) — 기기 이름이 아니라 이 값으로 배치한다 (IA — 화면 가장자리 2026-11-20).
+   작업 공간 껍데기와 화면 아래 탭이 이 값을 읽는다. --sa-pad-right는 "오른쪽 여백까지 넓히기(시험)"를 켜면 0이 된다 */
+:root {
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-left: env(safe-area-inset-left, 0px);
+  --sa-right: env(safe-area-inset-right, 0px);
+  --sa-pad-right: var(--sa-right);
+  /* 모서리 비킴 — 앱이 화면 맨 위까지 덮는데 기기가 위 여백을 0으로 알려 주는 경우(상태 표시가 위에 없는 접는 폰 등),
+     둥근 모서리가 머리의 단추를 깎는다. 그때만 이만큼 내려 앉힌다(lib/screenEdge가 data-full-top을 붙인다) */
+  --corner-guard: 0px;
+  --sa-pad-top: max(var(--sa-top), var(--corner-guard));
+}
+:root[data-edge-fill] {
+  --sa-pad-right: 0px;
+}
+:root[data-full-top] {
+  --corner-guard: 12px;
+}
+/* 화면 전체를 덮는 층(폰의 전체 화면 창)이 워크스페이스 껍데기와 같은 여백을 비우게 — 껍데기 밖에 fixed로 뜨는 층은 저마다 붙여야 한다 */
+@utility safe-full {
+  padding-top: var(--sa-pad-top);
+  padding-left: var(--sa-left);
+  padding-right: var(--sa-pad-right);
+}
+/* 앱이 닿지 못하는 가장자리(브라우저가 남기는 띠·당겨 올린 뒤편)를 브라우저는 페이지 바탕색으로 칠한다 — 비워 두면 검정이 된다 */
+html,
+body {
+  background-color: var(--color-slate-950);
+}
 body {
   overflow: hidden;
   overscroll-behavior: none;

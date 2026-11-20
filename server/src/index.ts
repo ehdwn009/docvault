@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { edgeShellHtml } from './lib/edgeShell.js';
 import { Hono, type Context } from 'hono';
 import { logger } from 'hono/logger';
 import { APP_VERSION, config } from './config.js';
-import { HEALTH_PATH, NOTIFICATION, SLOW_REQUEST_MS, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
+import { EDGE_SHELL_PATH, HEALTH_PATH, NOTIFICATION, SLOW_REQUEST_MS, STATIC_ASSET_MAX_AGE_S, TRASH_PURGE_INTERVAL_MS } from './constants.js';
 import { initDb } from './db/index.js';
 import { seedAdmin } from './db/seed.js';
 import { purgeOldExports } from './lib/exportJobs.js';
@@ -146,6 +147,13 @@ if (fs.existsSync(config.clientDist)) {
     if (filePath.includes('/assets/')) c.header('Cache-Control', `public, max-age=${STATIC_ASSET_MAX_AGE_S}, immutable`);
     else if (filePath.endsWith('index.html')) c.header('Cache-Control', 'no-cache');
   };
+  // 시험 입구 — 같은 화면을 "상태 표시 아래까지 쓰기" 설정과 함께 내준다 (lib/edgeShell)
+  app.get(EDGE_SHELL_PATH, (c) => {
+    const html = edgeShellHtml(config.clientDist);
+    if (html === null) return c.notFound();
+    c.header('Cache-Control', 'no-cache');
+    return c.html(html);
+  });
   app.use('*', serveStatic({ root, onFound: cacheHeaders }));
   app.get('*', serveStatic({ root, path: 'index.html', onFound: cacheHeaders }));
 } else {

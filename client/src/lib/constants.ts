@@ -71,3 +71,7 @@ export const HTML_INLINE_MAX_BYTES = 2 * 1024 * 1024;
 
 /** 알림함 새로고침 주기 — 1단계는 푸시 없이 묻는 방식이라, 화면이 보일 때만 이 간격으로 (알림 설계 2026-11-04) */
 export const NOTIFICATION_POLL_MS = 60 * 1000;
+
+/** 화면 가장자리 시험 — 시험 입구 주소(서버 EDGE_SHELL_PATH·manifest-edge의 start_url과 같아야 한다)와, "오른쪽 여백까지 넓히기" 저장 열쇠 */
+export const EDGE_PATH = '/edge';
+export const EDGE_FILL_KEY = 'dv_edge_fill';

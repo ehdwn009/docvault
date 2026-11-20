@@ -1679,7 +1679,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       aria-label="주 메뉴"
       aria-hidden={chromeHidden}
       // 불투명 + 위 테두리 — 밝은 테마에서 본문이 비쳐 보였다 (사용자 보고 2026-10-31)
-      className={`fixed inset-x-0 z-30 flex items-stretch border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
+      className={`fixed left-[var(--sa-left)] right-[var(--sa-pad-right)] z-30 flex items-stretch border-t border-hair bg-ground pb-[env(safe-area-inset-bottom)] pc:hidden ${
         tabBarVisible ? '' : 'hidden'
       } ${chromeHidden ? 'pointer-events-none' : ''}`}
       style={barTop !== null ? { top: barTop, bottom: 'auto' } : { bottom: 0 }}
@@ -1748,7 +1748,9 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   return (
     <BottomSlotContext.Provider value={barSlot}>
     <TopNavContext.Provider value={topNav}>
-    <div className="relative flex h-dvh bg-slate-950 text-slate-100">
+    {/* 가장자리 여백(상태 표시·노치·옆 띠)은 바깥 껍데기가 한 번에 비운다. 안쪽 relative가 absolute 층들의 기준이라, 층이 상태 표시 밑으로 들어가지 않는다 */}
+    <div className="h-dvh bg-slate-950 pl-[var(--sa-left)] pr-[var(--sa-pad-right)] pt-[var(--sa-pad-top)]">
+    <div className="relative flex h-full text-slate-100">
       {/* 터치: ☰·드로어 대신 하단 탭 바(루트 끝에서 그린다). 목록 층(사이드 패널 내용)은 문서 위에 전체 화면으로 덮인다 (IA — 안 B 폰, SCR-102).
           z-[25]: 뷰어의 오버레이 헤더·도구막대(z-20)보다 위, 탭 바(z-30)·기사 시트(z-40)보다 아래 */}
       <div
@@ -2523,6 +2525,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
           </button>
         </div>
       )}
+    </div>
     </div>
     </TopNavContext.Provider>
     </BottomSlotContext.Provider>

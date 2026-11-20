@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import NameStory from './NameStory';
+import ScreenInfo from './ScreenInfo';
 import { downloadArchive } from '../../lib/download';
 import { rowId } from './catalog';
 import SettingRow, { btnClass } from './SettingRow';
@@ -10,6 +11,7 @@ type Props = { onShowChangelog: () => void };
 export default function AboutSettings({ onShowChangelog }: Props) {
   const [withManifest, setWithManifest] = useState(true);
   const [storyOpen, setStoryOpen] = useState(false);
+  const [screenOpen, setScreenOpen] = useState(false);
   const [exportNote, setExportNote] = useState<string | null>(null);
   return (
     <>
@@ -39,6 +41,12 @@ export default function AboutSettings({ onShowChangelog }: Props) {
           className={btnClass}
         >
           내 자료 전부 내보내기
+        </button>
+      </SettingRow>
+      {/* 화면 정보 — 낯선 크기의 기기에서 앱이 받은 영역·여백을 확인하고 전해 줄 수 있게 (IA — 화면 가장자리) */}
+      <SettingRow id={rowId('about', 'screen')} title="화면 정보" desc="이 기기가 앱에 내준 화면 크기와 가장자리 여백. 옆이 비어 보일 때 확인합니다" below={screenOpen ? <ScreenInfo /> : undefined}>
+        <button onClick={() => setScreenOpen((v) => !v)} className={btnClass} aria-expanded={screenOpen}>
+          {screenOpen ? '접기' : '보기'}
         </button>
       </SettingRow>
       {/* 이름 이야기 — 설정의 유일한 읽을거리. 접어 두고 궁금한 사람만 펼친다 (이름·아이콘 결정 2026-11-04) */}

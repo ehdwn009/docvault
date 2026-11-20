@@ -79,6 +79,18 @@ export const APP_THEME_EVENT = 'dv:apptheme';
 let current: AppTheme = DEFAULT_APP_THEME;
 let listening = false;
 
+/** 계산된 색을 #rrggbb로 — 바탕색이 oklch 같은 새 표기로 돌아오는데, theme-color는 옛 표기만 읽는 브라우저가 있어 점 하나를 칠해 읽는다 */
+function rgbOf(color: string): string | null {
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (!ctx || !color) return null;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const px = Array.from(ctx.getImageData(0, 0, 1, 1).data);
+  // 투명이면(스타일이 아직 안 붙음) 건드리지 않는다
+  if ((px[3] ?? 0) === 0) return null;
+  return `#${px.slice(0, 3).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function paint() {
   const root = document.documentElement.dataset;
   // 기본값(어두움·하늘)은 속성을 지운다 — CSS의 기본 변수값이 곧 그 색이다
@@ -87,6 +99,9 @@ function paint() {
   else root.scheme = scheme;
   if (current.accent === 'sky') delete root.accent;
   else root.accent = current.accent;
+  // 브라우저·기기가 앱 밖(주소창·상태 표시·옆 띠)을 칠할 때 쓰는 색도 앱 바탕과 같게 — 밝은 테마에서 어두운 띠가 남지 않도록
+  const bg = rgbOf(getComputedStyle(document.documentElement).backgroundColor);
+  if (bg) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
   window.dispatchEvent(new Event(APP_THEME_EVENT));
 }
 

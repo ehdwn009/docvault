@@ -146,7 +146,7 @@ export default function NotificationCenter({ items, unread, onClose, onOpen, onR
 
   if (IS_TOUCH) {
     return createPortal(
-      <div className="fixed inset-0 z-50 flex flex-col bg-ground pt-[env(safe-area-inset-top)]" role="dialog" aria-label="알림">
+      <div className="fixed inset-0 z-50 flex flex-col bg-ground pl-[var(--sa-left)] pr-[var(--sa-pad-right)] pt-[var(--sa-pad-top)]" role="dialog" aria-label="알림">
         <div className="flex items-center gap-1 px-2 pt-2">
           <button onClick={onClose} className="flex min-h-11 items-center gap-0.5 pr-2 text-[15px] text-accent-400" aria-label="뒤로">
             <Icon name="chevronLeft" size={20} />홈

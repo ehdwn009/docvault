@@ -1144,7 +1144,7 @@ function Sheet({
     scrollRef.current?.scrollTo({ top: 0 });
   }, [l.item.id, mode]);
   return (
-    <div className={`fixed inset-0 z-40 flex flex-col ${stickyBg} ${p.text}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} role="dialog" aria-modal="true">
+    <div className={`fixed inset-0 z-40 flex flex-col ${stickyBg} ${p.text}`} style={{ paddingTop: 'var(--sa-pad-top)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'var(--sa-left)', paddingRight: 'var(--sa-pad-right)' }} role="dialog" aria-modal="true">
       <DetailTop l={l} p={p} mode={mode} setMode={setMode} canRead={canRead} onClose={onClose} />
       <div
         ref={scrollRef}

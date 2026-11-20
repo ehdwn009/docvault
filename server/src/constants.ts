@@ -29,6 +29,8 @@ export const TRASH_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** 해시 이름 정적 파일(/assets/*)의 브라우저 캐시 기간 — 1년. 이름에 해시가 있어 내용이 바뀌면 이름도 바뀐다 */
 export const STATIC_ASSET_MAX_AGE_S = 365 * 24 * 60 * 60;
+/** 화면 가장자리 시험 입구 — 화면(client constants의 EDGE_PATH)·manifest-edge의 start_url과 같아야 한다 */
+export const EDGE_SHELL_PATH = '/edge';
 
 /** 이보다 오래 일한 요청은 로그에 [slow]로 부분별 시간을 남긴다 — 다음에 느려지면 로그만 보면 어디인지 나오게 */
 export const SLOW_REQUEST_MS = 500;
