@@ -1,11 +1,11 @@
 # data.json 형식 (trade-report)
 
-화면 템플릿(`assets/template.html`)이 읽는 한 파일. 에이전트들은 이것을 조각으로 나눠 `out/`에 쓰고, `verify.py`가 대조한 뒤 합친다. 완성 예: `assets/example-data.json`(2026년 10월호, 인용 420개 대조 통과).
+화면 틀(`server/assets/trade-template.html`)과 서버(API-158)가 읽는 한 파일. 에이전트들은 이것을 조각으로 나눠 `out/`에 쓰고, `npm run trade:job -w server -- build`가 엮어 원문과 대조한다(`server/src/lib/trade/verify.ts` — 서버가 완성본을 받을 때와 같은 함수). 완성 예: `assets/example-data.json`(2026년 10월호, 인용·출처 439개 대조 통과).
 
 ## 공통 규칙
 
 - **쪽 번호는 PDF 쪽(1부터)**, `pages/cur/NN.txt`의 NN과 같다.
-- **인용 객체** `{ "page": 7, "quote": "원문 그대로" }` — quote는 그 쪽 텍스트에 **글자 그대로** 있어야 한다(띄어쓰기·줄바꿈만 무시). 120자 이내. 요약하거나 고쳐 쓰지 않는다. 표의 줄을 인용할 때는 그 줄을 그대로 옮긴다.
+- **인용 객체** `{ "page": 7, "quote": "원문 그대로" }` — quote는 그 쪽 텍스트에 **글자 그대로** 있어야 한다(띄어쓰기·줄바꿈만 무시). 120자 이내(표의 줄은 칸 사이 공백 때문에 더 길어도 된다, 상한 400자). 요약하거나 고쳐 쓰지 않는다. 표의 줄을 인용할 때는 그 줄을 그대로 옮긴다.
 - **전월 호 인용**은 객체에 `"doc": "prev"`를 붙이거나 `prev` 열쇠 아래에 둔다.
 - **숫자는 새로 만들지 않는다.** 원문에 있는 숫자는 인용과 함께, 원문 숫자로 계산한 값은 `"basis": "원문 숫자로 계산"`과 `"calc": "식 = 값"`을 함께.
 - 감소는 음수(원문의 △). 금액은 억 달러(품목 13개월 추이만 백만 달러 — 원문 표 단위 그대로).
@@ -72,15 +72,14 @@ vsPrev는 1쪽 문장끼리, changes는 문서 전체에서 **헤드라인 말�
 
 ```json
 {
-  "series": {"months": ["’25.10", "11", "…", "10"], "exp": [595, …], "imp": [535, …], "bal": [60, …], "daily": [29.8, …]},
-  "itemSeries": {"반도체": [15701, …13개]},
+  "series": {"months": ["’25.10", "11", "…", "10"]},
   "rows": {
     "exp": {"source": {"page": 18, "quote": "수출액 595 608 … 1,153"}, "values": [595, …]},
     "item:반도체": {"source": {"page": 20, "quote": "173,406 15,701 … 56,438"}, "values": [15701, …]}
   }
 }
 ```
-`rows`의 각 값은 출처 줄에 그대로(쉼표 무시) 있어야 한다 — 아니면 verify가 멈춘다. series·itemSeries의 숫자는 rows에서 옮긴다.
+`rows`의 각 값은 출처 줄에 그대로(쉼표 무시, 음수는 원문의 △) 있어야 한다 — 아니면 build가 멈춘다. `series`에는 `months`(달 이름 13개)만 쓰면 된다: 화면의 추이(`series.exp` 등, `itemSeries`)는 **대조를 통과한 rows에서 코드가 만든다** — `exp`·`imp`·`bal`·`daily`는 그 이름의 줄에서, 품목은 `item:<품목명>` 줄에서(품목명은 items20의 `name`과 같게). 완성된 data.json에는 rows가 `tableRows`라는 이름으로 실려 서버가 다시 대조한다.
 
 ## out/meta.json — 리더(이 세션)가 A~C를 읽고 쓴다
 
@@ -109,4 +108,11 @@ vsPrev는 1쪽 문장끼리, changes는 문서 전체에서 **헤드라인 말�
 | `progress` | `value`, `total`, `labels[3]`, `caption`, `page`, `note` | 연간 목표까지 거리 |
 | `grid20` | `note` | 품목 수 주장 — 품목 격자와 감소 품목 이유 |
 
-`caption`·`note`의 숫자도 원문에 있거나 underneath의 계산과 같아야 한다(리더가 확인한다 — 자동 대조는 인용만 한다).
+`caption`·`note`의 숫자도 원문에 있거나 underneath의 계산과 같아야 한다(리더가 확인한다 — 자동 대조는 인용과 표만 한다).
+
+## 검증 (build와 서버가 같은 규칙)
+
+- 인용이 틀린 **목록 항목**은 그 항목만 빠진다(evidence·mentions·links·nih·changes·vsPrev·items20·regions). 품목의 `why`가 틀리면 `why`만 빠진다.
+- **1쪽 문장**(`claims[].claim`)이 틀리면 거절 — 고쳐야 한다. `underneath`는 인용이 있거나 `basis: "원문 숫자로 계산"` + `calc`가 있어야 하고, 없으면 그 줄이 빠진다.
+- 숫자 표 줄이 틀리면 거절. 뺀 항목이 대조한 것의 30%를 넘어도 거절.
+- 빠진 항목을 가리키던 id(`related_links`·`related_changes`·`prev`·`nih`·`related`·`headlineCompare`)와 없는 주장을 가리키는 카드·KPI는 걷어 낸다.

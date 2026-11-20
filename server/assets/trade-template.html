@@ -286,6 +286,7 @@ footer { border-top: 1px solid var(--hair); padding-top: 14px; display: flex; fl
   </footer>
 </div>
 
+<!--TRADE_DATA-->
 <script>
 (function () {
   "use strict";
@@ -573,7 +574,9 @@ footer { border-top: 1px solid var(--hair); padding-top: 14px; display: flex; fl
   });
   window.matchMedia("(max-width: 1023px)").addEventListener("change", function () { if (!isNarrow() && S.panelOpen) { S.panelOpen = false; document.body.style.overflow = ""; } if (D) renderPanel(); });
 
-  fetch("data.json").then(function (r) { return r.json(); }).then(function (d) {
+  // 자료는 두 길 — Loft 문서(서버가 이 파일에 JSON을 심어 넣는다, 격리된 뷰어라 fetch가 안 된다)와 단독 페이지(옆의 data.json)
+  var inline = document.getElementById("trade-data");
+  (inline ? Promise.resolve().then(function () { return JSON.parse(inline.textContent); }) : fetch("data.json").then(function (r) { return r.json(); })).then(function (d) {
     D = d; M = d.meta;
     // 첫 화면은 "18개 증가"처럼 풀어볼 거리가 가장 많은 카드 — meta.startClaim, 없으면 첫 카드
     S.claim = M.startClaim || (M.cards[0] || {}).id;

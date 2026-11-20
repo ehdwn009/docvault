@@ -37,3 +37,26 @@ export function notifyBackfill(saved: SavedRelease[]): void {
 export function notifyMissing(args: { dedupeKey: string; title: string; body: string }): void {
   pushNotification({ userIds: adminIds(), kind: 'trade_missing', title: args.title, body: args.body, dedupeKey: args.dedupeKey });
 }
+
+/** 해부 도착 — 원문 PDF 도착과는 다른 사건이라 따로 알린다(누르면 해부 문서) */
+export function notifyAnalysisReady(a: { period: string; fileId: number; claims: number; links: number; passed: number }): void {
+  pushNotification({
+    userIds: activeUserIds(),
+    kind: 'trade_ready',
+    title: `${periodLabel(a.period).split(' ')[1]} 수출입 동향 해부가 나왔어요`,
+    body: `1쪽 문장 ${a.claims}개 해부 · 쪽 넘는 연결 ${a.links}개 · 인용 ${a.passed}개 원문 대조`,
+    fileId: a.fileId,
+    dedupeKey: `trade:${a.period}:analysis`,
+  });
+}
+
+/** 해부 실패 — 원문 PDF는 이미 폴더에 있다. 할 수 있는 일이 있는 관리자에게만 */
+export function notifyAnalysisFailed(period: string, jobId: string, reason: string): void {
+  pushNotification({
+    userIds: adminIds(),
+    kind: 'trade_missing',
+    title: `${periodLabel(period).split(' ')[1]} 수출입 동향 해부를 만들지 못했어요`,
+    body: `${reason} · 원문 PDF는 수출입동향 폴더에 있어요`,
+    dedupeKey: `trade:${period}:analysis:${jobId}`,
+  });
+}

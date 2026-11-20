@@ -1,5 +1,6 @@
 import { TRADE } from '../../constants.js';
 import { kstParts, kstToMs } from '../briefing/time.js';
+import { startAnalysis, startPendingAnalysis, sweepExpiredTradeJobs } from './analysis.js';
 import { backfill, checkPeriod, exclusive, isBusy } from './collect.js';
 import { periodLabel, previousMonth } from './match.js';
 import { notifyBackfill, notifyMissing, notifyReady } from './notify.js';
@@ -52,6 +53,8 @@ async function runCheck(slot: Slot, now: number): Promise<void> {
     if (saved) {
       notifyReady(saved);
       console.log(`[trade] ${slot.period} 받음 → 파일 ${saved.fileId}`);
+      // 찾는 순간 해부를 시킨다 — 예약 시각을 따로 두지 않으므로 게시 시각과 어긋날 일이 없다 (2단계)
+      await startAnalysis(slot.period);
     } else {
       console.log(`[trade] ${slot.period} 아직 없음`);
       missingNotice(slot.period, Date.now(), null);
@@ -80,7 +83,22 @@ async function runBackfill(now: number): Promise<void> {
   }
 }
 
+/** 해부 쪽 일 — 마감 지난 실행 닫기, 가장 최근 호에 해부가 없으면 한 번 켜기. 게시판 확인과 따로 돈다(서로 기다리지 않는다) */
+let analysisBusy = false;
+function tickAnalysis(now: number): void {
+  sweepExpiredTradeJobs(now);
+  // 소급이 도는 중에는 켜지 않는다 — 옛 호부터 들어오므로 "가장 최근 호"가 잠깐 작년 호가 된다
+  if (analysisBusy || isBusy()) return;
+  analysisBusy = true;
+  startPendingAnalysis(now)
+    .catch((e: unknown) => console.log(`[trade] 해부 시작 오류: ${reasonOf(e)}`))
+    .finally(() => {
+      analysisBusy = false;
+    });
+}
+
 export function tickTrade(now = Date.now()): void {
+  tickAnalysis(now);
   if (isBusy()) return;
   // 표가 비어 있으면(처음 배포) 한 번 소급. 소급에서 일부를 못 받아도 다음 기동 때 다시 돌지 않는다 — 표가 비어 있지 않으므로
   if (!backfillTried) {

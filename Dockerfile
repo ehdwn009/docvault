@@ -18,6 +18,8 @@ RUN npm run typecheck -w server
 FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
+# 수출입 동향 원문(PDF)에서 쪽별 글자를 뽑는 pdftotext — 해부 결과의 인용을 원문과 대조하는 바탕 (수출입 동향 설계 2단계)
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 RUN npm ci -w server --omit=dev

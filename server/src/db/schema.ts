@@ -413,7 +413,38 @@ export const tradeReleases = sqliteTable(
     pdfSha256: text('pdf_sha256').notNull(),
     pdfBytes: integer('pdf_bytes').notNull(),
     foundBy: text('found_by', { enum: ['schedule', 'backfill'] }).notNull(),
+    /** 해부 결과(화면이 읽는 data.json) — 서버의 원문 대조를 통과한 것만. 없으면 NULL (2단계 2026-11-20) */
+    analysisJson: text('analysis_json'),
+    /** 같은 내용을 담은 한 장짜리 HTML 문서 — 전용 화면이 생기기 전까지의 화면. 문서를 지우면 NULL */
+    analysisFileId: integer('analysis_file_id').references(() => files.id, { onDelete: 'set null' }),
+    analysisAt: integer('analysis_at'),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [uniqueIndex('trade_releases_source_period').on(t.source, t.period)],
+);
+
+/** 해부를 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록 (수출입 동향 설계 2단계).
+    호마다 자동 시도는 한 번이라, 이 표에 그 호의 줄이 있으면 다시 켜지 않는다 */
+export const tradeJobs = sqliteTable(
+  'trade_jobs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 예약 작업이 가진 유일한 식별자(uuid) — 추측할 수 없는 긴 난수 */
+    jobId: text('job_id').notNull().unique(),
+    period: text('period').notNull(),
+    /** 트리거를 빌려 쓴 관리자 — 연결 열쇠의 주인과 같아야 지시서를 내준다 */
+    ownerId: integer('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['running', 'ok', 'missing', 'error'] }).notNull(),
+    message: text('message'),
+    deadlineAt: integer('deadline_at').notNull(),
+    startedAt: integer('started_at').notNull(),
+    /** 세션이 지시서를 받아 간 시각 — NULL이면 예약 작업이 서버를 부르지 않았다 */
+    remoteStartedAt: integer('remote_started_at'),
+    finishedAt: integer('finished_at'),
+    /** 대조 결과 JSON { checked, passed, dropped[] } */
+    report: text('report'),
+  },
+  (t) => [index('trade_jobs_period').on(t.period)],
 );

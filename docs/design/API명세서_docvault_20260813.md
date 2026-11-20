@@ -42,6 +42,9 @@
 | BRIEFING_TRIGGER_NOT_SET | 409 | 생성 방식이 구독인데 트리거 주소·토큰이 없음 (v0.50) |
 | BRIEFING_MATERIALS_UNAVAILABLE | 404 | 서버가 가진 재료(후보·읽은 원문)가 없음 — 서버 재시작·수집 실패·읽기를 시작한 적 없음. 세션은 직접 수집·원문 읽기로 돌아간다 (v0.59) |
 | BRIEFING_MATERIALS_NOT_READY | 409 | 서버 수집이 아직 끝나지 않았는데 원문 읽기(API-155)를 요청함 — API-154가 200이 된 뒤 다시 (v0.59) |
+| TRADE_JOB_CLOSED | 409 | 수출입 동향 해부 실행이 이미 닫힘(마감 초과·저장됨) 또는 그 호의 원문이 서버에 없음 (v0.68) |
+| TRADE_JOB_REJECTED | 422 | 해부 완성본(API-158)이 원문 대조에서 거절됨 — `fatal`(고칠 것)·`dropped`·`checked`·`passed`를 함께 준다. 실행은 running 그대로, 고쳐서 다시 보낸다 (v0.68) |
+| TRADE_PAGES_UNAVAILABLE | 404 | 그 호의 원문 PDF가 서버에 없어 쪽 텍스트(API-157)를 줄 수 없음 (v0.68) |
 
 ## API 목록
 
@@ -143,6 +146,8 @@
 | API-154 | GET | /briefing/jobs/{jobId}/candidates | 서버가 트리거 때 수집해 둔 후보 — `candidates.json`과 같은 모양. 수집 중이면 202 (v0.59) | **연결 열쇠(Bearer)** |
 | API-155 | POST | /briefing/jobs/{jobId}/read | 세션이 고른 기사(`selected.json` 그대로)의 원문을 서버가 읽기 시작 → 202 (v0.59) | **연결 열쇠(Bearer)** |
 | API-156 | GET | /briefing/jobs/{jobId}/materials | 서버가 읽은 재료 — 읽는 중이면 202, 끝나면 기사마다 재료 목록 (v0.59) | **연결 열쇠(Bearer)** |
+| API-157 | GET | /briefing/jobs/{jobId}/trade/pages?doc=cur\|prev | 수출입 동향 해부 일감의 원문 쪽별 텍스트 — 이번 호·전월 호 (v0.68) | **연결 열쇠(Bearer)** |
+| API-158 | POST | /briefing/jobs/{jobId}/trade/result | 수출입 동향 해부 완성본 — 서버가 원문과 다시 대조해 저장·알림 (v0.68) | **연결 열쇠(Bearer)** |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -756,9 +761,18 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 **202** `{ "status": "reading", "done", "total" }` → **200** `{ "stats": { "bodiesRead": 31, "fromFeed": 4, "extractRejected": 2 }, "stories": [{ "main": 12, "materials": [{ "id": "A", "source": "연합뉴스", "url", "title", "text", "via": "body" | "feed" | "web" }] }], "warnings": ["stories[4]: 대표 번호 999이(가) 없거나 이미 쓰였음 — 버림"] }`. 기사는 **대표 후보의 전역 번호 `main`**으로 가리킨다 — 세션은 같은 `selected.json`으로 다시 만든 목록에 그 번호로 재료를 맞춘다. 재료를 하나도 못 얻은 기사는 `stories`에 없다(세션이 참고로 내리거나 웹 검색으로 채운다). 읽기를 시작한 적 없거나 실패했으면 404 BRIEFING_MATERIALS_UNAVAILABLE. 원문 글은 이 응답으로만 흐르고 서버에 저장되지 않는다.
 
 
+### API-151·157·158 — 수출입 동향 해부 일감 (Bearer, v0.68)
+
+설계: [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md) "2단계". 서버가 산업통상부의 새 호를 받으면 **브리핑 구독의 예약 작업을 그대로 켠다**(같은 트리거·같은 연결 열쇠·같은 접두어 — 사용자 쪽 새 설정 없음). 그래서 수출입 일감의 주소도 `/briefing/jobs/` 아래에 있고, 지시서의 `kind`가 일감을 가른다(`edition`·`ping`·`trade`). 라우트는 `routes/tradeJobs.ts` — `briefingJobRoutes`보다 먼저 등록되어 제 일감(`trade_jobs.job_id`)만 받고 나머지는 넘긴다. job의 주인(`trade_jobs.owner_id` = 트리거를 빌려준 관리자)이 열쇠의 주인과 다르면 404.
+
+- **API-151 (kind=trade)** `GET /briefing/jobs/{jobId}` → `{ "kind": "trade", "jobId", "skill": "trade-report", "period": "2026-10", "deadline": <unix ms>, "cur": { "period", "title", "dept", "date", "articleUrl" }, "prev": { … } | null, "limits": { "resultMaxBytes", "resendMax" } }`. 두 번 받아도 같다. 처음 받아 간 시각을 `remote_started_at`에 적는다. 닫힌 실행이면 409 `TRADE_JOB_CLOSED`.
+- **API-157** `GET …/trade/pages?doc=cur|prev` → `{ "doc", "period", "pages": ["1쪽 글자", "2쪽 글자", …] }` — 서버가 보관한 PDF를 `pdftotext -layout`으로 뽑은 것(배열 [0]이 1쪽). 세션은 산업통상부 사이트에 접속하지 않는다. `doc`이 틀리면 400, 그 호 PDF가 없으면 404 `TRADE_PAGES_UNAVAILABLE`.
+- **API-158** `POST …/trade/result` — 본문은 해부 `data.json`(형식: `.claude/skills/trade-report/references/schema.md`, 상한 2MB `TRADE.RESULT_MAX_BYTES` → 413). 서버는 ① 모양 검사(zod `TradeDataSchema` — 틀리면 400 `VALIDATION_ERROR`, 메시지 `<경로>: <이유>`; `meta.period`가 실행의 호와 다르면 400) ② **원문 대조**(`lib/trade/verify.ts` — 인용은 그 쪽 텍스트에 글자 그대로, 표의 값은 출처 줄에 그대로; 틀린 목록 항목은 빼고, 1쪽 문장·숫자 표가 틀리거나 뺀 항목이 30%를 넘으면 422 `TRADE_JOB_REJECTED`) ③ 저장 — 해부 JSON은 `trade_releases.analysis_json`, 같은 내용의 HTML 문서(「YYYY년 M월 수출입 동향 해부.html」)는 「수출입동향」 폴더 ④ 모든 활성 계정에 `trade_ready` 알림(「10월 수출입 동향 해부가 나왔어요」, fileId = 해부 문서). **200** `{ "fileId", "checked", "passed", "dropped": [..], "already" }` — 같은 job에 다시 보내면 `already: true`로 같은 답(멱등). 400·422는 실행을 닫지 않는다.
+- 마감(`TRADE.JOB_DEADLINE_MS` 3시간)까지 완성본이 없으면 틱이 `missing`으로 닫고 관리자에게 `trade_missing`(「해부를 만들지 못했어요」). 호마다 자동 시도는 한 번.
+
 ## 알림 (API-16x, 2026-11-04 — 1단계)
 
-알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). 수출입 동향(2026-11-20, 설계 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md))은 사건 둘을 더한다 — **도착**(`trade_ready`: 서버가 산업통상부 게시판에서 새 호 PDF를 받아 「수출입동향」 폴더에 넣음, 모든 활성 계정에게, fileId=그 PDF, 처음 소급은 12통 대신 한 통)과 **못 찾음**(`trade_missing`: 1일 18:00·4일 10:00 확인에도 없거나 받기 실패, 관리자에게). 이 경로에는 새 API가 없다 — 서버의 1분 틱이 혼자 한다. [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
+알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). 수출입 동향(2026-11-20, 설계 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md))은 사건 둘을 더한다 — **도착**(`trade_ready`: 서버가 산업통상부 게시판에서 새 호 PDF를 받아 「수출입동향」 폴더에 넣음, 모든 활성 계정에게, fileId=그 PDF, 처음 소급은 12통 대신 한 통)과 **못 찾음**(`trade_missing`: 1일 18:00·4일 10:00 확인에도 없거나 받기 실패, 관리자에게). 받기까지는 새 API가 없다 — 서버의 1분 틱이 혼자 한다. v0.68부터는 해부 도착도 `trade_ready`(dedupe `trade:{period}:analysis`), 해부 실패도 `trade_missing`(dedupe `trade:{period}:analysis:{jobId}`)으로 알린다(API-158). [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
 
 ### API-160 — GET /notifications
 내 알림함. **200** `{ "notifications": [{ "id", "kind": "briefing_ready" | "briefing_missing", "title", "body": string | null, "fileId": number | null, "readAt": number | null, "createdAt" }], "unread": 3 }` — 최신순 50개(`NOTIFICATION.LIST_MAX`). `fileId`는 누르면 열 회차 문서(지워졌으면 null → 화면은 브리핑이 있는 곳으로). 종 배지와 목록이 같은 응답을 쓴다.

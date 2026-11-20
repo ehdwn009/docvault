@@ -164,7 +164,7 @@ export async function assertTriggerUrl(raw: string): Promise<string | null> {
  * 예약 작업 켜기 — POST {fireUrl} + Bearer 트리거 토큰, 본문 text에 jobId. text는 예약 작업에 "신뢰하지 않는 데이터"로 감싸여 들어가므로
  * 예약 작업의 저장된 지시문이 그 안의 BRIEFING_JOB_ID를 읽도록 적혀 있어야 한다(시험 안내문). 10초·재시도 1회
  */
-async function fireTrigger(userId: number, text: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+export async function fireTrigger(userId: number, text: string): Promise<{ ok: true } | { ok: false; reason: string }> {
   const trigger = readTrigger(userId);
   if (trigger === null) return { ok: false, reason: '트리거가 설정되지 않았어요' };
   if (trigger === 'broken') return { ok: false, reason: '트리거를 읽을 수 없어요 — 다시 넣어 주세요' };
