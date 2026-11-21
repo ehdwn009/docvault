@@ -27,6 +27,8 @@ const KIND_ICON: Record<Notification['kind'], { icon: IconName; tint: 'accent' |
   briefing_missing: { icon: 'info', tint: 'warn' },
   trade_ready: { icon: 'chart', tint: 'accent' },
   trade_missing: { icon: 'info', tint: 'warn' },
+  outlook_ready: { icon: 'globe', tint: 'accent' },
+  outlook_missing: { icon: 'info', tint: 'warn' },
   upload_done: { icon: 'upload', tint: 'good' },
   export_done: { icon: 'download', tint: 'good' },
 };

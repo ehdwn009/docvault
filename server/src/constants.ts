@@ -62,7 +62,7 @@ export const EXPORT = {
 } as const;
 
 /** 알림 종류 — 설정 화면의 켜고 끄기 목록도 이 순서 (알림 3단계) */
-export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'upload_done', 'export_done'] as const;
+export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'outlook_ready', 'outlook_missing', 'upload_done', 'export_done'] as const;
 
 /** 산업통상부 「월간 수출입 동향」 자동 수집 (수출입 동향 설계 2026-11-20, 1단계) */
 export const TRADE = {
@@ -114,7 +114,7 @@ export const TRADE = {
   REPORT_TEXT_MAX_CHARS: 700,
 } as const;
 
-/** 세계 전망(큰 판 화이트페이퍼 · 작은 판 리서치 동향) — 세계전망 설계. 지금은 스킬과 손으로 돌리는 명령(outlook:job)만 쓴다 */
+/** 세계 전망(큰 판 화이트페이퍼 · 작은 판 리서치 동향) — 세계전망 설계. 스킬·손으로 돌리는 명령(outlook:job)과 서버(출시 2·3단계 — 자동 발행·동향 탭)가 함께 쓴다 */
 export const OUTLOOK = {
   /** 개인정보 없는 일반 이름 */
   USER_AGENT: 'Loft-reader/1 (+private research digest)',
@@ -130,6 +130,35 @@ export const OUTLOOK = {
   DROP_REJECT_RATIO: 0.3,
   /** 대조 대상 단위 — 수출입 동향의 단위에 이 기능에 흔한 것을 더한다(세계전망 설계 9단계) */
   EXTRA_UNITS: ['bp', '엔', '유로', '위안', '파운드', '배럴'],
+  /** 원문 받기에서 따라가는 리디렉트 수 — 넘어가는 곳마다 내부망 주소인지 다시 본다(SSRF) */
+  MAX_REDIRECTS: 5,
+  // ---- 출시 2·3단계: 서버가 예약 작업을 켜 자동으로 만든다 (사용자 결정 2026-11-21) ----
+  /** 예약 작업을 켠 뒤 완성본을 기다리는 시간 — 넘으면 missing으로 닫고 관리자에게 알린다 */
+  JOB_DEADLINE_MS: 4 * 60 * 60 * 1000,
+  /** 마감 이만큼 전이 되면 세션은 독자 검토를 건너뛰고 대조를 통과한 것으로 보낸다(지시서의 wrapUpBefore) */
+  WRAP_UP_BEFORE_MS: 30 * 60 * 1000,
+  /** 완성본 JSON 본문 상한 */
+  RESULT_MAX_BYTES: 2 * 1024 * 1024,
+  /** 대조에서 거절된 완성본을 고쳐 다시 보낼 수 있는 횟수(스킬 안내용) */
+  RESULT_RESEND_MAX: 2,
+  /** 묶음별 검색 할당(지시서) */
+  SEARCH_QUOTA: { small: 15, big: 25 },
+  /** 작은 판 자동 발행 — 매달 둘째·넷째 월요일 10:00 한국시간. 그 시(10시대) 안에서만 켠다 */
+  SCHEDULE: { weekday: 1, weeks: [2, 4], at: '10:00' },
+  /** 이 달의 첫 자동 발행(둘째 월요일)은 작은 판 대신 큰 판 */
+  BIG_MONTH: 1,
+  /** 큰 판이 읽는 기간 — 전년의 이 날부터 이 날까지(월-일) */
+  BIG_READ_FROM: '09-01',
+  BIG_READ_TO: '12-31',
+  /** 게시된 판이 하나도 없을 때 작은 판이 거슬러 읽는 날 수 — 발행 간격(2주) */
+  FIRST_WINDOW_DAYS: 14,
+  /** 한 실행에서 서버가 대신 받아 주는 원문 수 상한 */
+  GRAB_MAX_PER_JOB: 300,
+  /** 완성본 대조 때 아직 안 받은 원문을 한꺼번에 받는 수 — 주가 100개를 넘기도 해 하나씩이면 요청이 끝나지 않는다 */
+  RESULT_FETCH_CONCURRENCY: 6,
+  TICK_MS: 60_000,
+  /** 자동 작은 판이 읽을 날이 이보다 적으면 건너뛴다(직전 판이 [지금 만들기]로 며칠 전에 나온 경우) */
+  MIN_AUTO_WINDOW_DAYS: 7,
 } as const;
 
 /** 텔레그램 봇 통로 (API-167~170, 알림 3단계 2026-11-05) */

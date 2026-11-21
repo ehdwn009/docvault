@@ -4,9 +4,9 @@
 
 ## 공통 규약
 
-- **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50)**: `/briefing/jobs/*` 주소들(API-151~153, v0.59부터 154~156도)은 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
+- **인증**: 로그인 성공 시 JWT를 httpOnly 쿠키 `dv_session`으로 발급 (유효기간 7일, SameSite=Lax, 배포 시 Secure). 이후 모든 요청은 쿠키로 자동 인증되며 Authorization 헤더를 사용하지 않습니다. **단 하나의 예외(v0.50)**: `/briefing/jobs/*` 주소들(API-151~153, v0.59부터 154~156도, v0.68부터 수출입 동향의 157·158, v0.75부터 세계 전망의 177·178도)은 사람이 아니라 claude.ai 예약 작업이 부르므로 쿠키 대신 `Authorization: Bearer dvt_…` 헤더(연결 열쇠를 요청에 끼워 보내는 표준 칸, 열쇠는 API-141로 발급)만 받습니다. 이 경로는 쿠키를 거절하고, 다른 모든 경로는 Bearer를 무시합니다 — 열쇠가 다른 API의 통행증이 되지 않게. 구현 규칙(미들웨어 접두어 분기·라우트 등록 순서·IP 제한)은 설계 문서 "보안 — 구독 연결 열쇠"가 본가입니다.
 - **권한 등급**: 공개(로그인 불필요) 없음 — 로그인 화면 외 전 API가 인증 필수. `관리자` 표시 API는 role=admin만 호출 가능.
-- **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가). 수출입 동향 원문·정리본(`kind='trade'`)는 로그인한 모든 계정이 열람한다(v0.69 — 공공누리 자료, 쓰기는 소유자·관리자).
+- **파일 접근 규칙**: 소유자 본인, is_shared=1인 파일(및 공유 폴더 하위 파일)의 열람, 관리자는 전체 접근. 공유 파일은 열람 전용(수정 불가). 수출입 동향 원문·정리본(`kind='trade'`)는 로그인한 모든 계정이 열람한다(v0.69 — 공공누리 자료, 쓰기는 소유자·관리자). 세계 전망 판(`kind='outlook'`)도 같다(v0.75 — 공개 자료를 정리한 글, 관리자가 목록에서 내린 판도 파일 열람은 된다).
 - **공통 에러 응답**: `{ "code": "ERROR_CODE", "message": "설명" }`
 - **처리 시간 헤더**: 모든 `/api/v1` 응답에 `Server-Timing: app;dur=<ms>` — 서버가 그 요청에 실제로 쓴 시간. 클라이언트의 시작 시간 표(SCR-306)가 회선과 서버를 가르는 데 쓴다. API-021 `/tree`는 앞에 `folders`·`files`·`state`·`tags` 부분 시간을 더 단다. 0.5초(`SLOW_REQUEST_MS`) 넘게 일한 요청은 서버 로그에 `[slow]`로 이 헤더 전체가 찍힌다. 정적 파일은 `/assets/*` 1년 immutable, `index.html` no-cache.
 
@@ -18,7 +18,7 @@
 | TOO_MANY_ATTEMPTS | 429 | 로그인 시도 초과 (Retry-After 헤더에 대기 초). 연결 열쇠 실패 초과, 진행 보고(API-152) job당 분당 20건 초과도 같은 코드·헤더 (v0.50) |
 | NOT_FOUND | 404 | 대상 없음, **또는 열람 권한이 없는 자원** (403은 존재를 알려 주므로 통일 — 정보 노출 방지). `/briefing/jobs/*`에서는 jobId가 없음·남의 것·80자 초과·ping 만료(10분) (v0.50) |
 | CONFLICT | 409 | 중복 (username, 같은 폴더 내 동일 이름 등) |
-| PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과. 구독 완성본(API-153) 2MB·진행 보고(API-152) 16KB 초과 (v0.50) |
+| PAYLOAD_TOO_LARGE | 413 | 업로드 크기 초과. 구독 완성본(API-153) 2MB·진행 보고(API-152) 16KB 초과 (v0.50). 세계 전망 완성본(API-178) 2MB 초과 (v0.75) |
 | PUSH_DEVICE_GONE | 410 | 시험 알림(API-166)을 보냈더니 푸시 서버가 그 기기를 모른다고 함 — 구독을 지웠으니 그 기기에서 다시 켜야 한다 (알림 2단계) |
 | PUSH_FAILED | 502 | 푸시 서버가 받지 않음(네트워크·일시 장애). 구독은 그대로 (알림 2단계) |
 | TELEGRAM_NOT_CONFIGURED | 409 | 관리자가 봇 토큰을 넣지 않아 [연결]을 만들 수 없음 (알림 3단계) |
@@ -48,6 +48,12 @@
 | TRADE_ANALYSIS_RUNNING | 409 | 그 호의 정리본을 이미 만들고 있음(API-172) (v0.71) |
 | TRADE_TRIGGER_MISSING | 409 | 예약 작업(트리거)이 연결돼 있지 않아 정리본을 시킬 수 없음(API-172) (v0.71) |
 | TRADE_TRIGGER_FAILED | 502 | 예약 작업을 켜지 못함(API-172) (v0.71) |
+| OUTLOOK_JOB_CLOSED | 409 | 세계 전망 실행이 이미 닫힘(마감 초과 `missing`·트리거 실패 `error`, 이미 저장된 `ok`, 또는 저장 직전 재확인에서 그사이 닫힘). 지시서·원문 받기·완성본을 받지 않는다 — 이미 `ok`로 끝난 실행에 지시서·원문 받기를 부를 때도 409다. 그 실행에 완성본을 다시 보내는 것만 409가 아니라 200(멱등) (v0.75) |
+| OUTLOOK_JOB_REJECTED | 422 | 세계 전망 완성본(API-178)이 원문 대조에서 거절됨 — `fatal`(고칠 것)·`dropped`·`checked`·`passed`를 함께 준다. 실행은 running 그대로, 고쳐서 다시 보낸다 (v0.75) |
+| OUTLOOK_RUNNING | 409 | 세계 전망을 이미 만들고 있음 — 한 번에 하나만 돈다(API-174) (v0.75) |
+| OUTLOOK_TRIGGER_MISSING | 409 | 예약 작업(트리거)이 연결돼 있지 않아 세계 전망을 시킬 수 없음(API-174) (v0.75) |
+| OUTLOOK_NOTHING_TO_READ | 409 | 새로 읽을 기간이 없음 — 오늘까지 나온 글은 이미 게시된 판에 담겼다(API-174) (v0.75) |
+| OUTLOOK_TRIGGER_FAILED | 502 | 예약 작업을 켜지 못함(API-174) (v0.75) |
 
 ## API 목록
 
@@ -67,7 +73,7 @@
 | API-018 | PUT | /admin/backup | 자동 백업 설정 저장 (on/off·시각·보관 개수) | 관리자 |
 | API-019 | POST | /admin/backup/run | 지금 즉시 백업 실행 | 관리자 |
 | API-020 | GET | /admin/ask-usage | AI 사용량 — 사용자별 질문 수(오늘/7일/30일)·30일 토큰·검색·추정 비용, 많이 물어본 문서 | 관리자 |
-| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드와 브리핑 회차는 빠진다(v0.43 — 회차의 보관함은 브리핑 패널). 수출입 동향 원문·정리본(`kind='trade'`)도 빠진다(v0.69 — 동향 탭 API-171) | 로그인 |
+| API-021 | GET | /tree | 내 폴더·파일 트리 (탐색기 초기 로드). 카드와 브리핑 회차는 빠진다(v0.43 — 회차의 보관함은 브리핑 패널). 수출입 동향 원문·정리본(`kind='trade'`)도 빠진다(v0.69 — 동향 탭 API-171). 세계 전망 판(`kind='outlook'`)도 빠진다(v0.75 — 동향 탭 API-173) | 로그인 |
 | API-026 | GET | /folders/{id}/info | 폴더 속성(SCR-113): `{ folder, path[], folderCount, fileCount, bytes, byType{}, latest }` — 하위 전부, 휴지통·카드 제외 (v0.41) | 소유자 |
 | API-022 | POST | /folders | 폴더 생성 | 로그인 |
 | API-023 | PUT | /folders/{id} | 폴더 이름 변경 / 이동 / 정렬 | 로그인 |
@@ -96,13 +102,13 @@
 | API-052 | POST | /tags | 태그 생성 | 로그인 |
 | API-053 | DELETE | /tags/{id} | 태그 삭제 (연결 CASCADE) | 로그인 |
 | API-054 | PUT | /files/{id}/tags | 파일의 태그 목록 교체 | 로그인 |
-| API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용). 수출입 동향 원문·정리본(`kind='trade'`)는 공유 표시가 없어 나오지 않는다(v0.69) | 로그인 |
+| API-061 | GET | /shared/tree | 공유 파일·폴더 트리 (열람 전용). 수출입 동향 원문·정리본(`kind='trade'`)는 공유 표시가 없어 나오지 않는다(v0.69). 세계 전망 판(`kind='outlook'`)도 같다(v0.75) | 로그인 |
 | API-071 | GET | /me/settings | 뷰어 설정 조회 | 로그인 |
 | API-072 | PUT | /me/settings | 뷰어 설정 저장 (테마·글자 크기·HTML 글자 배율·본문 너비·용어 밑줄 termHighlight·질문 때 카드 askWithCards, 0/1) | 로그인 |
 | API-073 | PUT | /me/files/{id}/state | 즐겨찾기·읽던 위치·열람 기록·화면 맞춤 저장, 브리핑 읽음 `markRead` | 로그인 |
 | API-074 | GET | /me/recent | 최근 열람 파일 목록 | 로그인 |
 | API-075 | GET | /me/files/{id}/state | 파일 열람 상태 조회 (문서 열 때 최신 위치 복원용) | 로그인 |
-| API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5). doc이 아닌 결과는 `kind`·`createdAt`을 싣는다 — 브리핑 회차는 화면 이름으로 바꿔 보이고, 조각에서 JSON 열쇠·따옴표를 걷어 낸다 (v0.43). 수출입 동향 원문·정리본(`kind='trade'`)는 결과에서 뺀다 (v0.69) | 로그인 |
+| API-081 | GET | /search?q= | 파일명+본문 전문 검색 (FTS5). doc이 아닌 결과는 `kind`·`createdAt`을 싣는다 — 브리핑 회차는 화면 이름으로 바꿔 보이고, 조각에서 JSON 열쇠·따옴표를 걷어 낸다 (v0.43). 수출입 동향 원문·정리본(`kind='trade'`)는 결과에서 뺀다 (v0.69). 세계 전망 판(`kind='outlook'`)도 뺀다 (v0.75) | 로그인 |
 | API-091 | GET | /google/status | 내 구글 계정 연결 상태 (이메일·연결 시각) | 로그인 |
 | API-092 | POST | /google/connect | 구글 동의 화면 URL 발급 (state 발급) | 로그인 |
 | API-093 | GET | /google/callback | 구글 리디렉트 수신 → 토큰 교환·저장 | 로그인 |
@@ -145,7 +151,7 @@
 | API-142 | DELETE | /briefing/token | 연결 열쇠 폐기 (v0.50) | 관리자 |
 | API-143 | GET | /briefing/subscription | 구독 방식 상태 — 열쇠 앞 8자·마지막 사용·트리거 설정 여부·마지막 연결 확인·최근 7회 요약 (v0.50) | 관리자 |
 | API-144 | POST | /briefing/subscription/ping | [연결 확인] — `kind='ping'` job으로 트리거를 쏜다. 회차는 만들지 않는다 (v0.50) | 관리자 |
-| API-151 | GET | /briefing/jobs/{jobId} | 지시서 — 예약 작업이 일할 재료(범위·마감·수집 목록·허용 도메인·직전 회차) (v0.50) | **연결 열쇠(Bearer)** |
+| API-151 | GET | /briefing/jobs/{jobId} | 지시서 — 예약 작업이 일할 재료(범위·마감·수집 목록·허용 도메인·직전 회차) (v0.50). 일감의 종류는 `kind`가 가른다 — `edition`·`ping`·`trade`(v0.68)·`outlook`(v0.75) | **연결 열쇠(Bearer)** |
 | API-152 | POST | /briefing/jobs/{jobId}/progress | 진행 보고 한 줄 — 화면 [진행 기록]에 실시간 (v0.50) | **연결 열쇠(Bearer)** |
 | API-153 | POST | /briefing/jobs/{jobId}/result | 완성본 — 기사 목록 + 건강 숫자. 서버가 검사·조립·저장 (v0.50) | **연결 열쇠(Bearer)** |
 | API-154 | GET | /briefing/jobs/{jobId}/candidates | 서버가 트리거 때 수집해 둔 후보 — `candidates.json`과 같은 모양. 수집 중이면 202 (v0.59) | **연결 열쇠(Bearer)** |
@@ -153,8 +159,14 @@
 | API-156 | GET | /briefing/jobs/{jobId}/materials | 서버가 읽은 재료 — 읽는 중이면 202, 끝나면 기사마다 재료 목록 (v0.59) | **연결 열쇠(Bearer)** |
 | API-157 | GET | /briefing/jobs/{jobId}/trade/pages?doc=cur\|prev | 수출입 동향 정리본 일감의 원문 쪽별 텍스트 — 이번 호·전월 호 (v0.68) | **연결 열쇠(Bearer)** |
 | API-158 | POST | /briefing/jobs/{jobId}/trade/result | 수출입 동향 정리본 완성본(v0.71부터 format 2, v0.70까지 해부) — 서버가 원문과 다시 대조해 저장·알림 (v0.68) | **연결 열쇠(Bearer)** |
+| API-177 | POST | /briefing/jobs/{jobId}/outlook/grab | 세계 전망 일감의 원문 받기 — 세션이 보낸 주소 하나를 서버가 받아 글을 돌려준다(세션의 네트워크가 좁아서) (v0.75) | **연결 열쇠(Bearer)** |
+| API-178 | POST | /briefing/jobs/{jobId}/outlook/result | 세계 전망 완성본(format 1) — 서버가 원문과 다시 대조해 판으로 저장·알림 (v0.75) | **연결 열쇠(Bearer)** |
 | API-171 | GET | /trade | 수출입 동향 — 받은 호 목록·최신 호 카드·기다리는 일. 동향 탭(SCR-195)과 홈이 읽는다 (v0.69. v0.74: 카드에 최근 13개월 숫자와 크게 움직인 품목) | 로그인 |
 | API-172 | POST | /trade/{period}/analysis | 그 호의 정리본을 다시 만들게 시킨다(예약 작업을 켠다). 동향 탭의 [정리본 다시 만들기] (v0.71) | 관리자 |
+| API-173 | GET | /outlook | 세계 전망 — 판 목록·기준선 큰 판·기다리는 일·다음 자동 판. 동향 탭(SCR-195)의 「세계 전망」이 읽는다 (v0.75) | 로그인 |
+| API-174 | POST | /outlook/run | [지금 만들기] — 작은 판 하나를 시킨다(예약 작업을 켠다) (v0.75) | 관리자 |
+| API-175 | POST | /outlook/editions/{id}/hide | 판 내리기 — 모든 계정의 목록에서 감춘다(지우지 않는다) (v0.75) | 관리자 |
+| API-176 | POST | /outlook/editions/{id}/show | 판 다시 올리기 (v0.75) | 관리자 |
 | API-118 | GET/POST | /cards/export | 내보내기 — GET은 용어집 md·Anki CSV 텍스트(미리보기·다운로드), POST는 용어집을 내 파일 최상위 "용어집.md"로 만들거나 갱신 | 로그인 |
 
 이하 핵심 API의 상세 규격입니다. 나머지는 목록의 설명과 공통 규약을 따르며 구현 시 구체화합니다.
@@ -813,9 +825,59 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 - **202** `{ "status": "started" }` — 끝나면 알림으로 온다(API-158이 저장할 때 — 그 호에 저장된 것이 이미 있었으면 관리자에게만, 처음 생기는 것이면 모든 계정에). 만드는 동안과 실패했을 때는 기존 문서가 그대로 보인다.
 - 404 `NOT_FOUND` 그 호의 원문이 없음 · 409 `TRADE_ANALYSIS_RUNNING` 이미 도는 중 · 409 `TRADE_TRIGGER_MISSING` 예약 작업이 연결돼 있지 않음 · 502 `TRADE_TRIGGER_FAILED` 예약 작업을 켜지 못함(이때 실행은 `error`로 닫히고 관리자에게 `trade_missing` 알림).
 
+### API-151·177·178 — 세계 전망 일감 (Bearer, v0.75)
+
+설계: [세계전망_docvault_20261121.md](세계전망_docvault_20261121.md) "서버와 주고받기". 서버가 자동 발행일(그달 둘째·넷째 월요일 10시대, 1월 둘째 월요일은 큰 판)이나 관리자의 [지금 만들기](API-174)로 **브리핑 구독의 예약 작업을 그대로 켠다**(수출입 동향 일감과 같은 방식 — 같은 트리거·같은 연결 열쇠·같은 접두어). 라우트는 `routes/outlookJobs.ts` — `tradeJobRoutes` 다음, `briefingJobRoutes`보다 먼저 등록되어 제 일감(`outlook_jobs.job_id`)만 받고 나머지는 넘긴다. job의 주인(`outlook_jobs.owner_id` = 트리거를 빌려준 관리자)이 열쇠의 주인과 다르면 제 일감으로 치지 않는다(API-151은 브리핑 쪽으로 넘어가 404, API-177·178은 404 `NOT_FOUND`). 쿠키로 들어오면 401 `BRIEFING_TOKEN_INVALID`.
+
+**API-151 (kind=outlook)** `GET /briefing/jobs/{jobId}` → **200** 지시서:
+```json
+{
+  "kind": "outlook", "jobId": "uuid", "skill": "outlook-report",
+  "edition": "small", "label": "2026년 12월 둘째 판",
+  "since": "2026-11-21", "until": "2026-12-13",
+  "deadline": 1797224400000, "wrapUpBefore": 1800000, "searchQuota": 15,
+  "baseline": { "label": "2027년 세계 경제 전망(시범)", "title": "2027년 세계 경제 전망", "text": "…" },
+  "later": [{ "label": "2026년 11월 시험 판", "since": "2026-11-07", "until": "2026-11-20", "text": "…" }],
+  "excludeUrls": ["https://…"],
+  "limits": { "resultMaxBytes": 2097152, "resendMax": 2 }
+}
+```
+- **API-151** `edition`은 `big` | `small`, `since`·`until`은 한국 달력 날짜(양 끝 포함). `searchQuota`는 묶음 하나가 쓸 수 있는 검색 횟수(작은 판 15 · 큰 판 25, `OUTLOOK.SEARCH_QUOTA`). `baseline`은 지금 기준선인 큰 판(게시된 큰 판 가운데 `until`이 가장 늦은 것, 없으면 null), `later`는 그 뒤에 게시된 작은 판들(오래된 것부터). `text`는 그 판에 넣어 둔 기준선 글(시범 큰 판의 마크다운)이 있으면 그것, 없으면 완성본에서 뽑은 화면 글이다. `excludeUrls`는 가장 최근에 게시된 판의 출처 주소 — 같은 글을 두 판에 걸쳐 새 소식처럼 쓰지 않게. 내린 판은 셋 어디에도 들어가지 않는다. 두 번 받아도 같다. 처음 받아 간 시각을 `remote_started_at`에 적는다. 닫힌 실행이면 409 `OUTLOOK_JOB_CLOSED`(`status`가 함께 온다).
+- **API-177** `POST …/outlook/grab` **Body** `{ "url": "https://…" }`(600자까지, http(s)만 — 아니면 400 `VALIDATION_ERROR`) → **200** `{ "ok": true, "kind": "pdf" | "html" | "text", "text": "…" }` 또는 `{ "ok": false, "why": "HTTP 403" }`. 서버가 그 주소를 받는다(`lib/outlook/sources.ts`의 `fetchSource` — 세션이 직접 받을 때와 같은 함수. HTML은 페이지 글 전체, PDF는 `pdftotext`, 25MB·30초 상한). 리디렉트는 서버가 직접 따라가며 넘어가는 곳마다 내부망 주소인지 다시 본다(최대 5번 `OUTLOOK.MAX_REDIRECTS`, 검사는 브리핑 원문 받기의 `assertPublicUrl`). 못 받은 것도 200이다 — 사이트가 막은 것은 세션이 고칠 문제가 아니라 그 출처를 "원문 확인 못 함"으로 셀 일이라서. 실행마다 300개(`OUTLOOK.GRAB_MAX_PER_JOB`)까지 받고, 넘으면 받지 않고 `ok: false`. 받은 글은 실행 동안 서버 메모리에 두어 API-178의 대조에 다시 쓴다(같은 주소를 다시 물으면 받아 둔 글을 준다 — 못 받았던 주소는 다시 받고, 다시 센다). 서버가 재시작하면 비고, 실행이 닫히면 버린다. 닫힌 실행이면 409 `OUTLOOK_JOB_CLOSED`.
+- **API-178** `POST …/outlook/result` — 본문은 완성본 `data.json`(format 1 — 형식: `.claude/skills/outlook-report/references/schema.md`, zod `OutlookDataSchema`. 상한 2MB `OUTLOOK.RESULT_MAX_BYTES` → 413 `PAYLOAD_TOO_LARGE`, JSON이 아니면 400). 서버는 ① 모양 검사(틀리면 400 `VALIDATION_ERROR`, 메시지 `<경로>: <이유>`; `meta.edition`이나 `meta.since`·`meta.until`이 이 실행의 것과 다르면 400) ② **원문 대조**(`lib/outlook/verify.ts` — 세션의 `outlook:job build`와 같은 함수. 주마다 원문 글은 API-177로 받아 둔 것을 쓰고, 없으면 이때 6개씩 한꺼번에 받는다(`OUTLOOK.RESULT_FETCH_CONCURRENCY`). 인용이 원문에 없는 근거는 버리고 그 근거에만 기대던 문단·항목은 뺀다. 각주 번호·기간 밖 출처·금지 표기 같은 고칠 것(`fatal`)이 있거나 뺀 블록이 30%를 넘으면 422 `OUTLOOK_JOB_REJECTED` — 원문을 받지 못한 출처의 인용은 빼지 않고 `unverified`로 센다) ③ 저장 — HTML 문서(「판 이름.html」, 문서 탭 밖 `kind='outlook'`, 주인은 가장 먼저 만든 활성 관리자)와 `outlook_editions` 한 줄(완성본 JSON, 목록 첫 문장 = 부제, 없으면 요약 첫 문장) ④ 실행을 `ok`로 닫고 모든 활성 계정에 `outlook_ready` 알림. **200** `{ "editionId", "fileId", "checked", "passed", "dropped": [..], "unverified": [..], "already": false }` — 같은 job에 다시 보내면 `already: true`로 같은 답(멱등, 본문은 보지 않는다). 400·422는 실행을 닫지 않는다(스킬이 마감 전이면 고쳐 2번까지 다시 보낸다 — 서버가 횟수를 세지는 않는다). `missing`·`error`로 닫힌 실행은 409 `OUTLOOK_JOB_CLOSED` — 수출입 동향과 같이 늦게 온 완성본은 받지 않는다. 원문을 받는 동안 같은 실행의 다른 전송이 먼저 저장했으면 그 답을, 마감으로 닫혔으면 409를 준다.
+- 마감(`OUTLOOK.JOB_DEADLINE_MS` 4시간, 큰 판·작은 판 같다)까지 완성본이 없으면 서버의 1분 틱이 `missing`으로 닫고 관리자에게 `outlook_missing`(「세계 전망 {판 이름}을 만들지 못했어요」 — 본문은 지시서를 받아 간 적이 없으면 「예약 작업이 서버를 부르지 않았어요 (예약 작업·네트워크 설정 확인)」, 있으면 「마감까지 완성본이 오지 않았어요」). 자동 판은 이름마다 한 번만 시도한다.
+- 이 경로에서 서버는 AI를 부르지 않는다.
+
+### API-173 — GET /outlook (v0.75)
+
+설계: [세계전망_docvault_20261121.md](세계전망_docvault_20261121.md) "화면". 모든 로그인 계정.
+
+**200** `{ "editions": [{ "id": 2, "kind": "small", "label": "2026년 11월 시험 판", "title": "글로벌 리서치 동향", "subtitle": "…", "since": "2026-11-07", "until": "2026-11-20", "fileId": 31 | null, "status": "published" | "hidden", "origin": "auto" | "manual" | "seed", "publishedAt": <unix ms>, "lead": "…", "read": false }], "baselineId": 1 | null, "pending": { "state": "running", "label", "startedAt" } | { "state": "failed", "label", "message" } | null, "next": { "label": "2026년 12월 둘째 판", "at": <unix ms> } | null }`
+
+- `editions`는 게시 시각 최신순. `hidden`(관리자가 내린 판)은 관리자에게만 온다. `fileId`는 문서가 지워졌거나 휴지통에 있으면 null. `lead`는 목록에 보일 첫 문장. `read`는 이 계정이 그 문서를 연 적이 있는가(`user_file_state.last_opened_at`).
+- `baselineId`는 지금 기준선인 큰 판 — 게시된 큰 판 가운데 읽은 기간의 끝(`until`)이 가장 늦은 것.
+- `pending`: `running`은 도는 실행이 있을 때(모든 계정). `failed`는 가장 최근 실행이 `error`·`missing`이고 그 뒤에 게시된 판이 없을 때 — 관리자에게만, `message`에 이유.
+- `next`는 다음 자동 발행 — 켜는 창(그 시)이 아직 끝나지 않았고 그 이름으로 시킨 적 없는 가장 가까운 발행일. 읽을 날이 7일(`OUTLOOK.MIN_AUTO_WINDOW_DAYS`)이 안 돼 건너뛸 작은 판은 빼고 그다음 것을 보인다. `at`은 그날 10:00(한국시간).
+- 판 문서는 `kind='outlook'`이라 문서 트리(API-021)·공유받음(API-061)·검색(API-081)에 나오지 않는다. 읽기는 모든 로그인 계정(공용 권한 규칙 `canReadFile`에 `kind='outlook'` 추가).
+
+### API-174 — POST /outlook/run (v0.75)
+
+관리자 전용(그 밖은 403 `FORBIDDEN`). 본문 없음. 작은 판 하나를 시킨다 — 읽는 기간은 게시된 판 가운데 가장 늦은 `until`의 다음 날 ~ **오늘**(한국 날짜. 자동 판은 어제까지), 이름은 「YYYY년 M월 D일 판」(같은 날 두 번이면 「 (2)」…). 자동 판과 달리 읽을 날이 하루뿐이어도 시킨다.
+
+- **202** `{ "status": "started", "label": "2026년 11월 21일 판" }` — 끝나면 알림으로 온다(API-178이 저장할 때, 모든 계정에).
+- 409 `OUTLOOK_RUNNING` 이미 도는 세계 전망 실행이 있음(자동 판 포함 — 한 번에 하나) · 409 `OUTLOOK_TRIGGER_MISSING` 예약 작업이 연결돼 있지 않음 · 409 `OUTLOOK_NOTHING_TO_READ` 읽을 기간이 없음(오늘까지 이미 판에 담김) · 502 `OUTLOOK_TRIGGER_FAILED` 예약 작업을 켜지 못함(이때 실행은 `error`로 닫히고 관리자에게 `outlook_missing` 알림). 검사 순서는 도는 실행 → 트리거 → 읽을 기간.
+
+### API-175 · API-176 — POST /outlook/editions/{id}/hide · /show (v0.75)
+
+관리자 전용(그 밖은 403 `FORBIDDEN`). 본문 없음. 판의 상태를 `hidden`(내림) / `published`(다시 올림)로 바꾼다 → **200** `{ "status": "hidden" | "published" }`. 없는 판이나 숫자가 아닌 id는 404 `NOT_FOUND`. 이미 그 상태여도 200.
+
+- 내리기는 **목록에서만 감춘다** — 파일은 지우지 않고 읽기도 막지 않는다(이미 간 알림과 링크가 깨지지 않게). 일반 계정의 API-173 목록에서 빠지고, 관리자에게는 흐리게 남는다.
+- 내린 판은 다음 판의 계산에서 빠진다 — 기준선(내린 큰 판 대신 그 앞 큰 판), 다음 작은 판의 읽는 기간(내린 판의 기간을 다시 읽는다), 지시서의 `later`·`excludeUrls`.
+- 판을 다시 만드는 API는 없다(설계의 [다시 만들기]는 v0.75에서 만들지 않았다).
+
 ## 알림 (API-16x, 2026-11-04 — 1단계)
 
-알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). 수출입 동향(2026-11-20, 설계 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md))은 사건 둘을 더한다 — **도착**(`trade_ready`: 서버가 산업통상부 게시판에서 새 호 PDF를 받음(v0.67~0.68에는 「수출입동향」 폴더에, v0.69부터 문서 탭 밖 보관), 모든 활성 계정에게, fileId=그 PDF, 처음 소급은 12통 대신 한 통)과 **못 찾음**(`trade_missing`: 1일 18:00·4일 10:00 확인에도 없거나 받기 실패, 관리자에게). 받기까지는 새 API가 없다 — 서버의 1분 틱이 혼자 한다. v0.68부터는 해부 도착도 `trade_ready`(dedupe `trade:{period}:analysis`), 해부 실패도 `trade_missing`(dedupe `trade:{period}:analysis:{jobId}`)으로 알린다(API-158). **v0.69부터 알림은 한 번** — 새 호를 받으면 바로 알리지 않고 해부가 저장됐을 때 알리며, 해부를 시키지 못했거나 실패했을 때만 원문 도착(`trade:{period}:ready`)으로 대신 알린다. [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
+알림은 **사건 한 표(NOTIFICATIONS)** 에 쌓고, 화면(앱 안 알림함)·푸시·메신저는 그 위의 배달 통로다. 1단계는 앱 안 알림함과 종 배지만: 클라이언트가 화면이 보일 때 60초(`NOTIFICATION_POLL_MS`)마다 API-160을 다시 읽고, 탭이 다시 보이게 되면 바로 한 번 읽는다. 알림 한 줄의 `href`(4단계)는 문서가 아닌 곳으로 가는 주소 — fileId와 둘 중 하나. 사건은 셋 — 브리핑 **도착**(`briefing_ready`: 자동·구독 회차가 ok로 닫힘, 만든 사람 + 열람 계정에게), **못 만듦**(`briefing_missing`: 구독 마감 초과 missing·자동 실행 error, 만든 사람에게만), **오래 걸린 올리기 끝**(`upload_done`: API-031이 10초 넘게 걸렸을 때, 올린 사람에게). 수출입 동향(2026-11-20, 설계 [수출입동향_docvault_20261120.md](수출입동향_docvault_20261120.md))은 사건 둘을 더한다 — **도착**(`trade_ready`: 서버가 산업통상부 게시판에서 새 호 PDF를 받음(v0.67~0.68에는 「수출입동향」 폴더에, v0.69부터 문서 탭 밖 보관), 모든 활성 계정에게, fileId=그 PDF, 처음 소급은 12통 대신 한 통)과 **못 찾음**(`trade_missing`: 1일 18:00·4일 10:00 확인에도 없거나 받기 실패, 관리자에게). 받기까지는 새 API가 없다 — 서버의 1분 틱이 혼자 한다. v0.68부터는 해부 도착도 `trade_ready`(dedupe `trade:{period}:analysis`), 해부 실패도 `trade_missing`(dedupe `trade:{period}:analysis:{jobId}`)으로 알린다(API-158). **v0.69부터 알림은 한 번** — 새 호를 받으면 바로 알리지 않고 해부가 저장됐을 때 알리며, 해부를 시키지 못했거나 실패했을 때만 원문 도착(`trade:{period}:ready`)으로 대신 알린다. [지금 만들기]로 직접 만든 회차(trigger=manual)는 알리지 않는다. 세계 전망(v0.75, 설계 [세계전망_docvault_20261121.md](세계전망_docvault_20261121.md))도 사건 둘을 더한다 — **새 판**(`outlook_ready`: 서버 대조를 통과해 판이 저장됨(API-178), 모든 활성 계정에게, fileId=그 판 문서, dedupe `outlook:{판 이름}:ready`. 자동 판이든 관리자의 [지금 만들기](API-174)든 같다. 서버가 처음 켜질 때 넣는 시드 두 판은 알리지 않는다)과 **못 만듦**(`outlook_missing`: 예약 작업을 켜지 못함·마감 초과, 관리자에게, fileId 없음 — 누르면 동향 탭의 세계 전망 쪽, dedupe `outlook:{jobId}:failed`). 같은 실행의 같은 결과는 `dedupe_key`(`briefing-run:{runId}:{status}`)로 한 번만 쌓인다. 30일(`NOTIFICATION.KEEP_MS`) 지난 알림은 하루 한 번 지운다.
 
 ### API-160 — GET /notifications
 내 알림함. **200** `{ "notifications": [{ "id", "kind": "briefing_ready" | "briefing_missing", "title", "body": string | null, "fileId": number | null, "readAt": number | null, "createdAt" }], "unread": 3 }` — 최신순 50개(`NOTIFICATION.LIST_MAX`). `fileId`는 누르면 열 회차 문서(지워졌으면 null → 화면은 브리핑이 있는 곳으로). 종 배지와 목록이 같은 응답을 쓴다.
@@ -839,7 +901,7 @@ API-114와 같은 필드(제목 제외). 기존 출처는 유지하고 threadId�
 설정 화면의 [끊기]는 id로, 브라우저가 구독을 풀 때는 `{ "endpoint" }`로. **200** `{ "ok": true }`. id가 내 것이 아니면 404. 이 기기를 끊을 때 화면은 브라우저 구독도 함께 푼다 — 서버만 지우면 다시 켤 때 "구독은 있는데 등록이 없는" 어중간한 상태가 된다.
 
 #### 종류별 끄기·조용한 시간 (3단계, 2026-11-05)
-USER_SETTINGS에 `notifyPrefs`(JSON `{kind: 0|1}`, null=전부 켬)와 `quietHours`(JSON `{enabled, start:"23:00", end:"06:30"}`, null=없음)가 생겼다 — API-071/072로 객체 그대로 주고받고 서버가 JSON 글자로 저장한다. 종류 열쇠는 `NOTIFICATION_KINDS`(briefing_ready · briefing_missing · upload_done · export_done · trade_ready · trade_missing — 수출입 동향 2026-11-20)만 받는다(400). **끈 종류는 알림함에도 안 쌓인다**(pushNotification이 넣기 전에 거른다). **조용한 시간**은 한국시간 기준이고 자정을 넘는 구간(23:00~06:30)도 된다 — 그 사이 생긴 알림은 알림함엔 그대로 쌓이되 `deferred_push=1`로 푸시·텔레그램을 보류하고, 1분마다(`NOTIFICATION.QUIET_FLUSH_MS`) 조용한 시간이 끝난 사람의 보류분을 **한 통**으로 묶어 보낸다(1건이면 그 제목 그대로, 여럿이면 「조용한 시간 동안 알림 n개 — 첫 제목 외 n-1개」).
+USER_SETTINGS에 `notifyPrefs`(JSON `{kind: 0|1}`, null=전부 켬)와 `quietHours`(JSON `{enabled, start:"23:00", end:"06:30"}`, null=없음)가 생겼다 — API-071/072로 객체 그대로 주고받고 서버가 JSON 글자로 저장한다. 종류 열쇠는 `NOTIFICATION_KINDS`(briefing_ready · briefing_missing · upload_done · export_done · trade_ready · trade_missing — 수출입 동향 2026-11-20 · outlook_ready · outlook_missing — 세계 전망 v0.75)만 받는다(400). **끈 종류는 알림함에도 안 쌓인다**(pushNotification이 넣기 전에 거른다). **조용한 시간**은 한국시간 기준이고 자정을 넘는 구간(23:00~06:30)도 된다 — 그 사이 생긴 알림은 알림함엔 그대로 쌓이되 `deferred_push=1`로 푸시·텔레그램을 보류하고, 1분마다(`NOTIFICATION.QUIET_FLUSH_MS`) 조용한 시간이 끝난 사람의 보류분을 **한 통**으로 묶어 보낸다(1건이면 그 제목 그대로, 여럿이면 「조용한 시간 동안 알림 n개 — 첫 제목 외 n-1개」).
 
 #### 텔레그램 (3단계)
 봇은 **앱에 하나**(관리자가 BotFather 토큰을 넣는다 — `app_settings.telegram_bot`에 암호화, 토큰은 절대 응답에 싣지 않는다), 사용자는 저마다 /start 코드로 자기 대화를 잇는다. 서버는 웹훅 대신 **getUpdates 긴 폴링**(20초, `TELEGRAM.POLL_TIMEOUT_S`)을 돈다 — 공개 주소 설정이 필요 없다. 보내는 글은 `제목\n한 줄`뿐, 문서 내용·링크는 없다(폐쇄형). 푸시가 막힌 기기(시크릿 창·옛 브라우저)의 안전망이고 조용한 시간을 똑같이 따른다.

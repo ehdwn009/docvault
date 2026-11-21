@@ -132,7 +132,12 @@ export function renderOutlookPage(d: OutlookData): string {
     .replace('%%CHARTS%%', () => json(charts));
 }
 
+/** 게시용 조각(<title>로 시작, doctype 없음)을 뷰어·브라우저로 바로 여는 완전한 문서로 감싼다 — 손으로 만든 시범 큰 판(시드)도 같은 겉옷을 입는다 */
+export function wrapOutlookPage(fragment: string): string {
+  return `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<style>[hidden]{display:none!important} body{margin:0}</style>\n</head>\n<body>\n${fragment}\n</body>\n</html>\n`;
+}
+
 /** 뷰어·브라우저로 바로 여는 완전한 문서 — 게시용 조각(renderOutlookPage)을 감싼다 */
 export function renderOutlookHtml(d: OutlookData): string {
-  return `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<style>[hidden]{display:none!important} body{margin:0}</style>\n</head>\n<body>\n${renderOutlookPage(d)}\n</body>\n</html>\n`;
+  return wrapOutlookPage(renderOutlookPage(d));
 }

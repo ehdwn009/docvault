@@ -36,6 +36,9 @@ erDiagram
     FILES ||--o| TRADE_RELEASES : "받아 둔 원문 PDF"
     FILES ||--o| TRADE_RELEASES : "정리본 문서 (analysis_file_id)"
     USERS ||--o{ TRADE_JOBS : "트리거를 빌려준다"
+    FILES ||--o| OUTLOOK_EDITIONS : "판 문서 (HTML)"
+    USERS ||--o{ OUTLOOK_JOBS : "트리거를 빌려준다"
+    OUTLOOK_EDITIONS ||--o| OUTLOOK_JOBS : "저장된 판 (edition_id)"
 
     USERS {
         integer id PK
@@ -71,7 +74,7 @@ erDiagram
         text storage_path "바이너리만, 텍스트는 null"
         integer is_shared "0|1"
         integer sort_order
-        text kind "doc|card|briefing|trade — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 안 나오고 브리핑 패널에서만, v0.43 — v0.69부터 브리핑 탭), trade는 수출입 동향 원문·정리본(트리·공유받음·검색에 안 나오고 동향 탭에서만, v0.69)"
+        text kind "doc|card|briefing|trade|outlook — card는 배움 카드(트리에 안 나오고 서랍에서만, v0.26), briefing은 뉴스 브리핑 회차(트리에 안 나오고 브리핑 패널에서만, v0.43 — v0.69부터 브리핑 탭), trade는 수출입 동향 원문·정리본(트리·공유받음·검색에 안 나오고 동향 탭에서만, v0.69), outlook은 세계 전망 판(trade와 같은 자리·같은 규칙, v0.75)"
         integer deleted_at "휴지통 이동 시각, null=정상 (2026-08-15). 목록용 커버링 인덱스 files_owner_kind_idx — 비고 참조"
         integer created_at
         integer updated_at
@@ -238,7 +241,7 @@ erDiagram
     NOTIFICATIONS {
         integer id PK
         integer user_id FK "받는 사람"
-        text kind "briefing_ready | briefing_missing | upload_done | export_done | trade_ready | trade_missing (2026-11-20)"
+        text kind "briefing_ready | briefing_missing | upload_done | export_done | trade_ready | trade_missing (2026-11-20) | outlook_ready | outlook_missing (v0.75)"
         text title
         text body "nullable, 한 줄 설명"
         integer file_id FK "nullable — 누르면 열 회차 문서. 문서를 지우면 NULL(SET NULL)"
@@ -300,6 +303,44 @@ erDiagram
         text report "nullable JSON — 대조 결과 { checked, passed, dropped[] }"
     }
 
+    OUTLOOK_EDITIONS {
+        integer id PK
+        text kind "big | small — 큰 판(1월 세계 경제 전망) · 작은 판(월 2회 리서치 동향) (v0.75)"
+        text label UK "판 이름 — 2026년 12월 둘째 판, 2027년 세계 경제 전망, 2026년 11월 21일 판"
+        text title
+        text subtitle "기본 빈 글자"
+        text since "YYYY-MM-DD 읽은 기간 시작 (한국 날짜)"
+        text until "YYYY-MM-DD 읽은 기간 끝 — 게시된 판의 가장 늦은 until 다음 날이 다음 작은 판의 시작"
+        integer file_id FK "nullable — 판 문서(kind=outlook HTML). 문서를 지우면 NULL(SET NULL)"
+        text data_json "nullable — 서버 대조를 통과한 완성본(format 1). 손으로 만든 시범 큰 판은 NULL"
+        text baseline_text "nullable — 다음 판의 세션이 기준선으로 읽을 글. NULL이면 data_json에서 만든다(시범 큰 판만 마크다운 원문)"
+        text lead "목록에 보일 첫 문장 — 판 종류와 상관없이 부제, 없으면 요약 첫 문장(시드의 시범 큰 판만 마크다운 요약 첫 문장)"
+        text status "published | hidden — hidden은 관리자가 내림(목록에서만 감춘다)"
+        text origin "auto | manual | seed"
+        text job_id "nullable — 만든 실행의 uuid(outlook_jobs.job_id), 시드는 NULL"
+        integer published_at
+        integer created_at
+    }
+
+    OUTLOOK_JOBS {
+        integer id PK
+        text job_id UK "uuid — 예약 작업이 가진 유일한 식별자 (v0.75)"
+        text kind "big | small"
+        text label "판 이름 — 인덱스 outlook_jobs_label. 자동 판은 이 이름의 줄이 있으면 다시 켜지 않는다"
+        text since "YYYY-MM-DD"
+        text until "YYYY-MM-DD"
+        text origin "auto | manual"
+        integer owner_id FK "트리거를 빌려준 관리자 = 연결 열쇠의 주인"
+        text status "running | ok | missing | error"
+        text message "nullable — 실패 이유"
+        integer deadline_at
+        integer started_at
+        integer remote_started_at "nullable — 세션이 지시서를 받아 간 시각"
+        integer finished_at "nullable"
+        text report "nullable JSON — 대조 결과 { checked, passed, unverified[], dropped[], fatal[] }"
+        integer edition_id FK "nullable — 저장된 판(ok일 때만). 판을 지우면 NULL(SET NULL)"
+    }
+
     PUSH_SUBSCRIPTIONS {
         integer id PK
         integer user_id FK "기기의 주인"
@@ -334,6 +375,8 @@ erDiagram
 | APP_SETTINGS | 서버 하나에 하나인 설정의 열쇠-값. 지금은 텔레그램 봇(토큰+이름, 암호화) 한 줄 — 계정이 아니라 앱에 속하는 값은 USER_SETTINGS가 아니라 여기 (알림 3단계) |
 | TRADE_RELEASES | 산업통상부 「월간 수출입 동향」 한 호 — 언제 어느 글에서 받았고 어느 PDF 문서로 남겼는지. 내용 자체는 FILES의 PDF에 있다 (수출입 동향 1단계 2026-11-20) |
 | TRADE_JOBS | 수출입 동향 정리본(v0.70까지 해부)을 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록. 그 내용은 TRADE_RELEASES.analysis_json과 FILES의 HTML 문서에 있다 (2단계 v0.68) |
+| OUTLOOK_EDITIONS | 세계 전망 판 한 편 — 큰 판(매년 1월 세계 경제 전망) 또는 작은 판(월 2회 글로벌 리서치 동향). 화면은 FILES의 HTML 문서이고, 이 표는 동향 탭의 목록·기준선 판·다음 작은 판의 읽는 기간·다음 판에 넘길 글을 맡는다 (세계 전망 출시 2단계 v0.75) |
+| OUTLOOK_JOBS | 세계 전망 판을 시킨 실행 한 번 — 서버가 claude.ai 예약 작업을 켜고 완성본을 기다린 기록. TRADE_JOBS와 같은 모양에 판 정보(종류·이름·읽는 기간·만든 방식)와 저장된 판을 더했다 (v0.75) |
 | PUSH_SUBSCRIPTIONS | 웹 푸시 구독 — 기기(브라우저)마다 한 줄. endpoint가 곧 기기 주소라 유일. 알림 표에 새 줄이 생기면 주인의 기기 전부로 보내고, 푸시 서버가 404·410을 돌려주면 지운다. VAPID 열쇠는 표가 아니라 `data/vapid.json`에 (알림 2단계 2026-11-04) |
 | BRIEFING_RUNS | 뉴스 브리핑을 만든 실행 한 번. 진행 상태(단계·진행 숫자)·실패 이유·사용량·추정 비용·다룬 기사 범위를 담는다. 회차 내용 자체는 FILES의 문서에 있고, 이 표는 "만든 과정"의 기록이다 |
 | ASK_MESSAGES | 대화 속 말풍선 하나. user/assistant 번갈아 쌓인다. 하루 질문 한도는 소유자의 user 행을 UTC 날짜로 센다. assistant 행에는 그 답에 든 토큰·검색 횟수와 모델(model)을 적어 두어 관리자 사용량 통계(API-020)가 모델별 단가로 비용을 추정하는 근거가 된다 |
@@ -370,6 +413,16 @@ erDiagram
   - 알림: 도착(`trade_ready`)은 모든 활성 계정에, 못 찾음(`trade_missing`)은 관리자에게. dedupe_key는 `trade:{period}:ready`·`trade:{period}:missing:d1|d4`·`trade:backfill`. v0.69부터 원문 도착(`:ready`)은 해부를 시킬 수 없거나 못 만들었을 때만 간다 — 보통은 아래 해부 도착(`:analysis`) 한 번이다.
   - **해부 (2단계, v0.68)**: 새 호를 받으면 TRADE_JOBS에 한 줄을 만들고 브리핑 구독의 예약 작업을 켠다(USER_SETTINGS.briefing_trigger_enc를 가진 관리자의 트리거 — 그 관리자가 owner_id). 호마다 자동 시도는 한 번이라 그 period의 줄이 하나라도 있으면(성공·실패 무관) 다시 켜지 않는다. 사용자 삭제 시 CASCADE. 완성본이 원문 대조를 통과하면 TRADE_RELEASES.analysis_json에 해부 JSON, analysis_file_id에 같은 내용의 HTML 문서(`kind='trade'`의 html 파일 — v0.68에는 「수출입동향」 폴더의 `kind='doc'`)를 적는다 — 같은 호를 다시 받으면 그 문서를 고쳐 쓰고, 사람이 문서를 지웠으면(SET NULL) 새로 만든다. 마감(deadline_at)이 지난 running은 틱이 missing으로 닫는다. 알림 dedupe_key는 `trade:{period}:analysis`(도착)·`trade:{period}:analysis:{job_id}`(실패).
   - **정리본 (4단계, v0.71)**: 표는 그대로다. analysis_json에 담기는 자료의 형식만 해부에서 정리본(format 2)으로 바뀌고 문서 이름이 「…정리.html」이 된다. 관리자의 [정리본 다시 만들기](API-172)는 그 period에 TRADE_JOBS 줄을 하나 더 만든다 — "호마다 한 번"은 자동 시도에만 해당하고, running인 줄이 있으면 새로 만들지 않는다. 그 호에 저장된 것이 이미 있었다면 다시 만든 실행의 도착 알림은 dedupe_key `trade:{period}:analysis:{job_id}:ok`로 관리자에게만 가고, 못 만든 호에 처음 생기는 것이면 `trade:{period}:analysis`로 모든 계정에 간다.
+- **세계 전망 (2026-11-21, v0.75)**: 설계 전문은 [세계전망_docvault_20261121.md](세계전망_docvault_20261121.md).
+  - 판 하나가 OUTLOOK_EDITIONS 한 줄이고, 화면은 FILES의 HTML 한 행이다(`kind='outlook'`·`folder_id` NULL·`is_shared=0`) — 수출입 동향(`kind='trade'`)과 같은 자리·같은 규칙이다. 문서 트리·공유받음·문서 검색에 나오지 않고 동향 탭(API-173)에서만 보이며, 읽기는 모든 로그인 계정에 열려 있다(`canReadFile`의 `kind='outlook'` 규칙). 소유자는 첫 관리자(가장 먼저 만든 활성 관리자). 문서 이름은 「판 이름.html」.
+  - label UNIQUE — 같은 이름의 판을 두 번 만들지 않는다. 판 이름이 곧 자동 발행의 열쇠다: 자동 판은 그 이름의 줄이 OUTLOOK_EDITIONS나 OUTLOOK_JOBS에 하나라도 있으면(성공·실패 무관) 다시 켜지 않는다(실패해도 자동 재시도 없음 — 사용량이 새지 않게). 관리자의 [지금 만들기](API-174)는 같은 날 두 번이면 이름 뒤에 「 (2)」를 붙여 새 이름을 만든다.
+  - since·until은 시각이 아니라 한국 달력 날짜(`'YYYY-MM-DD'`)라 이 표에서만 글자로 둔다(다른 시각 칸은 전부 unix ms). 다음 작은 판은 `status='published'`인 판의 가장 늦은 until 다음 날부터 읽는다. 기준선은 게시된 큰 판 가운데 until이 가장 늦은 것이다.
+  - file_id는 SET NULL — 사람이 문서를 지워도 판의 기록은 남아 다음 판의 읽는 기간과 기준선이 흔들리지 않는다(동향 탭에서는 그 판을 「파일이 없어요」로 보인다).
+  - data_json은 서버 대조를 통과한 완성본, baseline_text는 다음 판의 세션이 기준선으로 읽을 글이다. 지금 들어가는 줄은 둘 중 하나가 있다 — 서버가 만든 판은 data_json만(글은 그때그때 data_json에서 뽑는다), 시드의 시범 큰 판은 손으로 만든 화면이라 완성본이 없어 baseline_text(마크다운 원문)만 있다.
+  - status='hidden'(관리자가 내림, API-175)은 목록에서만 감춘다 — FILES는 그대로라 알림·링크로는 열린다. 내린 판은 다음 판의 계산(읽는 기간·기준선·지시서의 `later`·`excludeUrls`)에서 빠진다.
+  - origin='seed'는 서버가 처음 켜질 때(OUTLOOK_EDITIONS가 비어 있을 때 한 번) 넣는 두 판 — 시범 큰 판(published_at 2026-11-20 0시 한국시간)과 11월 시험 판(2026-11-21 0시) — 이고, job_id가 NULL이다. 두 판은 한 트랜잭션으로 들어간다(반만 들어가면 표가 비어 있지 않아 다음 기동 때 다시 넣지 않는다). 시드는 알림을 남기지 않는다.
+  - OUTLOOK_JOBS는 실행 한 번 — TRADE_JOBS와 같은 규칙이다. owner_id는 트리거를 빌려준 관리자(USER_SETTINGS.briefing_trigger_enc를 가진 관리자 — 첫 관리자가 넣어 뒀으면 그 사람)이고 연결 열쇠의 주인과 같아야 지시서를 내준다. 사용자 삭제 시 CASCADE. running인 줄은 한 번에 하나뿐이다(서버가 새로 시키기 전에 본다). 마감(deadline_at)이 지난 running은 1분 틱이 missing으로 닫는다. 완성본이 저장되면 ok로 닫고 edition_id에 판을 적는다(판을 지우면 SET NULL). OUTLOOK_EDITIONS.job_id는 거꾸로 그 실행의 uuid를 글자로 적어 둔 것이다(외래 키 아님).
+  - 알림: 새 판(`outlook_ready`)은 모든 활성 계정에(dedupe_key `outlook:{label}:ready`, file_id = 판 문서), 못 만듦(`outlook_missing`)은 관리자에게(`outlook:{job_id}:failed`, file_id 없음).
 - **뉴스 브리핑 (2026-10-01)**: 설계 전문은 [뉴스브리핑_docvault_20261001.md](뉴스브리핑_docvault_20261001.md).
   - 회차 하나는 FILES의 한 행이다(`kind='briefing'`, `file_type='code'`, 본문 = 회차 JSON). 카드와 같은 이유로 별도 테이블을 만들지 않았다 — 검색·태그·즐겨찾기·휴지통·내보내기·백업이 FILES에 걸려 있다. **v0.43부터 카드처럼 파일 트리에서 빠지고 최상위(folder_id NULL)에 놓인다** — 보관함은 브리핑 패널(SCR-190)이다(v0.69의 새 레이아웃에서는 그 패널이 브리핑 탭 SCR-192 안에 들어간다). v0.42에 월별 폴더(`뉴스 브리핑/YYYY-MM`)에 저장된 회차는 마이그레이션이 최상위로 옮기고 빈 월별 폴더를 지운다. `kind`는 전용 뷰어로 그리고 편집 버튼을 숨기라는 표시일 뿐, 접근 규칙은 보통 파일과 같다.
   - **틀린 곳 알리기 (v0.45)**: USER_FILE_STATE.flag_items는 그 회차에서 사용자가 "숫자가 틀림·다른 기사가 섞임·과장됨·영향 판단이 이상함·해설이 이상함(v0.48)·기타"로 알린 기사 목록(`[{ id, reason, note?, at }]`)이다. 읽음과 같은 "이 사람 × 이 회차" 사실이라 같은 표에 둔다. 회차당 200건, 같은 기사는 마지막 신고로 덮어쓴다(API-073 `flag`). 어디로도 보내지 않고 모아 두는 기록이다 — 실측 2주 뒤 숫자 대조를 `drop`으로 바꿀지의 근거(상태 API가 이번 달 신고 수를 센다).
@@ -399,4 +452,5 @@ erDiagram
 - 타임스탬프는 전부 unix epoch 밀리초 정수(UTC)로 저장하고 표시 시점에 로컬 변환합니다.
 - 전문 검색용 FTS5 가상 테이블 `files_fts(name, content_text)`는 ERD에는 표시하지 않는 파생 인덱스이며, FILES 변경 시 트리거로 동기화합니다.
 - **FILES 커버링 인덱스 `files_owner_kind_idx`** (2026-09-20, v0.38.0): `(owner_id, kind, deleted_at, folder_id, name, file_type, size_bytes, is_shared, sort_order, updated_at)`. 본문(content_text)이 같은 행에 있어서, 인덱스 없이는 트리(API-021)·카드 목록이 행마다 본문을 지나가며 DB 전체를 읽었다(e2-micro에서 `/tree` 2.85초). 목록에 필요한 칸을 전부 담아 두어 목록 질의가 본문 행을 아예 안 건드린다. 본문을 따로 표로 떼는 대신 인덱스로 푼 이유: 마이그레이션 한 줄이고, 본문 저장·검색(FTS 트리거) 경로를 건드리지 않는다.
+- **세계 전망 인덱스** (2026-11-21, v0.75): `outlook_editions_label_unique`(label UNIQUE — 같은 이름의 판을 두 번 만들지 않고, 자동 발행이 "이 이름을 이미 시켰나"를 찾는다), `outlook_jobs_job_id_unique`(job_id UNIQUE — 예약 작업이 부르는 주소의 열쇠), `outlook_jobs_label`(label — 같은 이름을 OUTLOOK_JOBS에서도 찾는다. 유일 제약은 두지 않았다 — 이름이 겹치지 않게 하는 것은 서버가 새 실행을 만들기 전에 두 표를 함께 보는 검사다). 판 목록·기준선·마지막 until은 표 전체를 훑는다 — 판이 1년에 24편 남짓이라 인덱스를 더하지 않았다.
 - 컬럼별 상세 제약·기본값은 구현 시 테이블 정의서(데이터 사전)로 별도 문서화할 수 있습니다.

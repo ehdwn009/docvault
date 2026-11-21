@@ -20,9 +20,12 @@ import { briefingRoutes } from './routes/briefing.js';
 import { briefingJobRoutes } from './routes/briefingJobs.js';
 import { tradeJobRoutes } from './routes/tradeJobs.js';
 import { tradeRoutes } from './routes/trade.js';
+import { outlookJobRoutes } from './routes/outlookJobs.js';
+import { outlookRoutes } from './routes/outlook.js';
 import { recoverStaleRuns } from './lib/briefing/run.js';
 import { startScheduler } from './lib/briefing/schedule.js';
 import { startTradeScheduler } from './lib/trade/schedule.js';
+import { startOutlookScheduler } from './lib/outlook/schedule.js';
 import { cardRoutes } from './routes/cards.js';
 import { shareTargetRoutes } from './routes/share-target.js';
 import { authRoutes } from './routes/auth.js';
@@ -58,6 +61,8 @@ recoverStaleRuns();
 startScheduler();
 // 수출입 동향 — 매달 1~10일 확인 창에서만 게시판을 본다. 처음 켜질 때는 최근 12개월 소급 (수출입 동향 설계 1단계)
 startTradeScheduler();
+// 세계 전망 — 표가 비어 있으면 시범·시험 두 판을 넣고, 그달 둘째·넷째 월요일 10시대에 판을 켠다 (세계전망 설계 출시 3단계)
+startOutlookScheduler();
 
 const app = new Hono();
 
@@ -113,7 +118,9 @@ api.route('/admin', adminRoutes);
 api.route('/ask', askRoutes);
 // 구독 연결 열쇠(Bearer)로만 들어오는 세 주소 — /briefing보다 먼저. 뒤에 두면 briefingRoutes의 가드가 쿠키 user를 요구해 터진다 (v0.50)
 // 수출입 동향 정리본 일감도 같은 접두어 — 먼저 등록해 제 일감만 받고 나머지는 브리핑 쪽으로 넘긴다 (수출입 동향 설계 2단계)
+// 세계 전망 일감도 같은 접두어 — 수출입 다음, 브리핑 앞 (세계전망 설계 출시 2단계)
 api.route('/briefing/jobs', tradeJobRoutes);
+api.route('/briefing/jobs', outlookJobRoutes);
 api.route('/briefing/jobs', briefingJobRoutes);
 api.route('/briefing', briefingRoutes);
 api.route('/cards', cardRoutes);
@@ -127,6 +134,7 @@ api.route('/search', searchRoutes);
 api.route('/shared', sharedRoutes);
 api.route('/tags', tagRoutes);
 api.route('/trade', tradeRoutes);
+api.route('/outlook', outlookRoutes);
 
 app.route('/api/v1', api);
 // PWA 공유 시트 수신. deny by default의 유일한 예외 — 매니페스트 share_target이 고정 주소를

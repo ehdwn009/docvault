@@ -44,7 +44,8 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
 // 서버(프록시 없음)는 그대로 검사한다. fetch 자체가 프록시를 타게 하는 것은 npm script의 NODE_USE_ENV_PROXY=1
 const VIA_PROXY = !!(process.env.HTTPS_PROXY || process.env.https_proxy);
 
-async function assertPublicUrl(url: URL, signal: AbortSignal): Promise<void> {
+/** http(s)이고 밖의 주소인가 — 세계 전망의 원문 받기(lib/outlook/sources.ts)도 같은 검사를 쓴다 */
+export async function assertPublicUrl(url: URL, signal: AbortSignal): Promise<void> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('http(s) 주소가 아닙니다');
   if (VIA_PROXY) return;
   const host = url.hostname.replace(/^\[|\]$/g, '');

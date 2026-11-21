@@ -49,6 +49,7 @@ import SettingsPage from './settings/SettingsPage';
 import Home from './Home';
 import FeedPage from './FeedPage';
 import TradePage from './TradePage';
+import { setTrendMode } from '../lib/trendMode';
 import { TopNavContext } from '../lib/topNav';
 import AiPage from './AiPage';
 import { getLayout, LAYOUT_EVENT, type AppLayout } from '../lib/layout';
@@ -420,6 +421,8 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
   }, []);
   const openInChannel = (ch: 'feed' | 'trade', f: TreeFile) => {
     setChannelDoc((prev) => ({ ...prev, [ch]: f }));
+    // 동향 탭은 수출입과 세계 전망이 한 읽는 칸을 나눠 쓴다 — 연 문서 쪽으로 목록 전환도 맞춘다
+    if (ch === 'trade') setTrendMode(f.kind === 'outlook' ? 'outlook' : 'trade');
     if (panelRef.current !== ch) openPage(ch);
     if (narrow && !channelLayerRef.current) {
       channelLayerRef.current = pushLayer(() => {
@@ -439,10 +442,10 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
       setChannelDoc((prev) => ({ ...prev, [ch]: null }));
     });
   }, [narrow, readingChannel]);
-  /** 파일을 번호로 연다 — 종류에 따라 갈 곳이 다르다: 회차는 브리핑 탭, 수출입 동향은 동향 탭, 나머지는 문서 탭.
+  /** 파일을 번호로 연다 — 종류에 따라 갈 곳이 다르다: 회차는 브리핑 탭, 수출입 동향·세계 전망은 동향 탭, 나머지는 문서 탭.
    *  이전 레이아웃에는 브리핑 탭이 없어 회차는 전처럼 문서로 연다 */
   const channelOf = (f: TreeFile): 'feed' | 'trade' | null =>
-    f.kind === 'trade' ? 'trade' : f.kind === 'briefing' && layoutRef.current === 'home' && canSeeBriefingRef.current ? 'feed' : null;
+    f.kind === 'trade' || f.kind === 'outlook' ? 'trade' : f.kind === 'briefing' && layoutRef.current === 'home' && canSeeBriefingRef.current ? 'feed' : null;
   const openByKind = (f: TreeFile) => {
     const ch = channelOf(f);
     if (ch) openInChannel(ch, f);
@@ -1682,8 +1685,11 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
     setNotifOpen(false);
     if (n.href) startDownload(n.href); // 내보내기 ZIP — 문서가 아니라 내려받기
     else if (n.fileId !== null) openFileById(n.fileId);
-    // 열 문서가 없는 알림은 그 일의 탭으로 — 수출입 동향은 동향 탭, 브리핑(못 만듦)은 브리핑 탭 (탭 구조 개정)
-    else if (n.kind === 'trade_missing' || n.kind === 'trade_ready') openPage('trade');
+    // 열 문서가 없는 알림은 그 일의 탭으로 — 수출입 동향·세계 전망은 동향 탭(그쪽 전환으로), 브리핑(못 만듦)은 브리핑 탭 (탭 구조 개정)
+    else if (n.kind === 'trade_missing' || n.kind === 'trade_ready' || n.kind === 'outlook_missing' || n.kind === 'outlook_ready') {
+      setTrendMode(n.kind.startsWith('outlook') ? 'outlook' : 'trade');
+      openPage('trade');
+    }
     else if (layout === 'home') openPage(canSeeBriefing ? 'feed' : 'home');
     else openPanel('briefing');
   };
@@ -2468,6 +2474,7 @@ export default function Workspace({ user, onLogout }: { user: User; onLogout: ()
                   onOpenFileById={openFileById}
                   activeFileId={channelDoc.trade?.id ?? null}
                   autoOpen={!narrow && channelDoc.trade === null}
+                  wide={!narrow}
                   onCopy={(id) => {
                     actions.copyFile(id);
                     toast('내 문서에 사본을 만들었어요', 'success');

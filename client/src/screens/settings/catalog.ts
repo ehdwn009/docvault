@@ -67,6 +67,8 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { category: 'notifications', item: 'devices', title: '푸시 받는 기기', desc: '켜 둔 기기 목록 · 시험 알림 · 끊기' },
   { category: 'notifications', item: 'briefing_ready', title: '브리핑이 나왔을 때', desc: '종류별 켜고 끄기' },
   { category: 'notifications', item: 'trade_ready', title: '수출입 동향이 올라왔을 때', desc: '종류별 켜고 끄기' },
+  { category: 'notifications', item: 'outlook_ready', title: '세계 전망 새 판이 나왔을 때', desc: '종류별 켜고 끄기' },
+  { category: 'notifications', item: 'outlook_missing', title: '세계 전망을 못 만들었을 때', desc: '종류별 켜고 끄기 (관리자)', admin: true },
   { category: 'notifications', item: 'upload_done', title: '오래 걸린 올리기가 끝났을 때', desc: '종류별 켜고 끄기' },
   { category: 'notifications', item: 'export_done', title: '내보내기가 끝났을 때', desc: '종류별 켜고 끄기' },
   { category: 'notifications', item: 'quiet', title: '조용한 시간', desc: '밤에는 푸시·텔레그램을 보내지 않고 아침에 한 통으로' },

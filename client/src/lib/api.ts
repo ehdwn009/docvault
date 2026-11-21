@@ -45,8 +45,9 @@ export type TreeFile = {
   name: string;
   fileType: FileType;
   /** card = 배움 카드 (서랍에서만 보임, 뷰어는 머리말을 표로 그린다), briefing = 뉴스 브리핑 회차 (전용 뷰어),
-      trade = 수출입 동향 원문·정리본 (문서 목록에 안 나오고 동향 탭에서만 — 보통 PDF·HTML 뷰어로 연다). 없으면 doc */
-  kind?: 'doc' | 'card' | 'briefing' | 'trade';
+      trade = 수출입 동향 원문·정리본 (문서 목록에 안 나오고 동향 탭에서만 — 보통 PDF·HTML 뷰어로 연다),
+      outlook = 세계 전망 판 (trade와 같이 동향 탭에서만 — 보통 HTML 뷰어로 연다). 없으면 doc */
+  kind?: 'doc' | 'card' | 'briefing' | 'trade' | 'outlook';
   sizeBytes: number;
   isShared: number;
   sortOrder: number;
@@ -177,7 +178,7 @@ export type FileContent = {
 };
 
 /** 알림 종류 — 서버 constants NOTIFICATION_KINDS와 같은 순서 */
-export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'upload_done', 'export_done'] as const;
+export const NOTIFICATION_KINDS = ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'outlook_ready', 'outlook_missing', 'upload_done', 'export_done'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotifyPrefs = Partial<Record<NotificationKind, 0 | 1>>;
 export type QuietHours = { enabled: 0 | 1; start: string; end: string };
@@ -450,3 +451,47 @@ export type EditionHeadline = { id: string; title: string; section: string; cate
 export type TradeRelease = { period: string; label: string; publishedDate: string; pdfFileId: number | null; analysisFileId: number | null; read: boolean };
 export type TradePending = { period: string; label: string; state: 'waiting' | 'analyzing' | 'failed'; checks: string[]; laterCheck: string; message: string | null };
 export type TradeView = { releases: TradeRelease[]; latest: (TradeRelease & { card: TradeCard | null }) | null; pending: TradePending | null };
+
+// ---- 세계 전망 (API-173~176, 동향 탭 SCR-195의 「세계 전망」) ----
+/** 판 한 줄. big = 한 해의 기준선(세계 경제 전망), small = 한 달에 두 번의 글로벌 리서치 동향.
+ *  since·until은 읽은 기관 발표의 기간(YYYY-MM-DD), hidden은 관리자에게만 온다 */
+export type OutlookEditionView = {
+  id: number;
+  kind: 'big' | 'small';
+  label: string;
+  title: string;
+  subtitle: string;
+  since: string;
+  until: string;
+  fileId: number | null;
+  status: 'published' | 'hidden';
+  origin: 'auto' | 'manual' | 'seed';
+  publishedAt: number;
+  lead: string;
+  read: boolean;
+};
+/** 기다리는 일 — 만드는 중, 또는 못 만듦(관리자에게만) */
+export type OutlookPending = { state: 'running'; label: string; startedAt: number } | { state: 'failed'; label: string; message: string | null };
+export type OutlookView = {
+  /** 게시 시각 내림차순 */
+  editions: OutlookEditionView[];
+  /** 지금 기준선인 큰 판 — 게시된 큰 판 가운데 기간이 가장 늦은 것 */
+  baselineId: number | null;
+  pending: OutlookPending | null;
+  /** 다음 자동 발행 예정 — at은 unix ms */
+  next: { label: string; at: number } | null;
+};
+
+export function fetchOutlook(): Promise<OutlookView> {
+  return api<OutlookView>('/outlook');
+}
+
+/** 관리자: 작은 판을 지금 만들게 시킨다(API-174) — 예약 작업을 켜는 일이라 끝나면 알림으로 온다 */
+export function startOutlookRun(): Promise<{ status: 'started'; label: string }> {
+  return api<{ status: 'started'; label: string }>('/outlook/run', { method: 'POST' });
+}
+
+/** 관리자: 판 내리기(API-175)·다시 올리기(API-176) — 내려도 지우지 않고 목록에서만 감춘다 */
+export function setOutlookEditionShown(id: number, shown: boolean): Promise<{ status: OutlookEditionView['status'] }> {
+  return api<{ status: OutlookEditionView['status'] }>(`/outlook/editions/${id}/${shown ? 'show' : 'hide'}`, { method: 'POST' });
+}

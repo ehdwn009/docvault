@@ -11,11 +11,11 @@
     "edition": "small",                         // small(작은 판) | big(큰 판)
     "title": "글로벌 리서치 동향",
     "subtitle": "…",                            // 한 줄
-    "label": "2026년 12월 첫째 판",
-    "since": "2026-11-21", "until": "2026-12-04",
+    "label": "2026년 12월 둘째 판",
+    "since": "2026-11-21", "until": "2026-12-13",   // since = 직전 판의 until 다음 날(이 예는 [지금 만들기] 판이 없었을 때)
     "baseline": "2027 세계 경제 전망(2026-11-20 시범)",   // 작은 판만
     "test": false,                              // 시험 운행이면 true — 화면 머리에 "시험 운행"
-    "generator": "outlook-report v1"
+    "generator": "outlook-report v2"
   },
   "summary": [ { "text": "… 문장[1][2]. …", "facts": ["gdpImf"] } ],      // 1~5문단
   "sections": [

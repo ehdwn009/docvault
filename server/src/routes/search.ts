@@ -58,7 +58,7 @@ export const searchRoutes = new Hono<AppEnv>().get('/', (c) => {
       JOIN files f ON f.id = files_fts.rowid
       WHERE files_fts MATCH ${toFtsQuery(q)}
         AND f.deleted_at IS NULL
-        AND f.kind <> 'trade' -- 수출입 동향 원문·정리본는 문서 검색에 안 나온다 — 동향 탭에서 달로 찾는다 (수출입 동향 설계 3단계)
+        AND f.kind NOT IN ('trade', 'outlook') -- 수출입 동향 원문·정리본과 세계 전망 판은 문서 검색에 안 나온다 — 동향 탭에서 찾는다 (수출입 동향 설계 3단계, 세계전망 설계 출시 2단계)
       ORDER BY bm25(files_fts)
       LIMIT 30
     `);

@@ -17,12 +17,13 @@ description: docvault 뉴스 브리핑 회차를 Claude 구독(예약 작업)으
 | 진행 보고 | 하지 않는다(화면 없음) | 단계가 끝날 때마다 `POST …/jobs/<BRIEFING_JOB_ID>/progress` `{ "text": "수집 끝 — 후보 640건", "stage": "collect", "done": 1, "total": 8 }` → 204. `stage`는 `collect`·`classify`·`select`·`read`·`fill`·`summarize`·`lens`·`verify` 중 하나(선택), `done`·`total`은 0 이상 정수(선택). `text`는 800자를 넘으면 400(화면에는 200자만 남는다), 본문 16KB 초과는 413. **job당 분당 20건**까지 — 429가 오면 `Retry-After` 초만큼 기다렸다 보낸다(묶음마다 한 줄이면 넘지 않는다) |
 | 완성본 | 브랜치 `claude/briefing-test-<날짜>-<구성>`을 만들어 `git add -f .briefing-job/result.json .briefing-job/verify-report.txt .briefing-job/instruction.json`(폴더는 gitignore라 `-f` 필요, 다른 중간 파일은 넣지 않는다) → 커밋 `docs: 브리핑 구독 시험 결과 <날짜> 구성 <A|B>` → push | `POST …/jobs/<BRIEFING_JOB_ID>/result` 에 `result.json` 본문 → 200 `{ fileId, itemCount, dropped, already }`. 400(`message`가 `<경로>: <이유>`)·422 `BRIEFING_JOB_REJECTED`(검사에서 뺀 기사 30% 초과 또는 기사 0건, `dropped`에 이유별 수)면 고쳐 다시, 413 `PAYLOAD_TOO_LARGE`(2MB)면 `log`·`related`를 줄여 다시 — **합쳐 2번까지**(`limits.resendMax`). 409 `BRIEFING_JOB_CLOSED`면 **멈춘다**(다시 보내도 같다). 200의 `already: true`는 앞서 보낸 것이 이미 저장됐다는 뜻 — 그대로 끝낸다 |
 
-**실전 모드의 첫 네 가지 확인** — 어느 하나라도 걸리면 아무 단계도 돌리지 않는다.
+**실전 모드의 첫 다섯 가지 확인** — 어느 하나라도 걸리면 아무 단계도 돌리지 않는다.
 
 1. `DOCVAULT_URL`이 없거나 `https://`로 시작하지 않으면 **멈추고 보고**한다(평문으로 열쇠가 나간다). 열쇠 값은 어떤 파일·커밋·출력에도 적지 않는다. 지시서 요청이 401 `BRIEFING_TOKEN_INVALID`면 네트워크 시크릿(호스트·경로 접두사 `/api/v1/briefing/jobs/`·헤더)이 안 붙은 것이다 — 우회하지 말고 멈추고 보고한다.
 2. `<routine-fire-payload>` 블록에 `BRIEFING_JOB_ID=` 줄이 없으면 멈추고 보고한다 — 추측해 만들지 않는다.
 3. 받은 지시서가 `{ "kind": "ping", "jobId": "ping-…" }`이면(id가 `ping-`으로 시작) **[연결 확인]**이다 — 지시서를 받은 것으로 확인이 끝났으니 아무 단계도 돌리지 않고, 진행 보고·완성본도 보내지 않고 바로 끝낸다. 실전 지시서는 `kind: "edition"`이다.
 4. 받은 지시서가 `{ "kind": "trade", … }`이면 뉴스 브리핑이 아니라 **수출입 동향 정리본** 일감이다(서버가 산업통상부의 새 호를 찾았을 때 같은 예약 작업을 켠다 — 설계 `docs/design/수출입동향_docvault_20261120.md` 2단계). 이 스킬의 나머지 단계는 하나도 돌리지 않고, **`trade-report` 스킬을 자동 모드로** 실행한다 — job id는 같은 `BRIEFING_JOB_ID`, 서버 주소·열쇠 규칙도 같다.
+5. 받은 지시서가 `{ "kind": "outlook", … }`이면 **세계 전망** 일감이다(서버가 둘째·넷째 월요일 — 1월 둘째 월요일은 큰 판 — 또는 관리자의 [지금 만들기]로 같은 예약 작업을 켠다 — 설계 `docs/design/세계전망_docvault_20261121.md` 출시 2·3단계). 이 스킬의 단계는 돌리지 않고 `outlook-report` 스킬을 실전(자동) 모드로 실행한다 — job id는 지시서의 `jobId`.
 
 409 `BRIEFING_JOB_CLOSED`는 사용자가 [지금 만들기]로 대체했거나 생성 방식을 바꿨거나, 마감 뒤에 다른 회차가 먼저 만들어졌다는 뜻이다 — 지시서·진행 보고·완성본 어디서 받든 거기서 멈춘다.
 

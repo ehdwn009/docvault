@@ -62,8 +62,9 @@ export const files = sqliteTable('files', {
   sortOrder: integer('sort_order').notNull().default(0),
   /** doc=보통 문서, card=배움 카드(2판), briefing=뉴스 브리핑 회차. 카드는 md 파일이지만 파일 트리에는 안 나오고
       서랍(SCR-181)에서만 보인다. 브리핑은 본문이 회차 JSON인 code 파일이고 트리에 나온다 — 보관함이 곧 트리 (뉴스 브리핑 설계).
-      trade=수출입 동향의 원문 PDF·정리본 문서 — 트리·공유받음·검색에 안 나오고 동향 탭에서만 보인다 (수출입 동향 설계 3단계) */
-  kind: text('kind', { enum: ['doc', 'card', 'briefing', 'trade'] }).notNull().default('doc'),
+      trade=수출입 동향의 원문 PDF·정리본 문서 — 트리·공유받음·검색에 안 나오고 동향 탭에서만 보인다 (수출입 동향 설계 3단계).
+      outlook=세계 전망 판(HTML) — trade와 같은 자리·같은 규칙 (세계전망 설계 출시 2단계) */
+  kind: text('kind', { enum: ['doc', 'card', 'briefing', 'trade', 'outlook'] }).notNull().default('doc'),
   /** 휴지통 이동 시각. null이면 정상 파일. 보관 기한이 지나면 서버가 자동 영구 삭제한다 */
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
@@ -329,8 +330,9 @@ export const notifications = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     /** briefing_ready = 회차 도착, briefing_missing = 마감까지 못 만듦·실패, upload_done = 오래 걸린 올리기가 끝남, export_done = 내보내기 작업이 끝남 (4단계),
-        trade_ready = 수출입 동향 새 호 도착, trade_missing = 확인 창 안에 못 찾음·받기 실패 (2026-11-20). 목록은 constants NOTIFICATION_KINDS */
-    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'upload_done', 'export_done'] }).notNull(),
+        trade_ready = 수출입 동향 새 호 도착, trade_missing = 확인 창 안에 못 찾음·받기 실패 (2026-11-20),
+        outlook_ready = 세계 전망 새 판, outlook_missing = 세계 전망 실행 실패·마감 초과 (2026-11-21). 목록은 constants NOTIFICATION_KINDS */
+    kind: text('kind', { enum: ['briefing_ready', 'briefing_missing', 'trade_ready', 'trade_missing', 'outlook_ready', 'outlook_missing', 'upload_done', 'export_done'] }).notNull(),
     title: text('title').notNull(),
     body: text('body'),
     /** 누르면 열 문서. 회차 문서가 지워지면 NULL — 알림은 남되 열 곳만 없어진다 */
@@ -448,4 +450,64 @@ export const tradeJobs = sqliteTable(
     report: text('report'),
   },
   (t) => [index('trade_jobs_period').on(t.period)],
+);
+
+/** 세계 전망 판 한 줄 — 큰 판(매년 1월 세계 경제 전망)·작은 판(월 2회 리서치 동향). 화면은 files의 HTML, 이 표는 목록·기준선·다음 판의 읽는 기간 (세계전망 설계 출시 2단계).
+    label 유일 — 같은 판을 두 번 만들지 않는다. 문서를 지워도(file_id NULL) 판의 기록은 남아 다음 판의 읽는 기간이 흔들리지 않는다 */
+export const outlookEditions = sqliteTable('outlook_editions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind', { enum: ['big', 'small'] }).notNull(),
+  /** 판 이름 — "2026년 12월 둘째 판", "2027년 세계 경제 전망" */
+  label: text('label').notNull().unique(),
+  title: text('title').notNull(),
+  subtitle: text('subtitle').notNull().default(''),
+  /** 읽은 기간 'YYYY-MM-DD' — 시각이 아니라 달력 날짜라 글자로 둔다. 다음 작은 판은 게시된 판의 가장 늦은 until 다음 날부터 읽는다 */
+  since: text('since').notNull(),
+  until: text('until').notNull(),
+  fileId: integer('file_id').references(() => files.id, { onDelete: 'set null' }),
+  /** 서버 대조를 통과한 format 1 완성본 — 손으로 만든 시범 큰 판은 NULL */
+  dataJson: text('data_json'),
+  /** 다음 작은 판이 기준선으로 읽을 글. NULL이면 data_json에서 만든다(시범 큰 판만 마크다운 원문을 넣는다) */
+  baselineText: text('baseline_text'),
+  /** 목록에 보일 첫 문장 */
+  lead: text('lead').notNull().default(''),
+  /** hidden = 관리자가 내림 — 목록에서만 감추고 파일 읽기는 막지 않는다(알림·링크가 깨지지 않게) */
+  status: text('status', { enum: ['published', 'hidden'] }).notNull().default('published'),
+  origin: text('origin', { enum: ['auto', 'manual', 'seed'] }).notNull(),
+  /** 만든 실행의 uuid — 시드는 NULL */
+  jobId: text('job_id'),
+  publishedAt: integer('published_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+/** 세계 전망을 시킨 실행 한 번 — trade_jobs와 같은 모양에 판 정보를 더한다 (세계전망 설계 출시 2단계).
+    자동 판은 label마다 한 번 — 이 표에 그 label의 줄이 있으면 다시 켜지 않는다(실패해도 자동 재시도 없음, 사용량이 새지 않게) */
+export const outlookJobs = sqliteTable(
+  'outlook_jobs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 예약 작업이 가진 유일한 식별자(uuid) — 추측할 수 없는 긴 난수 */
+    jobId: text('job_id').notNull().unique(),
+    kind: text('kind', { enum: ['big', 'small'] }).notNull(),
+    label: text('label').notNull(),
+    since: text('since').notNull(),
+    until: text('until').notNull(),
+    origin: text('origin', { enum: ['auto', 'manual'] }).notNull(),
+    /** 트리거를 빌려 쓴 관리자 — 연결 열쇠의 주인과 같아야 지시서를 내준다 */
+    ownerId: integer('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['running', 'ok', 'missing', 'error'] }).notNull(),
+    message: text('message'),
+    deadlineAt: integer('deadline_at').notNull(),
+    startedAt: integer('started_at').notNull(),
+    /** 세션이 지시서를 받아 간 시각 — NULL이면 예약 작업이 서버를 부르지 않았다 */
+    remoteStartedAt: integer('remote_started_at'),
+    finishedAt: integer('finished_at'),
+    /** 대조 결과 JSON { checked, passed, unverified[], dropped[], fatal[] } */
+    report: text('report'),
+    /** 저장된 판 — ok일 때만 */
+    editionId: integer('edition_id').references(() => outlookEditions.id, { onDelete: 'set null' }),
+  },
+  (t) => [index('outlook_jobs_label').on(t.label)],
 );
