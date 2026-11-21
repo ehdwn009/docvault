@@ -114,6 +114,24 @@ export const TRADE = {
   REPORT_TEXT_MAX_CHARS: 700,
 } as const;
 
+/** 세계 전망(큰 판 화이트페이퍼 · 작은 판 리서치 동향) — 세계전망 설계. 지금은 스킬과 손으로 돌리는 명령(outlook:job)만 쓴다 */
+export const OUTLOOK = {
+  /** 개인정보 없는 일반 이름 */
+  USER_AGENT: 'Loft-reader/1 (+private research digest)',
+  FETCH_TIMEOUT_MS: 30_000,
+  /** 원문 한 건 상한 — 기관 전망 PDF는 100쪽 안팎에 10MB를 넘기도 한다 */
+  SOURCE_MAX_BYTES: 25 * 1024 * 1024,
+  PDFTOTEXT_TIMEOUT_MS: 60_000,
+  /** 인용 한 줄 길이 상한 — 문단을 통째로 옮기지 않게 */
+  QUOTE_MAX_CHARS: 500,
+  /** 문단 하나 길이 상한 */
+  TEXT_MAX_CHARS: 900,
+  /** 빠진 것(대조 실패)이 이 비율을 넘으면 통째로 거절 — 수출입 동향과 같은 선 */
+  DROP_REJECT_RATIO: 0.3,
+  /** 대조 대상 단위 — 수출입 동향의 단위에 이 기능에 흔한 것을 더한다(세계전망 설계 9단계) */
+  EXTRA_UNITS: ['bp', '엔', '유로', '위안', '파운드', '배럴'],
+} as const;
+
 /** 텔레그램 봇 통로 (API-167~170, 알림 3단계 2026-11-05) */
 export const TELEGRAM = {
   API: 'https://api.telegram.org',

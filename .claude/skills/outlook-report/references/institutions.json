@@ -1,0 +1,1320 @@
+{
+  "version": 1,
+  "updated": "2026-11-21",
+  "note": "세계 버전 기관 목록이며, 사람이 고치는 설정이고, 2026-11-20 시범의 노트에서 뽑았다.",
+  "groups": [
+    {
+      "id": "consult",
+      "name": "컨설팅사"
+    },
+    {
+      "id": "us-fin",
+      "name": "미국 금융(투자은행·운용사)"
+    },
+    {
+      "id": "eu-fin",
+      "name": "유럽 금융(은행·운용사·보험)"
+    },
+    {
+      "id": "asia-fin",
+      "name": "아시아 금융"
+    },
+    {
+      "id": "public",
+      "name": "국제기구·공공 연구기관"
+    },
+    {
+      "id": "indep",
+      "name": "독립 연구소·신용평가사"
+    }
+  ],
+  "smallGroups": {
+    "consult": "consult",
+    "us-fin": "fin-west",
+    "eu-fin": "fin-west",
+    "asia-fin": "asia-fin",
+    "public": "public",
+    "indep": "public"
+  },
+  "smallGroupNames": {
+    "consult": "컨설팅사",
+    "fin-west": "미국·유럽 금융",
+    "asia-fin": "아시아 금융",
+    "public": "국제기구·공공 연구기관·독립 연구소"
+  },
+  "institutions": [
+    {
+      "id": "mckinsey",
+      "name": "McKinsey & Company",
+      "group": "consult",
+      "region": "미국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://karriere.mckinsey.de/capabilities/strategy-and-corporate-finance/our-insights/global-economics-intelligence",
+        "https://karriere.mckinsey.de/capabilities/strategy-and-corporate-finance/our-insights/economic-conditions-outlook",
+        "https://www.mckinsey.com/capabilities/strategy-and-corporate-finance/our-insights/economic-conditions-outlook"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "Economic conditions outlook 12월판(분기 설문)"
+        },
+        {
+          "when": "매월",
+          "what": "Global Economics Intelligence 월간 요약"
+        },
+        {
+          "when": "11월",
+          "what": "The State of Fashion 2027(전년판 2025-11, 이번 확인 못 함)"
+        }
+      ],
+      "access": "자동 접속 막힘 — mckinsey.com은 503, 독일 채용 사이트 karriere.mckinsey.de에 같은 글이 열림"
+    },
+    {
+      "id": "bcg",
+      "name": "BCG (BCG Henderson Institute 포함)",
+      "group": "consult",
+      "region": "미국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "9월",
+          "what": "M&A Report(2026년판은 2026-09-21)"
+        }
+      ],
+      "access": "직접 열림 (PDF는 내려받아 글자 추출) — 목록 주소는 노트에 없음"
+    },
+    {
+      "id": "bain",
+      "name": "Bain & Company",
+      "group": "consult",
+      "region": "미국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "Bain Luxury Study 정식 보고서(전년 2025-12-18)"
+        }
+      ],
+      "access": "직접 열림 — 목록 주소는 노트에 없음"
+    },
+    {
+      "id": "oliverwyman",
+      "name": "Oliver Wyman",
+      "group": "consult",
+      "region": "미국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.oliverwyman.com/media-center.html"
+      ],
+      "calendar": [],
+      "access": "보도자료 목록 직접 열림, 월별 인사이트 목록(our-expertise/insights/2026/…)은 404"
+    },
+    {
+      "id": "rolandberger",
+      "name": "Roland Berger",
+      "group": "consult",
+      "region": "독일",
+      "type": "컨설팅사",
+      "lang": [
+        "en",
+        "de"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "2월 말",
+          "what": "독일 경기 전망 연간판 Die deutsche Konjunktur(전년판 2026-02-23)"
+        }
+      ],
+      "access": "열림, 뉴스룸은 최근 1건만 보이고 '더 보기'를 못 넘김 — 검색으로 개별 보도자료를 찾아야 함 (목록 주소는 노트에 없음)"
+    },
+    {
+      "id": "kearney",
+      "name": "Kearney",
+      "group": "consult",
+      "region": "미국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "12월 초",
+          "what": "Global Economic Outlook 2H(반기 시리즈, 전년 2025년 12월 초)"
+        }
+      ],
+      "access": "보도 페이지는 메뉴뿐이라 목록 없음 — PR Newswire의 Kearney 보도자료 목록으로 대신 (주소는 노트에 없음)"
+    },
+    {
+      "id": "deloitte",
+      "name": "Deloitte (Deloitte Insights)",
+      "group": "consult",
+      "region": "미국",
+      "type": "컨설팅사",
+      "lang": [
+        "en",
+        "de"
+      ],
+      "hubs": [
+        "https://www.deloitte.com/global/en/insights/topics/economy/us-economic-forecast/united-states-outlook-analysis.html"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "United States Economic Forecast Q4(분기판, 12월 추정)"
+        },
+        {
+          "when": "11월",
+          "what": "TMT Predictions 2027(전년판 11-17, 이번에는 미확인)"
+        }
+      ],
+      "access": "직접 열림 — 허브 목록은 필터 때문에 비어 보일 수 있음"
+    },
+    {
+      "id": "pwc",
+      "name": "PwC",
+      "group": "consult",
+      "region": "영국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "1월",
+          "what": "Annual Outlook(미국 수석이코노미스트 연간 전망, 전년판 1월)"
+        },
+        {
+          "when": "12월",
+          "what": "PwC UK Economic Predictions(전년판 2025년 12월)"
+        }
+      ],
+      "access": "자동 접속 막힘(403) — 언론 보도(Bisnow 등)로 대신, 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "accenture",
+      "name": "Accenture",
+      "group": "consult",
+      "region": "아일랜드",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "2027년 초",
+          "what": "Technology Vision 2027(연례, 미확인)"
+        }
+      ],
+      "access": "직접 열림 (newsroom.accenture.com 포함) — 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "kpmg",
+      "name": "KPMG",
+      "group": "consult",
+      "region": "네덜란드",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "매월",
+          "what": "Economic Compass·Global Navigator 월간판(12월호 예정)"
+        }
+      ],
+      "access": "직접 열림 (PDF는 내려받아 글자 추출) — 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "ey",
+      "name": "EY",
+      "group": "consult",
+      "region": "영국",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.ey.com/en_us/insights/strategy/global-economic-outlook"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "EY-Parthenon 연말 Global Economic Outlook(추정, 날짜 미확인)"
+        },
+        {
+          "when": "11월",
+          "what": "EY ITEM Club 가을 전망(전년 2025-11)"
+        }
+      ],
+      "access": "직접 열림 (PDF는 내려받아 글자 추출)"
+    },
+    {
+      "id": "capgemini",
+      "name": "Capgemini Research Institute",
+      "group": "consult",
+      "region": "프랑스",
+      "type": "컨설팅사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "9월",
+          "what": "World Payments Report(2026년 2027판 2026-09-24)"
+        }
+      ],
+      "access": "직접 열림 (보도자료·CRI 페이지) — 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "goldman",
+      "name": "Goldman Sachs Research",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "투자은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.goldmansachs.com/insights/outlooks/2027-outlooks"
+      ],
+      "calendar": [
+        {
+          "when": "11월 중순",
+          "what": "2027 Outlooks(거시·시장 연간 전망, 2026-11-12~16)"
+        }
+      ],
+      "access": "가져오기 도구는 403, 명령줄(curl) 기본 요청은 열림 — gspublishing.com 본문은 막혀 GS 자체 요약 기사로 대신"
+    },
+    {
+      "id": "morganstanley",
+      "name": "Morgan Stanley",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "투자은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.morganstanley.com/Themes/outlooks"
+      ],
+      "calendar": [
+        {
+          "when": "11월 중순",
+          "what": "2027 Outlooks(투자·경제 연간 전망, 2026-11-18)"
+        }
+      ],
+      "access": "직접 열림"
+    },
+    {
+      "id": "jpmorgan",
+      "name": "J.P. Morgan Global Research",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "투자은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.jpmorgan.com/insights/global-research/outlook/market-outlook",
+        "https://www.jpmorgan.com/insights/global-research"
+      ],
+      "calendar": [
+        {
+          "when": "12월 초",
+          "what": "Global Research 연간 시장 전망(전년 2025-12-09)"
+        }
+      ],
+      "access": "직접 열림 (일부 주소는 가져오기 도구와 curl 결과가 엇갈림)"
+    },
+    {
+      "id": "citi",
+      "name": "Citi",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "투자은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.citigroup.com/global/insights"
+      ],
+      "calendar": [
+        {
+          "when": "12월 초",
+          "what": "Citi Research 연간 전망 Prospects for 2027(전년 2025-12-08)"
+        },
+        {
+          "when": "매월",
+          "what": "Global Economic Outlook & Strategy 월간"
+        },
+        {
+          "when": "1월",
+          "what": "Citi Wealth Macro Investment View 1분기판(전년 2026-01-07)"
+        }
+      ],
+      "access": "공개 요약 직접 열림 — 전체 보고서는 고객 전용"
+    },
+    {
+      "id": "bofa",
+      "name": "Bank of America (Merrill·BofA Global Research)",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "투자은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "11월 말",
+          "what": "Merrill·BofA Private Bank CIO 연간 Outlook 웨비캐스트(2026-11-30 예고)"
+        },
+        {
+          "when": "12월 초",
+          "what": "BofA Global Research 연간 전망(전년 2025-12-02)"
+        },
+        {
+          "when": "매주",
+          "what": "Capital Market Outlook 주간(ml.com)"
+        }
+      ],
+      "access": "ml.com은 가져오기 도구로 열림(요약만), curl은 403 — newsroom.bankofamerica.com은 연결 실패. 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "wellsfargo",
+      "name": "Wells Fargo Investment Institute",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://sites.wf.com/outlook/",
+        "https://www.wellsfargoadvisors.com/research-analysis/strategy/market-charts.htm"
+      ],
+      "calendar": [
+        {
+          "when": "12월 초~중순",
+          "what": "WFII 연간 Outlook(전년 2025-12-10)"
+        }
+      ],
+      "access": "직접 열림 — 보도자료 businesswire.com은 403"
+    },
+    {
+      "id": "blackrock",
+      "name": "BlackRock Investment Institute",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.blackrock.com/corporate/insights/blackrock-investment-institute/insights",
+        "https://www.blackrock.com/sa/professional/en/insights/weekly-commentary"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "2027 Global Outlook(원문이 'next month'라 밝힘)"
+        },
+        {
+          "when": "매주",
+          "what": "주간 코멘터리"
+        }
+      ],
+      "access": "직접 열림 — 분기 전망 본문은 목록에 제목·날짜만 있어 주간 논평으로 대신"
+    },
+    {
+      "id": "vanguard",
+      "name": "Vanguard",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://corporate.vanguard.com/content/corporatesite/us/en/corp/vemo/economy-markets-diversified-portfolios.html"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "2027 economic and market outlook 전체판(원문 'to be released in December')"
+        }
+      ],
+      "access": "직접 열림 (VEMO 허브, 일부 표는 값이 안 들어옴)"
+    },
+    {
+      "id": "jpmam",
+      "name": "J.P. Morgan Asset Management",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://am.jpmorgan.com/us/en/asset-management/adv/insights/market-insights/investment-outlook/"
+      ],
+      "calendar": [
+        {
+          "when": "11월",
+          "what": "Investment Outlook(2027판 2026-11 발간)"
+        }
+      ],
+      "access": "직접 열림 (글로벌판 PDF는 글자 추출, LTCMA 본문은 일부 로그인)"
+    },
+    {
+      "id": "pimco",
+      "name": "PIMCO",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "1월",
+          "what": "Cyclical Outlook(2027년 1월 예정, 원문 명시)"
+        }
+      ],
+      "access": "직접 열림 — 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "statestreet",
+      "name": "State Street Investment Management",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "분기",
+          "what": "Quarterly Investment Outlook"
+        },
+        {
+          "when": "12월",
+          "what": "연간 Global Market Outlook(2026판은 2025-11-30 기준으로 추정)"
+        }
+      ],
+      "access": "직접 열림 (PDF는 글자 추출) — 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "invesco",
+      "name": "Invesco",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://invesco.com/us/en/insights/global-investment-outlook.html"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "연간 2027 Investment Outlook(추정, 미확인)"
+        },
+        {
+          "when": "매월",
+          "what": "Tactical asset allocation 월간"
+        }
+      ],
+      "access": "직접 열림"
+    },
+    {
+      "id": "fidelity",
+      "name": "Fidelity Investments",
+      "group": "us-fin",
+      "region": "미국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "연간 전망(회고 달력 기준 12월, 노트에는 날짜 없음)"
+        }
+      ],
+      "access": "Market Sense PDF만 열림 — 추정 주소(2027-aart-outlook)는 404, 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "schroders",
+      "name": "Schroders",
+      "group": "eu-fin",
+      "region": "영국",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.schroders.com/en-au/au/individual/resources/australian-investment-outlook-2027/"
+      ],
+      "calendar": [],
+      "access": "호주판 열림 — 영국·글로벌 페이지는 빈 페이지라 RankiaPro 언론 보도로 대신"
+    },
+    {
+      "id": "ubs",
+      "name": "UBS",
+      "group": "eu-fin",
+      "region": "스위스",
+      "type": "은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.ubs.com/global/en/wealthmanagement/insights/chief-investment-office/year-ahead.html",
+        "https://www.ubs.com/global/en/wealthmanagement/insights/chief-investment-office/year-ahead/forecasts.html"
+      ],
+      "calendar": [
+        {
+          "when": "11월",
+          "what": "GWM CIO Year Ahead 2027(연간 전망)"
+        }
+      ],
+      "access": "GWM(자산관리) 페이지는 직접 열림 — 투자은행(UBS Global Research) 리서치는 공개 경로 없음(고객 전용), newsquawk·HK01 등 언론으로 대신"
+    },
+    {
+      "id": "deutschebank",
+      "name": "Deutsche Bank Research",
+      "group": "eu-fin",
+      "region": "독일",
+      "type": "은행",
+      "lang": [
+        "en",
+        "de"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "11월 말",
+          "what": "World Outlook(전년 2025-11-24)"
+        },
+        {
+          "when": "11월 말",
+          "what": "Capital Markets Outlook(전년 2025-11-26)"
+        }
+      ],
+      "access": "flow.db.com·wealth.db.com 열림 — fxstreet는 403이라 재게시본으로 대신, 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "barclays",
+      "name": "Barclays",
+      "group": "eu-fin",
+      "region": "영국",
+      "type": "은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.ib.barclays/research/global-outlook/"
+      ],
+      "calendar": [
+        {
+          "when": "분기",
+          "what": "Barclays Research Global Outlook(Q4는 9-24, 2027 1분기판 예정)"
+        }
+      ],
+      "access": "요약 페이지는 열림, 투자은행 전문은 로그인 — 프라이빗뱅크 privatebank.barclays.com은 직접 열림"
+    },
+    {
+      "id": "hsbc",
+      "name": "HSBC",
+      "group": "eu-fin",
+      "region": "영국",
+      "type": "은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.business.hsbc.com/en-gb/insights/crosscurrents"
+      ],
+      "calendar": [
+        {
+          "when": "분기",
+          "what": "Investment Outlook(4분기판 2026-09-03)"
+        }
+      ],
+      "access": "직접 열림 (hsbc.co.uk·privatebanking.hsbc.com 포함)"
+    },
+    {
+      "id": "bnp",
+      "name": "BNP Paribas",
+      "group": "eu-fin",
+      "region": "프랑스",
+      "type": "은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://economic-research.bnpparibas.com/",
+        "https://globalmarkets.cib.bnpparibas/"
+      ],
+      "calendar": [
+        {
+          "when": "11월 말",
+          "what": "Markets 360 Global Outlook(전년 2025-11-28)"
+        },
+        {
+          "when": "11월 말",
+          "what": "Wealth Management Investment Themes(전년 2025-11-24)"
+        },
+        {
+          "when": "매월",
+          "what": "Economic Research 나우캐스트·시나리오 업데이트"
+        }
+      ],
+      "access": "economic-research 포털은 열림(너무 커서 명령줄로 받아 글자 추출) — globalmarkets.cib.bnpparibas는 503"
+    },
+    {
+      "id": "amundi",
+      "name": "Amundi",
+      "group": "eu-fin",
+      "region": "프랑스",
+      "type": "자산운용사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://int.media.amundi.com/"
+      ],
+      "calendar": [
+        {
+          "when": "11월",
+          "what": "Investment Outlook(2027판 2026-11-19)"
+        }
+      ],
+      "access": "직접 열림 (research-center.amundi.com, int.media.amundi.com)"
+    },
+    {
+      "id": "allianz",
+      "name": "Allianz Research",
+      "group": "eu-fin",
+      "region": "독일",
+      "type": "보험",
+      "lang": [
+        "en",
+        "de"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "분기",
+          "what": "경제 전망 분기판(2026-09-28)"
+        }
+      ],
+      "access": "페이지는 열림 — PDF는 명령줄 403이라 가져오기 도구가 받아 둔 파일에서 글자 추출, 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "nomura",
+      "name": "Nomura(野村)",
+      "group": "asia-fin",
+      "region": "일본",
+      "type": "투자은행",
+      "lang": [
+        "ja",
+        "en"
+      ],
+      "hubs": [
+        "https://www.nomuraconnects.com/articles",
+        "https://www.nomura.co.jp/wealthstyle"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "Annual Outlook 2027(검색 요약에 '보통 12월', 미확인)"
+        }
+      ],
+      "access": "직접 열림 — nomuraconnects 연간 전망 주소(/annual-outlook)만 404"
+    },
+    {
+      "id": "daiwa",
+      "name": "Daiwa(大和)",
+      "group": "asia-fin",
+      "region": "일본",
+      "type": "투자은행",
+      "lang": [
+        "ja",
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "매월",
+          "what": "主要国経済Outlook·Japan's Economy Monthly Outlook(월간)"
+        },
+        {
+          "when": "11월 20일",
+          "what": "第231回日本経済予測"
+        }
+      ],
+      "access": "大和総研 dir.co.jp는 열림(PDF는 암호화라 내려받아 글자 추출) — daiwa-am.co.jp PDF는 403, 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "mizuho",
+      "name": "Mizuho(みずほ)",
+      "group": "asia-fin",
+      "region": "일본",
+      "type": "은행",
+      "lang": [
+        "ja",
+        "en"
+      ],
+      "hubs": [
+        "https://mizuhogroup.com/bank/insights/information"
+      ],
+      "calendar": [
+        {
+          "when": "12월 말",
+          "what": "내외경제전망(전년 2025-12-25 발간, 올해도 12월 가능성)"
+        },
+        {
+          "when": "매월",
+          "what": "Forex Medium-Term Outlook"
+        }
+      ],
+      "access": "mizuhobank.co.jp는 403 — library.mizuhogroup.com 영문판 PDF와 mizuhogroup.com Insights 목록으로 대신"
+    },
+    {
+      "id": "mufg",
+      "name": "MUFG(三菱UFJ)",
+      "group": "asia-fin",
+      "region": "일본",
+      "type": "은행",
+      "lang": [
+        "ja",
+        "en"
+      ],
+      "hubs": [
+        "https://www.bk.mufg.jp/global/research"
+      ],
+      "calendar": [
+        {
+          "when": "11월 말~12월 초",
+          "what": "MUFG Bank 경제조사실 분기 Global Economic Outlook Q4판(전년 2025-12-05)"
+        },
+        {
+          "when": "매월",
+          "what": "Economic Monthly"
+        }
+      ],
+      "access": "직접 열림 (murc.jp·mufgamericas.com 포함, PDF는 글자 추출)"
+    },
+    {
+      "id": "dbs",
+      "name": "DBS",
+      "group": "asia-fin",
+      "region": "싱가포르",
+      "type": "은행",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.dbs.com.sg/treasures/aics/markets.page"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "CIO Insights 1Q27(분기 간행, 4Q26은 9월 말)"
+        },
+        {
+          "when": "11~12월",
+          "what": "DBS Group Research 연간 아시아 전망(시기 불규칙)"
+        }
+      ],
+      "access": "CIO Insights 페이지는 열림 — 리서치 목록은 스크립트로 그리는 페이지라 비어 보임"
+    },
+    {
+      "id": "cicc",
+      "name": "CICC(中金公司)",
+      "group": "asia-fin",
+      "region": "중국",
+      "type": "투자은행",
+      "lang": [
+        "zh"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "11월 중순",
+          "what": "연간 투자전략회(전년 2025-11-12~14)"
+        }
+      ],
+      "access": "자동 접속 막힘 — cicc.com 목록 404, research.cicc.com은 스크립트 화면, en.cicc.com은 521 — 东方财富·第一财经 등 중국 언론으로 대신"
+    },
+    {
+      "id": "citic",
+      "name": "CITIC Securities(中信证券)",
+      "group": "asia-fin",
+      "region": "중국",
+      "type": "투자은행",
+      "lang": [
+        "zh"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "11월 초",
+          "what": "연간 자본시장 전략회(2027년판 2026-11-03)"
+        }
+      ],
+      "access": "자체 사이트에 원문 없음 — 财联社·中国证券报 등 중국 언론 보도로만 확인"
+    },
+    {
+      "id": "imf",
+      "name": "IMF",
+      "group": "public",
+      "region": "국제",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.imf.org/en/meetings/2026/annual"
+      ],
+      "calendar": [
+        {
+          "when": "4월·10월",
+          "what": "World Economic Outlook(7월 업데이트)"
+        },
+        {
+          "when": "10월",
+          "what": "지역 전망(REO)·Fiscal Monitor·GFSR"
+        }
+      ],
+      "access": "열림 — 출판물 목록은 오래돼(WEO는 7월까지만 보임) 연차총회 일정표에서 실제 주소를 찾아야 함, 가끔 429"
+    },
+    {
+      "id": "oecd",
+      "name": "OECD",
+      "group": "public",
+      "region": "프랑스",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.oecd.org/en/topics/sub-issues/economic-outlook.html"
+      ],
+      "calendar": [
+        {
+          "when": "9월",
+          "what": "중간 경제전망(실제 발간 여부 미확인)"
+        },
+        {
+          "when": "12월 초",
+          "what": "본 경제전망(Economic Outlook)"
+        }
+      ],
+      "access": "자동 접속 막힘(403) — 대체 경로 없음"
+    },
+    {
+      "id": "worldbank",
+      "name": "World Bank",
+      "group": "public",
+      "region": "국제",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.worldbank.org/en/region/sar/publication/south-asia-development-update"
+      ],
+      "calendar": [
+        {
+          "when": "10월",
+          "what": "지역 경제 전망·원자재 전망(Commodity Markets Outlook)"
+        }
+      ],
+      "access": "직접 열림 — Africa's Pulse 페이지는 404"
+    },
+    {
+      "id": "wto",
+      "name": "WTO",
+      "group": "public",
+      "region": "스위스",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "10월",
+          "what": "Global Trade Outlook(2026-10-08 발표)"
+        }
+      ],
+      "access": "직접 열림 (뉴스·무역전망 보관) — 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "iea",
+      "name": "IEA",
+      "group": "public",
+      "region": "프랑스",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.iea.org/reports/world-energy-outlook-2026"
+      ],
+      "calendar": [],
+      "access": "자동 접속 막힘(403) — 대체 경로 없음"
+    },
+    {
+      "id": "bis",
+      "name": "BIS",
+      "group": "public",
+      "region": "스위스",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "Quarterly Review 12월호(3·6·9월호 다음 차례, 날짜 미확인)"
+        }
+      ],
+      "access": "분기보고서 목록은 열림, 추정 주소는 404 — 목록 주소는 노트에 없음"
+    },
+    {
+      "id": "unctad",
+      "name": "UNCTAD",
+      "group": "public",
+      "region": "국제",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://unctad.org/publication/trade-and-development-report-2026"
+      ],
+      "calendar": [
+        {
+          "when": "10월 초",
+          "what": "Trade and Development Report(2026-10-05)"
+        }
+      ],
+      "access": "직접 열림 — PDF는 내려받아 글자 추출"
+    },
+    {
+      "id": "adb",
+      "name": "ADB",
+      "group": "public",
+      "region": "필리핀",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.adb.org/outlook"
+      ],
+      "calendar": [
+        {
+          "when": "9월",
+          "what": "Asian Development Outlook(2026-09)"
+        },
+        {
+          "when": "12월",
+          "what": "보충판(과거 사례, 2026년 계획 미확인)"
+        }
+      ],
+      "access": "직접 열림"
+    },
+    {
+      "id": "amro",
+      "name": "AMRO",
+      "group": "public",
+      "region": "싱가포르",
+      "type": "국제기구",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.amro-asia.org/"
+      ],
+      "calendar": [
+        {
+          "when": "7월·10월",
+          "what": "ASEAN+3 Regional Economic Outlook(AREO) 분기 업데이트"
+        }
+      ],
+      "access": "직접 열림"
+    },
+    {
+      "id": "kiep",
+      "name": "KIEP(대외경제정책연구원)",
+      "group": "public",
+      "region": "한국",
+      "type": "공공 연구기관",
+      "lang": [
+        "ko",
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "11월",
+          "what": "세계경제 전망(2027년판 2026-11 발표)"
+        }
+      ],
+      "access": "게시물 본문은 열림, 첨부 PDF는 503 — 기자간담회 보도 게시물로 대신, 목록 주소는 노트에 없음"
+    },
+    {
+      "id": "capitaleconomics",
+      "name": "Capital Economics",
+      "group": "indep",
+      "region": "영국",
+      "type": "독립 연구소",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "12월 10일",
+          "what": "Roundtable – The World in 2027(런던 행사)"
+        },
+        {
+          "when": "분기",
+          "what": "Global Economic Outlook(분기판, 날짜 미확인)"
+        }
+      ],
+      "access": "유료·고객 전용 — 홈·행사 페이지만 열림, 발간물 목록은 403·404"
+    },
+    {
+      "id": "oxford",
+      "name": "Oxford Economics",
+      "group": "indep",
+      "region": "영국",
+      "type": "독립 연구소",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.oxfordeconomics.com/resource/world-economic-prospects-preview/"
+      ],
+      "calendar": [
+        {
+          "when": "매월",
+          "what": "World Economic Prospects 미리보기"
+        },
+        {
+          "when": "11월 말~12월 초",
+          "what": "Key themes for 2027 웨비나"
+        },
+        {
+          "when": "2027-02-10",
+          "what": "Global Economic Outlook Conference 2027(런던)"
+        }
+      ],
+      "access": "홈·미리보기·웨비나 안내는 열림 — /resource/ 목록은 404"
+    },
+    {
+      "id": "conferenceboard",
+      "name": "The Conference Board",
+      "group": "indep",
+      "region": "미국",
+      "type": "독립 연구소",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.conference-board.org/topics/global-economic-outlook",
+        "https://www.conference-board.org/publications/global-economic-forecast-update",
+        "https://www.conference-board.org/research/us-forecast"
+      ],
+      "calendar": [
+        {
+          "when": "12월",
+          "what": "Global Economic Outlook 2027(전년판 2025-12-08)"
+        },
+        {
+          "when": "12월 9일",
+          "what": "Economy Watch 웨비캐스트"
+        }
+      ],
+      "access": "요약만 열림, 본문·표는 로그인 필요"
+    },
+    {
+      "id": "piie",
+      "name": "PIIE",
+      "group": "indep",
+      "region": "미국",
+      "type": "싱크탱크",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "10월",
+          "what": "Global Economic Prospects 가을호(행사)"
+        }
+      ],
+      "access": "전부 열림 (차트·블로그·보도자료·행사) — 허브 주소는 노트에 없음, 추정 주소는 404"
+    },
+    {
+      "id": "brookings",
+      "name": "Brookings",
+      "group": "indep",
+      "region": "미국",
+      "type": "싱크탱크",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.brookings.edu/programs/economic-studies/",
+        "https://www.brookings.edu/programs/global-economy-and-development/",
+        "https://www.brookings.edu/centers/the-hutchins-center-on-fiscal-and-monetary-policy/"
+      ],
+      "calendar": [],
+      "access": "열림 — 주제 페이지(/topics/global-economy/)는 404, 프로그램 페이지로 대신"
+    },
+    {
+      "id": "bruegel",
+      "name": "Bruegel",
+      "group": "indep",
+      "region": "벨기에",
+      "type": "싱크탱크",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.bruegel.org/publications"
+      ],
+      "calendar": [],
+      "access": "열림 (목록 첫 쪽만 확인)"
+    },
+    {
+      "id": "economist",
+      "name": "The Economist (The World Ahead)",
+      "group": "indep",
+      "region": "영국",
+      "type": "독립 연구소",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.economist.com/the-world-ahead"
+      ],
+      "calendar": [],
+      "access": "자동 접속 막힘 — 가져오기 도구가 도메인 자체를 차단, 다른 경로 없음"
+    },
+    {
+      "id": "fitch",
+      "name": "Fitch Ratings",
+      "group": "indep",
+      "region": "미국",
+      "type": "신용평가사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.fitchratings.com/research/sovereigns/global-economic-outlook"
+      ],
+      "calendar": [
+        {
+          "when": "분기",
+          "what": "Global Economic Outlook(9월판·12월판 가능성, 미확인)"
+        }
+      ],
+      "access": "자동 접속 막힘 — 가져오기 도구가 도메인 자체를 차단"
+    },
+    {
+      "id": "sp",
+      "name": "S&P Global Ratings",
+      "group": "indep",
+      "region": "미국",
+      "type": "신용평가사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://press.spglobal.com"
+      ],
+      "calendar": [
+        {
+          "when": "4분기",
+          "what": "Global Credit Outlook 2027·지역별 Economic Outlook(발표일 미확인)"
+        }
+      ],
+      "access": "자동 접속 막힘(spglobal.com 403) — press.spglobal.com 보도자료 목록으로 대신"
+    },
+    {
+      "id": "moodys",
+      "name": "Moody's",
+      "group": "indep",
+      "region": "미국",
+      "type": "신용평가사",
+      "lang": [
+        "en"
+      ],
+      "hubs": [],
+      "calendar": [
+        {
+          "when": "11월",
+          "what": "2027 Global Credit Outlook·2027-28 Global Macro 등(2026-11-12~20 발표)"
+        }
+      ],
+      "access": "요약 페이지 열림, 전문은 로그인 — 문서 하나(PBC_1493404)만 403, 허브 주소는 노트에 없음"
+    },
+    {
+      "id": "wef",
+      "name": "World Economic Forum",
+      "group": "indep",
+      "region": "스위스",
+      "type": "싱크탱크",
+      "lang": [
+        "en"
+      ],
+      "hubs": [
+        "https://www.weforum.org/publications/series/chief-economists-outlook/"
+      ],
+      "calendar": [
+        {
+          "when": "1월",
+          "what": "Global Risks Report(발간 관행, 기간 밖)"
+        },
+        {
+          "when": "9월",
+          "what": "Chief Economists Outlook(존재·발표일 미확인)"
+        }
+      ],
+      "access": "자동 접속 막힘(403, 추정 PDF 주소는 504) — 대체 경로 없음"
+    }
+  ]
+}

@@ -12,7 +12,8 @@
     "briefing:readcheck": "tsx src/scripts/check-briefing-reader.ts",
     "briefing:job": "NODE_USE_ENV_PROXY=1 tsx src/scripts/briefing-job.ts",
     "trade:fetch": "NODE_USE_ENV_PROXY=1 tsx src/scripts/trade-fetch.ts",
-    "trade:job": "NODE_USE_ENV_PROXY=1 tsx src/scripts/trade-job.ts"
+    "trade:job": "NODE_USE_ENV_PROXY=1 tsx src/scripts/trade-job.ts",
+    "outlook:job": "NODE_USE_ENV_PROXY=1 tsx src/scripts/outlook-job.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
